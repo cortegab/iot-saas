@@ -1,6 +1,6 @@
 # Secrets / local config
-.env
-*.local
+#.env
+#*.local
 
 # Python
 .venv/
