@@ -1,0 +1,7 @@
+# Normalize line endings to LF for all text files. The platform runs on Linux
+# (Docker, WSL, the production VPS); CRLF would break shell scripts and container
+# builds regardless of who commits from Windows.
+* text=auto eol=lf
+
+# Shell scripts must be LF — they run under WSL/Linux bash.
+*.sh text eol=lf
