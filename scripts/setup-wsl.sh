@@ -87,7 +87,23 @@ else
 fi
 
 # ── 5. Claude Code (the dev agent) ──────────────────────────────────────────
-# Native installer: no sudo, installs to ~/.local/bin, auto-updates in the
+
+# 5a. Browser opener for WSL. Without this, WSL has no default browser, so
+# Claude Code's OAuth login page (and any other URL) silently fails to open.
+# wslu provides `wslview`, which opens the Windows default browser.
+if grep -qiE '(microsoft|wsl)' /proc/version 2>/dev/null; then
+  if ! command -v wslview >/dev/null 2>&1; then
+    log "Installing wslu (lets WSL open the Windows browser)"
+    sudo apt-get install -y wslu
+  fi
+  if ! grep -q 'BROWSER=wslview' "$HOME/.bashrc" 2>/dev/null; then
+    echo 'export BROWSER=wslview' >> "$HOME/.bashrc"
+  fi
+  export BROWSER=wslview
+  ok "Browser opener ready (BROWSER=wslview)"
+fi
+
+# 5b. Native installer: no sudo, installs to ~/.local/bin, auto-updates in the
 # background. (The npm package would require Node 22+, and we install Node 20 for
 # the frontend — so the native installer is the clean choice here.)
 log "Installing Claude Code (native installer)"
