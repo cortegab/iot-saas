@@ -86,7 +86,24 @@ else
   warn "Do NOT 'apt install docker' — that starts a second, conflicting engine."
 fi
 
-# ── 5. Verification summary ─────────────────────────────────────────────────
+# ── 5. Claude Code (the dev agent) ──────────────────────────────────────────
+# Native installer: no sudo, installs to ~/.local/bin, auto-updates in the
+# background. (The npm package would require Node 22+, and we install Node 20 for
+# the frontend — so the native installer is the clean choice here.)
+log "Installing Claude Code (native installer)"
+if command -v claude >/dev/null 2>&1; then
+  ok "Claude Code already installed: $(claude --version 2>/dev/null)"
+else
+  curl -fsSL https://claude.ai/install.sh | bash
+  export PATH="$HOME/.local/bin:$PATH"
+  if command -v claude >/dev/null 2>&1; then
+    ok "Claude Code installed: $(claude --version 2>/dev/null)"
+  else
+    warn "claude not on PATH yet — restart your shell (it installs to ~/.local/bin)"
+  fi
+fi
+
+# ── 6. Verification summary ─────────────────────────────────────────────────
 log "Toolchain versions"
 printf '  %-10s %s\n' "python:" "$(uv run --no-project python --version 2>/dev/null || echo 'via uv')"
 printf '  %-10s %s\n' "uv:"      "$(uv --version 2>/dev/null || echo MISSING)"
@@ -94,6 +111,7 @@ printf '  %-10s %s\n' "node:"    "$(node -v 2>/dev/null || echo MISSING)"
 printf '  %-10s %s\n' "pnpm:"    "$(pnpm --version 2>/dev/null || echo MISSING)"
 printf '  %-10s %s\n' "mqtt:"    "$(mosquitto_pub --help 2>&1 | head -1 || echo MISSING)"
 printf '  %-10s %s\n' "docker:"  "$(docker --version 2>/dev/null || echo 'not reachable')"
+printf '  %-10s %s\n' "claude:"  "$(claude --version 2>/dev/null || echo 'restart shell to load PATH')"
 
 cat <<'NEXT'
 
@@ -121,6 +139,11 @@ Next steps
 
 5. Backend dev outside containers (tests, lint, migrations):
      cd backend && uv sync && uv run pytest && uv run ruff check . && uv run mypy src/app
+
+6. Start Claude Code from the project directory and authenticate:
+     claude
+   First run opens a browser to log in. Requires a Claude Pro/Max/Team/Enterprise
+   or Console account — the free Claude.ai plan does not include Claude Code.
 NEXT
 
 ok "WSL setup complete."
