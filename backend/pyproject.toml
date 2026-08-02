@@ -11,6 +11,9 @@ dependencies = [
     "pydantic-settings>=2.7",
     "sqlalchemy[asyncio]>=2.0",
     "asyncpg>=0.30",
+    "alembic>=1.14",
+    "pyjwt>=2.10",
+    "argon2-cffi>=23.1",
 ]
 
 [dependency-groups]
@@ -19,6 +22,7 @@ dev = [
     "mypy>=1.14",
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
+    "httpx>=0.28",
 ]
 
 [tool.uv]
@@ -27,6 +31,11 @@ package = false
 [tool.ruff]
 line-length = 100
 src = ["src"]
+
+[tool.ruff.lint]
+# B008: FastAPI's Depends()-as-a-default-argument is the documented DI pattern
+# (CLAUDE.md §7), not the antipattern this rule normally guards against.
+ignore = ["B008"]
 
 [tool.mypy]
 strict = true

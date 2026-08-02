@@ -18,8 +18,9 @@ import aiomqtt
 import redis.asyncio as redis
 
 from app.config import settings
+from app.logging_config import configure_logging
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
+configure_logging()
 log = logging.getLogger("worker")
 
 TELEMETRY_STREAM = "telemetry"
@@ -58,8 +59,12 @@ async def handle_message(r: redis.Redis, topic: str, payload: bytes) -> None:
 
 async def run() -> None:
     r: redis.Redis = redis.from_url(settings.redis_url, decode_responses=True)
-    log.info("worker starting; mqtt=%s:%s redis=%s", settings.mqtt_host, settings.mqtt_port,
-             settings.redis_url)
+    log.info(
+        "worker starting; mqtt=%s:%s redis=%s",
+        settings.mqtt_host,
+        settings.mqtt_port,
+        settings.redis_url,
+    )
 
     while True:
         try:
@@ -67,7 +72,7 @@ async def run() -> None:
                 log.info("connected to MQTT broker; subscribing to '%s'", TELEMETRY_TOPIC)
                 await client.subscribe(TELEMETRY_TOPIC)
                 async for message in client.messages:
-                    await handle_message(r, str(message.topic), bytes(message.payload))  # type: ignore[arg-type]
+                    await handle_message(r, str(message.topic), bytes(message.payload))
         except aiomqtt.MqttError as exc:
             log.warning("MQTT connection error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS)
             await asyncio.sleep(RECONNECT_SECONDS)
