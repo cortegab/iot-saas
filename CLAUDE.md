@@ -355,6 +355,30 @@ Bring up infrastructure (Postgres+TimescaleDB, EMQX, Redis):
 docker compose -f infra/docker-compose.yml up -d
 ```
 
+**One-time database bootstrap** (Phase 1+): the backend connects with two different Postgres
+roles. `iot` (the compose superuser) runs migrations only; the running API/worker connect as
+`iot_app`, a non-superuser role, because **superusers bypass Row-Level Security silently** — if
+the app connected as `iot`, every RLS policy would be a no-op. Create the role and a `iot_test`
+database for the test suite once per environment:
+
+```bash
+docker compose -f infra/docker-compose.yml exec timescaledb psql -U iot -d iot -c \
+  "CREATE ROLE iot_app LOGIN PASSWORD 'iot_app_dev_password' NOSUPERUSER NOBYPASSRLS;"
+docker compose -f infra/docker-compose.yml exec timescaledb psql -U iot -d iot -c \
+  "GRANT CONNECT ON DATABASE iot TO iot_app;"
+docker compose -f infra/docker-compose.yml exec timescaledb psql -U iot -d iot -c \
+  "GRANT USAGE ON SCHEMA public TO iot_app;"
+docker compose -f infra/docker-compose.yml exec timescaledb psql -U iot -c \
+  "CREATE DATABASE iot_test OWNER iot;"
+docker compose -f infra/docker-compose.yml exec timescaledb psql -U iot -d iot_test -c \
+  "CREATE EXTENSION IF NOT EXISTS timescaledb;"
+docker compose -f infra/docker-compose.yml exec timescaledb psql -U iot -d iot_test -c \
+  "GRANT CONNECT ON DATABASE iot_test TO iot_app;"
+```
+
+Per-table `GRANT`s to `iot_app` are issued inside each table's own Alembic migration, next to its
+`CREATE POLICY` statement — not here.
+
 Backend:
 
 ```bash
