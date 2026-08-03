@@ -38,7 +38,7 @@ async def test_create_device_returns_credential_once(client: httpx.AsyncClient) 
     assert body["device"]["name"] == "Sensor 1"
     assert body["device"]["slug"] == "sensor-1"
     assert body["device"]["status"] == "active"
-    assert body["credential"]["username"] == "sensor-1"
+    assert body["credential"]["username"] == body["device"]["id"]
     assert body["credential"]["password"]
 
     # The credential must never appear again in list/get responses.

@@ -25,7 +25,10 @@ class Base(DeclarativeBase):
 # settings.database_url (the admin `iot` role), not this one.
 engine = create_async_engine(settings.app_database_url)
 
-_session_factory = async_sessionmaker(engine, expire_on_commit=False)
+# Public — the worker process (no FastAPI request/Depends machinery) also needs
+# to open its own short-lived sessions (device directory lookups, the batched
+# telemetry writer), so this can't stay a get_session()-only implementation detail.
+session_factory = async_sessionmaker(engine, expire_on_commit=False)
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -38,7 +41,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     next request that reuses that physical connection — a real cross-tenant leak
     via the pool, not a theoretical one.
     """
-    async with _session_factory() as session, session.begin():
+    async with session_factory() as session, session.begin():
         yield session
 
 

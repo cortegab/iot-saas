@@ -9,8 +9,11 @@
 # Optional dev tooling (pgAdmin, RedisInsight) is opt-in:
 #   docker compose -f infra/docker-compose.yml --profile tools up -d
 #
-# Ports are bound to 127.0.0.1 only. Dev MQTT is plaintext on 1883 with EMQX's default
-# anonymous access — TLS + per-device auth arrive in Phase 2, not in local dev.
+# Ports are bound to 127.0.0.1 only. Dev MQTT is plaintext on 1883 (TLS on 8883 is a
+# production/VPS deployment step, not part of local dev). Per-device auth (Phase 2) is
+# on: EMQX authenticates and authorizes every client — devices and the worker's own
+# subscriber connection alike — via HTTP callbacks into the api container, configured
+# declaratively in emqx/emqx.conf (mounted below) rather than through the dashboard.
 
 name: iot-saas
 
@@ -59,6 +62,7 @@ services:
       - "127.0.0.1:18083:18083"   # dashboard
     volumes:
       - emqx-data:/opt/emqx/data
+      - ./emqx/emqx.conf:/opt/emqx/etc/emqx.conf:ro
     healthcheck:
       test: ["CMD", "/opt/emqx/bin/emqx", "ctl", "status"]
       interval: 10s
@@ -82,6 +86,11 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS}
+      EMQX_AUTH_SHARED_SECRET: ${EMQX_AUTH_SHARED_SECRET}
+      MQTT_WORKER_USERNAME: ${MQTT_WORKER_USERNAME}
+      MQTT_WORKER_PASSWORD: ${MQTT_WORKER_PASSWORD}
+      TELEMETRY_BATCH_SIZE: ${TELEMETRY_BATCH_SIZE}
+      TELEMETRY_FLUSH_INTERVAL_MS: ${TELEMETRY_FLUSH_INTERVAL_MS}
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
@@ -110,6 +119,11 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES}
       REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS}
+      EMQX_AUTH_SHARED_SECRET: ${EMQX_AUTH_SHARED_SECRET}
+      MQTT_WORKER_USERNAME: ${MQTT_WORKER_USERNAME}
+      MQTT_WORKER_PASSWORD: ${MQTT_WORKER_PASSWORD}
+      TELEMETRY_BATCH_SIZE: ${TELEMETRY_BATCH_SIZE}
+      TELEMETRY_FLUSH_INTERVAL_MS: ${TELEMETRY_FLUSH_INTERVAL_MS}
     volumes:
       - ../backend:/app
     depends_on:
