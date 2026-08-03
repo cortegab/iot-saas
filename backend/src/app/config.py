@@ -33,5 +33,20 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
 
+    # EMQX HTTP auth/authz callbacks (app/ingestion/router.py) — shared secret so
+    # only EMQX can call them, not arbitrary traffic reaching the api container.
+    emqx_auth_shared_secret: SecretStr = SecretStr("dev-only-change-me")
+
+    # The worker's own MQTT identity. Not a row in `devices` — a fixed system
+    # credential with subscribe-only access across every tenant's telemetry
+    # topics, special-cased in the EMQX auth callbacks.
+    mqtt_worker_username: str = "__worker__"
+    mqtt_worker_password: SecretStr = SecretStr("dev-only-change-me")
+
+    # Storage-path batched writer (app/worker.py) tuning: flush whichever comes
+    # first — batch size or flush interval.
+    telemetry_batch_size: int = 500
+    telemetry_flush_interval_ms: int = 1000
+
 
 settings = Settings()

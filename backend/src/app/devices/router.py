@@ -53,7 +53,7 @@ async def create_device(
     device, secret = await service.create_device(session, ctx.tenant_id, body.name)
     return DeviceCreateResponse(
         device=_to_response(device),
-        credential=DeviceCredential(username=device.slug, password=secret),
+        credential=DeviceCredential(username=str(device.id), password=secret),
     )
 
 
@@ -91,5 +91,5 @@ async def rotate_credential(
     updated, secret = await service.rotate_credential(session, ctx.tenant_id, device.id)
     return DeviceCreateResponse(
         device=_to_response(updated),
-        credential=DeviceCredential(username=updated.slug, password=secret),
+        credential=DeviceCredential(username=str(updated.id), password=secret),
     )

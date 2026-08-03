@@ -1,15 +1,17 @@
 """Device CRUD and credential generation.
 
-MQTT username = device slug (unique per tenant); password = random secret,
-argon2id-hashed via auth.service.hash_secret, shown once at creation/rotation
-and never retrievable afterward.
+MQTT username = device.id (globally unique — required so EMQX's HTTP auth
+callback can resolve a device from a bare username with no tenant context);
+password = random secret, argon2id-hashed via auth.service.hash_secret, shown
+once at creation/rotation and never retrievable afterward.
 """
 
 import re
 import secrets
 import uuid
+from typing import NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service as auth_service
@@ -18,6 +20,33 @@ from app.devices.models import Device, DeviceStatus
 
 class DeviceNotFoundError(Exception):
     pass
+
+
+class DeviceAuthRecord(NamedTuple):
+    """What credential verification needs, resolved by device id alone — used
+    when no tenant context exists yet (EMQX auth/authz, the HTTP ingest
+    fallback). Backed by a SECURITY DEFINER function (see the
+    add_device_auth_lookup_functions migration): the one narrow, auditable
+    exception to devices' RLS. Everything else about `devices` stays exactly
+    as RLS-protected as it was in d6309384a7aa_create_devices_table.py.
+    """
+
+    tenant_id: uuid.UUID
+    tenant_slug: str
+    device_slug: str
+    token_hash: str
+    status: str
+
+
+class DeviceDirectoryRecord(NamedTuple):
+    """What topic-based resolution needs — (tenant_slug, device_slug), as
+    carried in an MQTT topic, resolved to real ids. Same SECURITY DEFINER
+    escape hatch as DeviceAuthRecord, scoped to a different lookup key.
+    """
+
+    tenant_id: uuid.UUID
+    device_id: uuid.UUID
+    status: str
 
 
 def _slugify(name: str) -> str:
@@ -109,3 +138,31 @@ async def rotate_credential(
     device.token_hash = auth_service.hash_secret(secret)
     await session.flush()
     return device, secret
+
+
+async def lookup_device_for_auth(
+    session: AsyncSession, device_id: uuid.UUID
+) -> DeviceAuthRecord | None:
+    result = await session.execute(
+        text(
+            "SELECT tenant_id, tenant_slug, device_slug, token_hash, status "
+            "FROM lookup_device_for_auth(:device_id)"
+        ),
+        {"device_id": str(device_id)},
+    )
+    row = result.mappings().first()
+    return DeviceAuthRecord(**row) if row is not None else None
+
+
+async def lookup_device_by_slug(
+    session: AsyncSession, tenant_slug: str, device_slug: str
+) -> DeviceDirectoryRecord | None:
+    result = await session.execute(
+        text(
+            "SELECT tenant_id, device_id, status "
+            "FROM lookup_device_by_slug(:tenant_slug, :device_slug)"
+        ),
+        {"tenant_slug": tenant_slug, "device_slug": device_slug},
+    )
+    row = result.mappings().first()
+    return DeviceDirectoryRecord(**row) if row is not None else None

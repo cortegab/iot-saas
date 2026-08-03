@@ -23,8 +23,18 @@ APP_TEST_URL = "postgresql+asyncpg://iot_app:iot_app_dev_password@127.0.0.1:5432
 
 # All app tables, in any order — TRUNCATE ... CASCADE handles FK dependencies
 # regardless of the order they're listed in. Add one entry whenever a new
-# table lands.
-ALL_TABLES = ("users", "tenants", "tenant_memberships", "refresh_tokens", "devices", "api_keys")
+# table lands. Continuous aggregates (telemetry_1m/telemetry_1h) aren't listed
+# here — they're materialized views, not plain tables, and can't be TRUNCATEd;
+# tests that care about rollup contents refresh them explicitly instead.
+ALL_TABLES = (
+    "users",
+    "tenants",
+    "tenant_memberships",
+    "refresh_tokens",
+    "devices",
+    "api_keys",
+    "telemetry",
+)
 
 
 @pytest_asyncio.fixture
