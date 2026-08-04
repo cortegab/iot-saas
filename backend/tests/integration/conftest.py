@@ -1,14 +1,23 @@
-"""Shared pytest fixtures for the backend test suite.
+"""Shared pytest fixtures for the integration test suite.
 
 Integration tests run against the real `iot_test` Postgres database (see the
 one-time bootstrap documented in CLAUDE.md §8) — never a mock or an in-memory
 substitute. Row-Level Security has no SQLite equivalent, and the whole point of
 this phase's RLS tests is to prove the real Postgres policies, not a stand-in.
+
+Scoped to tests/integration/ specifically (not the shared tests/ root) so
+tests/unit/'s pure, no-I/O tests never trigger the DB connections / Redis
+monkeypatching below — mixing many rapid-fire pure unit tests with these
+autouse DB fixtures was observed to hang the suite (accumulated asyncpg
+connections/event-loop state across dozens of back-to-back tests that never
+needed a connection in the first place).
 """
 
 from collections.abc import AsyncGenerator
+from unittest.mock import AsyncMock
 
 import httpx
+import pytest
 import pytest_asyncio
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
@@ -34,6 +43,8 @@ ALL_TABLES = (
     "devices",
     "api_keys",
     "telemetry",
+    "rules",
+    "commands",
 )
 
 
@@ -85,14 +96,41 @@ async def client(app_engine: AsyncEngine) -> AsyncGenerator[httpx.AsyncClient, N
     session_factory = async_sessionmaker(app_engine, expire_on_commit=False)
 
     async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
-        async with session_factory() as session, session.begin():
-            yield session
+        async with session_factory() as session:
+            async with session.begin():
+                yield session
+            for callback in session.info.pop("post_commit_callbacks", []):
+                await callback()
 
     app.dependency_overrides[get_session] = override_get_session
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def _mock_redis_xadd(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    """app.redis.redis_client is a process-wide singleton bound to whatever
+    event loop was running when it was first constructed. pytest-asyncio
+    gives each test its own event loop, so any real call on it here raises
+    "Task attached to a different loop" — and can poison the shared client
+    for every test that runs afterward in the same process, cascading well
+    beyond the one test that first touched it. Every test gets a mocked
+    xadd/publish instead (autouse — no test needs to opt in); nothing in this
+    suite needs telemetry or rule-invalidation messages to actually reach
+    Redis.
+    """
+    mock = AsyncMock(return_value=b"0-1")
+    monkeypatch.setattr("app.redis.redis_client.xadd", mock)
+    return mock
+
+
+@pytest.fixture(autouse=True)
+def _mock_redis_publish(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
+    mock = AsyncMock(return_value=0)
+    monkeypatch.setattr("app.redis.redis_client.publish", mock)
+    return mock
 
 
 @pytest_asyncio.fixture(autouse=True)

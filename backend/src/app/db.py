@@ -7,7 +7,7 @@ through `get_session()`.
 """
 
 import uuid
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -40,9 +40,29 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     request, a session variable set on a pooled connection would leak into the
     next request that reuses that physical connection — a real cross-tenant leak
     via the pool, not a theoretical one.
+
+    After a successful commit, runs anything registered via
+    add_post_commit_callback — never before. A callback (e.g. publishing a
+    Redis pub/sub invalidation message) fired mid-transaction would race a
+    concurrent reader against a write that isn't durably visible yet: the
+    reader's connection is a *different* Postgres session, so Postgres's own
+    MVCC visibility rules mean it can't see this transaction's writes until
+    this transaction actually commits, regardless of how fast the message
+    reaches it. Confirmed live: app.rules.service's rule-cache invalidation
+    hit exactly this race when it published before commit.
     """
-    async with session_factory() as session, session.begin():
-        yield session
+    async with session_factory() as session:
+        async with session.begin():
+            yield session
+        for callback in session.info.pop("post_commit_callbacks", []):
+            await callback()
+
+
+def add_post_commit_callback(session: AsyncSession, callback: Callable[[], Awaitable[None]]) -> None:
+    """Register an async callback to run once this session's transaction has
+    actually committed — see get_session's docstring for why this exists.
+    """
+    session.info.setdefault("post_commit_callbacks", []).append(callback)
 
 
 async def set_user_context(session: AsyncSession, user_id: uuid.UUID) -> None:

@@ -2,11 +2,12 @@
 callbacks — against the real FastAPI app and iot_test Postgres.
 
 The ingest endpoint pushes onto the same Redis stream the live dev worker
-container drains (app/redis.py's shared client) — every test here
-monkeypatches that client's xadd so nothing actually reaches Redis. Without
-that, test telemetry referencing iot_test-only tenant/device ids would land
-in the *dev* worker's queue and fail its FK-constrained insert against the
-dev database, an entirely different Postgres instance from iot_test.
+container drains (app/redis.py's shared client) — conftest.py's autouse
+`_mock_redis_xadd` fixture keeps every test here from actually reaching
+Redis. Without that, test telemetry referencing iot_test-only tenant/device
+ids would land in the *dev* worker's queue and fail its FK-constrained insert
+against the dev database, an entirely different Postgres instance from
+iot_test.
 """
 
 import base64
@@ -15,7 +16,6 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import httpx
-import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -56,13 +56,6 @@ def _basic_auth_header(username: str, password: str) -> dict[str, str]:
 async def _tenant_slug(admin_session: AsyncSession, tenant_id: str) -> str:
     result = await admin_session.execute(select(Tenant.slug).where(Tenant.id == uuid.UUID(tenant_id)))
     return result.scalar_one()
-
-
-@pytest.fixture(autouse=True)
-def _mock_redis_xadd(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
-    mock_xadd = AsyncMock(return_value=b"0-1")
-    monkeypatch.setattr("app.redis.redis_client.xadd", mock_xadd)
-    return mock_xadd
 
 
 async def test_ingest_with_valid_credentials_accepted(

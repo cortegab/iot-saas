@@ -1,10 +1,12 @@
-"""Ingestion worker — the storage path (CLAUDE.md §2). Two concurrent loops in
-one process; there is no third process (the API server never subscribes to
-MQTT, the worker never serves HTTP):
+"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Three
+concurrent loops in one process; there is no third process (the API server
+never subscribes to MQTT, the worker never serves HTTP):
 
-1. mqtt_ingest_loop — subscribes to telemetry topics, validates payloads,
-   resolves each topic to a real device via app.ingestion.service's cache, and
-   XADDs a normalized entry onto the `telemetry` Redis stream.
+1. mqtt_ingest_loop — subscribes to telemetry AND ack topics, validates
+   payloads, resolves each topic to a real device via
+   app.ingestion.service's cache, runs rule evaluation/dispatch (the hot
+   path — CLAUDE.md §9 constraint 1: before any queue hop), then XADDs a
+   normalized telemetry entry onto the `telemetry` Redis stream.
 2. stream_writer_loop — drains that stream through a consumer group (durable
    across worker restarts — the alternative, plain XREAD, would silently lose
    any buffered-but-unwritten telemetry on a crash, PLAN.md's called-out
@@ -13,9 +15,9 @@ MQTT, the worker never serves HTTP):
    tenants are in the batch. `telemetry` intentionally has no RLS — see the
    create_telemetry_hypertable migration for why — so unlike every other
    write path in this codebase, there's no per-tenant transaction to open here.
-
-Rule evaluation, the in-memory hot path, and the command service are Phase 3 —
-this worker only ever writes to storage.
+3. rule_cache_loop — loads active rules into memory at startup, then reloads
+   on every app.rules.service.RULES_INVALIDATE_CHANNEL pub/sub message, so a
+   rule CRUD change reaches the hot path within milliseconds.
 """
 
 import asyncio
@@ -30,12 +32,16 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.commands import service as commands_service
+from app.commands.schemas import AckPayload
 from app.config import settings
 from app.db import session_factory
+from app.devices.models import DeviceStatus
 from app.ingestion import service as ingestion_service
 from app.ingestion.schemas import TelemetryPayload
 from app.logging_config import configure_logging
 from app.redis import redis_client
+from app.rules import service as rules_service
 
 configure_logging()
 log = logging.getLogger("worker")
@@ -53,12 +59,22 @@ _TelemetryRow = tuple[datetime, uuid.UUID, uuid.UUID, str, float]
 
 
 async def handle_message(
-    factory: async_sessionmaker[AsyncSession], r: redis.Redis, topic: str, payload: bytes
+    factory: async_sessionmaker[AsyncSession],
+    r: redis.Redis,
+    client: aiomqtt.Client,
+    topic: str,
+    payload: bytes,
 ) -> None:
-    """Parse and record one telemetry message. A single malformed message (bad
-    topic, bad JSON, unknown/inactive device) is logged and dropped — it must
-    never stop the stream (CLAUDE.md constraint 11).
+    """Route one MQTT message to the ack path or the telemetry path. A single
+    malformed message (bad topic, bad JSON, unknown/inactive device) is
+    logged and dropped — it must never stop the stream (CLAUDE.md
+    constraint 11).
     """
+    ack_topic = ingestion_service.parse_ack_topic(topic)
+    if ack_topic is not None:
+        await _handle_ack(factory, ack_topic, payload)
+        return
+
     parsed = ingestion_service.parse_topic(topic)
     if parsed is None:
         log.warning("dropping message on unparseable topic %r", topic)
@@ -70,11 +86,65 @@ async def handle_message(
         log.warning("dropping malformed payload on %s: %r", topic, payload[:120])
         return
 
-    recorded = await ingestion_service.record_telemetry(factory, r, parsed, data)
-    if not recorded:
+    resolved = await ingestion_service.resolve_device_for_topic(
+        factory, parsed.tenant_slug, parsed.device_slug
+    )
+    if resolved is None or resolved.status != DeviceStatus.ACTIVE.value:
         log.warning("dropping telemetry for unknown/inactive device on %s", topic)
         return
+
+    timestamp = (
+        datetime.fromtimestamp(data.timestamp, tz=UTC) if data.timestamp else datetime.now(UTC)
+    )
+
+    # Hot path — in-memory, before the storage-path queue hop below
+    # (CLAUDE.md §9 constraint 1).
+    await rules_service.evaluate_and_dispatch(
+        client,
+        factory,
+        resolved.tenant_id,
+        resolved.device_id,
+        parsed.tenant_slug,
+        parsed.device_slug,
+        parsed.metric,
+        data.value,
+        timestamp,
+    )
+
+    # Storage path (Phase 2, unchanged in behavior).
+    await ingestion_service.record_telemetry_direct(
+        r, resolved.tenant_id, resolved.device_id, parsed.metric, data
+    )
     log.info("telemetry %s -> value=%s", topic, data.value)
+
+
+async def _handle_ack(
+    factory: async_sessionmaker[AsyncSession],
+    ack_topic: ingestion_service.ParsedAckTopic,
+    payload: bytes,
+) -> None:
+    try:
+        ack = AckPayload.model_validate_json(payload)
+    except ValidationError:
+        log.warning(
+            "dropping malformed ack payload on %s/%s/ack/%s",
+            ack_topic.tenant_slug,
+            ack_topic.device_slug,
+            ack_topic.actuator,
+        )
+        return
+
+    resolved = await ingestion_service.resolve_device_for_topic(
+        factory, ack_topic.tenant_slug, ack_topic.device_slug
+    )
+    if resolved is None:
+        log.warning(
+            "dropping ack for unknown device %s/%s", ack_topic.tenant_slug, ack_topic.device_slug
+        )
+        return
+
+    await commands_service.record_ack(factory, resolved.tenant_id, resolved.device_id, ack.command_id)
+    log.info("command %s acked by %s/%s", ack.command_id, ack_topic.tenant_slug, ack_topic.device_slug)
 
 
 async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
@@ -93,14 +163,39 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
                 password=settings.mqtt_worker_password.get_secret_value(),
             ) as client:
                 log.info(
-                    "connected to MQTT broker; subscribing to '%s'",
+                    "connected to MQTT broker; subscribing to '%s' and '%s'",
                     ingestion_service.TELEMETRY_TOPIC_FILTER,
+                    ingestion_service.ACK_TOPIC_FILTER,
                 )
                 await client.subscribe(ingestion_service.TELEMETRY_TOPIC_FILTER)
+                await client.subscribe(ingestion_service.ACK_TOPIC_FILTER)
                 async for message in client.messages:
-                    await handle_message(factory, r, str(message.topic), bytes(message.payload))
+                    await handle_message(
+                        factory, r, client, str(message.topic), bytes(message.payload)
+                    )
         except aiomqtt.MqttError as exc:
             log.warning("MQTT connection error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS)
+            await asyncio.sleep(RECONNECT_SECONDS)
+
+
+async def rule_cache_loop(factory: async_sessionmaker[AsyncSession]) -> None:
+    """Load active rules at startup, then reload on every invalidation
+    message — a rule CRUD change reaches the hot path within milliseconds,
+    not up to a stale TTL window later.
+    """
+    await rules_service.load_rule_cache(factory)
+    while True:
+        try:
+            async with redis_client.pubsub() as pubsub:
+                await pubsub.subscribe(rules_service.RULES_INVALIDATE_CHANNEL)
+                async for message in pubsub.listen():
+                    if message["type"] != "message":
+                        continue
+                    await rules_service.load_rule_cache(factory)
+        except redis.RedisError as exc:
+            log.warning(
+                "rule invalidation channel error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS
+            )
             await asyncio.sleep(RECONNECT_SECONDS)
 
 
@@ -185,6 +280,7 @@ async def run() -> None:
     await asyncio.gather(
         mqtt_ingest_loop(session_factory, redis_client),
         stream_writer_loop(session_factory, redis_client),
+        rule_cache_loop(session_factory),
     )
 
 

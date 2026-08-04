@@ -13,16 +13,20 @@ import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.devices import service as devices_service
-from app.devices.models import DeviceStatus
+from app.devices.service import DeviceDirectoryRecord
 from app.ingestion.schemas import TelemetryPayload
 
 TELEMETRY_STREAM = "telemetry"
 
 # What the worker subscribes to and what its own EMQX authorization is
 # restricted to (see app/ingestion/router.py's emqx_authorize). Three levels —
-# {tenant}/{device}/{metric} — deliberately excludes the four-level cmd/state/
-# ack topics, which belong to the command service (Phase 3), not ingestion.
+# {tenant}/{device}/{metric}.
 TELEMETRY_TOPIC_FILTER = "+/+/+"
+
+# The four-level ack topic {tenant}/{device}/ack/{actuator} (device -> platform,
+# CLAUDE.md §4) — the worker also subscribes to this (app/worker.py) so
+# app/commands/service.py can mark a command acknowledged.
+ACK_TOPIC_FILTER = "+/+/ack/+"
 
 _DIRECTORY_CACHE_TTL_SECONDS = 300
 
@@ -32,6 +36,13 @@ class ParsedTopic:
     tenant_slug: str
     device_slug: str
     metric: str
+
+
+@dataclass(frozen=True)
+class ParsedAckTopic:
+    tenant_slug: str
+    device_slug: str
+    actuator: str
 
 
 def parse_topic(topic: str) -> ParsedTopic | None:
@@ -46,6 +57,17 @@ def parse_topic(topic: str) -> ParsedTopic | None:
     return ParsedTopic(tenant_slug=tenant_slug, device_slug=device_slug, metric=metric)
 
 
+def parse_ack_topic(topic: str) -> ParsedAckTopic | None:
+    """Split an ack topic {tenant}/{device}/ack/{actuator}. Returns None on
+    anything else — never raises.
+    """
+    parts = topic.split("/")
+    if len(parts) != 4 or not all(parts) or parts[2] != "ack":
+        return None
+    tenant_slug, device_slug, _, actuator = parts
+    return ParsedAckTopic(tenant_slug=tenant_slug, device_slug=device_slug, actuator=actuator)
+
+
 @dataclass
 class _CacheEntry:
     tenant_id: uuid.UUID
@@ -57,15 +79,24 @@ class _CacheEntry:
 _directory_cache: dict[tuple[str, str], _CacheEntry] = {}
 
 
-async def _resolve_device(
+async def resolve_device_for_topic(
     session_factory: async_sessionmaker[AsyncSession],
     tenant_slug: str,
     device_slug: str,
-) -> _CacheEntry | None:
+) -> DeviceDirectoryRecord | None:
+    """Resolve MQTT topic segments (tenant slug, device slug) to real ids.
+
+    Public — both the storage path (record_telemetry_direct) and the hot path
+    (app.rules.service.evaluate_and_dispatch) resolve the device exactly once
+    per message, here, before either does anything else. Returns None if the
+    device doesn't exist; callers also check `.status` themselves.
+    """
     key = (tenant_slug, device_slug)
     cached = _directory_cache.get(key)
     if cached is not None and time.monotonic() - cached.cached_at < _DIRECTORY_CACHE_TTL_SECONDS:
-        return cached
+        return DeviceDirectoryRecord(
+            tenant_id=cached.tenant_id, device_id=cached.device_id, status=cached.status
+        )
 
     async with session_factory() as session, session.begin():
         record = await devices_service.lookup_device_by_slug(session, tenant_slug, device_slug)
@@ -74,14 +105,13 @@ async def _resolve_device(
         _directory_cache.pop(key, None)
         return None
 
-    entry = _CacheEntry(
+    _directory_cache[key] = _CacheEntry(
         tenant_id=record.tenant_id,
         device_id=record.device_id,
         status=record.status,
         cached_at=time.monotonic(),
     )
-    _directory_cache[key] = entry
-    return entry
+    return record
 
 
 async def record_telemetry_direct(
@@ -107,20 +137,3 @@ async def record_telemetry_direct(
     )
 
 
-async def record_telemetry(
-    session_factory: async_sessionmaker[AsyncSession],
-    r: redis.Redis,
-    parsed_topic: ParsedTopic,
-    payload: TelemetryPayload,
-) -> bool:
-    """Resolve an MQTT topic to a real device and record its telemetry.
-
-    Returns False if the device doesn't exist or isn't active — a message for
-    an unknown or disabled device is dropped, never an error.
-    """
-    entry = await _resolve_device(session_factory, parsed_topic.tenant_slug, parsed_topic.device_slug)
-    if entry is None or entry.status != DeviceStatus.ACTIVE.value:
-        return False
-
-    await record_telemetry_direct(r, entry.tenant_id, entry.device_id, parsed_topic.metric, payload)
-    return True
