@@ -100,6 +100,14 @@ async def emqx_authenticate(
     return EmqxAuthenticateResponse(result="allow")
 
 
+def _is_cmd_or_state_topic(topic: str) -> bool:
+    """{tenant}/{device}/cmd/{actuator} or {tenant}/{device}/state/{actuator}
+    (CLAUDE.md §4) — the worker's own publish rights, for command dispatch.
+    """
+    parts = topic.split("/")
+    return len(parts) == 4 and all(parts) and parts[2] in ("cmd", "state")
+
+
 @router.post(
     "/ingestion/emqx/authorize",
     response_model=EmqxAuthorizeResponse,
@@ -110,8 +118,19 @@ async def emqx_authorize(
     session: AsyncSession = Depends(get_session),
 ) -> EmqxAuthorizeResponse:
     if body.username == settings.mqtt_worker_username:
-        # Subscribe-only, across every tenant's telemetry topics — never publish.
-        allowed = body.action == "subscribe" and body.topic == ingestion_service.TELEMETRY_TOPIC_FILTER
+        # Subscribe across every tenant's telemetry + ack topics; publish only
+        # to cmd/state (command dispatch, app/commands/service.py). Never
+        # publish telemetry, never subscribe to cmd/state (it publishes those,
+        # doesn't need to read them back).
+        if body.action == "subscribe":
+            allowed = body.topic in (
+                ingestion_service.TELEMETRY_TOPIC_FILTER,
+                ingestion_service.ACK_TOPIC_FILTER,
+            )
+        elif body.action == "publish":
+            allowed = _is_cmd_or_state_topic(body.topic)
+        else:
+            allowed = False
         return EmqxAuthorizeResponse(result="allow" if allowed else "deny")
 
     try:
@@ -124,7 +143,7 @@ async def emqx_authorize(
         return EmqxAuthorizeResponse(result="deny")
 
     # Restrict each device to its own topic subtree (CLAUDE.md §4) — covers
-    # telemetry now, and cmd/state/ack (Phase 3) without touching this again.
+    # telemetry, and cmd/state/ack.
     own_subtree = f"{record.tenant_slug}/{record.device_slug}/"
     allowed = body.topic.startswith(own_subtree)
     return EmqxAuthorizeResponse(result="allow" if allowed else "deny")

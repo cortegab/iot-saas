@@ -12,9 +12,11 @@ from app.api_keys import models as api_keys_models  # noqa: F401
 # target_metadata is read below. Add one import line whenever a new module
 # gains a models.py.
 from app.auth import models as auth_models  # noqa: F401
+from app.commands import models as commands_models  # noqa: F401
 from app.config import settings
 from app.db import Base
 from app.devices import models as devices_models  # noqa: F401
+from app.rules import models as rules_models  # noqa: F401
 from app.tenants import models as tenants_models  # noqa: F401
 
 # this is the Alembic Config object, which provides
