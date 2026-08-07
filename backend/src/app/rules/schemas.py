@@ -70,3 +70,13 @@ class RuleResponse(BaseModel):
     cooldown: int
     enabled: bool
     created_at: datetime
+
+
+class RuleWithDeviceResponse(RuleResponse):
+    """The tenant-wide /rules list needs to say which device each rule
+    belongs to — the per-device endpoints don't, since the device is already
+    implied by the URL.
+    """
+
+    device_name: str
+    device_slug: str

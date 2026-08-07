@@ -40,6 +40,7 @@ async def test_create_device_returns_credential_once(client: httpx.AsyncClient) 
     assert body["device"]["status"] == "active"
     assert body["credential"]["username"] == body["device"]["id"]
     assert body["credential"]["password"]
+    assert body["tenant_slug"] == "acme"
 
     # The credential must never appear again in list/get responses.
     listing = await client.get("/devices", headers=headers)
@@ -108,6 +109,7 @@ async def test_rotate_credential_invalidates_old_one(
     assert rotated.status_code == 200
     new_password = rotated.json()["credential"]["password"]
     assert new_password != old_password
+    assert rotated.json()["tenant_slug"] == "acme5"
 
     # Verify against the stored hash directly (reaching into the DB as admin
     # purely to read it) that the new secret verifies and the old one no longer

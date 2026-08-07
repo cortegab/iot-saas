@@ -11,9 +11,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api_keys.router import router as api_keys_router
 from app.auth.router import router as auth_router
 from app.commands.router import router as commands_router
+from app.dashboards.router import router as dashboards_router
 from app.devices.router import router as devices_router
 from app.ingestion.router import router as ingestion_router
 from app.logging_config import configure_logging
+from app.notifications.router import router as notifications_router
+from app.realtime.router import router as realtime_router
 from app.rules.router import router as rules_router
 from app.telemetry.router import router as telemetry_router
 from app.tenants.router import router as tenants_router
@@ -23,10 +26,12 @@ configure_logging()
 app = FastAPI(title="iot-saas API", version="0.0.1")
 
 # Dev-only: allow the local Next.js frontend to call the API from the browser.
+# Both hostnames are listed because browsers treat localhost and 127.0.0.1 as
+# distinct origins even though they resolve to the same dev server.
 # Phase 4 tightens this to explicit origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -39,6 +44,9 @@ app.include_router(telemetry_router)
 app.include_router(ingestion_router)
 app.include_router(rules_router)
 app.include_router(commands_router)
+app.include_router(dashboards_router)
+app.include_router(realtime_router)
+app.include_router(notifications_router)
 
 
 @app.get("/")

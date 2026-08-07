@@ -1,4 +1,4 @@
-"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Three
+"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Four
 concurrent loops in one process; there is no third process (the API server
 never subscribes to MQTT, the worker never serves HTTP):
 
@@ -18,9 +18,19 @@ never subscribes to MQTT, the worker never serves HTTP):
 3. rule_cache_loop — loads active rules into memory at startup, then reloads
    on every app.rules.service.RULES_INVALIDATE_CHANNEL pub/sub message, so a
    rule CRUD change reaches the hot path within milliseconds.
+4. manual_command_loop — fulfils dashboard-triggered actuator commands (Phase
+   4). The API process has no MQTT client of its own, so a manual toggle is a
+   request on app.commands.service.MANUAL_COMMAND_CHANNEL; this loop holds its
+   own dedicated aiomqtt connection (separate from mqtt_ingest_loop's) and
+   calls commands_service.dispatch_command with rule_id=None. Kept off
+   mqtt_ingest_loop's connection deliberately: manual clicks are rare,
+   user-triggered, and outside the <2s hot-path budget, so there's no
+   throughput case for sharing that connection, and a slow/dead manual
+   publish must never risk blocking telemetry ingestion.
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import UTC, datetime
@@ -36,6 +46,7 @@ from app.commands import service as commands_service
 from app.commands.schemas import AckPayload
 from app.config import settings
 from app.db import session_factory
+from app.devices import service as devices_service
 from app.devices.models import DeviceStatus
 from app.ingestion import service as ingestion_service
 from app.ingestion.schemas import TelemetryPayload
@@ -199,6 +210,65 @@ async def rule_cache_loop(factory: async_sessionmaker[AsyncSession]) -> None:
             await asyncio.sleep(RECONNECT_SECONDS)
 
 
+async def _handle_manual_command(
+    client: aiomqtt.Client, factory: async_sessionmaker[AsyncSession], raw: str
+) -> None:
+    """A single manual-command request is untrusted-shaped input from the
+    API process, not a device — but the same discipline applies: a malformed
+    entry is logged and dropped, never raised, so one bad request can't kill
+    this loop for every other tenant's manual commands (CLAUDE.md constraint
+    11, extended to this request path).
+    """
+    try:
+        data = json.loads(raw)
+        tenant_id = uuid.UUID(data["tenant_id"])
+        device_id = uuid.UUID(data["device_id"])
+        tenant_slug = str(data["tenant_slug"])
+        device_slug = str(data["device_slug"])
+        actuator = str(data["actuator"])
+        value = data["value"]
+    except (KeyError, TypeError, ValueError) as exc:
+        log.warning("dropping malformed manual command request: %s", exc)
+        return
+
+    await commands_service.dispatch_command(
+        client,
+        factory,
+        tenant_id,
+        device_id,
+        None,
+        datetime.now(UTC),
+        tenant_slug,
+        device_slug,
+        actuator=actuator,
+        value=value,
+    )
+
+
+async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
+    while True:
+        try:
+            async with (
+                aiomqtt.Client(
+                    settings.mqtt_host,
+                    port=settings.mqtt_port,
+                    username=settings.mqtt_worker_username,
+                    password=settings.mqtt_worker_password.get_secret_value(),
+                ) as client,
+                redis_client.pubsub() as pubsub,
+            ):
+                await pubsub.subscribe(commands_service.MANUAL_COMMAND_CHANNEL)
+                async for message in pubsub.listen():
+                    if message["type"] != "message":
+                        continue
+                    await _handle_manual_command(client, factory, message["data"])
+        except (aiomqtt.MqttError, redis.RedisError) as exc:
+            log.warning(
+                "manual command loop error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS
+            )
+            await asyncio.sleep(RECONNECT_SECONDS)
+
+
 async def _ensure_consumer_group(r: redis.Redis) -> None:
     try:
         await r.xgroup_create(
@@ -248,6 +318,14 @@ async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis
                         for t, tid, did, metric, value in buffer
                     ],
                 )
+                # Connection-state tracking, batched with this flush rather than
+                # per-message so it never sits on the hot path. `seen_at` is one
+                # timestamp for the whole batch (not each row's own reading time)
+                # since this only has to be accurate to "the writer flushed
+                # recently", not per-reading precision.
+                await devices_service.touch_last_seen(
+                    session, list({did for _, _, did, _, _ in buffer}), datetime.now(UTC)
+                )
             await r.xack(ingestion_service.TELEMETRY_STREAM, CONSUMER_GROUP, *ack_ids)
             log.info("flushed %d telemetry rows", len(buffer))
         buffer = []
@@ -281,6 +359,7 @@ async def run() -> None:
         mqtt_ingest_loop(session_factory, redis_client),
         stream_writer_loop(session_factory, redis_client),
         rule_cache_loop(session_factory),
+        manual_command_loop(session_factory, redis_client),
     )
 
 

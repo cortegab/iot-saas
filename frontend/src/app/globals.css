@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+/*
+ * Dark mode is the default (UX_UI_Description.md: "Dark mode first, light mode fully
+ * supported"). Light is a full peer theme, not an afterthought behind a media query —
+ * toggled by adding `.light` to <html>. `@custom-variant dark` makes Tailwind's `dark:`
+ * utilities key off that class too, once a toggle exists, rather than only system preference.
+ */
+@custom-variant dark (&:where(:not(.light)));
+
+:root {
+  --color-canvas: #0b0f14;
+  --color-surface: #11161d;
+  --color-surface-raised: #171d26;
+  --color-border: #232b34;
+  --color-ink: #e6edf3;
+  --color-ink-muted: #8b949e;
+  --color-accent: #58a6ff;
+
+  /* Semantic status colors — the only colors allowed to carry meaning.
+     Every status UI must pair these with an icon/shape/text label, never color alone. */
+  --color-status-online: #3fb950;
+  --color-status-offline: #f85149;
+  --color-status-unknown: #8b949e;
+  --color-status-pending: #d29922;
+  --color-status-error: #f85149;
+}
+
+:root.light {
+  --color-canvas: #f6f8fa;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f0f2f5;
+  --color-border: #d0d7de;
+  --color-ink: #1b1f24;
+  --color-ink-muted: #59636e;
+  --color-accent: #0969da;
+
+  --color-status-online: #1a7f37;
+  --color-status-offline: #cf222e;
+  --color-status-unknown: #59636e;
+  --color-status-pending: #9a6700;
+  --color-status-error: #cf222e;
+}
+
+@theme inline {
+  --color-canvas: var(--color-canvas);
+  --color-surface: var(--color-surface);
+  --color-surface-raised: var(--color-surface-raised);
+  --color-border: var(--color-border);
+  --color-ink: var(--color-ink);
+  --color-ink-muted: var(--color-ink-muted);
+  --color-accent: var(--color-accent);
+  --color-status-online: var(--color-status-online);
+  --color-status-offline: var(--color-status-offline);
+  --color-status-unknown: var(--color-status-unknown);
+  --color-status-pending: var(--color-status-pending);
+  --color-status-error: var(--color-status-error);
+}
+
+body {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: system-ui, sans-serif;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* react-grid-layout (dashboards, §Dashboards) ships with a red placeholder
+ * and a fixed rgba(0,0,0,0.4) resize-handle corner — neither follows this
+ * app's theme tokens by default, so both are overridden here rather than
+ * left as the library's hard-coded look. */
+.react-grid-item.react-grid-placeholder {
+  background: var(--color-accent);
+  border-radius: 0.75rem;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-right-color: var(--color-ink-muted);
+  border-bottom-color: var(--color-ink-muted);
+}

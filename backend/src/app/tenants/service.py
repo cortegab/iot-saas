@@ -55,6 +55,17 @@ async def create_tenant_with_owner(session: AsyncSession, user_id: uuid.UUID, na
     return tenant
 
 
+async def get_tenant_slug(session: AsyncSession, tenant_id: uuid.UUID) -> str:
+    """The one place other modules go for "what's this tenant's slug" (e.g.
+    devices/router.py building an MQTT-topic-ready credential response,
+    commands/service.py publishing a manual command) — a cross-module
+    service call, not a `from app.tenants.models import Tenant` in the
+    caller (CLAUDE.md §6 forbids the latter, not the former).
+    """
+    result = await session.execute(select(Tenant.slug).where(Tenant.id == tenant_id))
+    return result.scalar_one()
+
+
 async def list_my_tenants(session: AsyncSession, user_id: uuid.UUID) -> list[tuple[Tenant, str]]:
     """List every tenant the given user belongs to, with their role in each.
 

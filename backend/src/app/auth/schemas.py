@@ -1,6 +1,7 @@
 """Pydantic request/response models for the auth routes."""
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -23,6 +24,7 @@ class RefreshRequest(BaseModel):
 class MembershipSummary(BaseModel):
     tenant_id: uuid.UUID
     tenant_name: str
+    tenant_slug: str
     role: str
 
 
@@ -31,3 +33,9 @@ class TokenPairResponse(BaseModel):
     refresh_token: str
     token_type: str = "bearer"
     memberships: list[MembershipSummary]
+
+
+class UserResponse(BaseModel):
+    id: uuid.UUID
+    email: str
+    created_at: datetime

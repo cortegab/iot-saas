@@ -24,8 +24,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.commands.models import Command
 from app.config import settings
 from app.db import set_tenant_context
+from app.realtime import service as realtime_service
+from app.redis import redis_client
+from app.tenants import service as tenants_service
 
 log = logging.getLogger("commands")
+
+# Dashboard-triggered manual commands (Phase 4): the API process holds no MQTT
+# client of its own (CLAUDE.md §2 — "the API never subscribes to MQTT"), so a
+# manual toggle is a request published here and fulfilled by app.worker's
+# manual_command_loop, which owns a dedicated aiomqtt connection and calls
+# dispatch_command below with rule_id=None — the same nullable column and
+# dispatch path a rule firing uses.
+MANUAL_COMMAND_CHANNEL = "commands:manual"
 
 
 async def dispatch_command(
@@ -33,7 +44,7 @@ async def dispatch_command(
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
     device_id: uuid.UUID,
-    rule_id: uuid.UUID,
+    rule_id: uuid.UUID | None,
     reading_timestamp: datetime,
     tenant_slug: str,
     device_slug: str,
@@ -112,6 +123,10 @@ async def record_ack(
             )
             .values(acked_at=datetime.now(UTC))
         )
+    await realtime_service.publish_event(
+        tenant_id,
+        {"type": "command_ack", "command_id": str(command_id), "device_id": str(device_id)},
+    )
 
 
 async def list_commands(
@@ -124,3 +139,31 @@ async def list_commands(
         .limit(100)
     )
     return list(result.scalars().all())
+
+
+async def request_manual_command(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    device_slug: str,
+    actuator: str,
+    value: Any,
+) -> None:
+    """Publish a manual-command request for app.worker's manual_command_loop
+    to fulfil. This writes nothing to the database itself (dispatch_command
+    does that once the worker actually publishes), so — unlike
+    rules.service._publish_invalidation — there is no commit to race against
+    and no need to defer this publish via add_post_commit_callback.
+    """
+    tenant_slug = await tenants_service.get_tenant_slug(session, tenant_id)
+    payload = json.dumps(
+        {
+            "tenant_id": str(tenant_id),
+            "device_id": str(device_id),
+            "tenant_slug": tenant_slug,
+            "device_slug": device_slug,
+            "actuator": actuator,
+            "value": value,
+        }
+    )
+    await redis_client.publish(MANUAL_COMMAND_CHANNEL, payload)

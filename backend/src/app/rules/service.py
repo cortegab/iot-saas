@@ -6,7 +6,7 @@ app/worker.py), and hot-path evaluation/dispatch.
 import logging
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Any, NamedTuple
 
 import aiomqtt
 import httpx
@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.commands import service as commands_service
 from app.db import add_post_commit_callback
+from app.notifications import service as notifications_service
 from app.redis import redis_client
 from app.rules.evaluators import Action, Evaluator, Reading, RuleState, ThresholdEvaluator
 from app.rules.models import Rule, RuleType
@@ -24,6 +25,22 @@ log = logging.getLogger("rules")
 RULES_INVALIDATE_CHANNEL = "rules:invalidate"
 
 _THRESHOLD_EVALUATOR: Evaluator = ThresholdEvaluator()
+
+# Mirrors frontend/src/components/rules/RuleSummary.tsx's OPERATOR_WORDS —
+# keep the two in sync if either wording changes.
+_OPERATOR_WORDS: dict[str, str] = {
+    ">": "goes above",
+    ">=": "reaches or exceeds",
+    "<": "drops below",
+    "<=": "falls to or below",
+    "==": "equals",
+    "!=": "is different from",
+}
+
+
+def _default_message(rule: Rule, reading: Reading) -> str:
+    op = _OPERATOR_WORDS.get(rule.operator, rule.operator)
+    return f"{rule.metric} {op} {rule.threshold} (currently {reading.value}) on this device."
 
 
 class RuleNotFoundError(Exception):
@@ -70,6 +87,45 @@ async def list_rules(session: AsyncSession, tenant_id: uuid.UUID, device_id: uui
         select(Rule).where(Rule.tenant_id == tenant_id, Rule.device_id == device_id)
     )
     return list(result.scalars().all())
+
+
+class RuleWithDeviceRow(NamedTuple):
+    """One row of the tenant-wide /rules list. A plain tuple, not a `Rule` ORM
+    instance, because building it means joining against `devices` — and per
+    CLAUDE.md §6, rules/service.py must not import devices/models.py's `Device`
+    to do that. A raw `text()` join sidesteps the cross-module model import
+    the same way devices.service.lookup_device_by_slug does for its own
+    cross-cutting query.
+    """
+
+    id: uuid.UUID
+    device_id: uuid.UUID
+    metric: str
+    type: str
+    operator: str
+    threshold: float
+    for_duration: int
+    hysteresis: float
+    action: dict[str, Any]
+    cooldown: int
+    enabled: bool
+    created_at: datetime
+    device_name: str
+    device_slug: str
+
+
+async def list_all_rules(session: AsyncSession, tenant_id: uuid.UUID) -> list[RuleWithDeviceRow]:
+    result = await session.execute(
+        text(
+            "SELECT r.id, r.device_id, r.metric, r.type, r.operator, r.threshold, "
+            "r.for_duration, r.hysteresis, r.action, r.cooldown, r.enabled, r.created_at, "
+            "d.name AS device_name, d.slug AS device_slug "
+            "FROM rules r JOIN devices d ON d.id = r.device_id "
+            "WHERE r.tenant_id = :tenant_id ORDER BY d.name, r.created_at"
+        ),
+        {"tenant_id": tenant_id},
+    )
+    return [RuleWithDeviceRow(**row) for row in result.mappings().all()]
 
 
 async def get_rule(session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID) -> Rule:
@@ -216,7 +272,7 @@ async def evaluate_and_dispatch(
         if action is None:
             continue
         try:
-            await _dispatch_action(client, factory, tenant_id, tenant_slug, device_slug, reading, action)
+            await _dispatch_action(client, factory, tenant_id, tenant_slug, device_slug, reading, action, rule)
         except Exception:
             log.exception("dispatch failed for rule %s", rule.id)
 
@@ -229,6 +285,7 @@ async def _dispatch_action(
     device_slug: str,
     reading: Reading,
     action: Action,
+    rule: Rule,
 ) -> None:
     if action.action_type == "actuator_command":
         await commands_service.dispatch_command(
@@ -249,9 +306,22 @@ async def _dispatch_action(
                 await http_client.post(action.payload["url"], json=action.payload.get("body", {}))
         except httpx.HTTPError as exc:
             log.warning("webhook dispatch failed for rule %s: %s", action.rule_id, exc)
-    elif action.action_type == "notification":
-        log.info(
-            "notification (stub) for rule %s: %s", action.rule_id, action.payload.get("message")
-        )
     else:
         log.warning("unknown action type %r for rule %s", action.action_type, action.rule_id)
+
+    # A notification row is written for every firing, regardless of the
+    # rule's configured action — this is what answers "did anything cross a
+    # threshold" (UX_UI_Description.md), not just rules explicitly configured
+    # to notify. `notification`-type actions use their own custom message
+    # verbatim; every other action type gets an auto-generated one.
+    message = (
+        action.payload["message"]
+        if action.action_type == "notification"
+        else _default_message(rule, reading)
+    )
+    try:
+        await notifications_service.create_notification(
+            factory, tenant_id, reading.device_id, action.rule_id, message
+        )
+    except Exception:
+        log.exception("notification write failed for rule %s", action.rule_id)

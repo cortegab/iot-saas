@@ -10,12 +10,15 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
+from app.auth.deps import get_current_user
+from app.auth.models import User
 from app.auth.schemas import (
     LoginRequest,
     MembershipSummary,
     RefreshRequest,
     RegisterRequest,
     TokenPairResponse,
+    UserResponse,
 )
 from app.db import get_session, set_user_context
 from app.tenants import service as tenants_service
@@ -33,7 +36,9 @@ async def _token_pair_response(
         access_token=access_token,
         refresh_token=refresh_token,
         memberships=[
-            MembershipSummary(tenant_id=tenant.id, tenant_name=tenant.name, role=role)
+            MembershipSummary(
+                tenant_id=tenant.id, tenant_name=tenant.name, tenant_slug=tenant.slug, role=role
+            )
             for tenant, role in memberships
         ],
     )
@@ -88,3 +93,10 @@ async def refresh(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(body: RefreshRequest, session: AsyncSession = Depends(get_session)) -> None:
     await service.revoke_refresh_token(session, body.refresh_token)
+
+
+@router.get("/me", response_model=UserResponse)
+async def me(current_user: User = Depends(get_current_user)) -> UserResponse:
+    return UserResponse(
+        id=current_user.id, email=current_user.email, created_at=current_user.created_at
+    )

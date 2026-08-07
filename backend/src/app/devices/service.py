@@ -9,6 +9,8 @@ once at creation/rotation and never retrievable afterward.
 import re
 import secrets
 import uuid
+from collections.abc import Sequence
+from datetime import datetime
 from typing import NamedTuple
 
 from sqlalchemy import select, text
@@ -166,3 +168,20 @@ async def lookup_device_by_slug(
     )
     row = result.mappings().first()
     return DeviceDirectoryRecord(**row) if row is not None else None
+
+
+async def touch_last_seen(
+    session: AsyncSession, device_ids: Sequence[uuid.UUID], seen_at: datetime
+) -> None:
+    """Batched connection-state update — called once per storage-path flush
+    (app.worker's stream_writer_loop), never per-message, so it stays off the
+    hot path. Backed by the touch_devices_last_seen SECURITY DEFINER function:
+    the worker's session has no tenant context (a flush spans many tenants),
+    so a plain UPDATE against RLS-protected `devices` would touch zero rows.
+    """
+    if not device_ids:
+        return
+    await session.execute(
+        text("SELECT touch_devices_last_seen(:ids, :seen_at)"),
+        {"ids": [str(d) for d in device_ids], "seen_at": seen_at},
+    )

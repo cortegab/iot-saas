@@ -38,7 +38,9 @@ async def list_mine(
     await set_user_context(session, current_user.id)
     memberships = await service.list_my_tenants(session, current_user.id)
     return [
-        MembershipSummary(tenant_id=tenant.id, tenant_name=tenant.name, role=role)
+        MembershipSummary(
+            tenant_id=tenant.id, tenant_name=tenant.name, tenant_slug=tenant.slug, role=role
+        )
         for tenant, role in memberships
     ]
 

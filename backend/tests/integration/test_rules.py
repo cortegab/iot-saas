@@ -190,3 +190,61 @@ async def test_create_rule_for_cross_tenant_device_404(client: httpx.AsyncClient
 
     resp = await _create_rule(client, headers_b, device_a["device"]["id"])
     assert resp.status_code == 404
+
+
+async def test_list_all_rules_across_devices(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner13@example.com", "Acme13")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+
+    device_a = await _create_device(client, headers, name="A Sensor")
+    device_b = await _create_device(client, headers, name="B Sensor")
+    rule_a = await _create_rule(client, headers, device_a["device"]["id"])
+    rule_b = await _create_rule(client, headers, device_b["device"]["id"], metric="humidity")
+    assert rule_a.status_code == 201
+    assert rule_b.status_code == 201
+
+    resp = await client.get("/rules", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert [r["device_name"] for r in body] == ["A Sensor", "B Sensor"]
+    assert body[0]["device_slug"] == device_a["device"]["slug"]
+    assert body[0]["metric"] == "temperature"
+    assert body[1]["device_slug"] == device_b["device"]["slug"]
+    assert body[1]["metric"] == "humidity"
+
+
+async def test_list_all_rules_tenant_isolation(client: httpx.AsyncClient) -> None:
+    owner_a = await _register(client, "owner14@example.com", "Acme14")
+    tenant_a = owner_a["memberships"][0]["tenant_id"]
+    headers_a = _auth_headers(owner_a, tenant_a)
+    device_a = await _create_device(client, headers_a)
+    await _create_rule(client, headers_a, device_a["device"]["id"])
+
+    owner_b = await _register(client, "owner15@example.com", "Acme15")
+    tenant_b = owner_b["memberships"][0]["tenant_id"]
+    headers_b = _auth_headers(owner_b, tenant_b)
+
+    resp = await client.get("/rules", headers=headers_b)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+async def test_viewer_can_list_all_rules(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner16@example.com", "Acme16")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    owner_headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, owner_headers)
+    await _create_rule(client, owner_headers, device["device"]["id"])
+
+    viewer = await _register(client, "viewer16@example.com", "ViewerOwnTenant16")
+    await client.post(
+        "/tenants/members",
+        json={"email": "viewer16@example.com", "role": "viewer"},
+        headers=owner_headers,
+    )
+    viewer_headers = _auth_headers(viewer, tenant_id)
+
+    resp = await client.get("/rules", headers=viewer_headers)
+    assert resp.status_code == 200
+    assert len(resp.json()) == 1

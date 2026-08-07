@@ -52,5 +52,10 @@ class Settings(BaseSettings):
     # honor a command after `issued_at` before treating it as stale.
     command_default_ttl_seconds: int = 30
 
+    # Device connection-state threshold (app/devices/): a device with no telemetry
+    # more recent than this is shown as "offline" rather than "online". A few
+    # multiples of the expected reporting interval (PLAN.md's free-tier "1 msg / 5s").
+    device_offline_after_seconds: int = 90
+
 
 settings = Settings()
