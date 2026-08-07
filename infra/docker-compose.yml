@@ -58,7 +58,7 @@ services:
       EMQX_NODE__COOKIE: ${EMQX_NODE_COOKIE:-iot-saas-dev-cookie}
       EMQX_DASHBOARD__DEFAULT_PASSWORD: ${EMQX_DASHBOARD_PASSWORD:-public}
     ports:
-      - "127.0.0.1:1883:1883"     # MQTT (plaintext, dev only)
+      - "0.0.0.0:1883:1883"       # MQTT (plaintext, dev only) — exposed to LAN
       - "127.0.0.1:18083:18083"   # dashboard
     volumes:
       - emqx-data:/opt/emqx/data

@@ -4,24 +4,36 @@ Thin per CLAUDE.md §6 — validation and delegation only, business logic lives
 in devices/service.py.
 """
 
+from datetime import UTC, datetime, timedelta
+
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.db import get_session
 from app.devices import service
 from app.devices.deps import get_device_or_404
 from app.devices.models import Device
 from app.devices.schemas import (
+    ConnectionState,
     DeviceCreateRequest,
     DeviceCreateResponse,
     DeviceCredential,
     DeviceResponse,
     DeviceUpdateRequest,
 )
+from app.tenants import service as tenants_service
 from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import TenantRole
 
 router = APIRouter(prefix="/devices", tags=["devices"])
+
+
+def _connection_state(last_seen_at: datetime | None) -> ConnectionState:
+    if last_seen_at is None:
+        return "never_connected"
+    offline_after = timedelta(seconds=settings.device_offline_after_seconds)
+    return "online" if datetime.now(UTC) - last_seen_at <= offline_after else "offline"
 
 
 def _to_response(device: Device) -> DeviceResponse:
@@ -32,6 +44,7 @@ def _to_response(device: Device) -> DeviceResponse:
         status=device.status,
         last_seen_at=device.last_seen_at,
         created_at=device.created_at,
+        connection_state=_connection_state(device.last_seen_at),
     )
 
 
@@ -51,9 +64,11 @@ async def create_device(
     session: AsyncSession = Depends(get_session),
 ) -> DeviceCreateResponse:
     device, secret = await service.create_device(session, ctx.tenant_id, body.name)
+    tenant_slug = await tenants_service.get_tenant_slug(session, ctx.tenant_id)
     return DeviceCreateResponse(
         device=_to_response(device),
         credential=DeviceCredential(username=str(device.id), password=secret),
+        tenant_slug=tenant_slug,
     )
 
 
@@ -89,7 +104,9 @@ async def rotate_credential(
     session: AsyncSession = Depends(get_session),
 ) -> DeviceCreateResponse:
     updated, secret = await service.rotate_credential(session, ctx.tenant_id, device.id)
+    tenant_slug = await tenants_service.get_tenant_slug(session, ctx.tenant_id)
     return DeviceCreateResponse(
         device=_to_response(updated),
         credential=DeviceCredential(username=str(updated.id), password=secret),
+        tenant_slug=tenant_slug,
     )

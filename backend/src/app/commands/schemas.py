@@ -5,7 +5,17 @@ device firmware publishes on {tenant}/{device}/ack/{actuator} (CLAUDE.md §4).
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+
+class ManualCommandRequest(BaseModel):
+    """A dashboard-triggered actuator toggle (Phase 4) — validated the same
+    as any other HTTP boundary input before commands.service.request_manual_command
+    ever sees it.
+    """
+
+    actuator: str = Field(min_length=1, max_length=100)
+    value: bool | float | str
 
 
 class AckPayload(BaseModel):

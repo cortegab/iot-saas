@@ -16,6 +16,7 @@ from app.commands import models as commands_models  # noqa: F401
 from app.config import settings
 from app.db import Base
 from app.devices import models as devices_models  # noqa: F401
+from app.notifications import models as notifications_models  # noqa: F401
 from app.rules import models as rules_models  # noqa: F401
 from app.tenants import models as tenants_models  # noqa: F401
 

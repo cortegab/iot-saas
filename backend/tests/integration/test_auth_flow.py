@@ -120,3 +120,26 @@ async def test_logout_revokes_refresh_token(client: httpx.AsyncClient) -> None:
 async def test_logout_idempotent_on_garbage_token(client: httpx.AsyncClient) -> None:
     resp = await client.post("/auth/logout", json={"refresh_token": "garbage"})
     assert resp.status_code == 204
+
+
+async def test_me_returns_current_user(client: httpx.AsyncClient) -> None:
+    reg = await client.post(
+        "/auth/register",
+        json={"email": "g@example.com", "password": "hunter2hunter2", "tenant_name": "Eta"},
+    )
+    access_token = reg.json()["access_token"]
+
+    resp = await client.get("/auth/me", headers={"authorization": f"Bearer {access_token}"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["email"] == "g@example.com"
+    assert body["id"]
+    assert body["created_at"]
+
+
+async def test_me_requires_auth(client: httpx.AsyncClient) -> None:
+    resp = await client.get("/auth/me")
+    assert resp.status_code == 401
+
+    garbage = await client.get("/auth/me", headers={"authorization": "Bearer garbage"})
+    assert garbage.status_code == 401

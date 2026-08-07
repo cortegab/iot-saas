@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.devices import service as devices_service
 from app.devices.service import DeviceDirectoryRecord
 from app.ingestion.schemas import TelemetryPayload
+from app.realtime import service as realtime_service
 
 TELEMETRY_STREAM = "telemetry"
 
@@ -133,6 +134,20 @@ async def record_telemetry_direct(
             "metric": metric,
             "value": str(payload.value),
             "timestamp": str(payload.timestamp or ""),
+        },
+    )
+    # Live-updates side channel (Phase 4) — separate from the stream above,
+    # which the batched writer drains for storage. This is a plain PUBLISH,
+    # not a queue: it's fine if nobody's listening, and it never blocks or
+    # slows down the storage path it sits next to.
+    await realtime_service.publish_event(
+        tenant_id,
+        {
+            "type": "telemetry",
+            "device_id": str(device_id),
+            "metric": metric,
+            "value": payload.value,
+            "time": payload.timestamp or int(time.time()),
         },
     )
 

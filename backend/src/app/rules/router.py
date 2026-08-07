@@ -13,8 +13,13 @@ from app.devices.models import Device
 from app.rules import service
 from app.rules.deps import get_rule_or_404
 from app.rules.models import Rule
-from app.rules.schemas import RuleCreateRequest, RuleResponse, RuleUpdateRequest
-from app.tenants.deps import TenantContext, require_role
+from app.rules.schemas import (
+    RuleCreateRequest,
+    RuleResponse,
+    RuleUpdateRequest,
+    RuleWithDeviceResponse,
+)
+from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import TenantRole
 
 router = APIRouter(tags=["rules"])
@@ -44,6 +49,15 @@ async def list_rules(
 ) -> list[RuleResponse]:
     rules = await service.list_rules(session, device.tenant_id, device.id)
     return [_to_response(r) for r in rules]
+
+
+@router.get("/rules", response_model=list[RuleWithDeviceResponse])
+async def list_all_rules(
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session),
+) -> list[RuleWithDeviceResponse]:
+    rows = await service.list_all_rules(session, ctx.tenant_id)
+    return [RuleWithDeviceResponse(**row._asdict()) for row in rows]
 
 
 @router.post(
