@@ -9,6 +9,7 @@ import { ApiRequestError } from "@/lib/api-client";
 export default function RegisterPage() {
   const { register } = useAuth();
   const router = useRouter();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantName, setTenantName] = useState("");
@@ -22,7 +23,7 @@ export default function RegisterPage() {
     try {
       // Registration also creates the workspace (tenant) in the same call — no
       // separate "create a workspace" step, part of keeping onboarding fast.
-      await register(email, password, tenantName);
+      await register(email, password, tenantName, name);
       router.replace("/devices");
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");
@@ -50,6 +51,18 @@ export default function RegisterPage() {
           value={tenantName}
           onChange={(e) => setTenantName(e.target.value)}
           placeholder="e.g. My Workshop"
+          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
+        />
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm text-ink-muted">
+        Name <span className="text-ink-muted/70">(optional)</span>
+        <input
+          type="text"
+          autoComplete="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Jamie Rivera"
           className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         />
       </label>

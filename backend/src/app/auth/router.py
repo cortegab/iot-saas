@@ -18,6 +18,7 @@ from app.auth.schemas import (
     RefreshRequest,
     RegisterRequest,
     TokenPairResponse,
+    UpdateProfileRequest,
     UserResponse,
 )
 from app.db import get_session, set_user_context
@@ -50,7 +51,7 @@ async def register(
 ) -> TokenPairResponse:
     try:
         user, _tenant = await service.register_user(
-            session, body.email, body.password, body.tenant_name
+            session, body.email, body.password, body.tenant_name, body.name
         )
     except service.EmailAlreadyRegisteredError as exc:
         raise HTTPException(
@@ -98,5 +99,18 @@ async def logout(body: RefreshRequest, session: AsyncSession = Depends(get_sessi
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)) -> UserResponse:
     return UserResponse(
-        id=current_user.id, email=current_user.email, created_at=current_user.created_at
+        id=current_user.id,
+        email=current_user.email,
+        name=current_user.name,
+        created_at=current_user.created_at,
     )
+
+
+@router.patch("/me", response_model=UserResponse)
+async def update_me(
+    body: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> UserResponse:
+    user = await service.update_profile(session, current_user, body.name)
+    return UserResponse(id=user.id, email=user.email, name=user.name, created_at=user.created_at)

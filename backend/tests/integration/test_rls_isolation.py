@@ -182,14 +182,33 @@ async def test_with_check_blocks_insert_outside_tenant_context(
 # ── Devices: the milestone-defining suite (standard single-tenant predicate) ──
 
 
+async def _create_catalog_entry(session: AsyncSession, tenant_id: uuid.UUID) -> uuid.UUID:
+    entry_id = uuid.uuid4()
+    await session.execute(
+        text(
+            "INSERT INTO device_catalog_entries (id, tenant_id, name, metrics, actuators, is_legacy) "
+            "VALUES (:id, :tenant_id, 'Test', '[]', '[]', false)"
+        ),
+        {"id": entry_id, "tenant_id": tenant_id},
+    )
+    return entry_id
+
+
 async def _create_device(session: AsyncSession, tenant_id: uuid.UUID, slug: str) -> uuid.UUID:
+    catalog_entry_id = await _create_catalog_entry(session, tenant_id)
     device_id = uuid.uuid4()
     await session.execute(
         text(
-            "INSERT INTO devices (id, tenant_id, name, slug, token_hash, status) "
-            "VALUES (:id, :tenant_id, :name, :slug, 'x', 'active')"
+            "INSERT INTO devices (id, tenant_id, catalog_entry_id, name, slug, token_hash, status) "
+            "VALUES (:id, :tenant_id, :catalog_entry_id, :name, :slug, 'x', 'active')"
         ),
-        {"id": device_id, "tenant_id": tenant_id, "name": slug, "slug": slug},
+        {
+            "id": device_id,
+            "tenant_id": tenant_id,
+            "catalog_entry_id": catalog_entry_id,
+            "name": slug,
+            "slug": slug,
+        },
     )
     return device_id
 
@@ -260,7 +279,12 @@ async def test_devices_api_blocks_cross_tenant_read_end_to_end(
     )
     tenant_a = reg_a.json()["memberships"][0]["tenant_id"]
     headers_a = {"authorization": f"Bearer {reg_a.json()['access_token']}", "x-tenant-id": tenant_a}
-    device_a = (await client.post("/devices", json={"name": "sensor-a"}, headers=headers_a)).json()
+    catalog_a = (await client.get("/catalog", headers=headers_a)).json()[0]["id"]
+    device_a = (
+        await client.post(
+            "/devices", json={"name": "sensor-a", "catalog_entry_id": catalog_a}, headers=headers_a
+        )
+    ).json()
 
     reg_b = await client.post(
         "/auth/register",
@@ -268,7 +292,12 @@ async def test_devices_api_blocks_cross_tenant_read_end_to_end(
     )
     tenant_b = reg_b.json()["memberships"][0]["tenant_id"]
     headers_b = {"authorization": f"Bearer {reg_b.json()['access_token']}", "x-tenant-id": tenant_b}
-    device_b = (await client.post("/devices", json={"name": "sensor-b"}, headers=headers_b)).json()
+    catalog_b = (await client.get("/catalog", headers=headers_b)).json()[0]["id"]
+    device_b = (
+        await client.post(
+            "/devices", json={"name": "sensor-b", "catalog_entry_id": catalog_b}, headers=headers_b
+        )
+    ).json()
 
     listing = await client.get("/devices", headers=headers_a)
     assert listing.status_code == 200
@@ -286,6 +315,9 @@ async def test_devices_with_check_blocks_cross_tenant_insert(
     """
     tenant_a, tenant_b, _device_a, _device_b = await _seed_two_tenants_with_devices(admin_session)
 
+    async with admin_session.begin():
+        catalog_entry_id = await _create_catalog_entry(admin_session, tenant_b)
+
     async with app_session_factory() as session:
         with pytest.raises(DBAPIError):
             async with session.begin():
@@ -294,8 +326,8 @@ async def test_devices_with_check_blocks_cross_tenant_insert(
                 )
                 await session.execute(
                     text(
-                        "INSERT INTO devices (id, tenant_id, name, slug, token_hash, status) "
-                        "VALUES (:id, :tenant_id, 'x', 'x', 'x', 'active')"
+                        "INSERT INTO devices (id, tenant_id, catalog_entry_id, name, slug, token_hash, status) "
+                        "VALUES (:id, :tenant_id, :catalog_entry_id, 'x', 'x', 'x', 'active')"
                     ),
-                    {"id": uuid.uuid4(), "tenant_id": tenant_b},
+                    {"id": uuid.uuid4(), "tenant_id": tenant_b, "catalog_entry_id": catalog_entry_id},
                 )

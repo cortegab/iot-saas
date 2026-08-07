@@ -6,8 +6,11 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.catalog import service as catalog_service
 from app.db import set_tenant_context
 from app.tenants.models import Tenant, TenantMembership, TenantRole
+
+LEGACY_CATALOG_ENTRY_NAME = "Legacy / Uncategorized"
 
 
 class NotAMemberError(Exception):
@@ -43,6 +46,12 @@ async def create_tenant_with_owner(session: AsyncSession, user_id: uuid.UUID, na
     dependency layer (tenants.deps.require_tenant_context) that calls
     set_tenant_context directly. This is sanctioned, not a bypass: the caller
     is, by construction, entitled to own the tenant they just created.
+
+    Also seeds a "Legacy / Uncategorized" catalog entry (empty metrics/
+    actuators) — the same one the device-catalog backfill migration creates
+    for pre-existing tenants — so a brand new tenant's first device creation
+    is never catalog-first-blocked. A cross-module service call, not a
+    `from app.catalog.models import ...` here (CLAUDE.md §6).
     """
     slug = await _unique_slug(session, name)
     tenant = Tenant(name=name, slug=slug)
@@ -51,6 +60,9 @@ async def create_tenant_with_owner(session: AsyncSession, user_id: uuid.UUID, na
 
     await set_tenant_context(session, tenant.id)
     session.add(TenantMembership(tenant_id=tenant.id, user_id=user_id, role=TenantRole.OWNER.value))
+    await catalog_service.create_catalog_entry(
+        session, tenant.id, LEGACY_CATALOG_ENTRY_NAME, [], [], is_legacy=True
+    )
     await session.flush()
     return tenant
 

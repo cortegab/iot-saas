@@ -6,9 +6,10 @@ in devices/service.py.
 
 from datetime import UTC, datetime, timedelta
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.catalog import service as catalog_service
 from app.config import settings
 from app.db import get_session
 from app.devices import service
@@ -40,6 +41,7 @@ def _to_response(device: Device) -> DeviceResponse:
     return DeviceResponse(
         id=device.id,
         name=device.name,
+        catalog_entry_id=device.catalog_entry_id,
         slug=device.slug,
         status=device.status,
         last_seen_at=device.last_seen_at,
@@ -63,7 +65,14 @@ async def create_device(
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
     session: AsyncSession = Depends(get_session),
 ) -> DeviceCreateResponse:
-    device, secret = await service.create_device(session, ctx.tenant_id, body.name)
+    try:
+        device, secret = await service.create_device(
+            session, ctx.tenant_id, body.name, body.catalog_entry_id
+        )
+    except catalog_service.CatalogEntryNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Catalog entry not found"
+        ) from exc
     tenant_slug = await tenants_service.get_tenant_slug(session, ctx.tenant_id)
     return DeviceCreateResponse(
         device=_to_response(device),

@@ -88,14 +88,19 @@ def decode_access_token(token: str) -> uuid.UUID:
 
 
 async def register_user(
-    session: AsyncSession, email: str, password: str, tenant_name: str
+    session: AsyncSession,
+    email: str,
+    password: str,
+    tenant_name: str,
+    name: str | None = None,
 ) -> tuple[User, Tenant]:
     normalized_email = email.strip().lower()
     existing = await session.execute(select(User).where(User.email == normalized_email))
     if existing.scalar_one_or_none() is not None:
         raise EmailAlreadyRegisteredError(normalized_email)
 
-    user = User(email=normalized_email, password_hash=hash_password(password))
+    stripped_name = name.strip() if name and name.strip() else None
+    user = User(email=normalized_email, name=stripped_name, password_hash=hash_password(password))
     session.add(user)
     await session.flush()  # populate user.id for the membership insert below
 
@@ -124,6 +129,12 @@ async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
     """
     result = await session.execute(select(User).where(User.email == email.strip().lower()))
     return result.scalar_one_or_none()
+
+
+async def update_profile(session: AsyncSession, user: User, name: str | None) -> User:
+    user.name = name.strip() if name and name.strip() else None
+    await session.flush()
+    return user
 
 
 async def get_emails_by_user_ids(

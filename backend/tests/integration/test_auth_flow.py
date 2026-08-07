@@ -133,6 +133,7 @@ async def test_me_returns_current_user(client: httpx.AsyncClient) -> None:
     assert resp.status_code == 200
     body = resp.json()
     assert body["email"] == "g@example.com"
+    assert body["name"] is None
     assert body["id"]
     assert body["created_at"]
 
@@ -143,3 +144,35 @@ async def test_me_requires_auth(client: httpx.AsyncClient) -> None:
 
     garbage = await client.get("/auth/me", headers={"authorization": "Bearer garbage"})
     assert garbage.status_code == 401
+
+
+async def test_register_with_name_returns_it_from_me(client: httpx.AsyncClient) -> None:
+    reg = await client.post(
+        "/auth/register",
+        json={
+            "email": "h@example.com",
+            "password": "hunter2hunter2",
+            "tenant_name": "Theta",
+            "name": "Hannah",
+        },
+    )
+    access_token = reg.json()["access_token"]
+
+    resp = await client.get("/auth/me", headers={"authorization": f"Bearer {access_token}"})
+    assert resp.json()["name"] == "Hannah"
+
+
+async def test_update_me_sets_and_clears_name(client: httpx.AsyncClient) -> None:
+    reg = await client.post(
+        "/auth/register",
+        json={"email": "i@example.com", "password": "hunter2hunter2", "tenant_name": "Iota"},
+    )
+    headers = {"authorization": f"Bearer {reg.json()['access_token']}"}
+
+    set_resp = await client.patch("/auth/me", json={"name": "Iris"}, headers=headers)
+    assert set_resp.status_code == 200
+    assert set_resp.json()["name"] == "Iris"
+
+    clear_resp = await client.patch("/auth/me", json={"name": None}, headers=headers)
+    assert clear_resp.status_code == 200
+    assert clear_resp.json()["name"] is None

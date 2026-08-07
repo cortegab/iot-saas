@@ -11,6 +11,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
 import { RuleForm } from "@/components/rules/RuleForm";
 import { RuleRow } from "@/components/rules/RuleRow";
+import { leafPredicates } from "@/components/rules/RuleSummary";
 import type { components } from "@/types/api";
 
 type RuleWithDeviceResponse = components["schemas"]["RuleWithDeviceResponse"];
@@ -28,7 +29,9 @@ export default function RulesPage() {
     const q = filter.trim().toLowerCase();
     if (!q) return rules;
     return rules.filter(
-      (r) => r.metric.toLowerCase().includes(q) || r.device_name.toLowerCase().includes(q),
+      (r) =>
+        leafPredicates(r.condition).some((leaf) => leaf.metric.toLowerCase().includes(q)) ||
+        r.device_name.toLowerCase().includes(q),
     );
   }, [rules, filter]);
 

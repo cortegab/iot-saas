@@ -29,7 +29,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, tenantName: string) => Promise<void>;
+  register: (email: string, password: string, tenantName: string, name?: string) => Promise<void>;
   logout: () => Promise<void>;
   /** Re-authenticates from the stored refresh token; returns the fresh session on
    * success so a caller mid-request can retry with the new access token without
@@ -101,11 +101,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const register = useCallback(
-    async (email: string, password: string, tenantName: string) => {
+    async (email: string, password: string, tenantName: string, name?: string) => {
       const data = await apiClient.post<TokenPairResponse>("/auth/register", {}, {
         email,
         password,
         tenant_name: tenantName,
+        name: name?.trim() || undefined,
       });
       applySession(data);
     },

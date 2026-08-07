@@ -13,6 +13,10 @@ ConnectionState = Literal["online", "offline", "never_connected"]
 
 class DeviceCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
+    # Write-once — no reassignment endpoint exists. Defaults to the tenant's
+    # auto-created "Legacy / Uncategorized" entry client-side when the user
+    # hasn't defined any real catalog entries yet.
+    catalog_entry_id: uuid.UUID
 
 
 class DeviceUpdateRequest(BaseModel):
@@ -23,6 +27,7 @@ class DeviceUpdateRequest(BaseModel):
 class DeviceResponse(BaseModel):
     id: uuid.UUID
     name: str
+    catalog_entry_id: uuid.UUID
     slug: str
     status: str
     last_seen_at: datetime | None

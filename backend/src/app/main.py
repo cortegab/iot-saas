@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api_keys.router import router as api_keys_router
 from app.auth.router import router as auth_router
+from app.catalog.router import router as catalog_router
 from app.commands.router import router as commands_router
 from app.dashboards.router import router as dashboards_router
 from app.devices.router import router as devices_router
@@ -38,6 +39,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(tenants_router)
+app.include_router(catalog_router)
 app.include_router(devices_router)
 app.include_router(api_keys_router)
 app.include_router(telemetry_router)

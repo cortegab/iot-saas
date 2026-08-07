@@ -21,6 +21,12 @@ def _auth_headers(body: dict[str, Any], tenant_id: str) -> dict[str, str]:
     return {"authorization": f"Bearer {body['access_token']}", "x-tenant-id": tenant_id}
 
 
+async def _catalog_entry_id(client: httpx.AsyncClient, headers: dict[str, str]) -> str:
+    resp = await client.get("/catalog", headers=headers)
+    entries: list[dict[str, Any]] = resp.json()
+    return str(entries[0]["id"])
+
+
 async def test_create_dashboard_starts_with_empty_layout(client: httpx.AsyncClient) -> None:
     owner = await _register(client, "owner1@example.com", "Acme1")
     tenant_id = owner["memberships"][0]["tenant_id"]
@@ -49,7 +55,10 @@ async def test_update_dashboard_layout_and_name(client: httpx.AsyncClient) -> No
     owner = await _register(client, "owner3@example.com", "Acme3")
     tenant_id = owner["memberships"][0]["tenant_id"]
     headers = _auth_headers(owner, tenant_id)
-    device = await client.post("/devices", json={"name": "Sensor 1"}, headers=headers)
+    catalog_entry_id = await _catalog_entry_id(client, headers)
+    device = await client.post(
+        "/devices", json={"name": "Sensor 1", "catalog_entry_id": catalog_entry_id}, headers=headers
+    )
     device_id = device.json()["device"]["id"]
     created = await client.post("/dashboards", json={"name": "Overview"}, headers=headers)
     dashboard_id = created.json()["id"]

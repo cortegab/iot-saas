@@ -86,7 +86,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Update Me */
+        patch: operations["update_me_auth_me_patch"];
         trace?: never;
     };
     "/tenants/mine": {
@@ -157,6 +158,43 @@ export interface paths {
         head?: never;
         /** Change Member Role */
         patch: operations["change_member_role_tenants_members__user_id__patch"];
+        trace?: never;
+    };
+    "/catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Catalog Entries */
+        get: operations["list_catalog_entries_catalog_get"];
+        put?: never;
+        /** Create Catalog Entry */
+        post: operations["create_catalog_entry_catalog_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/{entry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Catalog Entry */
+        get: operations["get_catalog_entry_catalog__entry_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Catalog Entry */
+        delete: operations["delete_catalog_entry_catalog__entry_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Catalog Entry */
+        patch: operations["update_catalog_entry_catalog__entry_id__patch"];
         trace?: never;
     };
     "/devices": {
@@ -578,6 +616,80 @@ export interface components {
             /** Revoked At */
             revoked_at: string | null;
         };
+        /** CatalogActuator */
+        CatalogActuator: {
+            /** Name */
+            name: string;
+            /**
+             * Value Type
+             * @default bool
+             * @enum {string}
+             */
+            value_type: "bool" | "float" | "string";
+            /** Allowed Values */
+            allowed_values?: (boolean | number | string)[] | null;
+        };
+        /** CatalogEntryCreateRequest */
+        CatalogEntryCreateRequest: {
+            /** Name */
+            name: string;
+            /** Metrics */
+            metrics?: components["schemas"]["CatalogMetric"][];
+            /** Actuators */
+            actuators?: components["schemas"]["CatalogActuator"][];
+        };
+        /** CatalogEntryResponse */
+        CatalogEntryResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Metrics */
+            metrics: components["schemas"]["CatalogMetric"][];
+            /** Actuators */
+            actuators: components["schemas"]["CatalogActuator"][];
+            /** Is Legacy */
+            is_legacy: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** CatalogEntryUpdateRequest */
+        CatalogEntryUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Metrics */
+            metrics?: components["schemas"]["CatalogMetric"][] | null;
+            /** Actuators */
+            actuators?: components["schemas"]["CatalogActuator"][] | null;
+        };
+        /** CatalogMetric */
+        CatalogMetric: {
+            /** Name */
+            name: string;
+            /** Unit */
+            unit?: string | null;
+            /**
+             * Data Type
+             * @default float
+             * @constant
+             */
+            data_type: "float";
+            /** Min */
+            min?: number | null;
+            /** Max */
+            max?: number | null;
+        };
         /** ChangeRoleRequest */
         ChangeRoleRequest: {
             role: components["schemas"]["TenantRole"];
@@ -617,6 +729,55 @@ export interface components {
             /** Latency Ms */
             latency_ms: number;
         };
+        /** ConditionGroup */
+        "ConditionGroup-Input": {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "group";
+            /**
+             * Op
+             * @enum {string}
+             */
+            op: "AND" | "OR";
+            /** Predicates */
+            predicates: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"])[];
+        };
+        /** ConditionGroup */
+        "ConditionGroup-Output": {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "group";
+            /**
+             * Op
+             * @enum {string}
+             */
+            op: "AND" | "OR";
+            /** Predicates */
+            predicates: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"])[];
+        };
+        /** ConditionLeaf */
+        ConditionLeaf: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "leaf";
+            /** Metric */
+            metric: string;
+            /** Operator */
+            operator: string;
+            /** Threshold */
+            threshold: number;
+            /**
+             * Hysteresis
+             * @default 0
+             */
+            hysteresis: number;
+        };
         /** DashboardCreateRequest */
         DashboardCreateRequest: {
             /** Name */
@@ -655,6 +816,11 @@ export interface components {
         DeviceCreateRequest: {
             /** Name */
             name: string;
+            /**
+             * Catalog Entry Id
+             * Format: uuid
+             */
+            catalog_entry_id: string;
         };
         /** DeviceCreateResponse */
         DeviceCreateResponse: {
@@ -683,6 +849,11 @@ export interface components {
             id: string;
             /** Name */
             name: string;
+            /**
+             * Catalog Entry Id
+             * Format: uuid
+             */
+            catalog_entry_id: string;
             /** Slug */
             slug: string;
             /** Status */
@@ -849,25 +1020,18 @@ export interface components {
             password: string;
             /** Tenant Name */
             tenant_name: string;
+            /** Name */
+            name?: string | null;
         };
         /** RuleCreateRequest */
         RuleCreateRequest: {
-            /** Metric */
-            metric: string;
-            /** Operator */
-            operator: string;
-            /** Threshold */
-            threshold: number;
+            /** Condition */
+            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"];
             /**
              * For Duration
              * @default 0
              */
             for_duration: number;
-            /**
-             * Hysteresis
-             * @default 0
-             */
-            hysteresis: number;
             /**
              * Cooldown
              * @default 0
@@ -893,24 +1057,18 @@ export interface components {
              * Format: uuid
              */
             device_id: string;
-            /** Metric */
-            metric: string;
             /** Type */
             type: string;
-            /** Operator */
-            operator: string;
-            /** Threshold */
-            threshold: number;
+            /** Condition */
+            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"];
             /** For Duration */
             for_duration: number;
-            /** Hysteresis */
-            hysteresis: number;
+            /** Cooldown */
+            cooldown: number;
             /** Action */
             action: {
                 [key: string]: unknown;
             };
-            /** Cooldown */
-            cooldown: number;
             /** Enabled */
             enabled: boolean;
             /**
@@ -921,16 +1079,10 @@ export interface components {
         };
         /** RuleUpdateRequest */
         RuleUpdateRequest: {
-            /** Metric */
-            metric?: string | null;
-            /** Operator */
-            operator?: string | null;
-            /** Threshold */
-            threshold?: number | null;
+            /** Condition */
+            condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
             /** For Duration */
             for_duration?: number | null;
-            /** Hysteresis */
-            hysteresis?: number | null;
             /** Cooldown */
             cooldown?: number | null;
             /** Action */
@@ -955,24 +1107,18 @@ export interface components {
              * Format: uuid
              */
             device_id: string;
-            /** Metric */
-            metric: string;
             /** Type */
             type: string;
-            /** Operator */
-            operator: string;
-            /** Threshold */
-            threshold: number;
+            /** Condition */
+            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"];
             /** For Duration */
             for_duration: number;
-            /** Hysteresis */
-            hysteresis: number;
+            /** Cooldown */
+            cooldown: number;
             /** Action */
             action: {
                 [key: string]: unknown;
             };
-            /** Cooldown */
-            cooldown: number;
             /** Enabled */
             enabled: boolean;
             /**
@@ -1056,6 +1202,11 @@ export interface components {
             /** Memberships */
             memberships: components["schemas"]["MembershipSummary"][];
         };
+        /** UpdateProfileRequest */
+        UpdateProfileRequest: {
+            /** Name */
+            name?: string | null;
+        };
         /** UserResponse */
         UserResponse: {
             /**
@@ -1065,6 +1216,8 @@ export interface components {
             id: string;
             /** Email */
             email: string;
+            /** Name */
+            name: string | null;
             /**
              * Created At
              * Format: date-time
@@ -1303,6 +1456,41 @@ export interface operations {
             };
         };
     };
+    update_me_auth_me_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_mine_tenants_mine_get: {
         parameters: {
             query?: never;
@@ -1494,6 +1682,178 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MemberResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_catalog_entries_catalog_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogEntryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_catalog_entry_catalog_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogEntryCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_catalog_entry_catalog__entry_id__get: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_catalog_entry_catalog__entry_id__delete: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_catalog_entry_catalog__entry_id__patch: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CatalogEntryUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogEntryResponse"];
                 };
             };
             /** @description Validation Error */
