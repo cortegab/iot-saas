@@ -32,7 +32,10 @@ def _auth_headers(body: dict[str, Any], tenant_id: str) -> dict[str, str]:
 async def _create_device(
     client: httpx.AsyncClient, headers: dict[str, str], name: str = "Sensor 1"
 ) -> dict[str, Any]:
-    resp = await client.post("/devices", json={"name": name}, headers=headers)
+    catalog_entry_id = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+    resp = await client.post(
+        "/devices", json={"name": name, "catalog_entry_id": catalog_entry_id}, headers=headers
+    )
     assert resp.status_code == 201
     result: dict[str, Any] = resp.json()
     return result

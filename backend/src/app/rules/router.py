@@ -5,6 +5,7 @@ in rules/service.py.
 """
 
 from fastapi import APIRouter, Depends, status
+from pydantic import TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -14,6 +15,7 @@ from app.rules import service
 from app.rules.deps import get_rule_or_404
 from app.rules.models import Rule
 from app.rules.schemas import (
+    ConditionNode,
     RuleCreateRequest,
     RuleResponse,
     RuleUpdateRequest,
@@ -24,17 +26,19 @@ from app.tenants.models import TenantRole
 
 router = APIRouter(tags=["rules"])
 
+# rule.condition is a raw dict[str, Any] from JSONB — this re-validates it
+# into the actual ConditionLeaf/ConditionGroup union for the response, since
+# response_model validation alone doesn't satisfy mypy's static check here.
+_condition_adapter: TypeAdapter[ConditionNode] = TypeAdapter(ConditionNode)
+
 
 def _to_response(rule: Rule) -> RuleResponse:
     return RuleResponse(
         id=rule.id,
         device_id=rule.device_id,
-        metric=rule.metric,
         type=rule.type,
-        operator=rule.operator,
-        threshold=rule.threshold,
+        condition=_condition_adapter.validate_python(rule.condition),
         for_duration=rule.for_duration,
-        hysteresis=rule.hysteresis,
         action=rule.action,
         cooldown=rule.cooldown,
         enabled=rule.enabled,
@@ -73,11 +77,8 @@ async def create_rule(
         session,
         ctx.tenant_id,
         device.id,
-        body.metric,
-        body.operator,
-        body.threshold,
+        body.condition.model_dump(mode="json"),
         body.for_duration,
-        body.hysteresis,
         body.cooldown,
         body.action.model_dump(),
         body.enabled,
@@ -101,11 +102,8 @@ async def update_rule(
         session,
         ctx.tenant_id,
         rule.id,
-        body.metric,
-        body.operator,
-        body.threshold,
+        body.condition.model_dump(mode="json") if body.condition is not None else None,
         body.for_duration,
-        body.hysteresis,
         body.cooldown,
         body.action.model_dump() if body.action is not None else None,
         body.enabled,

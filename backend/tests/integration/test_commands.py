@@ -38,7 +38,10 @@ def _auth_headers(body: dict[str, Any], tenant_id: str) -> dict[str, str]:
 
 
 async def _create_device(client: httpx.AsyncClient, headers: dict[str, str]) -> dict[str, Any]:
-    resp = await client.post("/devices", json={"name": "Sensor 1"}, headers=headers)
+    catalog_entry_id = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+    resp = await client.post(
+        "/devices", json={"name": "Sensor 1", "catalog_entry_id": catalog_entry_id}, headers=headers
+    )
     assert resp.status_code == 201
     result: dict[str, Any] = resp.json()
     return result
@@ -48,9 +51,7 @@ async def _create_rule(
     client: httpx.AsyncClient, headers: dict[str, str], device_id: str, **overrides: Any
 ) -> dict[str, Any]:
     body = {
-        "metric": "temperature",
-        "operator": ">",
-        "threshold": 30.0,
+        "condition": {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0},
         "action": {"type": "actuator_command", "actuator": "fan1", "value": True},
         **overrides,
     }
@@ -123,6 +124,73 @@ async def test_evaluate_and_dispatch_fires_actuator_command(
     notification = notification_result.scalar_one()
     assert "temperature" in notification.message
     assert notification.read_at is None
+
+
+async def test_and_condition_fires_only_once_both_metrics_satisfied(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    """The multi-metric risk area, exercised end to end: a message for one
+    metric alone must not fire an AND rule; only once the *other* metric's
+    last cached value (from an earlier message, on a separate MQTT topic)
+    also satisfies its predicate does the combined condition fire.
+    """
+    owner = await _register(client, "ownerAnd@example.com", "AcmeAnd")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    device_id = device["device"]["id"]
+    device_slug = device["device"]["slug"]
+    await _create_rule(
+        client,
+        headers,
+        device_id,
+        condition={
+            "kind": "group",
+            "op": "AND",
+            "predicates": [
+                {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0},
+                {"kind": "leaf", "metric": "humidity", "operator": "<", "threshold": 40.0},
+            ],
+        },
+    )
+
+    await rules_service.load_rule_cache(app_session_factory)
+    tenant_slug = await _tenant_slug(admin_session, tenant_id)
+
+    # Only temperature satisfied so far — humidity has never been reported.
+    await rules_service.evaluate_and_dispatch(
+        mock_mqtt_client,
+        app_session_factory,
+        uuid.UUID(tenant_id),
+        uuid.UUID(device_id),
+        tenant_slug,
+        device_slug,
+        "temperature",
+        35.0,
+        datetime.now(UTC),
+    )
+    mock_mqtt_client.publish.assert_not_called()
+
+    # A separate message, on humidity's own topic, satisfies the second
+    # predicate — the rule must fire now, reading temperature's value from
+    # the in-memory cache rather than this message's own payload.
+    await rules_service.evaluate_and_dispatch(
+        mock_mqtt_client,
+        app_session_factory,
+        uuid.UUID(tenant_id),
+        uuid.UUID(device_id),
+        tenant_slug,
+        device_slug,
+        "humidity",
+        35.0,
+        datetime.now(UTC),
+    )
+    assert mock_mqtt_client.publish.call_count == 2
+    cmd_call = mock_mqtt_client.publish.call_args_list[0]
+    assert cmd_call.args[0] == f"{tenant_slug}/{device_slug}/cmd/fan1"
 
 
 async def test_dispatch_command_and_record_ack(

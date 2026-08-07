@@ -17,6 +17,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service as auth_service
+from app.catalog import service as catalog_service
 from app.devices.models import Device, DeviceStatus
 
 
@@ -75,15 +76,23 @@ def _generate_credential_secret() -> str:
 
 
 async def create_device(
-    session: AsyncSession, tenant_id: uuid.UUID, name: str
+    session: AsyncSession, tenant_id: uuid.UUID, name: str, catalog_entry_id: uuid.UUID
 ) -> tuple[Device, str]:
-    """Create a device and return it with its one-time-shown credential secret."""
+    """Create a device and return it with its one-time-shown credential secret.
+
+    Raises catalog_service.CatalogEntryNotFoundError if catalog_entry_id
+    doesn't belong to this tenant — same existence+ownership check the
+    catalog module's own routes use, reused here rather than duplicated.
+    """
+    await catalog_service.get_catalog_entry(session, tenant_id, catalog_entry_id)
+
     slug = await _unique_slug(session, tenant_id, name)
     secret = _generate_credential_secret()
     device = Device(
         tenant_id=tenant_id,
         name=name,
         slug=slug,
+        catalog_entry_id=catalog_entry_id,
         token_hash=auth_service.hash_secret(secret),
         status=DeviceStatus.ACTIVE.value,
     )

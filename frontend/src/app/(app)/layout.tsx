@@ -1,18 +1,33 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtime } from "@/hooks/useRealtime";
 import { PrimaryNav } from "@/components/nav/PrimaryNav";
-import { TenantSwitcher } from "@/components/nav/TenantSwitcher";
 import { RealtimeStatusBadge } from "@/components/nav/RealtimeStatusBadge";
 import { GlobalHeader } from "@/components/nav/GlobalHeader";
 
+const SIDEBAR_COLLAPSED_KEY = "iot-saas:sidebar_collapsed";
+
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { status, memberships, currentTenantId, setCurrentTenantId, logout } = useAuth();
+  const { status, currentTenantId } = useAuth();
   const realtimeStatus = useRealtime();
   const router = useRouter();
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") setCollapsed(true);
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      const next = !c;
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      return next;
+    });
+  }
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -28,23 +43,30 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-56 flex-col justify-between border-r border-border bg-surface">
-        <PrimaryNav />
-        <div className="border-t border-border p-2">
-          <RealtimeStatusBadge status={realtimeStatus} />
-          <TenantSwitcher
-            memberships={memberships}
-            currentTenantId={currentTenantId}
-            onSwitch={setCurrentTenantId}
-          />
-          <button
-            type="button"
-            onClick={() => void logout().then(() => router.replace("/login"))}
-            className="w-full rounded-md px-3 py-2 text-left text-sm text-ink-muted hover:bg-surface-raised hover:text-ink"
-          >
-            Log out
-          </button>
+      <aside
+        className={`flex shrink-0 flex-col justify-between border-r border-border bg-surface transition-[width] duration-150 ${
+          collapsed ? "w-16" : "w-56"
+        }`}
+      >
+        <div>
+          <div className={`flex p-2 ${collapsed ? "justify-center" : "justify-end"}`}>
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="rounded-md p-1.5 text-ink-muted hover:bg-surface-raised hover:text-ink"
+            >
+              {collapsed ? <PanelLeftOpen aria-hidden size={18} /> : <PanelLeftClose aria-hidden size={18} />}
+            </button>
+          </div>
+          <PrimaryNav collapsed={collapsed} />
         </div>
+        {!collapsed && (
+          <div className="border-t border-border p-2">
+            <RealtimeStatusBadge status={realtimeStatus} />
+          </div>
+        )}
       </aside>
       <div className="flex flex-1 flex-col overflow-hidden">
         <GlobalHeader />

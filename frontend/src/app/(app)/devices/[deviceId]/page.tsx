@@ -16,12 +16,15 @@ import type { ChartThreshold } from "@/components/chart/TrendChart";
 import { RuleList } from "@/components/rules/RuleList";
 import { ActuatorControl } from "@/components/actuators/ActuatorControl";
 import { CommandHistory } from "@/components/actuators/CommandHistory";
+import { leafPredicates } from "@/components/rules/RuleSummary";
+import { buildSketch } from "@/lib/firmware-sketch";
 import type { components } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
+type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
 function CurrentReadings({ deviceId }: { deviceId: string }) {
   const { data, error, isLoading } = useApiSWR<TelemetryLatestResponse[]>(`/devices/${deviceId}/latest`);
@@ -49,35 +52,129 @@ function CurrentReadings({ deviceId }: { deviceId: string }) {
   );
 }
 
+function TopicRow({ label, topic }: { label: string; topic: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface-raised px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-xs text-ink-muted">{label}</p>
+        <p className="truncate font-mono text-sm text-ink">{topic}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => void navigator.clipboard.writeText(topic).then(() => setCopied(true))}
+        className="shrink-0 text-xs text-accent"
+      >
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
+  );
+}
+
 // MQTT topics are built from slugs, not display names — a device's slug is
 // fixed at creation and never changes on rename, so this is the one place
 // that reliably answers "what do I actually publish to?" after onboarding.
-function MqttTopicInfo({ deviceSlug }: { deviceSlug: string }) {
+// One row per catalog-declared metric/actuator; a "Legacy" device (no
+// declarations) falls back to the generic placeholder pattern this page
+// showed before the catalog existed.
+function DeviceTopics({ device }: { device: DeviceResponse }) {
   const { memberships, currentTenantId } = useAuthContext();
-  const [copied, setCopied] = useState(false);
+  const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(`/catalog/${device.catalog_entry_id}`);
   const tenantSlug = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_slug;
 
   if (!tenantSlug) return null;
 
-  const subtree = `${tenantSlug}/${deviceSlug}`;
+  const subtree = `${tenantSlug}/${device.slug}`;
+  const metrics = catalogEntry?.metrics ?? [];
+  const actuators = catalogEntry?.actuators ?? [];
+
+  if (metrics.length === 0 && actuators.length === 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-ink-muted">
+          <span className="font-mono">{subtree}/&lt;metric&gt;</span> — commands publish to{" "}
+          <span className="font-mono">{subtree}/cmd/&lt;actuator&gt;</span>
+        </p>
+        <TopicRow label="Topic prefix" topic={subtree} />
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-lg border border-border bg-surface p-3">
-      <p className="text-xs uppercase tracking-wide text-ink-muted">MQTT topic</p>
-      <p className="mt-1 font-mono text-sm text-ink">{subtree}/&lt;metric&gt;</p>
-      <p className="mt-1 text-xs text-ink-muted">
-        e.g. <span className="font-mono">{subtree}/temperature</span> — commands publish to{" "}
-        <span className="font-mono">{subtree}/cmd/&lt;actuator&gt;</span>
-      </p>
-      <button
-        type="button"
-        onClick={() => {
-          void navigator.clipboard.writeText(subtree).then(() => setCopied(true));
-        }}
-        className="mt-2 text-xs text-accent"
-      >
-        {copied ? "Copied" : "Copy topic prefix"}
+    <div className="flex flex-col gap-2">
+      {metrics.map((m) => (
+        <TopicRow key={`metric-${m.name}`} label={`Telemetry — ${m.name}`} topic={`${subtree}/${m.name}`} />
+      ))}
+      {actuators.map((a) => (
+        <div key={`actuator-${a.name}`} className="flex flex-col gap-1">
+          <TopicRow
+            label={`Command — ${a.name} (device subscribes)`}
+            topic={`${subtree}/cmd/${a.name}`}
+          />
+          <TopicRow
+            label={`Desired state — ${a.name} (device subscribes, retained)`}
+            topic={`${subtree}/state/${a.name}`}
+          />
+          <TopicRow
+            label={`Acknowledgement — ${a.name} (device publishes)`}
+            topic={`${subtree}/ack/${a.name}`}
+          />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// On-demand onboarding code, catalog-driven — unlike devices/new/page.tsx's
+// FirmwareSketch, the credential is never available here (shown exactly once,
+// at creation/rotation, never retrievable afterward), so buildSketch is
+// called with credential: null and emits a placeholder instead.
+function OnboardingCode({ device }: { device: DeviceResponse }) {
+  const { memberships, currentTenantId } = useAuthContext();
+  const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(
+    open ? `/catalog/${device.catalog_entry_id}` : null,
+  );
+  const tenantSlug = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_slug;
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="text-sm text-accent">
+        Generate onboarding code
       </button>
+    );
+  }
+
+  const sketch = buildSketch({
+    tenantSlug: tenantSlug ?? "",
+    deviceSlug: device.slug,
+    host: typeof window !== "undefined" ? window.location.hostname : "YOUR_SERVER_HOST",
+    metrics: catalogEntry?.metrics ?? [],
+    actuators: catalogEntry?.actuators ?? [],
+    credential: null,
+  });
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-xs text-ink-muted">
+        Credentials aren&apos;t included — paste them in after rotating a credential above.
+      </p>
+      <pre className="max-h-80 overflow-auto rounded-md bg-surface-raised p-3 text-xs text-ink">
+        <code>{sketch}</code>
+      </pre>
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={() => void navigator.clipboard.writeText(sketch).then(() => setCopied(true))}
+          className="text-sm text-accent"
+        >
+          {copied ? "Copied" : "Copy sketch"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="text-sm text-ink-muted">
+          Close
+        </button>
+      </div>
     </div>
   );
 }
@@ -105,7 +202,12 @@ export default function DeviceDetailPage() {
     const map: Record<string, ChartThreshold[]> = {};
     for (const rule of rules ?? []) {
       if (!rule.enabled) continue;
-      (map[rule.metric] ??= []).push({ value: rule.threshold, label: `${rule.operator} ${rule.threshold}` });
+      for (const leaf of leafPredicates(rule.condition)) {
+        (map[leaf.metric] ??= []).push({
+          value: leaf.threshold,
+          label: `${leaf.operator} ${leaf.threshold}`,
+        });
+      }
     }
     return map;
   }, [rules]);
@@ -187,8 +289,6 @@ export default function DeviceDetailPage() {
         <h1 className="text-lg font-semibold text-ink">{device.name}</h1>
         <ConnectionBadge state={device.connection_state} />
       </div>
-
-      <MqttTopicInfo deviceSlug={device.slug} />
 
       <Section title="Current readings">
         <CurrentReadings deviceId={deviceId} />
@@ -290,6 +390,20 @@ export default function DeviceDetailPage() {
                 </button>
               </div>
             )}
+          </div>
+
+          <div>
+            <span className="text-xs uppercase tracking-wide text-ink-muted">MQTT topics</span>
+            <div className="mt-1">
+              <DeviceTopics device={device} />
+            </div>
+          </div>
+
+          <div>
+            <span className="text-xs uppercase tracking-wide text-ink-muted">Onboarding code</span>
+            <div className="mt-1">
+              <OnboardingCode device={device} />
+            </div>
           </div>
 
           <div className="border-t border-border pt-4">

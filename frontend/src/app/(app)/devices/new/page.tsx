@@ -1,90 +1,35 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { ApiRequestError } from "@/lib/api-client";
+import { buildSketch } from "@/lib/firmware-sketch";
 import type { components } from "@/types/api";
 
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
-
-// A generic placeholder metric — the user can rename the topic's last segment
-// to whatever they're actually measuring, as the sketch's own comment says.
-const PLACEHOLDER_METRIC = "temperature";
-
-function buildSketch(created: DeviceCreateResponse): string {
-  const host = typeof window !== "undefined" ? window.location.hostname : "YOUR_SERVER_HOST";
-  const topic = `${created.tenant_slug}/${created.device.slug}/${PLACEHOLDER_METRIC}`;
-
-  return `#include <WiFi.h>
-#include <PubSubClient.h>
-
-// Wi-Fi credentials — fill these in.
-const char* WIFI_SSID = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
-
-// MQTT broker — defaults to this dashboard's own host, since the platform and
-// broker share one server. Change MQTT_HOST if your broker lives elsewhere.
-// Port 1883 is plaintext, matching this dev deployment; switch to 8883 with
-// WiFiClientSecure once TLS is configured in production.
-const char* MQTT_HOST = "${host}";
-const int MQTT_PORT = 1883;
-const char* MQTT_USERNAME = "${created.credential.username}";
-const char* MQTT_PASSWORD = "${created.credential.password}";
-
-// Rename "${PLACEHOLDER_METRIC}" to whatever you're actually measuring — just
-// keep it consistent with the metric name you use in rules and charts later.
-const char* TELEMETRY_TOPIC = "${topic}";
-
-WiFiClient wifiClient;
-PubSubClient mqttClient(wifiClient);
-
-void connectWifi() {
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-  }
-}
-
-void connectMqtt() {
-  while (!mqttClient.connected()) {
-    mqttClient.connect(MQTT_USERNAME, MQTT_USERNAME, MQTT_PASSWORD);
-    if (!mqttClient.connected()) {
-      delay(2000);
-    }
-  }
-}
-
-void setup() {
-  connectWifi();
-  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
-}
-
-void loop() {
-  if (!mqttClient.connected()) {
-    connectMqtt();
-  }
-  mqttClient.loop();
-
-  // Placeholder reading — replace this with your real sensor code.
-  float value = 20.0 + random(0, 100) / 10.0;
-  char payload[64];
-  snprintf(payload, sizeof(payload), "{\\"value\\": %.1f}", value);
-  mqttClient.publish(TELEMETRY_TOPIC, payload);
-
-  delay(5000);
-}
-`;
-}
+type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
 // The hero element (UX_UI_Description.md §1: "the code block is the hero
 // element, not an afterthought") — a ready-to-paste sketch with credentials
-// already filled in.
+// already filled in. Metrics/actuators come from the device's catalog entry
+// (empty for a "Legacy" device — buildSketch falls back to one placeholder
+// metric and no actuator code, matching this page's original behavior).
 function FirmwareSketch({ created }: { created: DeviceCreateResponse }) {
   const [copied, setCopied] = useState(false);
-  const sketch = buildSketch(created);
+  const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(
+    `/catalog/${created.device.catalog_entry_id}`,
+  );
+  const sketch = buildSketch({
+    tenantSlug: created.tenant_slug,
+    deviceSlug: created.device.slug,
+    host: typeof window !== "undefined" ? window.location.hostname : "YOUR_SERVER_HOST",
+    metrics: catalogEntry?.metrics ?? [],
+    actuators: catalogEntry?.actuators ?? [],
+    credential: created.credential,
+  });
 
   return (
     <div className="rounded-xl border border-accent/40 bg-surface p-4">
@@ -149,18 +94,32 @@ function WaitingForFirstData({ deviceId }: { deviceId: string }) {
 
 export default function NewDevicePage() {
   const api = useApi();
+  const { data: catalogEntries } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const [name, setName] = useState("");
+  const [catalogEntryId, setCatalogEntryId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<DeviceCreateResponse | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Default to the first entry (a fresh tenant's is always its auto-created
+  // "Legacy / Uncategorized" one — devices/service.py — so this is never a
+  // catalog-first-blocked empty state).
+  useEffect(() => {
+    if (catalogEntries && catalogEntries.length > 0 && !catalogEntryId) {
+      setCatalogEntryId(catalogEntries[0].id);
+    }
+  }, [catalogEntries, catalogEntryId]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      const result = await api.post<DeviceCreateResponse>("/devices", { name });
+      const result = await api.post<DeviceCreateResponse>("/devices", {
+        name,
+        catalog_entry_id: catalogEntryId,
+      });
       setCreated(result);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");
@@ -240,6 +199,26 @@ export default function NewDevicePage() {
           placeholder="e.g. Greenhouse sensor 1"
           className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         />
+      </label>
+
+      <label className="flex flex-col gap-1 text-sm text-ink-muted">
+        Type
+        <select
+          required
+          value={catalogEntryId}
+          onChange={(e) => setCatalogEntryId(e.target.value)}
+          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
+        >
+          {!catalogEntries && <option value="">Loading…</option>}
+          {catalogEntries?.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.name}
+            </option>
+          ))}
+        </select>
+        <Link href="/devices/catalog" className="text-xs text-accent">
+          Manage device types →
+        </Link>
       </label>
 
       {error && (

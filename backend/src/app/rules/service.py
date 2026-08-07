@@ -1,6 +1,7 @@
 """Rule CRUD, the worker-side in-memory rule cache (keyed by device_id+metric,
 reloaded on Redis pub/sub invalidation — see rule_cache_loop in
-app/worker.py), and hot-path evaluation/dispatch.
+app/worker.py), the in-memory last-known-metric-value cache multi-metric
+conditions read from, and hot-path evaluation/dispatch.
 """
 
 import logging
@@ -17,7 +18,15 @@ from app.commands import service as commands_service
 from app.db import add_post_commit_callback
 from app.notifications import service as notifications_service
 from app.redis import redis_client
-from app.rules.evaluators import Action, Evaluator, Reading, RuleState, ThresholdEvaluator
+from app.rules.evaluators import (
+    Action,
+    Evaluator,
+    MetricSnapshot,
+    MetricValue,
+    RuleState,
+    ThresholdEvaluator,
+    referenced_metrics,
+)
 from app.rules.models import Rule, RuleType
 
 log = logging.getLogger("rules")
@@ -38,9 +47,22 @@ _OPERATOR_WORDS: dict[str, str] = {
 }
 
 
-def _default_message(rule: Rule, reading: Reading) -> str:
-    op = _OPERATOR_WORDS.get(rule.operator, rule.operator)
-    return f"{rule.metric} {op} {rule.threshold} (currently {reading.value}) on this device."
+def _leaf_summary(leaf: dict[str, Any], snapshot: MetricSnapshot) -> str:
+    op = _OPERATOR_WORDS.get(leaf["operator"], leaf["operator"])
+    current = snapshot.get(leaf["metric"])
+    current_clause = f" (currently {current.value})" if current is not None else ""
+    return f"{leaf['metric']} {op} {leaf['threshold']}{current_clause}"
+
+
+def _condition_summary(condition: dict[str, Any], snapshot: MetricSnapshot) -> str:
+    if condition["kind"] == "leaf":
+        return _leaf_summary(condition, snapshot)
+    joiner = " and " if condition["op"] == "AND" else " or "
+    return joiner.join(_condition_summary(child, snapshot) for child in condition["predicates"])
+
+
+def _default_message(rule: Rule, snapshot: MetricSnapshot) -> str:
+    return f"{_condition_summary(rule.condition, snapshot)} on this device."
 
 
 class RuleNotFoundError(Exception):
@@ -54,11 +76,8 @@ async def create_rule(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     device_id: uuid.UUID,
-    metric: str,
-    operator: str,
-    threshold: float,
+    condition: dict[str, Any],
     for_duration: int,
-    hysteresis: float,
     cooldown: int,
     action: dict[str, Any],
     enabled: bool,
@@ -66,12 +85,9 @@ async def create_rule(
     rule = Rule(
         tenant_id=tenant_id,
         device_id=device_id,
-        metric=metric,
         type=RuleType.THRESHOLD.value,
-        operator=operator,
-        threshold=threshold,
+        condition=condition,
         for_duration=for_duration,
-        hysteresis=hysteresis,
         cooldown=cooldown,
         action=action,
         enabled=enabled,
@@ -100,12 +116,9 @@ class RuleWithDeviceRow(NamedTuple):
 
     id: uuid.UUID
     device_id: uuid.UUID
-    metric: str
     type: str
-    operator: str
-    threshold: float
+    condition: dict[str, Any]
     for_duration: int
-    hysteresis: float
     action: dict[str, Any]
     cooldown: int
     enabled: bool
@@ -117,8 +130,8 @@ class RuleWithDeviceRow(NamedTuple):
 async def list_all_rules(session: AsyncSession, tenant_id: uuid.UUID) -> list[RuleWithDeviceRow]:
     result = await session.execute(
         text(
-            "SELECT r.id, r.device_id, r.metric, r.type, r.operator, r.threshold, "
-            "r.for_duration, r.hysteresis, r.action, r.cooldown, r.enabled, r.created_at, "
+            "SELECT r.id, r.device_id, r.type, r.condition, "
+            "r.for_duration, r.action, r.cooldown, r.enabled, r.created_at, "
             "d.name AS device_name, d.slug AS device_slug "
             "FROM rules r JOIN devices d ON d.id = r.device_id "
             "WHERE r.tenant_id = :tenant_id ORDER BY d.name, r.created_at"
@@ -142,26 +155,17 @@ async def update_rule(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     rule_id: uuid.UUID,
-    metric: str | None,
-    operator: str | None,
-    threshold: float | None,
+    condition: dict[str, Any] | None,
     for_duration: int | None,
-    hysteresis: float | None,
     cooldown: int | None,
     action: dict[str, Any] | None,
     enabled: bool | None,
 ) -> Rule:
     rule = await get_rule(session, tenant_id, rule_id)
-    if metric is not None:
-        rule.metric = metric
-    if operator is not None:
-        rule.operator = operator
-    if threshold is not None:
-        rule.threshold = threshold
+    if condition is not None:
+        rule.condition = condition
     if for_duration is not None:
         rule.for_duration = for_duration
-    if hysteresis is not None:
-        rule.hysteresis = hysteresis
     if cooldown is not None:
         rule.cooldown = cooldown
     if action is not None:
@@ -200,6 +204,12 @@ def _publish_invalidation(session: AsyncSession, device_id: uuid.UUID) -> None:
 _rule_cache: dict[tuple[uuid.UUID, str], list[Rule]] = {}
 _rule_states: dict[uuid.UUID, RuleState] = {}
 
+# Last known value per (device_id, metric), updated unconditionally on every
+# telemetry message (pure dict write, zero I/O — stays in the hot-path
+# budget) so a multi-metric condition can synchronously read every metric it
+# references, not just the one that just triggered this message.
+_metric_value_cache: dict[tuple[uuid.UUID, str], MetricValue] = {}
+
 
 async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
     """Full reload — called once at worker startup and on every
@@ -219,20 +229,29 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
             id=row["id"],
             tenant_id=row["tenant_id"],
             device_id=row["device_id"],
-            metric=row["metric"],
             type=row["type"],
-            operator=row["operator"],
-            threshold=row["threshold"],
+            condition=row["condition"],
             for_duration=row["for_duration"],
-            hysteresis=row["hysteresis"],
             action=row["action"],
             cooldown=row["cooldown"],
             enabled=row["enabled"],
         )
-        new_cache.setdefault((rule.device_id, rule.metric), []).append(rule)
+        # Registered under every metric the tree references — not just one —
+        # so a message on any of them triggers re-evaluation of this rule.
+        for metric in referenced_metrics(rule.condition):
+            new_cache.setdefault((rule.device_id, metric), []).append(rule)
     _rule_cache.clear()
     _rule_cache.update(new_cache)
     log.info("rule cache reloaded: %d active rules", len(rows))
+
+
+def _snapshot_for_device(device_id: uuid.UUID, metrics: set[str]) -> MetricSnapshot:
+    snapshot: MetricSnapshot = {}
+    for metric in metrics:
+        value = _metric_value_cache.get((device_id, metric))
+        if value is not None:
+            snapshot[metric] = value
+    return snapshot
 
 
 async def evaluate_and_dispatch(
@@ -257,22 +276,39 @@ async def evaluate_and_dispatch(
     reading, or ingestion for every other device (CLAUDE.md constraint 11,
     extended to this new hot path).
     """
+    # Record unconditionally, even if no rule watches this exact metric yet —
+    # a rule referencing it may be created (or another metric's rule may
+    # start referencing it) later, and it should see this value immediately.
+    _metric_value_cache[(device_id, metric)] = MetricValue(value=value, timestamp=timestamp)
+
     rules = _rule_cache.get((device_id, metric))
     if not rules:
         return
 
-    reading = Reading(device_id=device_id, metric=metric, value=value, timestamp=timestamp)
     for rule in rules:
+        needed_metrics = referenced_metrics(rule.condition)
+        snapshot = _snapshot_for_device(device_id, needed_metrics)
         state = _rule_states.setdefault(rule.id, RuleState())
         try:
-            action = _THRESHOLD_EVALUATOR.evaluate(rule, reading, state)
+            action = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, timestamp, state)
         except Exception:
             log.exception("evaluator raised for rule %s -- treating as no-fire", rule.id)
             continue
         if action is None:
             continue
         try:
-            await _dispatch_action(client, factory, tenant_id, tenant_slug, device_slug, reading, action, rule)
+            await _dispatch_action(
+                client,
+                factory,
+                tenant_id,
+                device_id,
+                tenant_slug,
+                device_slug,
+                timestamp,
+                snapshot,
+                action,
+                rule,
+            )
         except Exception:
             log.exception("dispatch failed for rule %s", rule.id)
 
@@ -281,9 +317,11 @@ async def _dispatch_action(
     client: aiomqtt.Client,
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
     tenant_slug: str,
     device_slug: str,
-    reading: Reading,
+    timestamp: datetime,
+    snapshot: MetricSnapshot,
     action: Action,
     rule: Rule,
 ) -> None:
@@ -292,9 +330,9 @@ async def _dispatch_action(
             client,
             factory,
             tenant_id,
-            reading.device_id,
+            device_id,
             action.rule_id,
-            reading.timestamp,
+            timestamp,
             tenant_slug,
             device_slug,
             actuator=action.payload["actuator"],
@@ -317,11 +355,11 @@ async def _dispatch_action(
     message = (
         action.payload["message"]
         if action.action_type == "notification"
-        else _default_message(rule, reading)
+        else _default_message(rule, snapshot)
     )
     try:
         await notifications_service.create_notification(
-            factory, tenant_id, reading.device_id, action.rule_id, message
+            factory, tenant_id, device_id, action.rule_id, message
         )
     except Exception:
         log.exception("notification write failed for rule %s", action.rule_id)

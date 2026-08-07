@@ -37,12 +37,17 @@ export default function DevicesPage() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-ink">Devices</h1>
-        <Link
-          href="/devices/new"
-          className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white"
-        >
-          Add device
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link href="/devices/catalog" className="text-sm text-ink-muted hover:text-ink">
+            Manage catalog
+          </Link>
+          <Link
+            href="/devices/new"
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white"
+          >
+            Add device
+          </Link>
+        </div>
       </div>
 
       {isLoading && <LoadingSkeleton rows={4} rowClassName="h-16" />}

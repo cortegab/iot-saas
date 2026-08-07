@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -16,7 +17,6 @@ type RuleResponse = components["schemas"]["RuleResponse"];
 export function RuleList({ deviceId }: { deviceId: string }) {
   const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
   const isAdmin = useIsAdmin();
-  const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
 
   if (isLoading) return <LoadingSkeleton rows={2} rowClassName="h-20" />;
@@ -33,27 +33,13 @@ export function RuleList({ deviceId }: { deviceId: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      {isAdmin && !creating && !editingRule && (
-        <div>
-          <button
-            type="button"
-            onClick={() => setCreating(true)}
-            className="rounded-md border border-border px-3 py-1.5 text-sm text-ink hover:bg-surface-raised"
-          >
-            Add rule
-          </button>
-        </div>
-      )}
-
-      {creating && (
-        <RuleForm
-          deviceId={deviceId}
-          onSaved={() => {
-            setCreating(false);
-            void mutate();
-          }}
-          onCancel={() => setCreating(false)}
-        />
+      {/* Creation lives in the device catalog view now (a rule's condition
+          vocabulary comes from the device's catalog entry) — this page only
+          lists and edits. */}
+      {isAdmin && !editingRule && (rules?.length ?? 0) === 0 && (
+        <Link href="/devices/catalog" className="text-sm text-accent">
+          Create a rule from the catalog →
+        </Link>
       )}
 
       {editingRule && (

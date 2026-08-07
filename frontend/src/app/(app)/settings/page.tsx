@@ -28,7 +28,12 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 function AccountSection() {
+  const api = useApi();
   const { data, error, isLoading, mutate } = useApiSWR<UserResponse>("/auth/me");
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   if (isLoading) return <LoadingSkeleton rows={1} rowClassName="h-12" />;
   if (error) {
@@ -41,12 +46,70 @@ function AccountSection() {
   }
   if (!data) return null;
 
+  async function save() {
+    setBusy(true);
+    setSaveError(null);
+    try {
+      await api.patch("/auth/me", { name: name.trim() || null });
+      setEditing(false);
+      void mutate();
+    } catch (err) {
+      setSaveError(err instanceof ApiRequestError ? err.message : "Couldn't save your name.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="rounded-xl border border-border bg-surface p-4">
-      <p className="text-sm text-ink">{data.email}</p>
-      <p className="mt-1 text-xs text-ink-muted">
-        Member since {new Date(data.created_at).toLocaleDateString()}
-      </p>
+      {editing ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            autoFocus
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Your name"
+            className="rounded-md border border-border bg-surface-raised px-3 py-1.5 text-sm text-ink"
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void save()}
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
+          >
+            {busy ? "Saving…" : "Save"}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setEditing(false)}
+            className="text-sm text-ink-muted disabled:opacity-60"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm text-ink">{data.name || <span className="text-ink-muted">No name set</span>}</p>
+            <p className="text-sm text-ink-muted">{data.email}</p>
+            <p className="mt-1 text-xs text-ink-muted">
+              Member since {new Date(data.created_at).toLocaleDateString()}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setName(data.name ?? "");
+              setEditing(true);
+            }}
+            className="text-sm text-ink-muted hover:text-ink"
+          >
+            {data.name ? "Edit" : "Add name"}
+          </button>
+        </div>
+      )}
+      {saveError && <ErrorState message={saveError} />}
     </div>
   );
 }

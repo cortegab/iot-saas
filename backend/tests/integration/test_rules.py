@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 _ACTION = {"type": "actuator_command", "actuator": "fan1", "value": True}
+_TEMPERATURE_CONDITION = {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0}
 
 
 async def _register(client: httpx.AsyncClient, email: str, tenant_name: str) -> dict[str, Any]:
@@ -26,7 +27,10 @@ def _auth_headers(body: dict[str, Any], tenant_id: str) -> dict[str, str]:
 async def _create_device(
     client: httpx.AsyncClient, headers: dict[str, str], name: str = "Sensor 1"
 ) -> dict[str, Any]:
-    resp = await client.post("/devices", json={"name": name}, headers=headers)
+    catalog_entry_id = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+    resp = await client.post(
+        "/devices", json={"name": name, "catalog_entry_id": catalog_entry_id}, headers=headers
+    )
     assert resp.status_code == 201
     result: dict[str, Any] = resp.json()
     return result
@@ -35,7 +39,7 @@ async def _create_device(
 async def _create_rule(
     client: httpx.AsyncClient, headers: dict[str, str], device_id: str, **overrides: Any
 ) -> httpx.Response:
-    body = {"metric": "temperature", "operator": ">", "threshold": 30.0, "action": _ACTION, **overrides}
+    body = {"condition": _TEMPERATURE_CONDITION, "action": _ACTION, **overrides}
     return await client.post(f"/devices/{device_id}/rules", json=body, headers=headers)
 
 
@@ -49,9 +53,7 @@ async def test_create_rule_returns_rule(client: httpx.AsyncClient) -> None:
     assert resp.status_code == 201
     body = resp.json()
     assert body["device_id"] == device["device"]["id"]
-    assert body["metric"] == "temperature"
-    assert body["operator"] == ">"
-    assert body["threshold"] == 30.0
+    assert body["condition"] == {**_TEMPERATURE_CONDITION, "hysteresis": 0.0}
     assert body["type"] == "threshold"
     assert body["enabled"] is True
     assert body["action"] == _ACTION
@@ -63,7 +65,12 @@ async def test_list_rules(client: httpx.AsyncClient) -> None:
     headers = _auth_headers(owner, tenant_id)
     device = await _create_device(client, headers)
     await _create_rule(client, headers, device["device"]["id"])
-    await _create_rule(client, headers, device["device"]["id"], metric="humidity")
+    await _create_rule(
+        client,
+        headers,
+        device["device"]["id"],
+        condition={"kind": "leaf", "metric": "humidity", "operator": ">", "threshold": 30.0},
+    )
 
     resp = await client.get(f"/devices/{device['device']['id']}/rules", headers=headers)
     assert resp.status_code == 200
@@ -92,12 +99,41 @@ async def test_update_rule(client: httpx.AsyncClient) -> None:
     rule_id = created.json()["id"]
 
     resp = await client.patch(
-        f"/rules/{rule_id}", json={"threshold": 40.0, "enabled": False}, headers=headers
+        f"/rules/{rule_id}",
+        json={
+            "condition": {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 40.0},
+            "enabled": False,
+        },
+        headers=headers,
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["threshold"] == 40.0
+    assert body["condition"]["threshold"] == 40.0
     assert body["enabled"] is False
+
+
+async def test_update_rule_to_multi_predicate_condition(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner4b@example.com", "Acme4b")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    created = await _create_rule(client, headers, device["device"]["id"])
+    rule_id = created.json()["id"]
+
+    and_condition = {
+        "kind": "group",
+        "op": "AND",
+        "predicates": [
+            {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0},
+            {"kind": "leaf", "metric": "humidity", "operator": "<", "threshold": 40.0},
+        ],
+    }
+    resp = await client.patch(f"/rules/{rule_id}", json={"condition": and_condition}, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["condition"]["kind"] == "group"
+    assert body["condition"]["op"] == "AND"
+    assert len(body["condition"]["predicates"]) == 2
 
 
 async def test_delete_rule(client: httpx.AsyncClient) -> None:
@@ -200,7 +236,12 @@ async def test_list_all_rules_across_devices(client: httpx.AsyncClient) -> None:
     device_a = await _create_device(client, headers, name="A Sensor")
     device_b = await _create_device(client, headers, name="B Sensor")
     rule_a = await _create_rule(client, headers, device_a["device"]["id"])
-    rule_b = await _create_rule(client, headers, device_b["device"]["id"], metric="humidity")
+    rule_b = await _create_rule(
+        client,
+        headers,
+        device_b["device"]["id"],
+        condition={"kind": "leaf", "metric": "humidity", "operator": ">", "threshold": 30.0},
+    )
     assert rule_a.status_code == 201
     assert rule_b.status_code == 201
 
@@ -209,9 +250,9 @@ async def test_list_all_rules_across_devices(client: httpx.AsyncClient) -> None:
     body = resp.json()
     assert [r["device_name"] for r in body] == ["A Sensor", "B Sensor"]
     assert body[0]["device_slug"] == device_a["device"]["slug"]
-    assert body[0]["metric"] == "temperature"
+    assert body[0]["condition"]["metric"] == "temperature"
     assert body[1]["device_slug"] == device_b["device"]["slug"]
-    assert body[1]["metric"] == "humidity"
+    assert body[1]["condition"]["metric"] == "humidity"
 
 
 async def test_list_all_rules_tenant_isolation(client: httpx.AsyncClient) -> None:

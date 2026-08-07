@@ -8,7 +8,15 @@ treatment every other tenant-scoped table gets.
 `type` only allows 'threshold' for now (CLAUDE.md §5's schema also lists
 'window' and 'anomaly' as future values) — the check constraint and the
 `RuleType` enum are both written to make adding one later a one-line change,
-not a redesign.
+not a redesign. This is orthogonal to `condition` below: `type` is the rule
+*kind*, `condition` is that kind's actual predicate tree.
+
+`condition` is a tree of predicates (leaf: metric/operator/threshold/
+hysteresis; group: op ["AND"|"OR"] + child predicates) — see
+rules/schemas.py's ConditionLeaf/ConditionGroup for the validated shape.
+Stored as opaque JSONB here; only the Pydantic layer validates it, the same
+treatment `action` already gets (no CHECK constraint can express a recursive
+shape). Evaluated by rules/evaluators.py.
 """
 
 import enum
@@ -38,10 +46,7 @@ class RuleOperator(str, enum.Enum):
 
 class Rule(Base):
     __tablename__ = "rules"
-    __table_args__ = (
-        CheckConstraint("type IN ('threshold')", name="ck_rules_type"),
-        CheckConstraint("operator IN ('>', '>=', '<', '<=', '==', '!=')", name="ck_rules_operator"),
-    )
+    __table_args__ = (CheckConstraint("type IN ('threshold')", name="ck_rules_type"),)
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(
@@ -50,13 +55,10 @@ class Rule(Base):
     device_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("devices.id", ondelete="CASCADE"), nullable=False
     )
-    metric: Mapped[str] = mapped_column(nullable=False)
     type: Mapped[str] = mapped_column(nullable=False, default=RuleType.THRESHOLD.value)
-    operator: Mapped[str] = mapped_column(nullable=False)
-    threshold: Mapped[float] = mapped_column(nullable=False)
-    # Seconds the condition must hold before firing / minimum time between firings.
+    condition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    # Seconds the combined condition must hold before firing / minimum time between firings.
     for_duration: Mapped[int] = mapped_column(nullable=False, default=0)
-    hysteresis: Mapped[float] = mapped_column(nullable=False, default=0.0)
     # {"type": "actuator_command"|"notification"|"webhook", ...action-specific fields}
     action: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     cooldown: Mapped[int] = mapped_column(nullable=False, default=0)

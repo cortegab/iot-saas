@@ -37,6 +37,13 @@ class Device(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
+    # No ON DELETE clause (RESTRICT by default) — a catalog entry still
+    # referenced by a device can't be deleted (catalog/service.py's
+    # CatalogEntryInUseError). Write-once: chosen at creation, never
+    # reassigned, matching slug's immutability below.
+    catalog_entry_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("device_catalog_entries.id"), nullable=False
+    )
     name: Mapped[str] = mapped_column(nullable=False)
     slug: Mapped[str] = mapped_column(nullable=False)
     token_hash: Mapped[str] = mapped_column(nullable=False)
