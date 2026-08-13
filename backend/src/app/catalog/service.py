@@ -73,6 +73,7 @@ async def update_catalog_entry(
     name: str | None,
     metrics: list[dict[str, Any]] | None,
     actuators: list[dict[str, Any]] | None,
+    entry_status: str | None,
 ) -> DeviceCatalogEntry:
     if name is not None:
         entry.name = name
@@ -80,6 +81,8 @@ async def update_catalog_entry(
         entry.metrics = metrics
     if actuators is not None:
         entry.actuators = actuators
+    if entry_status is not None:
+        entry.status = entry_status
     return entry
 
 

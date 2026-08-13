@@ -17,6 +17,10 @@ from app.notifications.models import Notification
 from app.realtime import service as realtime_service
 
 
+class NotificationNotFoundError(Exception):
+    pass
+
+
 async def create_notification(
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
@@ -61,3 +65,20 @@ async def mark_all_read(session: AsyncSession, tenant_id: uuid.UUID) -> list[Not
     )
     await session.flush()
     return await list_notifications(session, tenant_id)
+
+
+async def mark_read(
+    session: AsyncSession, tenant_id: uuid.UUID, notification_id: uuid.UUID
+) -> Notification:
+    result = await session.execute(
+        select(Notification).where(
+            Notification.tenant_id == tenant_id, Notification.id == notification_id
+        )
+    )
+    notification = result.scalar_one_or_none()
+    if notification is None:
+        raise NotificationNotFoundError
+    if notification.read_at is None:
+        notification.read_at = datetime.now(UTC)
+        await session.flush()
+    return notification

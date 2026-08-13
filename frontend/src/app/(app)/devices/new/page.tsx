@@ -2,8 +2,13 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { mutate as revalidate } from "swr";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { ApiRequestError } from "@/lib/api-client";
 import { buildSketch } from "@/lib/firmware-sketch";
 import type { components } from "@/types/api";
@@ -37,15 +42,15 @@ function FirmwareSketch({ created }: { created: DeviceCreateResponse }) {
       <pre className="mt-2 max-h-80 overflow-auto rounded-md bg-surface-raised p-3 text-xs text-ink">
         <code>{sketch}</code>
       </pre>
-      <button
+      <Button
         type="button"
+        className="mt-3"
         onClick={() => {
           void navigator.clipboard.writeText(sketch).then(() => setCopied(true));
         }}
-        className="mt-3 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white"
       >
         {copied ? "Copied" : "Copy sketch"}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -94,9 +99,12 @@ function WaitingForFirstData({ deviceId }: { deviceId: string }) {
 
 export default function NewDevicePage() {
   const api = useApi();
+  const searchParams = useSearchParams();
+  const prefillCatalogEntryId = searchParams.get("catalog_entry_id");
+  const prefillName = searchParams.get("name");
   const { data: catalogEntries } = useApiSWR<CatalogEntryResponse[]>("/catalog");
-  const [name, setName] = useState("");
-  const [catalogEntryId, setCatalogEntryId] = useState("");
+  const [name, setName] = useState(prefillName ?? "");
+  const [catalogEntryId, setCatalogEntryId] = useState(prefillCatalogEntryId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<DeviceCreateResponse | null>(null);
@@ -104,7 +112,8 @@ export default function NewDevicePage() {
 
   // Default to the first entry (a fresh tenant's is always its auto-created
   // "Legacy / Uncategorized" one — devices/service.py — so this is never a
-  // catalog-first-blocked empty state).
+  // catalog-first-blocked empty state). Skipped when a type was already
+  // handed in via ?catalog_entry_id= (the Devices list's Duplicate action).
   useEffect(() => {
     if (catalogEntries && catalogEntries.length > 0 && !catalogEntryId) {
       setCatalogEntryId(catalogEntries[0].id);
@@ -120,6 +129,7 @@ export default function NewDevicePage() {
         name,
         catalog_entry_id: catalogEntryId,
       });
+      void revalidate("/devices");
       setCreated(result);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");
@@ -150,8 +160,9 @@ export default function NewDevicePage() {
               <dd className="font-mono text-ink">{created.credential.password}</dd>
             </div>
           </dl>
-          <button
+          <Button
             type="button"
+            className="mt-3"
             onClick={() => {
               void navigator.clipboard
                 .writeText(
@@ -159,21 +170,13 @@ export default function NewDevicePage() {
                 )
                 .then(() => setCopied(true));
             }}
-            className="mt-3 rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white"
           >
             {copied ? "Copied" : "Copy credential"}
-          </button>
+          </Button>
         </div>
 
-        <Link
-          href={`/devices/${created.device.id}`}
-          aria-disabled={!copied}
-          onClick={(e) => {
-            if (!copied) e.preventDefault();
-          }}
-          className={`text-center text-sm ${copied ? "text-accent" : "pointer-events-none text-ink-muted"}`}
-        >
-          {copied ? "Continue to device →" : "Copy the credential to continue"}
+        <Link href={`/devices/${created.device.id}`} className="text-center text-sm text-accent">
+          Continue to device →
         </Link>
 
         <FirmwareSketch created={created} />
@@ -191,33 +194,27 @@ export default function NewDevicePage() {
 
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Name
-        <input
+        <Input
           type="text"
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Greenhouse sensor 1"
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         />
       </label>
 
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Type
-        <select
-          required
-          value={catalogEntryId}
-          onChange={(e) => setCatalogEntryId(e.target.value)}
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-        >
+        <Select required value={catalogEntryId} onChange={(e) => setCatalogEntryId(e.target.value)}>
           {!catalogEntries && <option value="">Loading…</option>}
           {catalogEntries?.map((entry) => (
             <option key={entry.id} value={entry.id}>
               {entry.name}
             </option>
           ))}
-        </select>
-        <Link href="/devices/catalog" className="text-xs text-accent">
-          Manage device types →
+        </Select>
+        <Link href="/devices/templates" className="text-xs text-accent">
+          Manage templates →
         </Link>
       </label>
 
@@ -227,13 +224,9 @@ export default function NewDevicePage() {
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-      >
+      <Button type="submit" size="md" disabled={submitting}>
         {submitting ? "Creating…" : "Create device"}
-      </button>
+      </Button>
     </form>
   );
 }

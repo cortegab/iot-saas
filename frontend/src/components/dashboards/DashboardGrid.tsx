@@ -22,10 +22,16 @@ const COLS = { lg: 12 };
 
 export function DashboardGrid({
   widgets,
+  isAdmin,
   onLayoutChange,
   onRemoveWidget,
 }: {
   widgets: Widget[];
+  /** Viewer roles get a read-only grid — no remove affordance on any widget.
+   * Layout drag/resize stays available to every role; only removal (a
+   * destructive, persisted action) is gated, mirroring the rest of the
+   * Dashboards module. */
+  isAdmin: boolean;
   onLayoutChange: (updated: Widget[]) => void;
   onRemoveWidget: (id: string) => void;
 }) {
@@ -53,39 +59,34 @@ export function DashboardGrid({
       onDragStop={handleStop}
       onResizeStop={handleStop}
     >
-      {widgets.map((widget) => (
-        <div key={widget.id}>
-          {widget.type === "value_card" && (
-            <ValueCardWidget
-              deviceId={widget.device_id}
-              metric={widget.metric ?? null}
-              onRemove={() => onRemoveWidget(widget.id)}
-            />
-          )}
-          {widget.type === "trend_chart" && (
-            <TrendChartWidget
-              deviceId={widget.device_id}
-              metric={widget.metric ?? null}
-              onRemove={() => onRemoveWidget(widget.id)}
-            />
-          )}
-          {widget.type === "device_status" && (
-            <DeviceStatusWidget deviceId={widget.device_id} onRemove={() => onRemoveWidget(widget.id)} />
-          )}
-          {widget.type === "actuator_control" && (
-            <ActuatorControlWidget deviceId={widget.device_id} onRemove={() => onRemoveWidget(widget.id)} />
-          )}
-          {widget.type === "gauge" && (
-            <GaugeWidget
-              deviceId={widget.device_id}
-              metric={widget.metric ?? null}
-              min={widget.min ?? null}
-              max={widget.max ?? null}
-              onRemove={() => onRemoveWidget(widget.id)}
-            />
-          )}
-        </div>
-      ))}
+      {widgets.map((widget) => {
+        const onRemove = isAdmin ? () => onRemoveWidget(widget.id) : undefined;
+        return (
+          <div key={widget.id}>
+            {widget.type === "value_card" && (
+              <ValueCardWidget deviceId={widget.device_id} metric={widget.metric ?? null} onRemove={onRemove} />
+            )}
+            {widget.type === "trend_chart" && (
+              <TrendChartWidget deviceId={widget.device_id} metric={widget.metric ?? null} onRemove={onRemove} />
+            )}
+            {widget.type === "device_status" && (
+              <DeviceStatusWidget deviceId={widget.device_id} onRemove={onRemove} />
+            )}
+            {widget.type === "actuator_control" && (
+              <ActuatorControlWidget deviceId={widget.device_id} onRemove={onRemove} />
+            )}
+            {widget.type === "gauge" && (
+              <GaugeWidget
+                deviceId={widget.device_id}
+                metric={widget.metric ?? null}
+                min={widget.min ?? null}
+                max={widget.max ?? null}
+                onRemove={onRemove}
+              />
+            )}
+          </div>
+        );
+      })}
     </ResponsiveGridLayout>
   );
 }

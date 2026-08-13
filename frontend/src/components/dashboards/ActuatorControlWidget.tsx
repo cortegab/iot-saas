@@ -13,7 +13,7 @@ export function ActuatorControlWidget({
   onRemove,
 }: {
   deviceId: string;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   const { data: device, isLoading } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
 
@@ -22,7 +22,11 @@ export function ActuatorControlWidget({
       {isLoading || !device ? (
         <LoadingSkeleton rows={1} rowClassName="h-16" />
       ) : (
-        <ActuatorControl deviceId={deviceId} deviceOnline={device.connection_state === "online"} />
+        <ActuatorControl
+          deviceId={deviceId}
+          deviceOnline={device.connection_state === "online"}
+          catalogEntryId={device.catalog_entry_id}
+        />
       )}
     </WidgetCard>
   );

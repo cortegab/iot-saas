@@ -5,6 +5,7 @@ Register/login's membership list reuses app.auth.schemas.MembershipSummary
 """
 
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -15,10 +16,15 @@ class TenantCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
 
 
+class TenantUpdateRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+
+
 class TenantResponse(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
+    created_at: datetime
 
 
 class MemberResponse(BaseModel):

@@ -1,29 +1,33 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuthContext } from "@/lib/auth-context";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 import { ConnectionBadge } from "@/components/ui/ConnectionBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { ApiRequestError } from "@/lib/api-client";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Tabs, TabPanel } from "@/components/ui/Tabs";
 import { DeviceTrendChart } from "@/components/chart/DeviceTrendChart";
 import type { ChartThreshold } from "@/components/chart/TrendChart";
 import { RuleList } from "@/components/rules/RuleList";
 import { ActuatorControl } from "@/components/actuators/ActuatorControl";
 import { CommandHistory } from "@/components/actuators/CommandHistory";
-import { leafPredicates } from "@/components/rules/RuleSummary";
+import { leafPredicates, parseAction } from "@/components/rules/RuleSummary";
 import { buildSketch } from "@/lib/firmware-sketch";
+import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
+type CommandResponse = components["schemas"]["CommandResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
 function CurrentReadings({ deviceId }: { deviceId: string }) {
@@ -43,11 +47,55 @@ function CurrentReadings({ deviceId }: { deviceId: string }) {
   return (
     <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3">
       {data.map((m) => (
-        <div key={m.metric} className="rounded-lg border border-border bg-surface p-3">
+        <Card key={m.metric} padding="sm">
           <dt className="text-xs uppercase tracking-wide text-ink-muted">{m.metric}</dt>
           <dd className="text-lg font-semibold text-ink">{m.value}</dd>
-        </div>
+        </Card>
       ))}
+    </dl>
+  );
+}
+
+function formatCommandValue(value: unknown): string {
+  if (typeof value === "boolean") return value ? "ON" : "OFF";
+  return String(value);
+}
+
+/** Read-only actuator states for the Overview tab — the Actuators tab has the
+ * interactive controls; this is just "what's the state right now" at a
+ * glance, derived the same way ActuatorControl finds its actuator list
+ * (rule actions), just without the send-command affordance. */
+function ActuatorStateSummary({ deviceId }: { deviceId: string }) {
+  const { data: rules, isLoading: rulesLoading } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
+  const { data: commands } = useApiSWR<CommandResponse[]>(`/devices/${deviceId}/commands`, {
+    refreshInterval: 20_000,
+  });
+
+  const actuators = useMemo(() => {
+    const set = new Set<string>();
+    for (const rule of rules ?? []) {
+      const action = parseAction(rule.action);
+      if (action?.type === "actuator_command") set.add(action.actuator);
+    }
+    return Array.from(set);
+  }, [rules]);
+
+  if (rulesLoading) return <LoadingSkeleton rows={1} rowClassName="h-10" />;
+  if (actuators.length === 0) return null;
+
+  return (
+    <dl className="flex flex-wrap gap-4">
+      {actuators.map((actuator) => {
+        const latest = commands?.find((c) => c.actuator === actuator);
+        return (
+          <Card key={actuator} padding="sm">
+            <dt className="text-xs uppercase tracking-wide text-ink-muted">{actuator}</dt>
+            <dd className="text-sm font-semibold text-ink">
+              {latest ? formatCommandValue(latest.value) : "—"}
+            </dd>
+          </Card>
+        );
+      })}
     </dl>
   );
 }
@@ -140,9 +188,9 @@ function OnboardingCode({ device }: { device: DeviceResponse }) {
 
   if (!open) {
     return (
-      <button type="button" onClick={() => setOpen(true)} className="text-sm text-accent">
+      <Button type="button" variant="ghost" onClick={() => setOpen(true)}>
         Generate onboarding code
-      </button>
+      </Button>
     );
   }
 
@@ -164,13 +212,13 @@ function OnboardingCode({ device }: { device: DeviceResponse }) {
         <code>{sketch}</code>
       </pre>
       <div className="flex gap-3">
-        <button
+        <Button
           type="button"
+          variant="ghost"
           onClick={() => void navigator.clipboard.writeText(sketch).then(() => setCopied(true))}
-          className="text-sm text-accent"
         >
           {copied ? "Copied" : "Copy sketch"}
-        </button>
+        </Button>
         <button type="button" onClick={() => setOpen(false)} className="text-sm text-ink-muted">
           Close
         </button>
@@ -179,20 +227,21 @@ function OnboardingCode({ device }: { device: DeviceResponse }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-medium uppercase tracking-wide text-ink-muted">{title}</h2>
-      {children}
-    </section>
-  );
-}
+const TABS = [
+  { id: "overview", label: "Overview" },
+  { id: "metrics", label: "Metrics" },
+  { id: "actuators", label: "Actuators" },
+  { id: "rules", label: "Rules" },
+  { id: "settings", label: "Settings" },
+];
 
 export default function DeviceDetailPage() {
   const params = useParams<{ deviceId: string }>();
   const deviceId = params.deviceId;
-  const router = useRouter();
+  const searchParams = useSearchParams();
   const api = useApi();
+
+  const [tab, setTab] = useState(searchParams.get("tab") ?? "overview");
 
   const { data: device, error, isLoading, mutate } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
   // Same SWR key RuleList/ActuatorControl fetch — shared cache, one request.
@@ -270,47 +319,45 @@ export default function DeviceDetailPage() {
     }
   }
 
-  async function deleteDevice() {
-    if (!confirm(`Delete ${device!.name}? This cannot be undone.`)) return;
-    setBusy(true);
-    setActionError(null);
-    try {
-      await api.delete(`/devices/${deviceId}`);
-      router.replace("/devices");
-    } catch (err) {
-      setActionError(err instanceof ApiRequestError ? err.message : "Couldn't delete device.");
-      setBusy(false);
-    }
-  }
-
   return (
-    <div className="flex flex-col gap-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-ink">{device.name}</h1>
-        <ConnectionBadge state={device.connection_state} />
-      </div>
+    <div className="flex flex-col gap-4">
+      <PageHeader
+        title={device.name}
+        back={{ href: "/devices", label: "Devices" }}
+        actions={<ConnectionBadge state={device.connection_state} />}
+      />
 
-      <Section title="Current readings">
-        <CurrentReadings deviceId={deviceId} />
-      </Section>
+      <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
-      <Section title="Trend chart">
+      <TabPanel id="overview" active={tab}>
+        <div className="flex flex-col gap-6">
+          <CurrentReadings deviceId={deviceId} />
+          <DeviceTrendChart deviceId={deviceId} thresholdsByMetric={thresholdsByMetric} />
+          <ActuatorStateSummary deviceId={deviceId} />
+        </div>
+      </TabPanel>
+
+      <TabPanel id="metrics" active={tab}>
         <DeviceTrendChart deviceId={deviceId} thresholdsByMetric={thresholdsByMetric} />
-      </Section>
+      </TabPanel>
 
-      <Section title="Rules">
+      <TabPanel id="actuators" active={tab}>
+        <div className="flex flex-col gap-4">
+          <ActuatorControl
+            deviceId={deviceId}
+            deviceOnline={device.connection_state === "online"}
+            catalogEntryId={device.catalog_entry_id}
+          />
+          <CommandHistory deviceId={deviceId} />
+        </div>
+      </TabPanel>
+
+      <TabPanel id="rules" active={tab}>
         <RuleList deviceId={deviceId} />
-      </Section>
+      </TabPanel>
 
-      <Section title="Actuator controls">
-        <ActuatorControl deviceId={deviceId} deviceOnline={device.connection_state === "online"} />
-        <CommandHistory deviceId={deviceId} />
-      </Section>
-
-      <hr className="border-border" />
-
-      <Section title="Settings">
-        <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4">
+      <TabPanel id="settings" active={tab}>
+        <Card className="flex flex-col gap-4">
           {actionError && <ErrorState message={actionError} />}
 
           <div>
@@ -322,35 +369,26 @@ export default function DeviceDetailPage() {
                   onChange={(e) => setName(e.target.value)}
                   className="rounded-md border border-border bg-surface-raised px-2 py-1 text-sm text-ink"
                 />
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void saveName()}
-                  className="rounded-md bg-accent px-3 py-1 text-sm text-white"
-                >
+                <Button disabled={busy} onClick={() => void saveName()}>
                   Save
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setRenaming(false)}
-                  className="rounded-md px-3 py-1 text-sm text-ink-muted"
-                >
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setRenaming(false)}>
                   Cancel
-                </button>
+                </Button>
               </div>
             ) : (
               <div className="mt-1 flex items-center gap-3">
                 <span className="text-sm text-ink">{device.name}</span>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={() => {
                     setName(device.name);
                     setRenaming(true);
                   }}
-                  className="text-sm text-accent"
                 >
                   Rename
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -359,35 +397,25 @@ export default function DeviceDetailPage() {
             <span className="text-xs uppercase tracking-wide text-ink-muted">Status</span>
             <div className="mt-1 flex items-center gap-3">
               <span className="text-sm text-ink">{device.status}</span>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void toggleStatus()}
-                className="text-sm text-accent disabled:opacity-60"
-              >
+              <Button type="button" variant="ghost" disabled={busy} onClick={() => void toggleStatus()}>
                 {device.status === "active" ? "Disable" : "Enable"}
-              </button>
+              </Button>
             </div>
           </div>
 
           <div>
             <span className="text-xs uppercase tracking-wide text-ink-muted">Credential</span>
             {rotated ? (
-              <div className="mt-1 rounded-md border border-status-pending/40 bg-status-pending/10 p-3 text-sm">
+              <div className="mt-1 rounded-xl border border-status-pending/40 bg-status-pending/10 p-3 text-sm">
                 <p className="font-medium text-ink">Copy this now — it will not be shown again.</p>
                 <p className="mt-1 font-mono text-ink">{rotated.username}</p>
                 <p className="font-mono text-ink">{rotated.password}</p>
               </div>
             ) : (
               <div className="mt-1">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void rotateCredential()}
-                  className="text-sm text-accent disabled:opacity-60"
-                >
+                <Button type="button" variant="ghost" disabled={busy} onClick={() => void rotateCredential()}>
                   Rotate credential
-                </button>
+                </Button>
               </div>
             )}
           </div>
@@ -405,19 +433,8 @@ export default function DeviceDetailPage() {
               <OnboardingCode device={device} />
             </div>
           </div>
-
-          <div className="border-t border-border pt-4">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => void deleteDevice()}
-              className="text-sm text-status-error disabled:opacity-60"
-            >
-              Delete device
-            </button>
-          </div>
-        </div>
-      </Section>
+        </Card>
+      </TabPanel>
     </div>
   );
 }

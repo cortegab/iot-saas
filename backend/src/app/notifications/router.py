@@ -6,7 +6,9 @@ activity feed, not tenant configuration, so membership alone
 (require_tenant_context) is enough — same reasoning dashboards/router.py uses.
 """
 
-from fastapi import APIRouter, Depends
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
@@ -45,3 +47,18 @@ async def mark_all_read(
 ) -> list[NotificationResponse]:
     notifications = await service.mark_all_read(session, ctx.tenant_id)
     return [_to_response(n) for n in notifications]
+
+
+@router.patch("/{notification_id}/read", response_model=NotificationResponse)
+async def mark_read(
+    notification_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session),
+) -> NotificationResponse:
+    try:
+        notification = await service.mark_read(session, ctx.tenant_id, notification_id)
+    except service.NotificationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Notification not found"
+        ) from exc
+    return _to_response(notification)

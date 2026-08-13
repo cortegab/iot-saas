@@ -18,16 +18,21 @@ from app.auth.schemas import MembershipSummary
 from app.db import get_session, set_user_context
 from app.tenants import service
 from app.tenants.deps import TenantContext, require_role, require_tenant_context
-from app.tenants.models import TenantRole
+from app.tenants.models import Tenant, TenantRole
 from app.tenants.schemas import (
     AddMemberRequest,
     ChangeRoleRequest,
     MemberResponse,
     TenantCreateRequest,
     TenantResponse,
+    TenantUpdateRequest,
 )
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
+
+
+def _tenant_response(tenant: Tenant) -> TenantResponse:
+    return TenantResponse(id=tenant.id, name=tenant.name, slug=tenant.slug, created_at=tenant.created_at)
 
 
 @router.get("/mine", response_model=list[MembershipSummary])
@@ -54,7 +59,26 @@ async def create_tenant(
     tenant = await service.create_tenant_with_owner(
         session, user_id=current_user.id, name=body.name
     )
-    return TenantResponse(id=tenant.id, name=tenant.name, slug=tenant.slug)
+    return _tenant_response(tenant)
+
+
+@router.get("/current", response_model=TenantResponse)
+async def get_current_tenant(
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session),
+) -> TenantResponse:
+    tenant = await service.get_tenant(session, ctx.tenant_id)
+    return _tenant_response(tenant)
+
+
+@router.patch("/current", response_model=TenantResponse)
+async def rename_current_tenant(
+    body: TenantUpdateRequest,
+    ctx: TenantContext = Depends(require_role(TenantRole.OWNER)),
+    session: AsyncSession = Depends(get_session),
+) -> TenantResponse:
+    tenant = await service.rename_tenant(session, ctx.tenant_id, body.name)
+    return _tenant_response(tenant)
 
 
 @router.get("/members", response_model=list[MemberResponse])

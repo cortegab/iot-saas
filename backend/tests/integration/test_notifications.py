@@ -82,6 +82,41 @@ async def test_mark_all_read_clears_unread(
     assert all(n["read_at"] is not None for n in refetched.json())
 
 
+async def test_mark_single_notification_read(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    owner = await _register(client, "owner3b@example.com", "Acme3b")
+    tenant_id = uuid.UUID(owner["memberships"][0]["tenant_id"])
+    headers = _auth_headers(owner, str(tenant_id))
+
+    await notifications_service.create_notification(
+        app_session_factory, tenant_id, None, None, "one"
+    )
+    await notifications_service.create_notification(
+        app_session_factory, tenant_id, None, None, "two"
+    )
+    listed = (await client.get("/notifications", headers=headers)).json()
+    unread_id = next(n["id"] for n in listed if n["message"] == "one")
+
+    resp = await client.patch(f"/notifications/{unread_id}/read", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["read_at"] is not None
+
+    refetched = {n["id"]: n["read_at"] for n in (await client.get("/notifications", headers=headers)).json()}
+    other_id = next(n["id"] for n in listed if n["message"] == "two")
+    assert refetched[unread_id] is not None
+    assert refetched[other_id] is None
+
+
+async def test_mark_read_unknown_notification_returns_404(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner3c@example.com", "Acme3c")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+
+    resp = await client.patch(f"/notifications/{uuid.uuid4()}/read", headers=headers)
+    assert resp.status_code == 404
+
+
 async def test_notifications_tenant_isolation(
     client: httpx.AsyncClient,
     app_session_factory: async_sessionmaker[AsyncSession],

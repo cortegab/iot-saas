@@ -4,9 +4,14 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Select } from "@/components/ui/Select";
 import { ApiRequestError } from "@/lib/api-client";
 import { DashboardGrid } from "@/components/dashboards/DashboardGrid";
 import type { components } from "@/types/api";
@@ -67,28 +72,23 @@ function AddWidgetForm({ onAdd }: { onAdd: (widget: NewWidget) => void }) {
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 rounded-xl border border-border bg-surface p-4">
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Widget type
-        <select
-          value={type}
-          onChange={(e) => setType(e.target.value as WidgetType)}
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-        >
+        <Select value={type} onChange={(e) => setType(e.target.value as WidgetType)}>
           {(Object.keys(WIDGET_TYPE_LABELS) as WidgetType[]).map((t) => (
             <option key={t} value={t}>
               {WIDGET_TYPE_LABELS[t]}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Device
-        <select
+        <Select
           required
           value={deviceId}
           onChange={(e) => {
             setDeviceId(e.target.value);
             setMetric("");
           }}
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         >
           <option value="" disabled>
             Choose a device…
@@ -98,18 +98,12 @@ function AddWidgetForm({ onAdd }: { onAdd: (widget: NewWidget) => void }) {
               {d.name}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       {needsMetric(type) && (
         <label className="flex flex-col gap-1 text-sm text-ink-muted">
           Metric
-          <select
-            required
-            value={metric}
-            onChange={(e) => setMetric(e.target.value)}
-            disabled={!deviceId}
-            className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink disabled:opacity-60"
-          >
+          <Select required value={metric} onChange={(e) => setMetric(e.target.value)} disabled={!deviceId}>
             <option value="" disabled>
               {deviceId ? "Choose a metric…" : "Pick a device first"}
             </option>
@@ -118,30 +112,18 @@ function AddWidgetForm({ onAdd }: { onAdd: (widget: NewWidget) => void }) {
                 {m.metric}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
       {needsRange(type) && (
         <>
           <label className="flex flex-col gap-1 text-sm text-ink-muted">
             Min
-            <input
-              type="number"
-              required
-              value={min}
-              onChange={(e) => setMin(e.target.value)}
-              className="w-20 rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-            />
+            <Input type="number" required value={min} onChange={(e) => setMin(e.target.value)} className="w-20" />
           </label>
           <label className="flex flex-col gap-1 text-sm text-ink-muted">
             Max
-            <input
-              type="number"
-              required
-              value={max}
-              onChange={(e) => setMax(e.target.value)}
-              className="w-20 rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-            />
+            <Input type="number" required value={max} onChange={(e) => setMax(e.target.value)} className="w-20" />
           </label>
         </>
       )}
@@ -157,6 +139,8 @@ export default function DashboardDetailPage() {
   const dashboardId = params.dashboardId;
   const router = useRouter();
   const api = useApi();
+  const isAdmin = useIsAdmin();
+  const { confirm, dialog } = useConfirm();
 
   const { data, error, isLoading } = useApiSWR<DashboardResponse>(`/dashboards/${dashboardId}`);
 
@@ -197,7 +181,7 @@ export default function DashboardDetailPage() {
   }
 
   async function deleteDashboard() {
-    if (!data || !confirm(`Delete "${data.name}"? This cannot be undone.`)) return;
+    if (!data || !(await confirm(`Delete "${data.name}"? This cannot be undone.`))) return;
     try {
       await api.delete(`/dashboards/${dashboardId}`);
       router.replace("/dashboards");
@@ -218,66 +202,88 @@ export default function DashboardDetailPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        {renaming ? (
-          <div className="flex items-center gap-2">
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="rounded-md border border-border bg-surface-raised px-2 py-1 text-lg text-ink"
-            />
-            <button type="button" onClick={() => void saveName()} className="rounded-md bg-accent px-3 py-1 text-sm text-white">
-              Save
+      <PageHeader
+        back={{ href: "/dashboards", label: "Dashboards" }}
+        title={
+          renaming ? (
+            <span className="flex items-center gap-2 font-normal">
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="rounded-md border border-border bg-surface-raised px-2 py-1 text-lg text-ink"
+              />
+              <button
+                type="button"
+                onClick={() => void saveName()}
+                className="rounded-md bg-accent px-3 py-1 text-sm font-medium text-white"
+              >
+                Save
+              </button>
+              <button type="button" onClick={() => setRenaming(false)} className="text-sm text-ink-muted">
+                Cancel
+              </button>
+            </span>
+          ) : (
+            <span className="flex items-center gap-3">
+              {data.name}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setName(data.name);
+                    setRenaming(true);
+                  }}
+                  className="text-sm font-normal text-accent"
+                >
+                  Rename
+                </button>
+              )}
+            </span>
+          )
+        }
+        actions={
+          isAdmin && (
+            <button type="button" onClick={() => void deleteDashboard()} className="text-sm text-status-error">
+              Delete dashboard
             </button>
-            <button type="button" onClick={() => setRenaming(false)} className="text-sm text-ink-muted">
-              Cancel
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-ink">{data.name}</h1>
-            <button
-              type="button"
-              onClick={() => {
-                setName(data.name);
-                setRenaming(true);
-              }}
-              className="text-sm text-accent"
-            >
-              Rename
-            </button>
-          </div>
-        )}
-        <button type="button" onClick={() => void deleteDashboard()} className="text-sm text-status-error">
-          Delete dashboard
-        </button>
-      </div>
+          )
+        }
+      />
 
       {saveError && <ErrorState message={saveError} />}
 
-      <AddWidgetForm
-        onAdd={(widget) => {
-          // "Place at the bottom": react-grid-layout's own convention for this
-          // is y: Infinity, but that only works passed as a live JS object —
-          // JSON.stringify(Infinity) is `null`, which the backend's
-          // Widget.y: int rejects with a 422. Compute a real number instead.
-          const y = widgets.length === 0 ? 0 : Math.max(...widgets.map((w) => w.y + w.h));
-          void saveLayout([...widgets, { ...widget, x: 0, y }]);
-        }}
-      />
+      {isAdmin && (
+        <AddWidgetForm
+          onAdd={(widget) => {
+            // "Place at the bottom": react-grid-layout's own convention for this
+            // is y: Infinity, but that only works passed as a live JS object —
+            // JSON.stringify(Infinity) is `null`, which the backend's
+            // Widget.y: int rejects with a 422. Compute a real number instead.
+            const y = widgets.length === 0 ? 0 : Math.max(...widgets.map((w) => w.y + w.h));
+            void saveLayout([...widgets, { ...widget, x: 0, y }]);
+          }}
+        />
+      )}
 
       {widgets.length === 0 ? (
         <EmptyState
           title="This dashboard is empty"
-          description="Add your first widget above to start seeing live data here."
+          description={
+            isAdmin
+              ? "Add your first widget above to start seeing live data here."
+              : "An admin hasn't added any widgets to this dashboard yet."
+          }
         />
       ) : (
         <DashboardGrid
           widgets={widgets}
+          isAdmin={isAdmin}
           onLayoutChange={(updated) => void saveLayout(updated)}
           onRemoveWidget={(id) => void saveLayout(widgets.filter((w) => w.id !== id))}
         />
       )}
+
+      {dialog}
     </div>
   );
 }
