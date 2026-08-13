@@ -67,6 +67,23 @@ async def create_tenant_with_owner(session: AsyncSession, user_id: uuid.UUID, na
     return tenant
 
 
+async def get_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> Tenant:
+    result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
+    return result.scalar_one()
+
+
+async def rename_tenant(session: AsyncSession, tenant_id: uuid.UUID, name: str) -> Tenant:
+    """Rename the tenant. Callers gate this to TenantRole.OWNER (tenants/router.py)
+    — `tenants` itself carries no RLS (see tenants/models.py's docstring), so
+    the role check at the route layer is the only thing standing between any
+    member and renaming the whole workspace.
+    """
+    tenant = await get_tenant(session, tenant_id)
+    tenant.name = name
+    await session.flush()
+    return tenant
+
+
 async def get_tenant_slug(session: AsyncSession, tenant_id: uuid.UUID) -> str:
     """The one place other modules go for "what's this tenant's slug" (e.g.
     devices/router.py building an MQTT-topic-ready credential response,

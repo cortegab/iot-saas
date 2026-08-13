@@ -12,21 +12,26 @@ export function WidgetCard({
   children,
 }: {
   title: string;
-  onRemove: () => void;
+  /** Omitted (rather than a no-op) for viewer roles — see DashboardGrid's
+   * `isAdmin` prop — so the remove affordance doesn't render at all instead
+   * of rendering disabled or silently doing nothing. */
+  onRemove?: () => void;
   children: ReactNode;
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
       <div className="widget-drag-handle flex shrink-0 cursor-move items-center justify-between border-b border-border px-3 py-1.5">
         <span className="truncate text-xs font-medium text-ink-muted">{title}</span>
-        <button
-          type="button"
-          onClick={onRemove}
-          aria-label="Remove widget"
-          className="text-ink-muted hover:text-status-error"
-        >
-          ×
-        </button>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label="Remove widget"
+            className="text-ink-muted hover:text-status-error"
+          >
+            ×
+          </button>
+        )}
       </div>
       {/* Clipped, not scrollable — widgets are resizable, so "see more" means
           drag it bigger, not scroll inside a small box (which also fights

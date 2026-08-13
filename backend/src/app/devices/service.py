@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import NamedTuple
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service as auth_service
@@ -104,6 +104,19 @@ async def create_device(
 async def list_devices(session: AsyncSession, tenant_id: uuid.UUID) -> list[Device]:
     result = await session.execute(select(Device).where(Device.tenant_id == tenant_id))
     return list(result.scalars().all())
+
+
+async def count_devices_by_catalog_entry(
+    session: AsyncSession, tenant_id: uuid.UUID
+) -> dict[uuid.UUID, int]:
+    """Per-catalog-entry device counts, for the Device Types list's "Devices"
+    column — one query rather than N, since a tenant can have many types."""
+    result = await session.execute(
+        select(Device.catalog_entry_id, func.count(Device.id))
+        .where(Device.tenant_id == tenant_id)
+        .group_by(Device.catalog_entry_id)
+    )
+    return {catalog_entry_id: count for catalog_entry_id, count in result.all()}
 
 
 async def get_device(session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID) -> Device:

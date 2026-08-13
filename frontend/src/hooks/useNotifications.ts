@@ -25,5 +25,10 @@ export function useNotifications() {
     await mutate();
   }
 
-  return { notifications: data ?? [], unreadCount, isLoading, error, markAllRead };
+  async function markRead(id: string) {
+    await api.patch<NotificationResponse>(`/notifications/${id}/read`);
+    await mutate();
+  }
+
+  return { notifications: data ?? [], unreadCount, isLoading, error, markAllRead, markRead };
 }

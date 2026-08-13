@@ -26,6 +26,20 @@
   --color-status-error: #f85149;
 }
 
+/*
+ * Layout rhythm conventions (not enforceable by Tailwind, so written down
+ * here rather than left to drift page-by-page):
+ *   - Page-level wrapper: `gap-6` between distinct sections (e.g. settings
+ *     pages with multiple cards); `gap-4` for a single flat list/section
+ *     (e.g. a devices or rules list with no sub-sections).
+ *   - Section/group label ("DEVICES", "ASSIGN ROLES"): always
+ *     `text-xs font-medium uppercase tracking-wide text-ink-muted` — one
+ *     size for this role everywhere, no `text-sm` variant.
+ *   - Content card: `Card` (components/ui/Card.tsx) — `rounded-xl` always;
+ *     `padding="md"` (p-4) for standalone sections, `padding="sm"` (p-3) for
+ *     dense list rows. Radius never forks between the two.
+ */
+
 :root.light {
   --color-canvas: #f6f8fa;
   --color-surface: #ffffff;

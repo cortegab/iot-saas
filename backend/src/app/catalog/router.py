@@ -23,19 +23,22 @@ from app.catalog.schemas import (
     CatalogMetric,
 )
 from app.db import get_session
+from app.devices import service as devices_service
 from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import TenantRole
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
 
-def _to_response(entry: DeviceCatalogEntry) -> CatalogEntryResponse:
+def _to_response(entry: DeviceCatalogEntry, device_count: int = 0) -> CatalogEntryResponse:
     return CatalogEntryResponse(
         id=entry.id,
         name=entry.name,
         metrics=[CatalogMetric.model_validate(m) for m in entry.metrics],
         actuators=[CatalogActuator.model_validate(a) for a in entry.actuators],
+        status=entry.status,  # type: ignore[arg-type]
         is_legacy=entry.is_legacy,
+        device_count=device_count,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
     )
@@ -47,7 +50,8 @@ async def list_catalog_entries(
     session: AsyncSession = Depends(get_session),
 ) -> list[CatalogEntryResponse]:
     entries = await service.list_catalog_entries(session, ctx.tenant_id)
-    return [_to_response(e) for e in entries]
+    counts = await devices_service.count_devices_by_catalog_entry(session, ctx.tenant_id)
+    return [_to_response(e, counts.get(e.id, 0)) for e in entries]
 
 
 @router.post("", response_model=CatalogEntryResponse, status_code=status.HTTP_201_CREATED)
@@ -69,8 +73,11 @@ async def create_catalog_entry(
 @router.get("/{entry_id}", response_model=CatalogEntryResponse)
 async def get_catalog_entry(
     entry: DeviceCatalogEntry = Depends(get_catalog_entry_or_404),
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session),
 ) -> CatalogEntryResponse:
-    return _to_response(entry)
+    counts = await devices_service.count_devices_by_catalog_entry(session, ctx.tenant_id)
+    return _to_response(entry, counts.get(entry.id, 0))
 
 
 @router.patch("/{entry_id}", response_model=CatalogEntryResponse)
@@ -84,10 +91,11 @@ async def update_catalog_entry(
     actuators = (
         [a.model_dump(mode="json") for a in body.actuators] if body.actuators is not None else None
     )
-    updated = await service.update_catalog_entry(entry, body.name, metrics, actuators)
+    updated = await service.update_catalog_entry(entry, body.name, metrics, actuators, body.status)
     await session.flush()
     await session.refresh(updated)
-    return _to_response(updated)
+    counts = await devices_service.count_devices_by_catalog_entry(session, ctx.tenant_id)
+    return _to_response(updated, counts.get(updated.id, 0))
 
 
 @router.delete("/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)

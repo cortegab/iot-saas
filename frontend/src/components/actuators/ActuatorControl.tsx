@@ -4,6 +4,10 @@ import { useMemo, useState } from "react";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useApi } from "@/hooks/useApi";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -13,6 +17,7 @@ import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type CommandResponse = components["schemas"]["CommandResponse"];
+type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
 function formatValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "ON" : "OFF";
@@ -35,6 +40,7 @@ function ActuatorRow({
   onSent: () => void;
 }) {
   const api = useApi();
+  const { confirm, dialog } = useConfirm();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,7 +48,11 @@ function ActuatorRow({
   const confirmed = latest != null && latest.acked_at != null;
 
   async function send(nextValue: boolean) {
-    if (!confirm(`Turn ${actuator} ${nextValue ? "ON" : "OFF"}?`)) return;
+    const ok = await confirm(`Turn ${actuator} ${nextValue ? "ON" : "OFF"}?`, {
+      danger: false,
+      confirmLabel: nextValue ? "Turn ON" : "Turn OFF",
+    });
+    if (!ok) return;
     setBusy(true);
     setError(null);
     try {
@@ -56,18 +66,13 @@ function ActuatorRow({
   }
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
+    <Card className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <span className="font-medium text-ink">{actuator}</span>
         {isAdmin && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void send(!(currentValue === true))}
-            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white disabled:opacity-60"
-          >
+          <Button disabled={busy} onClick={() => void send(!(currentValue === true))}>
             Turn {currentValue === true ? "OFF" : "ON"}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -78,11 +83,7 @@ function ActuatorRow({
               Requested <span className="text-ink">{formatValue(latest.value)}</span>
             </span>
             <span aria-hidden>·</span>
-            {confirmed ? (
-              <span className="text-status-online">Confirmed</span>
-            ) : (
-              <span className="text-status-pending">Pending</span>
-            )}
+            <Badge tone={confirmed ? "online" : "pending"} variant="text" label={confirmed ? "Confirmed" : "Pending"} />
           </>
         ) : (
           <span>No commands sent yet.</span>
@@ -99,19 +100,25 @@ function ActuatorRow({
       )}
 
       {error && <ErrorState message={error} />}
-    </div>
+      {dialog}
+    </Card>
   );
 }
 
 export function ActuatorControl({
   deviceId,
   deviceOnline,
+  catalogEntryId,
 }: {
   deviceId: string;
   deviceOnline: boolean;
+  catalogEntryId: string;
 }) {
   const isAdmin = useIsAdmin();
   const { data: rules, isLoading: rulesLoading } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
+  const { data: catalogEntry, isLoading: catalogLoading } = useApiSWR<CatalogEntryResponse>(
+    `/catalog/${catalogEntryId}`,
+  );
   // A fallback, not the primary freshness mechanism — useRealtime's
   // command_ack messages revalidate this same key the moment an ack lands.
   const { data: commands, mutate: mutateCommands } = useApiSWR<CommandResponse[]>(
@@ -119,16 +126,20 @@ export function ActuatorControl({
     { refreshInterval: 20_000 },
   );
 
+  // The template's declared actuators are the primary source — a rule
+  // referencing an actuator is unioned in too, so a control never disappears
+  // for an actuator an active rule still commands even if it was since
+  // dropped from the template.
   const actuators = useMemo(() => {
-    const set = new Set<string>();
+    const set = new Set<string>((catalogEntry?.actuators ?? []).map((a) => a.name));
     for (const rule of rules ?? []) {
       const action = parseAction(rule.action);
       if (action?.type === "actuator_command") set.add(action.actuator);
     }
     return Array.from(set);
-  }, [rules]);
+  }, [catalogEntry, rules]);
 
-  if (rulesLoading) return <LoadingSkeleton rows={2} rowClassName="h-24" />;
+  if (rulesLoading || catalogLoading) return <LoadingSkeleton rows={2} rowClassName="h-24" />;
 
   // Only known-to-exist actuators are shown — no speculative fixed list
   // (UX_UI_Description.md §3's "only render what's known to exist").
@@ -136,7 +147,7 @@ export function ActuatorControl({
     return (
       <EmptyState
         title="No actuators configured"
-        description="Add a device-command rule to control an actuator manually."
+        description="This device's template doesn't declare any actuators, and no rule commands one yet."
       />
     );
   }

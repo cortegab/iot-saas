@@ -12,6 +12,11 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
+import { Textarea } from "@/components/ui/Textarea";
+import { cn } from "@/lib/cn";
 import { ApiRequestError } from "@/lib/api-client";
 import { RuleSummary, type ConditionLeaf, type ConditionNode } from "@/components/rules/RuleSummary";
 import type { components } from "@/types/api";
@@ -104,14 +109,7 @@ function SafetyField({
   return (
     <label className="flex flex-col gap-1 text-sm text-ink-muted">
       {label}
-      <input
-        type="number"
-        min={0}
-        step="any"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-      />
+      <Input type="number" min={0} step="any" value={value} onChange={(e) => onChange(Number(e.target.value))} />
       <span className="text-xs">{hint}</span>
       {value < min && (
         <span className="text-xs text-status-pending">
@@ -119,6 +117,42 @@ function SafetyField({
         </span>
       )}
     </label>
+  );
+}
+
+/** The AND/OR combinator picker and the action-type picker were the same
+ * segmented-button markup copy-pasted twice in this file — factored out once
+ * rather than left to drift the next time either grows a state. */
+function SegmentedToggle<T extends string>({
+  options,
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (v: T) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <div className="flex gap-1" role="group" aria-label={ariaLabel}>
+      {options.map((opt) => (
+        <button
+          key={opt.value}
+          type="button"
+          aria-pressed={value === opt.value}
+          onClick={() => onChange(opt.value)}
+          className={cn(
+            "rounded-md px-3 py-1.5 text-sm transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            value === opt.value
+              ? "bg-surface-raised font-medium text-ink"
+              : "text-ink-muted hover:bg-surface-raised hover:text-ink",
+          )}
+        >
+          {opt.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -140,11 +174,7 @@ function PredicateRow({
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Metric
         {metricOptions.length > 0 ? (
-          <select
-            value={predicate.metric}
-            onChange={(e) => onChange({ ...predicate, metric: e.target.value })}
-            className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-          >
+          <Select value={predicate.metric} onChange={(e) => onChange({ ...predicate, metric: e.target.value })}>
             <option value="" disabled>
               Choose a metric…
             </option>
@@ -153,7 +183,7 @@ function PredicateRow({
                 {m}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           <span className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-ink-muted">
             No metrics declared
@@ -162,37 +192,31 @@ function PredicateRow({
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Comparison
-        <select
-          value={predicate.operator}
-          onChange={(e) => onChange({ ...predicate, operator: e.target.value })}
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-        >
+        <Select value={predicate.operator} onChange={(e) => onChange({ ...predicate, operator: e.target.value })}>
           {OPERATORS.map((op) => (
             <option key={op.value} value={op.value}>
               {op.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Threshold
-        <input
+        <Input
           type="number"
           step="any"
           value={predicate.threshold}
           onChange={(e) => onChange({ ...predicate, threshold: Number(e.target.value) })}
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         />
       </label>
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Re-arm gap
-        <input
+        <Input
           type="number"
           min={0}
           step="any"
           value={predicate.hysteresis}
           onChange={(e) => onChange({ ...predicate, hysteresis: Number(e.target.value) })}
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         />
       </label>
       {removable && (
@@ -219,13 +243,9 @@ function NotFlatConditionNotice({ rule, onCancel }: { rule: RuleResponse; onCanc
         This rule has a nested condition structure that isn&apos;t editable here — it was created
         directly through the API. Delete and recreate it to use this form.
       </p>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="self-start rounded-md px-3 py-2 text-sm text-ink-muted hover:bg-surface-raised"
-      >
+      <Button type="button" variant="secondary" size="md" className="self-start" onClick={onCancel}>
         Close
-      </button>
+      </Button>
     </div>
   );
 }
@@ -303,6 +323,16 @@ function RuleFormInner({
   const [actuator, setActuator] = useState(
     typeof existingAction?.actuator === "string" ? existingAction.actuator : "",
   );
+
+  // Same reasoning as metricOptions: the template's declared actuators are
+  // the primary source, plus the current value so editing never silently
+  // drops a saved actuator that's no longer declared.
+  const actuatorOptions = useMemo(() => {
+    const declared = (catalogEntry?.actuators ?? []).map((a) => a.name);
+    const names = new Set(declared);
+    if (actuator) names.add(actuator);
+    return Array.from(names);
+  }, [catalogEntry, actuator]);
   const [valueKind, setValueKind] = useState<ValueKind>(
     typeof existingAction?.value === "number"
       ? "number"
@@ -397,11 +427,10 @@ function RuleFormInner({
   }
 
   return (
-    <form
-      onSubmit={(e) => void handleSubmit(e)}
-      className="flex flex-col gap-5 rounded-xl border border-border bg-surface p-4"
-    >
-      <RuleSummary rule={{ condition: previewCondition, for_duration: forDuration, action: previewAction }} />
+    <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-6">
+      <div className="rounded-xl border border-border bg-surface p-4">
+        <RuleSummary rule={{ condition: previewCondition, for_duration: forDuration, action: previewAction }} />
+      </div>
 
       <fieldset className="flex flex-col gap-3">
         <legend className="text-xs font-medium uppercase tracking-wide text-ink-muted">Condition</legend>
@@ -416,36 +445,25 @@ function RuleFormInner({
           />
         ))}
         <div className="flex items-center gap-3">
-          <button
+          <Button
             type="button"
+            variant="ghost"
             onClick={() =>
               setPredicates([
                 ...predicates,
                 { metric: "", operator: ">", threshold: 0, hysteresis: DEFAULT_HYSTERESIS },
               ])
             }
-            className="text-sm text-accent"
           >
             + Add condition
-          </button>
+          </Button>
           {predicates.length > 1 && (
-            <div className="flex gap-1" role="group" aria-label="Combine conditions with">
-              {(["AND", "OR"] as Combinator[]).map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  aria-pressed={combinator === c}
-                  onClick={() => setCombinator(c)}
-                  className={`rounded-md px-3 py-1.5 text-sm ${
-                    combinator === c
-                      ? "bg-surface-raised text-ink font-medium"
-                      : "text-ink-muted hover:bg-surface-raised hover:text-ink"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
+            <SegmentedToggle
+              ariaLabel="Combine conditions with"
+              value={combinator}
+              onChange={setCombinator}
+              options={(["AND", "OR"] as Combinator[]).map((c) => ({ value: c, label: c }))}
+            />
           )}
         </div>
       </fieldset>
@@ -479,80 +497,65 @@ function RuleFormInner({
           summary above (UX_UI_Description.md §6: "Cover every action type"). */}
       <fieldset className="flex flex-col gap-3">
         <legend className="text-xs font-medium uppercase tracking-wide text-ink-muted">Action</legend>
-        <div className="flex gap-1" role="group" aria-label="Action type">
-          {(["actuator_command", "notification", "webhook"] as ActionType[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={actionType === t}
-              onClick={() => setActionType(t)}
-              className={`rounded-md px-3 py-1.5 text-sm ${
-                actionType === t
-                  ? "bg-surface-raised text-ink font-medium"
-                  : "text-ink-muted hover:bg-surface-raised hover:text-ink"
-              }`}
-            >
-              {t === "actuator_command" ? "Device command" : t === "notification" ? "Notification" : "Webhook"}
-            </button>
-          ))}
-        </div>
+        <SegmentedToggle
+          ariaLabel="Action type"
+          value={actionType}
+          onChange={setActionType}
+          options={[
+            { value: "actuator_command", label: "Device command" },
+            { value: "notification", label: "Notification" },
+            { value: "webhook", label: "Webhook" },
+          ]}
+        />
 
         {actionType === "actuator_command" && (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="flex flex-col gap-1 text-sm text-ink-muted">
               Actuator
-              <input
-                value={actuator}
-                onChange={(e) => setActuator(e.target.value)}
-                placeholder="e.g. fan1"
-                className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-              />
+              {actuatorOptions.length > 0 ? (
+                <Select value={actuator} onChange={(e) => setActuator(e.target.value)}>
+                  <option value="" disabled>
+                    Choose an actuator…
+                  </option>
+                  {actuatorOptions.map((a) => (
+                    <option key={a} value={a}>
+                      {a}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <span className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-ink-muted">
+                  No actuators declared
+                </span>
+              )}
             </label>
             <label className="flex flex-col gap-1 text-sm text-ink-muted">
               Value type
-              <select
-                value={valueKind}
-                onChange={(e) => setValueKind(e.target.value as ValueKind)}
-                className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-              >
+              <Select value={valueKind} onChange={(e) => setValueKind(e.target.value as ValueKind)}>
                 <option value="boolean">On / Off</option>
                 <option value="number">Number</option>
                 <option value="text">Text</option>
-              </select>
+              </Select>
             </label>
             {valueKind === "boolean" && (
               <label className="flex flex-col gap-1 text-sm text-ink-muted">
                 Value
-                <select
-                  value={boolValue ? "true" : "false"}
-                  onChange={(e) => setBoolValue(e.target.value === "true")}
-                  className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-                >
+                <Select value={boolValue ? "true" : "false"} onChange={(e) => setBoolValue(e.target.value === "true")}>
                   <option value="true">ON</option>
                   <option value="false">OFF</option>
-                </select>
+                </Select>
               </label>
             )}
             {valueKind === "number" && (
               <label className="flex flex-col gap-1 text-sm text-ink-muted">
                 Value
-                <input
-                  type="number"
-                  step="any"
-                  value={numValue}
-                  onChange={(e) => setNumValue(Number(e.target.value))}
-                  className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-                />
+                <Input type="number" step="any" value={numValue} onChange={(e) => setNumValue(Number(e.target.value))} />
               </label>
             )}
             {valueKind === "text" && (
               <label className="flex flex-col gap-1 text-sm text-ink-muted">
                 Value
-                <input
-                  value={textValue}
-                  onChange={(e) => setTextValue(e.target.value)}
-                  className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-                />
+                <Input value={textValue} onChange={(e) => setTextValue(e.target.value)} />
               </label>
             )}
           </div>
@@ -561,12 +564,7 @@ function RuleFormInner({
         {actionType === "notification" && (
           <label className="flex flex-col gap-1 text-sm text-ink-muted">
             Message
-            <textarea
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
-              rows={2}
-              className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-            />
+            <Textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={2} />
           </label>
         )}
 
@@ -574,20 +572,19 @@ function RuleFormInner({
           <div className="flex flex-col gap-3">
             <label className="flex flex-col gap-1 text-sm text-ink-muted">
               URL
-              <input
+              <Input
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
                 placeholder="https://example.com/hook"
-                className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
               />
             </label>
             <label className="flex flex-col gap-1 text-sm text-ink-muted">
               Body (JSON)
-              <textarea
+              <Textarea
                 value={webhookBody}
                 onChange={(e) => setWebhookBody(e.target.value)}
                 rows={3}
-                className="rounded-md border border-border bg-surface-raised px-3 py-2 font-mono text-ink"
+                className="font-mono"
               />
             </label>
           </div>
@@ -605,21 +602,13 @@ function RuleFormInner({
         </p>
       )}
 
-      <div className="flex gap-2">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-        >
+      <div className="flex gap-3 border-t border-border pt-4">
+        <Button type="submit" size="md" disabled={submitting}>
           {submitting ? "Saving…" : existing ? "Save changes" : "Create rule"}
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="rounded-md px-3 py-2 text-sm text-ink-muted hover:bg-surface-raised"
-        >
+        </Button>
+        <Button type="button" variant="secondary" size="md" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       </div>
     </form>
   );

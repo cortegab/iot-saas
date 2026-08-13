@@ -41,7 +41,7 @@ export function GaugeWidget({
   metric: string | null;
   min: number | null;
   max: number | null;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   const { data: device } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
   // A fallback, not the primary freshness mechanism — useRealtime revalidates

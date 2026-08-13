@@ -4,6 +4,8 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { ApiRequestError } from "@/lib/api-client";
 
 export default function RegisterPage() {
@@ -44,51 +46,47 @@ export default function RegisterPage() {
 
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Workspace name
-        <input
+        <Input
           type="text"
           required
           autoComplete="organization"
           value={tenantName}
           onChange={(e) => setTenantName(e.target.value)}
           placeholder="e.g. My Workshop"
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         />
       </label>
 
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Name <span className="text-ink-muted/70">(optional)</span>
-        <input
+        <Input
           type="text"
           autoComplete="name"
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Jamie Rivera"
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         />
       </label>
 
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Email
-        <input
+        <Input
           type="email"
           required
           autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         />
       </label>
 
       <label className="flex flex-col gap-1 text-sm text-ink-muted">
         Password
-        <input
+        <Input
           type="password"
           required
           autoComplete="new-password"
           minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
         />
       </label>
 
@@ -98,13 +96,9 @@ export default function RegisterPage() {
         </p>
       )}
 
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-      >
+      <Button type="submit" size="md" disabled={submitting}>
         {submitting ? "Creating account…" : "Create account"}
-      </button>
+      </Button>
 
       <p className="text-center text-sm text-ink-muted">
         Already have an account?{" "}

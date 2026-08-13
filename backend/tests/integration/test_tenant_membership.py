@@ -22,6 +22,38 @@ def _auth_headers(body: dict[str, Any], tenant_id: str) -> dict[str, str]:
     return {"authorization": f"Bearer {body['access_token']}", "x-tenant-id": tenant_id}
 
 
+async def test_owner_can_rename_current_tenant(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner1b@example.com", "Original Name")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+
+    get_resp = await client.get("/tenants/current", headers=headers)
+    assert get_resp.status_code == 200
+    assert get_resp.json()["name"] == "Original Name"
+
+    patch_resp = await client.patch("/tenants/current", json={"name": "Renamed Org"}, headers=headers)
+    assert patch_resp.status_code == 200
+    assert patch_resp.json()["name"] == "Renamed Org"
+
+    refetched = await client.get("/tenants/current", headers=headers)
+    assert refetched.json()["name"] == "Renamed Org"
+
+
+async def test_non_owner_cannot_rename_tenant(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner1c@example.com", "Acme1c")
+    owner_headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+
+    admin = await _register(client, "admin1c@example.com", "AdminOwnTenant1c")
+    await client.post(
+        "/tenants/members",
+        json={"email": "admin1c@example.com", "role": "admin"},
+        headers=owner_headers,
+    )
+    admin_headers = _auth_headers(admin, owner["memberships"][0]["tenant_id"])
+
+    resp = await client.patch("/tenants/current", json={"name": "Hijacked"}, headers=admin_headers)
+    assert resp.status_code == 403
+
+
 async def test_create_additional_tenant(client: httpx.AsyncClient) -> None:
     owner = await _register(client, "owner@example.com", "First")
     headers = {"authorization": f"Bearer {owner['access_token']}"}

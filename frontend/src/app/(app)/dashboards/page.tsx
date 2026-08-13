@@ -1,106 +1,51 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { buttonClassName } from "@/components/ui/Button";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Table, type TableColumn } from "@/components/ui/Table";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
 
 type DashboardResponse = components["schemas"]["DashboardResponse"];
 
-function NewDashboardForm({ onCreated }: { onCreated: () => void }) {
+export default function DashboardsPage() {
+  const router = useRouter();
   const api = useApi();
-  const [name, setName] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const isAdmin = useIsAdmin();
+  const { confirm, dialog } = useConfirm();
+  const { data: dashboards, error, isLoading, mutate } = useApiSWR<DashboardResponse[]>("/dashboards");
+  const [search, setSearch] = useState("");
+  const [actionError, setActionError] = useState<string | null>(null);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSubmitting(true);
-    try {
-      await api.post("/dashboards", { name: name.trim() });
-      setName("");
-      onCreated();
-    } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't create this dashboard.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const filtered = useMemo(() => {
+    if (!dashboards) return [];
+    const q = search.trim().toLowerCase();
+    if (!q) return dashboards;
+    return dashboards.filter((d) => d.name.toLowerCase().includes(q));
+  }, [dashboards, search]);
 
-  return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="flex items-end gap-2">
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Name
-        <input
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Greenhouse overview"
-          className="rounded-md border border-border bg-surface-raised px-3 py-2 text-ink"
-        />
-      </label>
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
-      >
-        {submitting ? "Creating…" : "New dashboard"}
-      </button>
-      {error && (
-        <p role="alert" className="text-sm text-status-error">
-          {error}
-        </p>
-      )}
-    </form>
-  );
-}
-
-function DashboardRow({ dashboard, onDeleted }: { dashboard: DashboardResponse; onDeleted: () => void }) {
-  const api = useApi();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function remove() {
-    if (!confirm(`Delete "${dashboard.name}"? This cannot be undone.`)) return;
-    setBusy(true);
-    setError(null);
+  async function remove(dashboard: DashboardResponse) {
+    if (!(await confirm(`Delete "${dashboard.name}"? This cannot be undone.`))) return;
+    setActionError(null);
     try {
       await api.delete(`/dashboards/${dashboard.id}`);
-      onDeleted();
+      void mutate();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't delete this dashboard.");
-      setBusy(false);
+      setActionError(err instanceof ApiRequestError ? err.message : "Couldn't delete this dashboard.");
     }
   }
-
-  return (
-    <li className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-4">
-      <div className="flex items-center justify-between">
-        <Link href={`/dashboards/${dashboard.id}`} className="text-sm font-medium text-ink hover:text-accent">
-          {dashboard.name}
-        </Link>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-ink-muted">
-            Updated {new Date(dashboard.updated_at).toLocaleDateString()}
-          </span>
-          <button type="button" disabled={busy} onClick={() => void remove()} className="text-sm text-status-error disabled:opacity-60">
-            Delete
-          </button>
-        </div>
-      </div>
-      {error && <ErrorState message={error} />}
-    </li>
-  );
-}
-
-export default function DashboardsPage() {
-  const { data: dashboards, error, isLoading, mutate } = useApiSWR<DashboardResponse[]>("/dashboards");
 
   if (isLoading) return <LoadingSkeleton rows={3} rowClassName="h-16" />;
   if (error) {
@@ -112,24 +57,77 @@ export default function DashboardsPage() {
     );
   }
 
+  const columns: TableColumn<DashboardResponse>[] = [
+    {
+      header: "Name",
+      render: (d) => (
+        <Link href={`/dashboards/${d.id}`} className="font-medium text-ink hover:text-accent">
+          {d.name}
+        </Link>
+      ),
+    },
+    { header: "Updated", render: (d) => new Date(d.updated_at).toLocaleDateString() },
+  ];
+  if (isAdmin) {
+    columns.push({
+      header: "",
+      className: "w-10 text-right",
+      render: (d) => {
+        const items: DropdownMenuItem[][] = [
+          [{ label: "Edit", onClick: () => router.push(`/dashboards/${d.id}`) }],
+          [{ label: "Delete", danger: true, onClick: () => void remove(d) }],
+        ];
+        return <DropdownMenu groups={items} label={`Actions for ${d.name}`} />;
+      },
+    });
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-ink">Dashboards</h1>
+      <PageHeader
+        title="Dashboards"
+        actions={
+          isAdmin && (
+            <Link href="/dashboards/new" className={buttonClassName()}>
+              Add Dashboard
+            </Link>
+          )
+        }
+      />
 
-      <NewDashboardForm onCreated={() => void mutate()} />
+      {actionError && <ErrorState message={actionError} />}
+
+      {dashboards && dashboards.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            compact
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search dashboards…"
+          />
+        </div>
+      )}
 
       {!dashboards || dashboards.length === 0 ? (
         <EmptyState
           title="No dashboards yet"
           description="Create one and add widgets for the devices you care about most."
+          action={
+            isAdmin ? (
+              <Link href="/dashboards/new" className={buttonClassName({ variant: "ghost" })}>
+                Add a dashboard →
+              </Link>
+            ) : undefined
+          }
         />
+      ) : filtered.length === 0 ? (
+        <EmptyState title="No matching dashboards" description="Try a different search term." />
       ) : (
-        <ul className="flex flex-col gap-2">
-          {dashboards.map((d) => (
-            <DashboardRow key={d.id} dashboard={d} onDeleted={() => void mutate()} />
-          ))}
-        </ul>
+        <Table columns={columns} rows={filtered} rowKey={(d) => d.id} />
       )}
+
+      {dialog}
     </div>
   );
 }

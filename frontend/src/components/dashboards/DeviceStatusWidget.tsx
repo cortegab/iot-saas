@@ -8,7 +8,7 @@ import type { components } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 
-export function DeviceStatusWidget({ deviceId, onRemove }: { deviceId: string; onRemove: () => void }) {
+export function DeviceStatusWidget({ deviceId, onRemove }: { deviceId: string; onRemove?: () => void }) {
   // A fallback, not the primary freshness mechanism — useRealtime revalidates
   // this same key the moment a telemetry message implies the device is online.
   const { data: device, isLoading } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`, {

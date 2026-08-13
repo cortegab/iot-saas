@@ -53,9 +53,28 @@ async def test_create_catalog_entry_with_metrics_and_actuators(client: httpx.Asy
     assert body["name"] == "Temperature Sensor v2"
     assert body["is_legacy"] is False
     assert body["metrics"] == [
-        {"name": "temperature", "unit": "°C", "data_type": "float", "min": -20.0, "max": 80.0}
+        {
+            "name": "temperature",
+            "key": None,
+            "unit": "°C",
+            "data_type": "float",
+            "decimals": None,
+            "min": -20.0,
+            "max": 80.0,
+        }
     ]
-    assert body["actuators"] == [{"name": "fan1", "value_type": "bool", "allowed_values": None}]
+    assert body["actuators"] == [
+        {
+            "name": "fan1",
+            "key": None,
+            "value_type": "bool",
+            "allowed_values": None,
+            "on_value": None,
+            "off_value": None,
+        }
+    ]
+    assert body["status"] == "active"
+    assert body["device_count"] == 0
 
 
 async def test_list_returns_legacy_plus_created(client: httpx.AsyncClient) -> None:
@@ -77,6 +96,34 @@ async def test_update_catalog_entry(client: httpx.AsyncClient) -> None:
     resp = await client.patch(f"/catalog/{entry_id}", json={"name": "Renamed"}, headers=headers)
     assert resp.status_code == 200
     assert resp.json()["name"] == "Renamed"
+
+
+async def test_update_catalog_entry_status(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner4b@example.com", "Acme4b")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    created = await client.post("/catalog", json={"name": "Original"}, headers=headers)
+    entry_id = created.json()["id"]
+    assert created.json()["status"] == "active"
+
+    resp = await client.patch(f"/catalog/{entry_id}", json={"status": "disabled"}, headers=headers)
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "disabled"
+
+
+async def test_device_count_reflects_devices_using_entry(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner4c@example.com", "Acme4c")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    entry_id = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+
+    get_before = await client.get(f"/catalog/{entry_id}", headers=headers)
+    assert get_before.json()["device_count"] == 0
+
+    await client.post(
+        "/devices", json={"name": "Sensor 1", "catalog_entry_id": entry_id}, headers=headers
+    )
+
+    get_after = await client.get(f"/catalog/{entry_id}", headers=headers)
+    assert get_after.json()["device_count"] == 1
 
 
 async def test_delete_unused_catalog_entry(client: httpx.AsyncClient) -> None:

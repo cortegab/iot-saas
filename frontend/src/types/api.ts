@@ -124,6 +124,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tenants/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Current Tenant */
+        get: operations["get_current_tenant_tenants_current_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Rename Current Tenant */
+        patch: operations["rename_current_tenant_tenants_current_patch"];
+        trace?: never;
+    };
     "/tenants/members": {
         parameters: {
             query?: never;
@@ -520,6 +538,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/{notification_id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark Read */
+        patch: operations["mark_read_notifications__notification_id__read_patch"];
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -620,6 +655,8 @@ export interface components {
         CatalogActuator: {
             /** Name */
             name: string;
+            /** Key */
+            key?: string | null;
             /**
              * Value Type
              * @default bool
@@ -628,6 +665,10 @@ export interface components {
             value_type: "bool" | "float" | "string";
             /** Allowed Values */
             allowed_values?: (boolean | number | string)[] | null;
+            /** On Value */
+            on_value?: boolean | number | string | null;
+            /** Off Value */
+            off_value?: boolean | number | string | null;
         };
         /** CatalogEntryCreateRequest */
         CatalogEntryCreateRequest: {
@@ -651,8 +692,15 @@ export interface components {
             metrics: components["schemas"]["CatalogMetric"][];
             /** Actuators */
             actuators: components["schemas"]["CatalogActuator"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "disabled";
             /** Is Legacy */
             is_legacy: boolean;
+            /** Device Count */
+            device_count: number;
             /**
              * Created At
              * Format: date-time
@@ -672,11 +720,15 @@ export interface components {
             metrics?: components["schemas"]["CatalogMetric"][] | null;
             /** Actuators */
             actuators?: components["schemas"]["CatalogActuator"][] | null;
+            /** Status */
+            status?: ("active" | "disabled") | null;
         };
         /** CatalogMetric */
         CatalogMetric: {
             /** Name */
             name: string;
+            /** Key */
+            key?: string | null;
             /** Unit */
             unit?: string | null;
             /**
@@ -685,6 +737,8 @@ export interface components {
              * @constant
              */
             data_type: "float";
+            /** Decimals */
+            decimals?: number | null;
             /** Min */
             min?: number | null;
             /** Max */
@@ -1178,6 +1232,11 @@ export interface components {
             name: string;
             /** Slug */
             slug: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /**
          * TenantRole
@@ -1188,6 +1247,11 @@ export interface components {
          * @enum {string}
          */
         TenantRole: "owner" | "admin" | "viewer";
+        /** TenantUpdateRequest */
+        TenantUpdateRequest: {
+            /** Name */
+            name: string;
+        };
         /** TokenPairResponse */
         TokenPairResponse: {
             /** Access Token */
@@ -1539,6 +1603,74 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_current_tenant_tenants_current_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rename_current_tenant_tenants_current_patch: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -2856,6 +2988,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_read_notifications__notification_id__read_patch: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
                 };
             };
             /** @description Validation Error */

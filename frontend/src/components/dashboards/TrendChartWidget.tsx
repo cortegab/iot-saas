@@ -15,7 +15,7 @@ export function TrendChartWidget({
 }: {
   deviceId: string;
   metric: string | null;
-  onRemove: () => void;
+  onRemove?: () => void;
 }) {
   const { data: device } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
 
