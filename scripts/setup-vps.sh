@@ -125,7 +125,7 @@ X11Forwarding no
 Port ${SSH_PORT}
 EOF
 sshd -t || die "sshd config test failed — check $SSHD_CONF before restarting sshd"
-systemctl reload sshd
+systemctl reload ssh
 ok "sshd hardened and reloaded. Root login and password auth are now OFF."
 warn "Keep your current SSH session open until you've verified you can log in as"
 warn "'$DEPLOY_USER' from a NEW terminal — if that fails, fix it from this session."
@@ -169,7 +169,7 @@ Next steps
 ────────────────────────────────────────────────────────────────────────────
 1. From your OWN machine, in a NEW terminal (leave this session open until
    this succeeds):
-     ssh -p ${SSH_PORT} ${DEPLOY_USER}@<vps-ip>
+     ssh -p ${SSH_PORT} ${DEPLOY_USER}@2.25.104.233
 
 2. Point DNS A records at this VPS's IP for both:
      app.yourdomain.com   (frontend)
