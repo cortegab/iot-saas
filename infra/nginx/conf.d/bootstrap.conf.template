@@ -1,0 +1,25 @@
+# Temporary HTTP-only nginx config, used ONLY for the very first certificate
+# issuance (infra/PROD_DEPLOY.md's "Issue the TLS certificate" step). The real
+# config (iot-saas.conf.template) has `listen 443 ssl` blocks that reference
+# certificate files that don't exist yet on a brand-new host — nginx refuses
+# to start with a dangling ssl_certificate path, so there's a one-time
+# chicken-and-egg to resolve: boot nginx with HTTP only, get a cert via the
+# ACME webroot challenge, THEN switch to the full config.
+#
+# Rendered to iot-saas.conf (same target file as the real template — see
+# scripts/render-prod-config.sh) only during that bootstrap step; every
+# subsequent deploy renders iot-saas.conf.template instead.
+
+server {
+    listen 80;
+    server_name ${DOMAIN_APP} ${DOMAIN_API};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 200 "iot-saas: awaiting TLS certificate issuance\n";
+        add_header Content-Type text/plain;
+    }
+}

@@ -1,0 +1,33 @@
+# Production image for the Next.js frontend. Multi-stage: build with the full
+# dependency tree, ship only the Next.js "standalone" output (self-contained
+# server + the subset of node_modules it actually traces as used) plus the
+# static assets. Much smaller than the dev image and needs no bind mount.
+
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json pnpm-lock.yaml* ./
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate \
+    && pnpm install --frozen-lockfile
+
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# Baked in at build time — Next.js inlines NEXT_PUBLIC_* vars into the client
+# bundle, so it must be known before `next build`, not just at container run.
+ARG NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+RUN corepack enable && corepack prepare pnpm@9.15.9 --activate \
+    && pnpm build
+
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+RUN addgroup -S app && adduser -S app -G app
+COPY --from=build /app/public ./public
+COPY --from=build --chown=app:app /app/.next/standalone ./
+COPY --from=build --chown=app:app /app/.next/static ./.next/static
+USER app
+
+EXPOSE 3000
+CMD ["node", "server.js"]

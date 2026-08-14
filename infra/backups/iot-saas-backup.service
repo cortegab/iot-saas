@@ -1,0 +1,14 @@
+# Install: sudo cp infra/backups/iot-saas-backup.* /etc/systemd/system/
+#          sudo systemctl daemon-reload
+#          sudo systemctl enable --now iot-saas-backup.timer
+# Adjust WorkingDirectory/ExecStart if the repo isn't at /home/deploy/iot-saas.
+[Unit]
+Description=iot-saas database backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/iot-saas
+ExecStart=/usr/bin/env bash infra/backups/backup.sh
