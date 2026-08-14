@@ -1,0 +1,14 @@
+# Install alongside iot-saas-backup.service — same steps, different unit name:
+#   sudo cp infra/backups/iot-saas-cert-renew.* /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now iot-saas-cert-renew.timer
+[Unit]
+Description=Renew iot-saas Let's Encrypt certificate
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=deploy
+WorkingDirectory=/home/deploy/iot-saas
+ExecStart=/usr/bin/env bash infra/backups/renew-certs.sh

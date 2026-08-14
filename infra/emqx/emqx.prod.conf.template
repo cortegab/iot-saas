@@ -1,0 +1,86 @@
+# Production EMQX config template. Rendered to emqx.prod.conf by
+# scripts/render-prod-config.sh (envsubst against infra/.env.prod) — the
+# rendered file is git-ignored because it bakes in EMQX_AUTH_SHARED_SECRET in
+# plaintext. Edit this template, not the generated file.
+#
+# Same authentication/authorization design as infra/emqx/emqx.conf (dev) —
+# see that file's comment for why the shared secret must be a literal value
+# rather than EMQX's own ${...} request-templating syntax (which only
+# understands MQTT connection-context placeholders, not env vars). The
+# difference here is TLS: devices in production connect over 8883, and the
+# listener's certificate is overridden to point at the Let's Encrypt cert
+# infra/docker-compose.prod.yml mounts read-only from the certbot-certs
+# volume (the same cert nginx uses, issued for DOMAIN_API with DOMAIN_APP and
+# DOMAIN_MQTT as additional SANs — see infra/PROD_DEPLOY.md's certbot step).
+#
+# EMQX ships schema defaults for listeners.ssl.default already bound to
+# :8883 — we only need to override its certificate, not declare the listener
+# from scratch.
+
+node {
+  name = "emqx@127.0.0.1"
+  cookie = "${EMQX_NODE_COOKIE}"
+  data_dir = "data"
+}
+
+cluster {
+  name = emqxcl
+  discovery_strategy = manual
+}
+
+dashboard {
+    listeners {
+        http.bind = 18083
+    }
+}
+
+listeners.ssl.default {
+  ssl_options {
+    certfile = "/etc/letsencrypt/live/${DOMAIN_API}/fullchain.pem"
+    keyfile = "/etc/letsencrypt/live/${DOMAIN_API}/privkey.pem"
+  }
+}
+
+authentication = [
+  {
+    mechanism = password_based
+    backend = http
+    method = post
+    url = "http://api:8000/ingestion/emqx/authenticate"
+    body {
+      username = "${username}"
+      password = "${password}"
+    }
+    headers {
+      "content-type" = "application/json"
+      "x-emqx-auth-secret" = "${EMQX_AUTH_SHARED_SECRET}"
+    }
+    pool_size = 8
+    connect_timeout = "5s"
+    request_timeout = "5s"
+  }
+]
+
+authorization {
+  sources = [
+    {
+      type = http
+      method = post
+      url = "http://api:8000/ingestion/emqx/authorize"
+      body {
+        username = "${username}"
+        topic = "${topic}"
+        action = "${action}"
+      }
+      headers {
+        "content-type" = "application/json"
+        "x-emqx-auth-secret" = "${EMQX_AUTH_SHARED_SECRET}"
+      }
+      pool_size = 8
+      connect_timeout = "5s"
+      request_timeout = "5s"
+    }
+  ]
+  no_match = deny
+  deny_action = disconnect
+}

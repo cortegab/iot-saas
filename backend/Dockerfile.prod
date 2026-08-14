@@ -1,0 +1,38 @@
+# Production image for the FastAPI backend (api + worker share this image,
+# same as dev — see infra/docker-compose.prod.yml's `command:` per service).
+#
+# Differs from the dev Dockerfile in the ways that matter for a VPS deploy:
+# no bind mount (source is COPYed in, so the image is self-contained), no
+# --reload, dependencies installed with --frozen so a prod build never
+# silently drifts from uv.lock, and the process runs as a non-root user.
+
+FROM python:3.12-slim AS base
+
+RUN pip install --no-cache-dir uv
+
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONPATH=/app/src \
+    PYTHONUNBUFFERED=1 \
+    PATH=/opt/venv/bin:$PATH
+
+WORKDIR /app
+
+# Dependencies first for layer caching — a source-only change skips this layer.
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project --no-dev
+
+COPY . .
+
+# Drop root once everything that needed write access (installing into
+# /opt/venv) is done.
+RUN useradd --create-home --uid 1000 app \
+    && chown -R app:app /app /opt/venv
+USER app
+
+EXPOSE 8000
+
+# Overridden per service in docker-compose.prod.yml (api runs uvicorn without
+# --reload, worker runs the module) — this default is just a safe fallback.
+CMD ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

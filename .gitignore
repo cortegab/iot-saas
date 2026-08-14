@@ -2,6 +2,14 @@
 #.env
 #*.local
 
+# Production secrets and host-generated config — unlike the dev .env files
+# above (committed on purpose, dev-only placeholder values), these hold real
+# credentials and must never be committed. See infra/PROD_DEPLOY.md.
+infra/.env.prod
+infra/emqx/emqx.prod.conf
+infra/nginx/conf.d/*.conf
+!infra/nginx/conf.d/*.conf.template
+
 # Python
 .venv/
 __pycache__/
