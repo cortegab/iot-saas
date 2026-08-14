@@ -16,10 +16,10 @@ order — later steps assume earlier ones succeeded.
 ## 1. Provision the VPS
 
 ```bash
-ssh root@<vps-ip>
+ssh root@2.25.104.233
 ```
 
-Copy `scripts/setup-vps.sh` up (`scp scripts/setup-vps.sh root@<vps-ip>:` from your machine, or
+Copy `scripts/setup-vps.sh` up (`scp scripts/setup-vps.sh root@2.25.104.233:` from your machine, or
 `git clone` the repo as root temporarily) and run it:
 
 ```bash
@@ -35,7 +35,7 @@ locked out of.
 **Verify you can log in as `deploy` from a new terminal before closing your root session:**
 
 ```bash
-ssh deploy@<vps-ip>
+ssh deploy@2.25.104.233
 ```
 
 ---
@@ -249,7 +249,7 @@ docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod logs 
 **EMQX dashboard (never exposed publicly — tunnel to it):**
 
 ```bash
-ssh -L 18083:localhost:18083 deploy@<vps-ip>
+ssh -L 18083:localhost:18083 deploy@2.25.104.233
 # then open http://localhost:18083 on your own machine
 ```
 
