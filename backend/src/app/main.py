@@ -12,6 +12,7 @@ from app.api_keys.router import router as api_keys_router
 from app.auth.router import router as auth_router
 from app.catalog.router import router as catalog_router
 from app.commands.router import router as commands_router
+from app.config import settings
 from app.dashboards.router import router as dashboards_router
 from app.devices.router import router as devices_router
 from app.ingestion.router import router as ingestion_router
@@ -26,13 +27,12 @@ configure_logging()
 
 app = FastAPI(title="iot-saas API", version="0.0.1")
 
-# Dev-only: allow the local Next.js frontend to call the API from the browser.
-# Both hostnames are listed because browsers treat localhost and 127.0.0.1 as
-# distinct origins even though they resolve to the same dev server.
-# Phase 4 tightens this to explicit origins.
+# Allowed browser origins come from settings.cors_allow_origins (CORS_ALLOW_ORIGINS
+# env var) — defaults to the local Next.js dev server, set to the real frontend
+# origin(s) in infra/.env.prod for production.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=settings.cors_allow_origins_list,
     allow_methods=["*"],
     allow_headers=["*"],
 )

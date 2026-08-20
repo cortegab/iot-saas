@@ -57,5 +57,14 @@ class Settings(BaseSettings):
     # multiples of the expected reporting interval (PLAN.md's free-tier "1 msg / 5s").
     device_offline_after_seconds: int = 90
 
+    # Browser origins allowed to call the API (app/main.py's CORSMiddleware).
+    # Comma-separated. Defaults to the local Next.js dev server; prod sets this
+    # to the real frontend origin(s) via CORS_ALLOW_ORIGINS in infra/.env.prod.
+    cors_allow_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    @property
+    def cors_allow_origins_list(self) -> list[str]:
+        return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
+
 
 settings = Settings()
