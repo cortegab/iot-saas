@@ -156,45 +156,18 @@ The value should appear on the live chart within a second.
 
 ### 3. Or flash an ESP32
 
-```cpp
-#include <WiFi.h>
-#include <WiFiClientSecure.h>
-#include <PubSubClient.h>
+Register the device in the dashboard and use the sketch shown there (also available on demand from a
+device's Settings page) — it's generated for that specific device's tenant/slug, declared metrics, and
+actuators, so it's already correct rather than a hand-adapted example.
 
-const char* WIFI_SSID  = "your-network";
-const char* WIFI_PASS  = "your-password";
+The generated sketch automatically targets whichever transport this dashboard itself is running on:
+plaintext MQTT on port 1883 in local dev, or `WiFiClientSecure` on port 8883 with the Let's Encrypt
+certificate chain validated for real (not skipped with `setInsecure()`) in production. It also parses
+actuator commands as JSON and logs each step over Serial — Wi-Fi/MQTT connect, publishes, and any
+command received — so you can confirm a rule firing on the platform actually reaches the device.
 
-const char* MQTT_HOST  = "mqtt.yourdomain.com";
-const int   MQTT_PORT  = 8883;
-const char* DEVICE_ID  = "paste-from-dashboard";
-const char* DEVICE_TOK = "paste-from-dashboard";
-const char* TOPIC      = "your-tenant/sensor01/temperature";
-
-WiFiClientSecure net;
-PubSubClient mqtt(net);
-
-void setup() {
-  WiFi.begin(WIFI_SSID, WIFI_PASS);
-  while (WiFi.status() != WL_CONNECTED) delay(500);
-
-  net.setInsecure();              // for testing only — pin the CA in production
-  mqtt.setServer(MQTT_HOST, MQTT_PORT);
-  while (!mqtt.connect(DEVICE_ID, DEVICE_ID, DEVICE_TOK)) delay(2000);
-}
-
-void loop() {
-  float celsius = readYourSensor();
-
-  char payload[64];
-  snprintf(payload, sizeof(payload), "{\"value\":%.2f}", celsius);
-  mqtt.publish(TOPIC, payload);
-
-  mqtt.loop();
-  delay(10000);
-}
-```
-
-The dashboard generates this sketch with your credentials already filled in.
+It needs the `PubSubClient` and `ArduinoJson` libraries installed via the Arduino Library Manager
+(`WiFiClientSecure` ships with the ESP32 board core, no separate install needed).
 
 ---
 

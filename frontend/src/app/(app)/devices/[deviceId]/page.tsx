@@ -198,6 +198,7 @@ function OnboardingCode({ device }: { device: DeviceResponse }) {
     tenantSlug: tenantSlug ?? "",
     deviceSlug: device.slug,
     host: typeof window !== "undefined" ? window.location.hostname : "YOUR_SERVER_HOST",
+    tls: typeof window !== "undefined" && window.location.protocol === "https:",
     metrics: catalogEntry?.metrics ?? [],
     actuators: catalogEntry?.actuators ?? [],
     credential: null,
