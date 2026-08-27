@@ -1,0 +1,65 @@
+# Push-to-deploy for the production VPS.
+#
+# On every push to `prod`, SSH to the `deploy` user on the VPS, check out the
+# exact pushed commit, rebuild the stack, and run migrations — the same steps as
+# infra/PROD_DEPLOY.md §11, automated. The build runs on the VPS (the prod
+# compose files use `build:`, not prebuilt images).
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DEPLOY_SSH_KEY   private key whose public half is in ~deploy/.ssh/authorized_keys on the VPS
+#   VPS_HOST         VPS hostname or IP (e.g. 2.25.104.233)
+#   VPS_SSH_KNOWN_HOSTS   output of `ssh-keyscan <VPS_HOST>` — pins the host key
+#
+# infra/.env.prod is NOT a secret here — it lives only on the VPS (git-ignored,
+# chmod 600). This job only runs compose commands on the box.
+
+name: deploy-prod
+
+on:
+  push:
+    branches: [prod]
+  workflow_dispatch: {}
+
+# Never let two deploys overlap; a newer push supersedes an in-flight one.
+concurrency:
+  group: prod-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.VPS_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy ${{ github.sha }}
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          SHA: ${{ github.sha }}
+        run: |
+          ssh -i ~/.ssh/id_ed25519 "deploy@${VPS_HOST}" bash -euo pipefail <<EOF
+          cd ~/iot-saas
+          git fetch --prune origin
+          git checkout --detach "${SHA}"
+          C="docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod"
+          \$C up -d --build
+          \$C exec -T api uv run alembic upgrade head
+          \$C ps
+          EOF
+
+      - name: Health check
+        run: |
+          for i in $(seq 1 10); do
+            if curl -fsS "https://api.iodriven.tech/health" | grep -q '"status":"ok"'; then
+              echo "healthy"; exit 0
+            fi
+            echo "attempt $i: not healthy yet"; sleep 6
+          done
+          echo "::error::API did not report healthy after deploy"
+          exit 1
