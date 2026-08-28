@@ -149,7 +149,7 @@ export default function DevicesPage() {
       />
 
       {revealed && (
-        <div className="rounded-xl border border-status-pending/40 bg-status-pending/10 p-4">
+        <div className="rounded-xl border border-status-pending/40 bg-status-pending-surface p-4">
           <p className="text-sm font-medium text-ink">
             New credential for {revealed.deviceName} — copy it now, it will not be shown again.
           </p>

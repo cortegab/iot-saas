@@ -19,9 +19,9 @@ export function WidgetCard({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border border-t-panel-edge bg-surface">
       <div className="widget-drag-handle flex shrink-0 cursor-move items-center justify-between border-b border-border px-3 py-1.5">
-        <span className="truncate text-xs font-medium text-ink-muted">{title}</span>
+        <span className="truncate font-mono text-xs font-medium text-ink-muted">{title}</span>
         {onRemove && (
           <button
             type="button"

@@ -160,8 +160,9 @@ body {
 }
 
 /* uPlot ships one fixed color: the drag-select region (rgba(0,0,0,0.07)),
-   near-invisible on the dark ground. Track/point follow the series stroke. */
-.u-select {
+   near-invisible on the dark ground. The `.uplot` prefix is needed to beat the
+   library's own `.u-select` rule, which loads in a later route CSS chunk. */
+.uplot .u-select {
   background: var(--color-ink-muted);
   opacity: 0.12;
 }

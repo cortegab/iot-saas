@@ -23,9 +23,9 @@ export function Table<T>({
   onRowClick?: (row: T) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border">
+    <div className="overflow-x-auto rounded-xl border border-border border-t-panel-edge">
       <table className="w-full text-left text-sm">
-        <thead className="text-xs uppercase tracking-wide text-ink-muted">
+        <thead className="font-mono text-xs uppercase tracking-wide text-ink-muted">
           <tr>
             {columns.map((col) => (
               <th key={col.header} className={`px-3 py-2 font-medium ${col.className ?? ""}`}>

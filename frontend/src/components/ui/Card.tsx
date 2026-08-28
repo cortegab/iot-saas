@@ -20,7 +20,13 @@ export interface CardProps {
 
 export function Card({ children, padding = "md", className }: CardProps) {
   return (
-    <div className={cn("rounded-xl border border-border bg-surface", PADDING_CLASSES[padding], className)}>
+    <div
+      className={cn(
+        "rounded-xl border border-border border-t-panel-edge bg-surface",
+        PADDING_CLASSES[padding],
+        className,
+      )}
+    >
       {children}
     </div>
   );

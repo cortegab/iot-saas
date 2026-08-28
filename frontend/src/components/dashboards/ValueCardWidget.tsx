@@ -4,6 +4,7 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { ConnectionBadge } from "@/components/ui/ConnectionBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
+import { Readout } from "@/components/ui/Readout";
 import { WidgetCard } from "@/components/dashboards/WidgetCard";
 import type { components } from "@/types/api";
 
@@ -37,10 +38,7 @@ export function ValueCardWidget({
         ) : !metric || !reading ? (
           <EmptyState title="No reading yet" description={metric ? undefined : "No metric configured."} />
         ) : (
-          <>
-            <span className="text-xs uppercase tracking-wide text-ink-muted">{metric}</span>
-            <span className="text-2xl font-semibold text-ink">{reading.value}</span>
-          </>
+          <Readout label={metric} value={reading.value} size="lg" />
         )}
         {device && (
           <div className="mt-2">

@@ -10,14 +10,14 @@ export function ErrorState({ message, onRetry }: ErrorStateProps) {
   return (
     <div
       role="alert"
-      className="flex flex-col items-start gap-2 rounded-xl border border-status-error/30 bg-status-error/10 p-4"
+      className="flex flex-col items-start gap-2 rounded-xl border border-status-error/30 bg-status-error-surface p-4"
     >
       <p className="text-sm text-status-error">{message}</p>
       {onRetry && (
         <button
           type="button"
           onClick={onRetry}
-          className="rounded-md border border-border px-3 py-1.5 text-sm text-ink hover:bg-surface-raised"
+          className="rounded-md border border-border bg-surface px-3 py-1.5 text-sm text-ink hover:bg-surface-raised"
         >
           Retry
         </button>

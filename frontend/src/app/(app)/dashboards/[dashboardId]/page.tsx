@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -127,9 +128,9 @@ function AddWidgetForm({ onAdd }: { onAdd: (widget: NewWidget) => void }) {
           </label>
         </>
       )}
-      <button type="submit" className="rounded-md bg-accent px-3 py-2 text-sm font-medium text-white">
+      <Button type="submit" size="md">
         Add widget
-      </button>
+      </Button>
     </form>
   );
 }
@@ -207,21 +208,13 @@ export default function DashboardDetailPage() {
         title={
           renaming ? (
             <span className="flex items-center gap-2 font-normal">
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="rounded-md border border-border bg-surface-raised px-2 py-1 text-lg text-ink"
-              />
-              <button
-                type="button"
-                onClick={() => void saveName()}
-                className="rounded-md bg-accent px-3 py-1 text-sm font-medium text-white"
-              >
+              <Input compact value={name} onChange={(e) => setName(e.target.value)} className="text-lg" />
+              <Button type="button" onClick={() => void saveName()}>
                 Save
-              </button>
-              <button type="button" onClick={() => setRenaming(false)} className="text-sm text-ink-muted">
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setRenaming(false)}>
                 Cancel
-              </button>
+              </Button>
             </span>
           ) : (
             <span className="flex items-center gap-3">

@@ -145,7 +145,7 @@ export default function TokensSettingsPage() {
 
       {revealed ? (
         // Shown once — mirrors the device-credential reveal in devices/new.
-        <div className="rounded-xl border border-status-pending/40 bg-status-pending/10 p-4">
+        <div className="rounded-xl border border-status-pending/40 bg-status-pending-surface p-4">
           <p className="text-sm font-medium text-ink">Copy this key now — it will not be shown again.</p>
           <p className="mt-2 break-all font-mono text-sm text-ink">{revealed.key}</p>
           <div className="mt-3 flex items-center gap-3">
