@@ -129,18 +129,11 @@ export default function TokensSettingsPage() {
   const [copied, setCopied] = useState(false);
 
   if (!isAdmin) {
-    return (
-      <div className="flex flex-col gap-4">
-        <h1 className="text-lg font-semibold text-ink">API / Tokens</h1>
-        <EmptyState title="Admins only" description="Ask an admin or owner to manage API keys." />
-      </div>
-    );
+    return <EmptyState title="Admins only" description="Ask an admin or owner to manage API keys." />;
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-ink">API / Tokens</h1>
-
       {isLoading && <LoadingSkeleton rows={2} rowClassName="h-16" />}
 
       {error && (

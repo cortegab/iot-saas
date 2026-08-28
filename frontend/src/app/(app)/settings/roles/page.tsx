@@ -73,8 +73,6 @@ export default function RolesSettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-lg font-semibold text-ink">Roles & Permissions</h1>
-
       <ul className="flex flex-col gap-2">
         {ROLE_DESCRIPTIONS.map((r) => (
           <li key={r.role}>

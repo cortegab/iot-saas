@@ -1,80 +1,141 @@
 @import "tailwindcss";
 
 /*
- * Dark mode is the default (UX_UI_Description.md: "Dark mode first, light mode fully
- * supported"). Light is a full peer theme, not an afterthought behind a media query —
- * toggled by adding `.light` to <html>. `@custom-variant dark` makes Tailwind's `dark:`
- * utilities key off that class too, once a toggle exists, rather than only system preference.
+ * "Control Room" identity (redesign). Dark is the default theme (UX spec:
+ * "dark mode first, light mode fully supported"); light is a full peer, toggled
+ * by adding `.light` to <html> (see app/layout.tsx no-flash script + useTheme).
+ * `@custom-variant dark` keeps Tailwind's `dark:` utilities keyed off that class.
+ *
+ * Two accent roles, kept separate on purpose:
+ *   --color-accent   brass  — UI chrome only (buttons, links, active nav/tab, focus, brand dot)
+ *   --color-chart    #E8590C — data/instruments only (trend line+fill, gauge fills, readout
+ *                              value, sparklines, the realtime "Live" dot). Never a background.
+ * Semantic status (online/offline/pending) is its own system — always paired with a
+ * dot/shape/label, never color alone.
  */
 @custom-variant dark (&:where(:not(.light)));
 
 :root {
-  --color-canvas: #0b0f14;
-  --color-surface: #11161d;
-  --color-surface-raised: #171d26;
-  --color-border: #232b34;
-  --color-ink: #e6edf3;
-  --color-ink-muted: #8b949e;
-  --color-accent: #58a6ff;
+  /* ---- dark (default) ---- */
+  --color-canvas: #15161a;
+  --color-surface: #1d1f24;
+  --color-surface-raised: #25272e;
+  --color-border: #2e313a;
+  --color-panel-edge: rgba(255, 255, 255, 0.05); /* card top highlight → reads as a panel */
+  --color-ink: #eceef2;
+  --color-ink-muted: #9ba1ad;
 
-  /* Semantic status colors — the only colors allowed to carry meaning.
-     Every status UI must pair these with an icon/shape/text label, never color alone. */
+  --color-accent: #c9902b;         /* brass — controls */
+  --color-accent-strong: #f5c542;  /* hover / pressed / live */
+  --color-accent-muted: #2a2113;   /* subtle tinted fill (selected row, hover) */
+  --color-on-accent: #1a1206;      /* text/icon on a brass fill */
+
+  --color-chart: #e8590c;          /* data + instrument indicators */
+  --color-chart-grid: rgba(255, 255, 255, 0.06);
+
+  /* Semantic status — never color-alone; always with a dot/shape/label. */
   --color-status-online: #3fb950;
   --color-status-offline: #f85149;
-  --color-status-unknown: #8b949e;
+  --color-status-unknown: #9ba1ad;
   --color-status-pending: #d29922;
   --color-status-error: #f85149;
+  --color-status-error-surface: #2e1a20;
+  --color-status-pending-surface: #2c2415;
 }
 
 /*
- * Layout rhythm conventions (not enforceable by Tailwind, so written down
- * here rather than left to drift page-by-page):
- *   - Page-level wrapper: `gap-6` between distinct sections (e.g. settings
- *     pages with multiple cards); `gap-4` for a single flat list/section
- *     (e.g. a devices or rules list with no sub-sections).
+ * Layout rhythm conventions (not enforceable by Tailwind, so written down here
+ * rather than left to drift page-by-page):
+ *   - Page-level wrapper: `gap-6` between distinct sections; `gap-4` for a single
+ *     flat list/section.
  *   - Section/group label ("DEVICES", "ASSIGN ROLES"): always
- *     `text-xs font-medium uppercase tracking-wide text-ink-muted` — one
- *     size for this role everywhere, no `text-sm` variant.
- *   - Content card: `Card` (components/ui/Card.tsx) — `rounded-xl` always;
- *     `padding="md"` (p-4) for standalone sections, `padding="sm"` (p-3) for
- *     dense list rows. Radius never forks between the two.
+ *     `text-xs font-medium uppercase tracking-wide text-ink-muted`.
+ *   - Content card: `Card` (components/ui/Card.tsx) — `rounded-xl` always
+ *     (= --radius-xl, 8px in this identity); `padding="md"` (p-4) standalone,
+ *     `padding="sm"` (p-3) dense. Radius never forks between the two.
+ *   - Numbers that line up in a column get `tabular-nums` (auto inside the
+ *     app shell for <table>/<dl>; add the utility elsewhere).
  */
 
 :root.light {
-  --color-canvas: #f6f8fa;
+  --color-canvas: #f2f1ee;         /* warm paper — not cream */
   --color-surface: #ffffff;
-  --color-surface-raised: #f0f2f5;
-  --color-border: #d0d7de;
-  --color-ink: #1b1f24;
-  --color-ink-muted: #59636e;
-  --color-accent: #0969da;
+  --color-surface-raised: #f6f5f2;
+  --color-border: #e1e0db;
+  --color-panel-edge: #edebe6;
+  --color-ink: #1a1b1e;
+  --color-ink-muted: #5f6470;
+
+  --color-accent: #9a6e12;
+  --color-accent-strong: #b9841a;
+  --color-accent-muted: #f4ecdd;
+  --color-on-accent: #ffffff;
+
+  --color-chart: #d24f0a;
+  --color-chart-grid: rgba(0, 0, 0, 0.06);
 
   --color-status-online: #1a7f37;
   --color-status-offline: #cf222e;
-  --color-status-unknown: #59636e;
+  --color-status-unknown: #5f6470;
   --color-status-pending: #9a6700;
   --color-status-error: #cf222e;
+  --color-status-error-surface: #fbe9ec;
+  --color-status-pending-surface: #f7eedd;
 }
 
+/* Runtime-swapped tokens: `inline` so utilities emit `var(--color-*)` and the
+   `.light` class flips them live. */
 @theme inline {
   --color-canvas: var(--color-canvas);
   --color-surface: var(--color-surface);
   --color-surface-raised: var(--color-surface-raised);
   --color-border: var(--color-border);
+  --color-panel-edge: var(--color-panel-edge);
   --color-ink: var(--color-ink);
   --color-ink-muted: var(--color-ink-muted);
+
   --color-accent: var(--color-accent);
+  --color-accent-strong: var(--color-accent-strong);
+  --color-accent-muted: var(--color-accent-muted);
+  --color-on-accent: var(--color-on-accent);
+
+  --color-chart: var(--color-chart);
+  --color-chart-grid: var(--color-chart-grid);
+
   --color-status-online: var(--color-status-online);
   --color-status-offline: var(--color-status-offline);
   --color-status-unknown: var(--color-status-unknown);
   --color-status-pending: var(--color-status-pending);
   --color-status-error: var(--color-status-error);
+  --color-status-error-surface: var(--color-status-error-surface);
+  --color-status-pending-surface: var(--color-status-pending-surface);
+}
+
+/* Static identity tokens. Fonts are fed by next/font (app/layout.tsx) as
+   --ff-display / --ff-sans / --ff-mono on <html>; radius is tightened from
+   Tailwind's defaults so `rounded-xl` etc. shift app-wide with no component edits. */
+@theme {
+  --font-sans: var(--ff-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--ff-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --font-display: var(--ff-display), "Helvetica Neue", Arial, sans-serif;
+
+  --radius-sm: 0.25rem;   /* 4px */
+  --radius-md: 0.375rem;  /* 6px */
+  --radius-lg: 0.4375rem; /* 7px */
+  --radius-xl: 0.5rem;    /* 8px  — was 12px; Card/panels */
+  --radius-2xl: 0.75rem;  /* 12px — was 16px */
 }
 
 body {
   background: var(--color-canvas);
   color: var(--color-ink);
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-sans);
+}
+
+/* Tabular figures wherever digits stack in a column. Scoped to the app shell so
+   the marketing pages (.mkt, their own world) are untouched. */
+.app-shell :is(table, dl) {
+  font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -85,16 +146,22 @@ body {
   }
 }
 
-/* react-grid-layout (dashboards, §Dashboards) ships with a red placeholder
- * and a fixed rgba(0,0,0,0.4) resize-handle corner — neither follows this
- * app's theme tokens by default, so both are overridden here rather than
- * left as the library's hard-coded look. */
+/* react-grid-layout (dashboards) ships a red placeholder and a fixed
+   rgba(0,0,0,0.4) resize-handle corner — neither follows the theme tokens. */
 .react-grid-item.react-grid-placeholder {
-  background: var(--color-accent);
-  border-radius: 0.75rem;
+  background: var(--color-accent-muted);
+  border: 1px dashed var(--color-accent);
+  border-radius: var(--radius-xl);
 }
 
 .react-grid-item > .react-resizable-handle::after {
   border-right-color: var(--color-ink-muted);
   border-bottom-color: var(--color-ink-muted);
+}
+
+/* uPlot ships one fixed color: the drag-select region (rgba(0,0,0,0.07)),
+   near-invisible on the dark ground. Track/point follow the series stroke. */
+.u-select {
+  background: var(--color-ink-muted);
+  opacity: 0.12;
 }

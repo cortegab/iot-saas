@@ -1,7 +1,10 @@
 import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
 
-/** Joins conditional className fragments — thin wrapper so primitives don't
- * hand-roll ternary strings that drift from each other. */
+/** Joins conditional className fragments and resolves conflicting Tailwind
+ * utilities so a caller's `className` prop reliably wins over a primitive's
+ * defaults (last one set takes effect), instead of both landing in the string
+ * and the winner coming down to CSS source order. */
 export function cn(...inputs: ClassValue[]): string {
-  return clsx(inputs);
+  return twMerge(clsx(inputs));
 }
