@@ -17,6 +17,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { Table, type TableColumn } from "@/components/ui/Table";
+import { TableNameCell } from "@/components/ui/TableNameCell";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
@@ -93,18 +94,19 @@ export default function DevicesPage() {
     {
       header: "Name",
       render: (d) => (
-        <Link href={`/devices/${d.id}`} className="font-medium text-ink hover:text-accent">
-          {d.name}
-        </Link>
+        <TableNameCell
+          href={`/devices/${d.id}`}
+          name={d.name}
+          sublabel={catalogNameById.get(d.catalog_entry_id) ?? "No template"}
+        />
       ),
     },
-    { header: "Template", render: (d) => catalogNameById.get(d.catalog_entry_id) ?? "—" },
     {
       header: "Status",
       render: (d) => (
         <div className="flex items-center gap-2">
           <ConnectionBadge state={d.connection_state} />
-          {d.status === "disabled" && <Badge tone="unknown" label="Disabled" />}
+          {d.status === "disabled" && <Badge tone="unknown" variant="dot" label="Disabled" />}
         </div>
       ),
     },
@@ -178,12 +180,18 @@ export default function DevicesPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Input
             compact
+            className="bg-surface"
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search devices…"
           />
-          <Select compact value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+          <Select
+            compact
+            className="bg-surface"
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+          >
             <option value="all">All templates</option>
             {catalogEntries?.map((e) => (
               <option key={e.id} value={e.id}>
@@ -193,6 +201,7 @@ export default function DevicesPage() {
           </Select>
           <Select
             compact
+            className="bg-surface"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as ConnectionState | "all")}
           >

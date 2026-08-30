@@ -60,13 +60,19 @@ async def create_catalog_entry(
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
     session: AsyncSession = Depends(get_session),
 ) -> CatalogEntryResponse:
-    entry = await service.create_catalog_entry(
-        session,
-        ctx.tenant_id,
-        body.name,
-        [m.model_dump(mode="json") for m in body.metrics],
-        [a.model_dump(mode="json") for a in body.actuators],
-    )
+    try:
+        entry = await service.create_catalog_entry(
+            session,
+            ctx.tenant_id,
+            body.name,
+            [m.model_dump(mode="json") for m in body.metrics],
+            [a.model_dump(mode="json") for a in body.actuators],
+        )
+    except service.DuplicateKeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Duplicate key: {exc}",
+        ) from exc
     return _to_response(entry)
 
 
@@ -91,7 +97,13 @@ async def update_catalog_entry(
     actuators = (
         [a.model_dump(mode="json") for a in body.actuators] if body.actuators is not None else None
     )
-    updated = await service.update_catalog_entry(entry, body.name, metrics, actuators, body.status)
+    try:
+        updated = await service.update_catalog_entry(entry, body.name, metrics, actuators, body.status)
+    except service.DuplicateKeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Duplicate key: {exc}",
+        ) from exc
     await session.flush()
     await session.refresh(updated)
     counts = await devices_service.count_devices_by_catalog_entry(session, ctx.tenant_id)

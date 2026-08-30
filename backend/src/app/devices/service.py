@@ -6,7 +6,6 @@ password = random secret, argon2id-hashed via auth.service.hash_secret, shown
 once at creation/rotation and never retrievable afterward.
 """
 
-import re
 import secrets
 import uuid
 from collections.abc import Sequence
@@ -19,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import service as auth_service
 from app.catalog import service as catalog_service
 from app.devices.models import Device, DeviceStatus
+from app.shared.slug import slugify
 
 
 class DeviceNotFoundError(Exception):
@@ -52,13 +52,8 @@ class DeviceDirectoryRecord(NamedTuple):
     status: str
 
 
-def _slugify(name: str) -> str:
-    base = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
-    return base or "device"
-
-
 async def _unique_slug(session: AsyncSession, tenant_id: uuid.UUID, name: str) -> str:
-    base = _slugify(name)
+    base = slugify(name, fallback="device")
     slug = base
     suffix = 1
     while (

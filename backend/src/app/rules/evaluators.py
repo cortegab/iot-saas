@@ -98,10 +98,14 @@ def _rearm_condition_met(
     threshold triggers the rule. `==`/`!=` have no meaningful hysteresis
     margin — they re-arm as soon as the condition is no longer true.
     """
-    if operator in (">", ">="):
+    if operator == ">":
         return value <= threshold - hysteresis
-    if operator in ("<", "<="):
+    if operator == ">=":
+        return value < threshold - hysteresis
+    if operator == "<":
         return value >= threshold + hysteresis
+    if operator == "<=":
+        return value > threshold + hysteresis
     return not condition_true
 
 

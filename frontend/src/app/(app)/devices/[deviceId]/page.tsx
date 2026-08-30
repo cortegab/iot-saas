@@ -25,7 +25,7 @@ import { CommandHistory } from "@/components/actuators/CommandHistory";
 import { leafPredicates, parseAction, ruleSummaryText } from "@/components/rules/RuleSummary";
 import { buildSketch } from "@/lib/firmware-sketch";
 import { ApiRequestError } from "@/lib/api-client";
-import { slugify } from "@/lib/slug";
+import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
@@ -34,6 +34,7 @@ type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
 type CommandResponse = components["schemas"]["CommandResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
+type CatalogMetric = components["schemas"]["CatalogMetric"];
 type NotificationResponse = components["schemas"]["NotificationResponse"];
 
 function timeAgo(iso: string | null): string {
@@ -51,12 +52,22 @@ function formatCommandValue(value: unknown): string {
   return String(value);
 }
 
+/** Live value shown with its catalog decimals honoured; the raw number
+ * (with `toLocaleString`) when the metric declares none. */
+function formatReading(value: number, meta?: CatalogMetric): string | number {
+  if (meta?.decimals != null && Number.isFinite(value)) return value.toFixed(meta.decimals);
+  return value;
+}
+
 function CurrentReadings({
   deviceId,
   thresholdsByMetric,
+  metricMeta,
 }: {
   deviceId: string;
   thresholdsByMetric: Record<string, ChartThreshold[]>;
+  /** Catalog metric definitions keyed by wire id, for unit + decimals. */
+  metricMeta?: Map<string, CatalogMetric>;
 }) {
   const { data, error, isLoading } = useApiSWR<TelemetryLatestResponse[]>(`/devices/${deviceId}/latest`);
 
@@ -72,6 +83,7 @@ function CurrentReadings({
   }
 
   const [primary, ...rest] = data;
+  const primaryMeta = metricMeta?.get(primary.metric);
   const threshold = thresholdsByMetric[primary.metric]?.[0]?.value;
   // No historical extent is fetched here — when a rule pins a threshold, show a
   // window around it so "how close to the limit" reads at a glance.
@@ -83,7 +95,8 @@ function CurrentReadings({
         <Readout
           size="lg"
           label={primary.metric}
-          value={primary.value}
+          value={formatReading(primary.value, primaryMeta)}
+          unit={primaryMeta?.unit ?? undefined}
           stamp={`updated ${timeAgo(primary.time)}`}
           threshold={threshold}
           min={threshold != null ? threshold - span : undefined}
@@ -92,9 +105,17 @@ function CurrentReadings({
       </Card>
       {rest.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {rest.map((m) => (
-            <Metric key={m.metric} label={m.metric} value={m.value} />
-          ))}
+          {rest.map((m) => {
+            const meta = metricMeta?.get(m.metric);
+            return (
+              <Metric
+                key={m.metric}
+                label={m.metric}
+                value={formatReading(m.value, meta)}
+                hint={meta?.unit ?? undefined}
+              />
+            );
+          })}
         </div>
       )}
     </div>
@@ -314,26 +335,21 @@ function DeviceTopics({ device }: { device: DeviceResponse }) {
   return (
     <div className="flex flex-col gap-2">
       {metrics.map((m) => {
-        const wireId = m.key || slugify(m.name);
-        return (
-          <TopicRow key={`metric-${wireId}`} label={`Telemetry — ${m.name}`} topic={`${subtree}/${wireId}`} />
-        );
+        const id = wireId(m);
+        return <TopicRow key={`metric-${id}`} label={`Telemetry — ${m.name}`} topic={`${subtree}/${id}`} />;
       })}
       {actuators.map((a) => {
-        const wireId = a.key || slugify(a.name);
+        const id = wireId(a);
         return (
-          <div key={`actuator-${wireId}`} className="flex flex-col gap-1">
-            <TopicRow
-              label={`Command — ${a.name} (device subscribes)`}
-              topic={`${subtree}/cmd/${wireId}`}
-            />
+          <div key={`actuator-${id}`} className="flex flex-col gap-1">
+            <TopicRow label={`Command — ${a.name} (device subscribes)`} topic={`${subtree}/cmd/${id}`} />
             <TopicRow
               label={`Desired state — ${a.name} (device subscribes, retained)`}
-              topic={`${subtree}/state/${wireId}`}
+              topic={`${subtree}/state/${id}`}
             />
             <TopicRow
               label={`Acknowledgement — ${a.name} (device publishes)`}
-              topic={`${subtree}/ack/${wireId}`}
+              topic={`${subtree}/ack/${id}`}
             />
           </div>
         );
@@ -416,6 +432,14 @@ export default function DeviceDetailPage() {
   const { data: device, error, isLoading, mutate } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
   // Same SWR key RuleList/ActuatorControl fetch — shared cache, one request.
   const { data: rules } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
+  // Same key DeviceTopics fetches — deduped. Gives readings their unit + decimals.
+  const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(
+    device ? `/catalog/${device.catalog_entry_id}` : null,
+  );
+  const metricMetaByWireId = useMemo(
+    () => new Map((catalogEntry?.metrics ?? []).map((m) => [wireId(m), m] as const)),
+    [catalogEntry],
+  );
 
   const thresholdsByMetric = useMemo(() => {
     const map: Record<string, ChartThreshold[]> = {};
@@ -502,7 +526,11 @@ export default function DeviceDetailPage() {
       <TabPanel id="overview" active={tab}>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="flex flex-col gap-6">
-            <CurrentReadings deviceId={deviceId} thresholdsByMetric={thresholdsByMetric} />
+            <CurrentReadings
+              deviceId={deviceId}
+              thresholdsByMetric={thresholdsByMetric}
+              metricMeta={metricMetaByWireId}
+            />
             <DeviceTrendChart deviceId={deviceId} thresholdsByMetric={thresholdsByMetric} />
             <ActuatorStateSummary deviceId={deviceId} />
           </div>

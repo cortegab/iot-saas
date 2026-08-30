@@ -7,6 +7,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Table, type TableColumn } from "@/components/ui/Table";
 import { ApiRequestError } from "@/lib/api-client";
+import { commandStatus, commandStatusLabel, commandStatusTone } from "@/lib/command-status";
 import type { components } from "@/types/api";
 
 type CommandResponse = components["schemas"]["CommandResponse"];
@@ -48,12 +49,16 @@ export function CommandHistory({ deviceId }: { deviceId: string }) {
     { header: "Source", render: (c) => <span className="text-ink-muted">{c.rule_id ? "Rule" : "Manual"}</span> },
     {
       header: "Status",
-      render: (c) =>
-        c.acked_at ? (
-          <Badge tone="online" variant="text" label="Confirmed" />
-        ) : (
-          <Badge tone="pending" variant="text" label="Pending" />
-        ),
+      render: (c) => {
+        const status = commandStatus(c);
+        return (
+          <Badge
+            tone={commandStatusTone(status)}
+            variant="dot"
+            label={commandStatusLabel(status)}
+          />
+        );
+      },
     },
   ];
 

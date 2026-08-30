@@ -244,14 +244,24 @@ export function TrendChart({
         />
       )}
 
+      {/* The measured element is the *inner* unpadded div, not this padded
+          wrapper: sizing uPlot to a padded box's clientWidth makes its canvas
+          wider than the space it sits in, and flex items' default
+          min-width:auto lets that overshoot ratchet the layout wider on every
+          ResizeObserver tick — the "chart keeps growing horizontally" bug.
+          overflow-hidden + min-w-0 stop any residual off-by-one from doing the
+          same. */}
       <div
-        ref={containerRef}
         className={
           points.length === 0
             ? "hidden"
-            : `rounded-xl border border-border border-t-panel-edge bg-surface p-2 ${fillHeight ? "min-h-0 flex-1" : ""}`
+            : `min-w-0 overflow-hidden rounded-xl border border-border border-t-panel-edge bg-surface p-2 ${
+                fillHeight ? "min-h-0 flex-1" : ""
+              }`
         }
-      />
+      >
+        <div ref={containerRef} className={fillHeight ? "h-full min-h-0" : ""} />
+      </div>
     </div>
   );
 }
