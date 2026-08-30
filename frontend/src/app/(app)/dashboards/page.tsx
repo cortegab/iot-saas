@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Table, type TableColumn } from "@/components/ui/Table";
+import { TableNameCell } from "@/components/ui/TableNameCell";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
 
@@ -47,26 +48,19 @@ export default function DashboardsPage() {
     }
   }
 
-  if (isLoading) return <LoadingSkeleton rows={3} rowClassName="h-16" />;
-  if (error) {
-    return (
-      <ErrorState
-        message={error instanceof ApiRequestError ? error.message : "Couldn't load dashboards."}
-        onRetry={() => void mutate()}
-      />
-    );
-  }
-
   const columns: TableColumn<DashboardResponse>[] = [
     {
       header: "Name",
       render: (d) => (
-        <Link href={`/dashboards/${d.id}`} className="font-medium text-ink hover:text-accent">
-          {d.name}
-        </Link>
+        <TableNameCell
+          href={`/dashboards/${d.id}`}
+          name={d.name}
+          sublabel={`${d.layout.length} widget${d.layout.length === 1 ? "" : "s"} · updated ${new Date(
+            d.updated_at,
+          ).toLocaleDateString()}`}
+        />
       ),
     },
-    { header: "Updated", render: (d) => new Date(d.updated_at).toLocaleDateString() },
   ];
   if (isAdmin) {
     columns.push({
@@ -101,6 +95,7 @@ export default function DashboardsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Input
             compact
+            className="bg-surface"
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -109,7 +104,16 @@ export default function DashboardsPage() {
         </div>
       )}
 
-      {!dashboards || dashboards.length === 0 ? (
+      {isLoading && <LoadingSkeleton rows={3} rowClassName="h-16" />}
+
+      {error && (
+        <ErrorState
+          message={error instanceof ApiRequestError ? error.message : "Couldn't load dashboards."}
+          onRetry={() => void mutate()}
+        />
+      )}
+
+      {dashboards && dashboards.length === 0 && (
         <EmptyState
           title="No dashboards yet"
           description="Create one and add widgets for the devices you care about most."
@@ -121,11 +125,13 @@ export default function DashboardsPage() {
             ) : undefined
           }
         />
-      ) : filtered.length === 0 ? (
-        <EmptyState title="No matching dashboards" description="Try a different search term." />
-      ) : (
-        <Table columns={columns} rows={filtered} rowKey={(d) => d.id} />
       )}
+
+      {dashboards && dashboards.length > 0 && filtered.length === 0 && (
+        <EmptyState title="No matching dashboards" description="Try a different search term." />
+      )}
+
+      {filtered.length > 0 && <Table columns={columns} rows={filtered} rowKey={(d) => d.id} />}
 
       {dialog}
     </div>

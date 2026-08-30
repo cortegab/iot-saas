@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { Card } from "@/components/ui/Card";
+import { Field } from "@/components/ui/Field";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
@@ -28,10 +29,9 @@ export default function NewRulePage() {
     <div className="flex flex-col gap-4">
       <PageHeader title="Add rule" back={{ href: "/rules", label: "Rules" }} />
 
-      <Card className="max-w-sm">
-        <label className="flex max-w-sm flex-col gap-1 text-sm text-ink-muted">
-          Device
-          <Select required value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
+      <Card>
+        <Field label="Device">
+          <Select compact required value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
             <option value="" disabled>
               {isLoading ? "Loading…" : "Choose a device…"}
             </option>
@@ -41,7 +41,7 @@ export default function NewRulePage() {
               </option>
             ))}
           </Select>
-        </label>
+        </Field>
 
         {isLoading && <LoadingSkeleton rows={2} rowClassName="h-12" />}
       </Card>

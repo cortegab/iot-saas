@@ -182,6 +182,53 @@ def test_hysteresis_rearm_inclusive_operators(operator: str) -> None:
     assert state.armed is False
 
 
+@pytest.mark.parametrize("operator", [">=", "<="])
+def test_hysteresis_no_spurious_rearm_at_exact_threshold_repeated(operator: str) -> None:
+    """Regression: with hysteresis=0 (the schema default), an inclusive
+    operator's re-arm boundary must not coincide with a value the raw
+    condition still considers true. A repeated reading pinned exactly at the
+    threshold must stay latched, not spuriously unlatch and wipe
+    condition_since on every other call — which starved for_duration and
+    meant the rule could never fire.
+    """
+    rule = _rule(_leaf(operator, 30.0, hysteresis=0.0), for_duration=2)
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(30.0, 0), state) is None
+    assert _EVALUATOR.evaluate(rule, *_at(30.0, 1), state) is None
+    assert state.condition_since == _BASE_TIME  # not reset by a spurious rearm
+    action = _EVALUATOR.evaluate(rule, *_at(30.0, 2), state)
+    assert action is not None
+
+
+def test_complementary_on_off_rules_at_shared_boundary() -> None:
+    """Regression for the exact user-reported scenario: an ON rule (`>` 30)
+    and an OFF rule (`<=` 30) on the same metric, both hysteresis=0, fed
+    readings that settle exactly at the boundary. The OFF rule must fire
+    once its for_duration elapses, not be starved forever.
+    """
+    on_rule = _rule(_leaf(">", 30.0, hysteresis=0.0), for_duration=2)
+    off_rule = _rule(_leaf("<=", 30.0, hysteresis=0.0), for_duration=2)
+    on_state = RuleState()
+    off_state = RuleState()
+
+    # Temperature above threshold: ON fires after for_duration, OFF never does.
+    assert _EVALUATOR.evaluate(on_rule, *_at(35.0, 0), on_state) is None
+    assert _EVALUATOR.evaluate(off_rule, *_at(35.0, 0), off_state) is None
+    assert _EVALUATOR.evaluate(off_rule, *_at(35.0, 2), off_state) is None
+    action = _EVALUATOR.evaluate(on_rule, *_at(35.0, 2), on_state)
+    assert action is not None
+
+    # Temperature settles at exactly 30, repeatedly: OFF must fire after
+    # for_duration; ON must not.
+    assert _EVALUATOR.evaluate(off_rule, *_at(30.0, 3), off_state) is None
+    assert _EVALUATOR.evaluate(on_rule, *_at(30.0, 3), on_state) is None
+    assert _EVALUATOR.evaluate(off_rule, *_at(30.0, 4), off_state) is None
+    assert _EVALUATOR.evaluate(on_rule, *_at(30.0, 4), on_state) is None
+    action = _EVALUATOR.evaluate(off_rule, *_at(30.0, 5), off_state)
+    assert action is not None
+    assert _EVALUATOR.evaluate(on_rule, *_at(30.0, 5), on_state) is None
+
+
 def test_hysteresis_ignored_for_equality_operators() -> None:
     rule = _rule(_leaf("==", 30.0, hysteresis=5.0))
     state = RuleState()

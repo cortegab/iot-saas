@@ -147,7 +147,7 @@ export default function NewDevicePage() {
       <div className="flex max-w-2xl flex-col gap-4">
         <h1 className="text-lg font-semibold text-ink">{created.device.name} created</h1>
 
-        <div className="rounded-xl border border-status-pending/40 bg-status-pending/10 p-4">
+        <div className="rounded-xl border border-status-pending/40 bg-status-pending-surface p-4">
           <p className="text-sm font-medium text-ink">
             Copy this credential now — it will not be shown again.
           </p>

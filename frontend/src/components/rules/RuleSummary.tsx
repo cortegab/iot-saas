@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import { cn } from "@/lib/cn";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -91,12 +92,24 @@ export function ruleSummaryText(rule: RuleSummaryData): string {
   return `When ${conditionClause(rule.condition)}${holds}, ${action}.`;
 }
 
-function ConditionText({ node }: { node: ConditionNode }) {
+/** A bolded value in the sentence — rendered as an accent "unfilled" chip
+ * instead when it equals the caller's placeholder marker (the live preview in
+ * RuleForm passes `placeholder="…"`; the list call sites pass nothing, so this
+ * is always a plain `<strong>` there). */
+function Value({ children, placeholder }: { children: string | number; placeholder?: string }) {
+  if (placeholder != null && String(children) === placeholder) {
+    return <span className="rounded bg-accent-muted px-1.5 font-medium text-accent">{children}</span>;
+  }
+  return <strong>{children}</strong>;
+}
+
+function ConditionText({ node, placeholder }: { node: ConditionNode; placeholder?: string }) {
   if (node.kind === "leaf") {
     const op = OPERATOR_WORDS[node.operator] ?? node.operator;
     return (
       <>
-        <strong>{node.metric}</strong> {op} <strong>{node.threshold}</strong>
+        <Value placeholder={placeholder}>{node.metric}</Value> {op}{" "}
+        <Value placeholder={placeholder}>{node.threshold}</Value>
       </>
     );
   }
@@ -106,7 +119,7 @@ function ConditionText({ node }: { node: ConditionNode }) {
       {node.predicates.map((child, i) => (
         <Fragment key={i}>
           {i > 0 && joiner}
-          <ConditionText node={child} />
+          <ConditionText node={child} placeholder={placeholder} />
         </Fragment>
       ))}
     </>
@@ -115,12 +128,22 @@ function ConditionText({ node }: { node: ConditionNode }) {
 
 /** The at-a-glance sentence UX_UI_Description.md §6 requires every rule to
  * render as — bolded values so it can be verified without reading closely. */
-export function RuleSummary({ rule }: { rule: RuleSummaryData }) {
+export function RuleSummary({
+  rule,
+  placeholder,
+  className,
+}: {
+  rule: RuleSummaryData;
+  /** Values equal to this render as an "unfilled" accent chip (the live
+   * preview passes "…"). */
+  placeholder?: string;
+  className?: string;
+}) {
   const action = parseAction(rule.action);
 
   return (
-    <p className="text-sm text-ink">
-      When <ConditionText node={rule.condition} />
+    <p className={cn("text-sm text-ink", className)}>
+      When <ConditionText node={rule.condition} placeholder={placeholder} />
       {rule.for_duration > 0 && (
         <>
           {" "}
@@ -130,16 +153,18 @@ export function RuleSummary({ rule }: { rule: RuleSummaryData }) {
       ,{" "}
       {action?.type === "actuator_command" ? (
         <>
-          turn <strong>{action.actuator}</strong>{" "}
-          <strong>{typeof action.value === "boolean" ? (action.value ? "ON" : "OFF") : String(action.value)}</strong>
+          turn <Value placeholder={placeholder}>{action.actuator}</Value>{" "}
+          <Value placeholder={placeholder}>
+            {typeof action.value === "boolean" ? (action.value ? "ON" : "OFF") : String(action.value)}
+          </Value>
         </>
       ) : action?.type === "notification" ? (
         <>
-          send a notification: <strong>&ldquo;{action.message}&rdquo;</strong>
+          send a notification: &ldquo;<Value placeholder={placeholder}>{action.message}</Value>&rdquo;
         </>
       ) : action?.type === "webhook" ? (
         <>
-          call the webhook at <strong>{action.url}</strong>
+          call the webhook at <Value placeholder={placeholder}>{action.url}</Value>
         </>
       ) : (
         "do nothing (unrecognized action)"

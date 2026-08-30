@@ -60,33 +60,31 @@ export default function NotificationsPage() {
     });
   }, [notifications, filter, deviceFilter, deviceNameById]);
 
-  if (isLoading) return <LoadingSkeleton rows={4} rowClassName="h-16" />;
-  if (error) {
-    return (
-      <ErrorState
-        message={error instanceof ApiRequestError ? error.message : "Couldn't load notifications."}
-        onRetry={() => void revalidate(NOTIFICATIONS_KEY)}
-      />
-    );
-  }
-
   const columns: TableColumn<NotificationResponse>[] = [
     {
       header: "Notification",
+      render: (n) => {
+        const dev = n.device_id ? deviceNameById.get(n.device_id) : null;
+        return (
+          <div className="flex flex-col gap-0.5">
+            <span className="text-ink">{n.message}</span>
+            <span className="text-xs text-ink-muted">
+              {[dev, timeAgo(n.created_at)].filter(Boolean).join(" · ")}
+            </span>
+          </div>
+        );
+      },
+    },
+    {
+      header: "Status",
       render: (n) => (
-        <div className="flex items-start gap-2">
-          <Badge
-            tone={n.read_at == null ? "pending" : "unknown"}
-            variant="indicator"
-            className={n.read_at == null ? "mt-1" : "mt-1 opacity-0"}
-            label={n.read_at == null ? "Unread" : "Read"}
-          />
-          <span className="text-ink">{n.message}</span>
-        </div>
+        <Badge
+          tone={n.read_at == null ? "pending" : "unknown"}
+          variant="dot"
+          label={n.read_at == null ? "Unread" : "Read"}
+        />
       ),
     },
-    { header: "Device", render: (n) => (n.device_id ? (deviceNameById.get(n.device_id) ?? "—") : "—") },
-    { header: "Time", render: (n) => timeAgo(n.created_at) },
     {
       header: "",
       className: "w-10 text-right",
@@ -123,12 +121,18 @@ export default function NotificationsPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Input
             compact
+            className="bg-surface"
             type="search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter by message or device…"
           />
-          <Select compact value={deviceFilter} onChange={(e) => setDeviceFilter(e.target.value)}>
+          <Select
+            compact
+            className="bg-surface"
+            value={deviceFilter}
+            onChange={(e) => setDeviceFilter(e.target.value)}
+          >
             <option value="all">All devices</option>
             {deviceOptions.map((d) => (
               <option key={d.value} value={d.value}>
@@ -139,13 +143,24 @@ export default function NotificationsPage() {
         </div>
       )}
 
-      {notifications.length === 0 ? (
-        <EmptyState title="Nothing yet" description="Rule firings show up here." />
-      ) : filtered.length === 0 ? (
-        <EmptyState title="No matching notifications" description="Try a different search term or device filter." />
-      ) : (
-        <Table columns={columns} rows={filtered} rowKey={(n) => n.id} />
+      {isLoading && <LoadingSkeleton rows={4} rowClassName="h-16" />}
+
+      {error && (
+        <ErrorState
+          message={error instanceof ApiRequestError ? error.message : "Couldn't load notifications."}
+          onRetry={() => void revalidate(NOTIFICATIONS_KEY)}
+        />
       )}
+
+      {!isLoading && !error && notifications.length === 0 && (
+        <EmptyState title="Nothing yet" description="Rule firings show up here." />
+      )}
+
+      {notifications.length > 0 && filtered.length === 0 && (
+        <EmptyState title="No matching notifications" description="Try a different search term or device filter." />
+      )}
+
+      {filtered.length > 0 && <Table columns={columns} rows={filtered} rowKey={(n) => n.id} />}
     </div>
   );
 }

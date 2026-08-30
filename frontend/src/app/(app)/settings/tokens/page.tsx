@@ -129,18 +129,11 @@ export default function TokensSettingsPage() {
   const [copied, setCopied] = useState(false);
 
   if (!isAdmin) {
-    return (
-      <div className="flex flex-col gap-4">
-        <h1 className="text-lg font-semibold text-ink">API / Tokens</h1>
-        <EmptyState title="Admins only" description="Ask an admin or owner to manage API keys." />
-      </div>
-    );
+    return <EmptyState title="Admins only" description="Ask an admin or owner to manage API keys." />;
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-ink">API / Tokens</h1>
-
       {isLoading && <LoadingSkeleton rows={2} rowClassName="h-16" />}
 
       {error && (
@@ -152,7 +145,7 @@ export default function TokensSettingsPage() {
 
       {revealed ? (
         // Shown once — mirrors the device-credential reveal in devices/new.
-        <div className="rounded-xl border border-status-pending/40 bg-status-pending/10 p-4">
+        <div className="rounded-xl border border-status-pending/40 bg-status-pending-surface p-4">
           <p className="text-sm font-medium text-ink">Copy this key now — it will not be shown again.</p>
           <p className="mt-2 break-all font-mono text-sm text-ink">{revealed.key}</p>
           <div className="mt-3 flex items-center gap-3">

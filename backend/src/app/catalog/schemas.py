@@ -9,7 +9,9 @@ from pydantic import BaseModel, Field
 # Informational only for now — telemetry's `value` column is always a bare
 # float regardless of what a catalog entry declares (ingestion/schemas.py);
 # this doesn't change wire validation, only what authoring UIs display.
-MetricDataType = Literal["float"]
+# "bool" marks an on/off flag metric (door open, leak detected): still a
+# 0.0/1.0 float on the wire, but authoring/display can treat it as two-state.
+MetricDataType = Literal["float", "bool"]
 ActuatorValueType = Literal["bool", "float", "string"]
 CatalogEntryStatus = Literal["active", "disabled"]
 

@@ -19,8 +19,10 @@ const SIZE_CLASSES: Record<ButtonSize, string> = {
 const PADDED_VARIANTS = new Set<ButtonVariant>(["primary", "secondary"]);
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: "rounded-md bg-accent font-medium text-white hover:bg-accent/90",
-  secondary: "rounded-md font-medium text-ink-muted hover:bg-surface-raised hover:text-ink",
+  primary:
+    "rounded-md border border-accent bg-accent font-medium text-on-accent hover:border-accent-strong hover:bg-accent-strong",
+  secondary:
+    "rounded-md border border-border font-medium text-ink-muted hover:bg-surface-raised hover:text-ink",
   destructive: "text-sm text-status-error hover:underline",
   ghost: "text-sm text-accent hover:underline",
 };

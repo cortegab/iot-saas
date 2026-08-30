@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,20 +9,12 @@ import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
+import { Section } from "@/components/ui/Section";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
 
 type UserResponse = components["schemas"]["UserResponse"];
 type TenantResponse = components["schemas"]["TenantResponse"];
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3">
-      <h2 className="text-xs font-medium uppercase tracking-wide text-ink-muted">{title}</h2>
-      {children}
-    </section>
-  );
-}
 
 function OrganizationSection() {
   const api = useApi();
@@ -173,8 +165,6 @@ function AccountSection() {
 export default function OrganizationSettingsPage() {
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-lg font-semibold text-ink">Organization</h1>
-
       <Section title="Workspace">
         <OrganizationSection />
       </Section>

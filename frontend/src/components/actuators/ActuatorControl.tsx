@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useApi } from "@/hooks/useApi";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -12,6 +12,13 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
+import {
+  commandStatus,
+  commandStatusLabel,
+  commandStatusTone,
+  msUntilCommandDeadline,
+} from "@/lib/command-status";
+import { wireId } from "@/lib/wire-id";
 import { parseAction } from "@/components/rules/RuleSummary";
 import type { components } from "@/types/api";
 
@@ -26,14 +33,18 @@ function formatValue(value: unknown): string {
 
 function ActuatorRow({
   deviceId,
-  actuator,
+  actuatorId,
+  actuatorLabel,
   deviceOnline,
   isAdmin,
   latest,
   onSent,
 }: {
   deviceId: string;
-  actuator: string;
+  /** The stable wire id — sent to the API and matched against CommandResponse.actuator. */
+  actuatorId: string;
+  /** The pretty catalog display name shown to the user. */
+  actuatorLabel: string;
   deviceOnline: boolean;
   isAdmin: boolean;
   latest: CommandResponse | undefined;
@@ -45,10 +56,24 @@ function ActuatorRow({
   const [error, setError] = useState<string | null>(null);
 
   const currentValue = latest?.value ?? false;
-  const confirmed = latest != null && latest.acked_at != null;
+
+  // Re-render once when the pending command crosses its TTL deadline, so the
+  // badge flips "Pending" → "No response" on time instead of waiting for the
+  // next SWR poll. A late ack landing after this still revalidates the list
+  // (useRealtime) and wins, since acked_at takes precedence.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    if (!latest) return;
+    const ms = msUntilCommandDeadline(latest);
+    if (ms == null) return;
+    const id = setTimeout(() => forceTick((n) => n + 1), ms + 250);
+    return () => clearTimeout(id);
+  }, [latest]);
+
+  const status = latest ? commandStatus(latest) : null;
 
   async function send(nextValue: boolean) {
-    const ok = await confirm(`Turn ${actuator} ${nextValue ? "ON" : "OFF"}?`, {
+    const ok = await confirm(`Turn ${actuatorLabel} ${nextValue ? "ON" : "OFF"}?`, {
       danger: false,
       confirmLabel: nextValue ? "Turn ON" : "Turn OFF",
     });
@@ -56,7 +81,7 @@ function ActuatorRow({
     setBusy(true);
     setError(null);
     try {
-      await api.post(`/devices/${deviceId}/commands`, { actuator, value: nextValue });
+      await api.post(`/devices/${deviceId}/commands`, { actuator: actuatorId, value: nextValue });
       onSent();
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Couldn't send this command.");
@@ -68,7 +93,7 @@ function ActuatorRow({
   return (
     <Card className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="font-medium text-ink">{actuator}</span>
+        <span className="font-medium text-ink">{actuatorLabel}</span>
         {isAdmin && (
           <Button disabled={busy} onClick={() => void send(!(currentValue === true))}>
             Turn {currentValue === true ? "OFF" : "ON"}
@@ -77,13 +102,17 @@ function ActuatorRow({
       </div>
 
       <div className="flex items-center gap-2 text-sm text-ink-muted">
-        {latest ? (
+        {latest && status ? (
           <>
             <span>
               Requested <span className="text-ink">{formatValue(latest.value)}</span>
             </span>
             <span aria-hidden>·</span>
-            <Badge tone={confirmed ? "online" : "pending"} variant="text" label={confirmed ? "Confirmed" : "Pending"} />
+            <Badge
+              tone={commandStatusTone(status)}
+              variant="text"
+              label={commandStatusLabel(status)}
+            />
           </>
         ) : (
           <span>No commands sent yet.</span>
@@ -129,14 +158,24 @@ export function ActuatorControl({
   // The template's declared actuators are the primary source — a rule
   // referencing an actuator is unioned in too, so a control never disappears
   // for an actuator an active rule still commands even if it was since
-  // dropped from the template.
+  // dropped from the template. `id` is the stable wire id (catalog `key`,
+  // falling back to a slugified `name`) used to send commands and match
+  // CommandResponse rows; `label` is the pretty catalog name shown to the
+  // user. A rule's saved actuator string (possibly a legacy name-based
+  // value) has no known pretty label, so it's shown as-is.
   const actuators = useMemo(() => {
-    const set = new Set<string>((catalogEntry?.actuators ?? []).map((a) => a.name));
+    const options = new Map<string, string>();
+    for (const a of catalogEntry?.actuators ?? []) {
+      const id = wireId(a);
+      if (!options.has(id)) options.set(id, a.name);
+    }
     for (const rule of rules ?? []) {
       const action = parseAction(rule.action);
-      if (action?.type === "actuator_command") set.add(action.actuator);
+      if (action?.type === "actuator_command" && !options.has(action.actuator)) {
+        options.set(action.actuator, action.actuator);
+      }
     }
-    return Array.from(set);
+    return Array.from(options, ([id, label]) => ({ id, label }));
   }, [catalogEntry, rules]);
 
   if (rulesLoading || catalogLoading) return <LoadingSkeleton rows={2} rowClassName="h-24" />;
@@ -154,14 +193,15 @@ export function ActuatorControl({
 
   return (
     <div className="flex flex-col gap-3">
-      {actuators.map((actuator) => (
+      {actuators.map(({ id, label }) => (
         <ActuatorRow
-          key={actuator}
+          key={id}
           deviceId={deviceId}
-          actuator={actuator}
+          actuatorId={id}
+          actuatorLabel={label}
           deviceOnline={deviceOnline}
           isAdmin={isAdmin}
-          latest={commands?.find((c) => c.actuator === actuator)}
+          latest={commands?.find((c) => c.actuator === id)}
           onSent={() => void mutateCommands()}
         />
       ))}

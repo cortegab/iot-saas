@@ -157,7 +157,7 @@ export function DropdownMenu({
                         className={cn(
                           "flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors duration-150 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
                           item.danger
-                            ? "text-status-error hover:bg-status-error/10"
+                            ? "text-status-error hover:bg-status-error-surface"
                             : "text-ink hover:bg-surface-raised",
                         )}
                       >

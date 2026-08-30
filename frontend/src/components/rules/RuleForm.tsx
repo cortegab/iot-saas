@@ -9,21 +9,28 @@
  * use) falls back to a read-only view here — see NotFlatConditionNotice.
  */
 
-import { useMemo, useState, type FormEvent } from "react";
+import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Plus } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
+import { Card } from "@/components/ui/Card";
+import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/cn";
 import { ApiRequestError } from "@/lib/api-client";
+import { wireId } from "@/lib/wire-id";
 import { RuleSummary, type ConditionLeaf, type ConditionNode } from "@/components/rules/RuleSummary";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
+type CatalogActuator = components["schemas"]["CatalogActuator"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 type ActionType = "actuator_command" | "notification" | "webhook";
 type ValueKind = "boolean" | "number" | "text";
@@ -36,6 +43,20 @@ interface LeafDraft {
   hysteresis: number;
 }
 
+/** A selectable metric/actuator: `id` is the stable wire identifier stored
+ * on the rule (catalog `key`, falling back to a slugified `name` for legacy
+ * entries), `label` is the pretty catalog `name` shown in the dropdown. */
+interface WireOption {
+  id: string;
+  label: string;
+}
+
+function addOption(options: Map<string, string>, id: string, label: string): void {
+  if (!options.has(id)) options.set(id, label);
+}
+
+// Backend `_OPERATOR_PATTERN` is `^(>|>=|<|<=|==|!=)$` — no "crosses above/below"
+// edge-trigger operators, so the prototype's extra comparisons aren't offered.
 const OPERATORS: { value: string; label: string }[] = [
   { value: ">", label: "> above" },
   { value: ">=", label: "≥ at or above" },
@@ -44,6 +65,20 @@ const OPERATORS: { value: string; label: string }[] = [
   { value: "==", label: "= equal to" },
   { value: "!=", label: "≠ different from" },
 ];
+
+const SECTION_LABEL = "text-xs font-medium uppercase tracking-wide text-ink-muted";
+
+// CatalogActuator.value_type → the value control shown for it.
+const TYPE_TO_KIND: Record<CatalogActuator["value_type"], ValueKind> = {
+  bool: "boolean",
+  float: "number",
+  string: "text",
+};
+const VALUE_TYPE_WORD: Record<CatalogActuator["value_type"], string> = {
+  bool: "boolean",
+  float: "numeric",
+  string: "text",
+};
 
 // Safe, non-zero starting points (UX_UI_Description.md §6: "their defaults
 // must be safe rather than zero. This is a hardware-safety requirement, not
@@ -93,7 +128,10 @@ function buildCondition(predicates: LeafDraft[], combinator: Combinator): Condit
   return { kind: "group", op: combinator, predicates: leaves };
 }
 
-function SafetyField({
+/** A hardware-safety number field: the amber note when the value dips below a
+ * recommended minimum is advisory — the backend re-validates `ge=0` and this
+ * never blocks submit. */
+function NumberSafetyField({
   label,
   hint,
   value,
@@ -107,52 +145,28 @@ function SafetyField({
   min?: number;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-sm text-ink-muted">
-      {label}
-      <Input type="number" min={0} step="any" value={value} onChange={(e) => onChange(Number(e.target.value))} />
-      <span className="text-xs">{hint}</span>
-      {value < min && (
-        <span className="text-xs text-status-pending">
-          Low values make relays cycle rapidly on noisy readings — consider {min} or higher.
-        </span>
-      )}
-    </label>
-  );
-}
-
-/** The AND/OR combinator picker and the action-type picker were the same
- * segmented-button markup copy-pasted twice in this file — factored out once
- * rather than left to drift the next time either grows a state. */
-function SegmentedToggle<T extends string>({
-  options,
-  value,
-  onChange,
-  ariaLabel,
-}: {
-  options: { value: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
-  ariaLabel: string;
-}) {
-  return (
-    <div className="flex gap-1" role="group" aria-label={ariaLabel}>
-      {options.map((opt) => (
-        <button
-          key={opt.value}
-          type="button"
-          aria-pressed={value === opt.value}
-          onClick={() => onChange(opt.value)}
-          className={cn(
-            "rounded-md px-3 py-1.5 text-sm transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-            value === opt.value
-              ? "bg-surface-raised font-medium text-ink"
-              : "text-ink-muted hover:bg-surface-raised hover:text-ink",
+    <Field
+      label={label}
+      hint={
+        <>
+          {hint}
+          {value < min && (
+            <span className="block text-status-pending">
+              Low values make relays cycle rapidly on noisy readings — consider {min} or higher.
+            </span>
           )}
-        >
-          {opt.label}
-        </button>
-      ))}
-    </div>
+        </>
+      }
+    >
+      <Input
+        compact
+        type="number"
+        min={0}
+        step="any"
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+    </Field>
   );
 }
 
@@ -164,69 +178,68 @@ function PredicateRow({
   removable,
 }: {
   predicate: LeafDraft;
-  metricOptions: string[];
+  metricOptions: WireOption[];
   onChange: (next: LeafDraft) => void;
   onRemove: () => void;
   removable: boolean;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-[2fr_1.5fr_1fr_1fr_auto]">
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Metric
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1.6fr_1.3fr_1fr_1fr_auto]">
+      <Field label="Metric">
         {metricOptions.length > 0 ? (
-          <Select value={predicate.metric} onChange={(e) => onChange({ ...predicate, metric: e.target.value })}>
+          <Select compact value={predicate.metric} onChange={(e) => onChange({ ...predicate, metric: e.target.value })}>
             <option value="" disabled>
               Choose a metric…
             </option>
             {metricOptions.map((m) => (
-              <option key={m} value={m}>
-                {m}
+              <option key={m.id} value={m.id}>
+                {m.label}
               </option>
             ))}
           </Select>
         ) : (
-          <span className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-ink-muted">
+          <span className="rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-ink-muted">
             No metrics declared
           </span>
         )}
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Comparison
-        <Select value={predicate.operator} onChange={(e) => onChange({ ...predicate, operator: e.target.value })}>
+      </Field>
+      <Field label="Comparison">
+        <Select compact value={predicate.operator} onChange={(e) => onChange({ ...predicate, operator: e.target.value })}>
           {OPERATORS.map((op) => (
             <option key={op.value} value={op.value}>
               {op.label}
             </option>
           ))}
         </Select>
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Threshold
+      </Field>
+      <Field label="Threshold">
         <Input
+          compact
           type="number"
           step="any"
           value={predicate.threshold}
           onChange={(e) => onChange({ ...predicate, threshold: Number(e.target.value) })}
         />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Re-arm gap
+      </Field>
+      <Field
+        label="Hysteresis"
+        hint="How far the reading must fall back past the threshold before the rule can fire again."
+      >
         <Input
+          compact
           type="number"
           min={0}
           step="any"
           value={predicate.hysteresis}
           onChange={(e) => onChange({ ...predicate, hysteresis: Number(e.target.value) })}
         />
-      </label>
+      </Field>
       {removable && (
-        <button
-          type="button"
-          onClick={onRemove}
-          className="self-end rounded-md px-2 py-2 text-sm text-status-error hover:bg-surface-raised"
-        >
-          Remove
-        </button>
+        <div className="flex items-end">
+          <Button type="button" variant="destructive" onClick={onRemove}>
+            Remove
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -237,16 +250,18 @@ function PredicateRow({
  * builds one. Editing is blocked rather than risk silently flattening it. */
 function NotFlatConditionNotice({ rule, onCancel }: { rule: RuleResponse; onCancel: () => void }) {
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4">
-      <RuleSummary rule={rule} />
-      <p className="text-sm text-status-pending">
-        This rule has a nested condition structure that isn&apos;t editable here — it was created
-        directly through the API. Delete and recreate it to use this form.
-      </p>
-      <Button type="button" variant="secondary" size="md" className="self-start" onClick={onCancel}>
-        Close
-      </Button>
-    </div>
+    <Card padding="md">
+      <div className="flex flex-col gap-3">
+        <RuleSummary rule={rule} />
+        <Callout tone="warning">
+          This rule has a nested condition structure that isn&apos;t editable here — it was created
+          directly through the API. Delete and recreate it to use this form.
+        </Callout>
+        <Button type="button" variant="secondary" size="md" className="self-start" onClick={onCancel}>
+          Close
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -265,8 +280,17 @@ export function RuleForm({
     return <NotFlatConditionNotice rule={existing} onCancel={onCancel} />;
   }
 
+  return <RuleFormInner deviceId={deviceId} existing={existing} onSaved={onSaved} onCancel={onCancel} />;
+}
+
+function SectionCard({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <RuleFormInner deviceId={deviceId} existing={existing} onSaved={onSaved} onCancel={onCancel} />
+    <Card padding="md">
+      <div className="flex flex-col gap-4">
+        <h2 className={SECTION_LABEL}>{title}</h2>
+        {children}
+      </div>
+    </Card>
   );
 }
 
@@ -305,11 +329,18 @@ function RuleFormInner({
   // the "Legacy" entry (no declared metrics), so undeclared devices aren't
   // left with an empty picker. Existing predicates' metrics are always
   // included so editing never silently drops a saved value from the list.
+  // The saved/stored value is the wire id (catalog `key`, or a slugified
+  // `name` for legacy entries) — the dropdown still shows the pretty `name`.
   const metricOptions = useMemo(() => {
-    const declared = (catalogEntry?.metrics ?? []).map((m) => m.name);
-    const names = new Set(declared.length > 0 ? declared : (latest ?? []).map((r) => r.metric));
-    for (const p of predicates) if (p.metric) names.add(p.metric);
-    return Array.from(names);
+    const declared = catalogEntry?.metrics ?? [];
+    const options = new Map<string, string>();
+    if (declared.length > 0) {
+      for (const m of declared) addOption(options, wireId(m), m.name);
+    } else {
+      for (const r of latest ?? []) addOption(options, r.metric, r.metric);
+    }
+    for (const p of predicates) if (p.metric) addOption(options, p.metric, p.metric);
+    return Array.from(options, ([id, label]) => ({ id, label }));
   }, [catalogEntry, latest, predicates]);
 
   const [forDuration, setForDuration] = useState(existing?.for_duration ?? DEFAULT_FOR_DURATION);
@@ -328,11 +359,20 @@ function RuleFormInner({
   // the primary source, plus the current value so editing never silently
   // drops a saved actuator that's no longer declared.
   const actuatorOptions = useMemo(() => {
-    const declared = (catalogEntry?.actuators ?? []).map((a) => a.name);
-    const names = new Set(declared);
-    if (actuator) names.add(actuator);
-    return Array.from(names);
+    const options = new Map<string, string>();
+    for (const a of catalogEntry?.actuators ?? []) addOption(options, wireId(a), a.name);
+    if (actuator) addOption(options, actuator, actuator);
+    return Array.from(options, ([id, label]) => ({ id, label }));
   }, [catalogEntry, actuator]);
+
+  // The value control is driven by the chosen actuator's declared type. A
+  // manual "value kind" picker only surfaces for an actuator that isn't in
+  // the device's catalog (an old rule referencing a since-removed actuator).
+  const selectedActuator = useMemo(
+    () => (catalogEntry?.actuators ?? []).find((a) => wireId(a) === actuator),
+    [catalogEntry, actuator],
+  );
+  const catalogControlled = selectedActuator != null;
   const [valueKind, setValueKind] = useState<ValueKind>(
     typeof existingAction?.value === "number"
       ? "number"
@@ -340,6 +380,13 @@ function RuleFormInner({
         ? "text"
         : "boolean",
   );
+  const effectiveKind: ValueKind = catalogControlled ? TYPE_TO_KIND[selectedActuator.value_type] : valueKind;
+  const showManualKind = catalogEntry !== undefined && actuator.trim() !== "" && !catalogControlled;
+  const boolLabels = {
+    off: String(selectedActuator?.off_value ?? "Off"),
+    on: String(selectedActuator?.on_value ?? "On"),
+  };
+
   const [boolValue, setBoolValue] = useState(existingAction?.value !== false);
   const [numValue, setNumValue] = useState(
     typeof existingAction?.value === "number" ? existingAction.value : 0,
@@ -360,10 +407,19 @@ function RuleFormInner({
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
+  function addPredicate() {
+    setPredicates([
+      ...predicates,
+      { metric: "", operator: ">", threshold: 0, hysteresis: DEFAULT_HYSTERESIS },
+    ]);
+  }
+
   function buildAction(): Record<string, unknown> | null {
     if (actionType === "actuator_command") {
       if (!actuator.trim()) return null;
-      const value = valueKind === "boolean" ? boolValue : valueKind === "number" ? numValue : textValue;
+      // Stored value stays a JS boolean for a bool actuator — on_value/off_value
+      // are display labels only (same as commands/ActuatorControl).
+      const value = effectiveKind === "boolean" ? boolValue : effectiveKind === "number" ? numValue : textValue;
       return { type: "actuator_command", actuator: actuator.trim(), value };
     }
     if (actionType === "notification") {
@@ -426,78 +482,85 @@ function RuleFormInner({
     }
   }
 
-  return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-6">
-      <div className="rounded-xl border border-border bg-surface p-4">
-        <RuleSummary rule={{ condition: previewCondition, for_duration: forDuration, action: previewAction }} />
-      </div>
+  const detectedHint = catalogControlled
+    ? `Detected from “${selectedActuator.name}” — a ${VALUE_TYPE_WORD[selectedActuator.value_type]} actuator, so ${
+        effectiveKind === "boolean" ? "the value is a simple choice" : "the value is typed directly"
+      }.`
+    : undefined;
 
-      <fieldset className="flex flex-col gap-3">
-        <legend className="text-xs font-medium uppercase tracking-wide text-ink-muted">Condition</legend>
+  return (
+    <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
+      <Card padding="md">
+        <RuleSummary
+          rule={{ condition: previewCondition, for_duration: forDuration, action: previewAction }}
+          placeholder="…"
+          className="text-[15px] leading-relaxed"
+        />
+      </Card>
+
+      <SectionCard title="Condition">
         {predicates.map((predicate, i) => (
-          <PredicateRow
-            key={i}
-            predicate={predicate}
-            metricOptions={metricOptions}
-            removable={predicates.length > 1}
-            onChange={(next) => setPredicates(predicates.map((p, j) => (i === j ? next : p)))}
-            onRemove={() => setPredicates(predicates.filter((_, j) => i !== j))}
-          />
-        ))}
-        <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() =>
-              setPredicates([
-                ...predicates,
-                { metric: "", operator: ">", threshold: 0, hysteresis: DEFAULT_HYSTERESIS },
-              ])
-            }
-          >
-            + Add condition
-          </Button>
-          {predicates.length > 1 && (
-            <SegmentedToggle
-              ariaLabel="Combine conditions with"
-              value={combinator}
-              onChange={setCombinator}
-              options={(["AND", "OR"] as Combinator[]).map((c) => ({ value: c, label: c }))}
+          <Fragment key={i}>
+            {i > 0 && (
+              <div className="flex items-center gap-3">
+                <span className="h-px flex-1 bg-border" />
+                {i === 1 ? (
+                  <SegmentedControl
+                    ariaLabel="Combine conditions with"
+                    value={combinator}
+                    onChange={setCombinator}
+                    options={[
+                      { value: "AND", label: "AND" },
+                      { value: "OR", label: "OR" },
+                    ]}
+                  />
+                ) : (
+                  <span className={SECTION_LABEL}>{combinator}</span>
+                )}
+                <span className="h-px flex-1 bg-border" />
+              </div>
+            )}
+            <PredicateRow
+              predicate={predicate}
+              metricOptions={metricOptions}
+              removable={predicates.length > 1}
+              onChange={(next) => setPredicates(predicates.map((p, j) => (i === j ? next : p)))}
+              onRemove={() => setPredicates(predicates.filter((_, j) => i !== j))}
             />
-          )}
-        </div>
-      </fieldset>
+          </Fragment>
+        ))}
+        <Button type="button" variant="ghost" className="self-start" onClick={addPredicate}>
+          <Plus size={14} aria-hidden />
+          Add condition
+        </Button>
+      </SectionCard>
 
       {/* Safety fields — protect real hardware from flapping on noisy
           readings (UX_UI_Description.md §6). Never bypassable: the backend
-          re-validates ge=0 regardless of what this form allows. Hysteresis
-          lives per-predicate above now, not here — it only makes sense
-          against one scalar comparison. */}
-      <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <legend className="col-span-full text-xs font-medium uppercase tracking-wide text-ink-muted">
-          Flapping protection
-        </legend>
-        <SafetyField
-          label="Hold time (s)"
-          hint="Ignore brief spikes — the condition must hold this long."
-          value={forDuration}
-          onChange={setForDuration}
-          min={5}
-        />
-        <SafetyField
-          label="Minimum interval (s)"
-          hint="Shortest time allowed between firings."
-          value={cooldown}
-          onChange={setCooldown}
-          min={30}
-        />
-      </fieldset>
+          re-validates ge=0 regardless of what this form allows. */}
+      <SectionCard title="Flapping protection">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <NumberSafetyField
+            label="Hold time (s)"
+            hint="Ignore brief spikes — the condition must hold this long."
+            value={forDuration}
+            onChange={setForDuration}
+            min={5}
+          />
+          <NumberSafetyField
+            label="Minimum interval (s)"
+            hint="Shortest time allowed between firings."
+            value={cooldown}
+            onChange={setCooldown}
+            min={30}
+          />
+        </div>
+      </SectionCard>
 
       {/* Action — one editor per type; every type must read naturally in the
           summary above (UX_UI_Description.md §6: "Cover every action type"). */}
-      <fieldset className="flex flex-col gap-3">
-        <legend className="text-xs font-medium uppercase tracking-wide text-ink-muted">Action</legend>
-        <SegmentedToggle
+      <SectionCard title="Action">
+        <SegmentedControl
           ariaLabel="Action type"
           value={actionType}
           onChange={setActionType}
@@ -509,92 +572,109 @@ function RuleFormInner({
         />
 
         {actionType === "actuator_command" && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <label className="flex flex-col gap-1 text-sm text-ink-muted">
-              Actuator
-              {actuatorOptions.length > 0 ? (
-                <Select value={actuator} onChange={(e) => setActuator(e.target.value)}>
-                  <option value="" disabled>
-                    Choose an actuator…
-                  </option>
-                  {actuatorOptions.map((a) => (
-                    <option key={a} value={a}>
-                      {a}
+          <div className="flex flex-col gap-4">
+            <div className={cn("grid grid-cols-1 gap-4", showManualKind && "sm:grid-cols-2")}>
+              <Field label="Actuator">
+                {actuatorOptions.length > 0 ? (
+                  <Select compact value={actuator} onChange={(e) => setActuator(e.target.value)}>
+                    <option value="" disabled>
+                      Choose an actuator…
                     </option>
-                  ))}
-                </Select>
-              ) : (
-                <span className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-ink-muted">
-                  No actuators declared
-                </span>
+                    {actuatorOptions.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.label}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <span className="rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-ink-muted">
+                    No actuators declared
+                  </span>
+                )}
+              </Field>
+              {showManualKind && (
+                <Field
+                  label="Value kind"
+                  hint="This actuator isn't in the device template — pick how its value is sent."
+                >
+                  <Select compact value={valueKind} onChange={(e) => setValueKind(e.target.value as ValueKind)}>
+                    <option value="boolean">On / Off</option>
+                    <option value="number">Number</option>
+                    <option value="text">Text</option>
+                  </Select>
+                </Field>
               )}
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-ink-muted">
-              Value type
-              <Select value={valueKind} onChange={(e) => setValueKind(e.target.value as ValueKind)}>
-                <option value="boolean">On / Off</option>
-                <option value="number">Number</option>
-                <option value="text">Text</option>
-              </Select>
-            </label>
-            {valueKind === "boolean" && (
-              <label className="flex flex-col gap-1 text-sm text-ink-muted">
-                Value
-                <Select value={boolValue ? "true" : "false"} onChange={(e) => setBoolValue(e.target.value === "true")}>
-                  <option value="true">ON</option>
-                  <option value="false">OFF</option>
-                </Select>
-              </label>
-            )}
-            {valueKind === "number" && (
-              <label className="flex flex-col gap-1 text-sm text-ink-muted">
-                Value
-                <Input type="number" step="any" value={numValue} onChange={(e) => setNumValue(Number(e.target.value))} />
-              </label>
-            )}
-            {valueKind === "text" && (
-              <label className="flex flex-col gap-1 text-sm text-ink-muted">
-                Value
-                <Input value={textValue} onChange={(e) => setTextValue(e.target.value)} />
-              </label>
-            )}
+            </div>
+
+            <Field label="Value" hint={detectedHint}>
+              {effectiveKind === "boolean" && (
+                <SegmentedControl
+                  ariaLabel="Value"
+                  variant="solid"
+                  value={boolValue ? "on" : "off"}
+                  onChange={(v) => setBoolValue(v === "on")}
+                  options={[
+                    { value: "off", label: boolLabels.off },
+                    { value: "on", label: boolLabels.on },
+                  ]}
+                />
+              )}
+              {effectiveKind === "number" && (
+                <Input
+                  compact
+                  type="number"
+                  step="any"
+                  value={numValue}
+                  onChange={(e) => setNumValue(Number(e.target.value))}
+                />
+              )}
+              {effectiveKind === "text" && (
+                <Input compact value={textValue} onChange={(e) => setTextValue(e.target.value)} />
+              )}
+            </Field>
           </div>
         )}
 
         {actionType === "notification" && (
-          <label className="flex flex-col gap-1 text-sm text-ink-muted">
-            Message
-            <Textarea value={message} onChange={(e) => setMessage(e.target.value)} rows={2} />
-          </label>
+          <Field label="Message">
+            <Textarea compact value={message} onChange={(e) => setMessage(e.target.value)} rows={2} />
+          </Field>
         )}
 
         {actionType === "webhook" && (
-          <div className="flex flex-col gap-3">
-            <label className="flex flex-col gap-1 text-sm text-ink-muted">
-              URL
+          <div className="flex flex-col gap-4">
+            <Field label="URL">
               <Input
+                compact
                 value={webhookUrl}
                 onChange={(e) => setWebhookUrl(e.target.value)}
                 placeholder="https://example.com/hook"
               />
-            </label>
-            <label className="flex flex-col gap-1 text-sm text-ink-muted">
-              Body (JSON)
+            </Field>
+            <Field label="Body (JSON)">
               <Textarea
+                compact
                 value={webhookBody}
                 onChange={(e) => setWebhookBody(e.target.value)}
                 rows={3}
                 className="font-mono"
               />
-            </label>
+            </Field>
           </div>
         )}
-      </fieldset>
+      </SectionCard>
 
-      <label className="flex items-center gap-2 text-sm text-ink">
-        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
-        Enabled
-      </label>
+      <Card padding="md">
+        <label className="flex items-center gap-2 text-sm text-ink">
+          <input
+            type="checkbox"
+            className="accent-accent"
+            checked={enabled}
+            onChange={(e) => setEnabled(e.target.checked)}
+          />
+          Enabled
+        </label>
+      </Card>
 
       {error && (
         <p role="alert" className="text-sm text-status-error">

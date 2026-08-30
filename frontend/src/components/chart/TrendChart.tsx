@@ -47,7 +47,7 @@ export interface ChartThreshold {
  * dark is the default, `.light` on <html> is the full peer theme
  * (globals.css) — without hard-coding either palette here. */
 function useThemeColors() {
-  const [colors, setColors] = useState({ ink: "", inkMuted: "", border: "", accent: "" });
+  const [colors, setColors] = useState({ ink: "", inkMuted: "", border: "", chart: "", threshold: "" });
 
   useEffect(() => {
     const read = () => {
@@ -56,7 +56,10 @@ function useThemeColors() {
         ink: style.getPropertyValue("--color-ink").trim(),
         inkMuted: style.getPropertyValue("--color-ink-muted").trim(),
         border: style.getPropertyValue("--color-border").trim(),
-        accent: style.getPropertyValue("--color-accent").trim(),
+        // The series is the instrument colour; the threshold marker is the alert
+        // colour, so a breached level stays legible against the trace.
+        chart: style.getPropertyValue("--color-chart").trim(),
+        threshold: style.getPropertyValue("--color-status-offline").trim(),
       });
     };
     read();
@@ -127,11 +130,11 @@ export function TrendChart({
     const drawThresholds: uPlot.Hooks.Defs["draw"] = (u) => {
       const { ctx } = u;
       ctx.save();
-      ctx.font = "11px system-ui, sans-serif";
+      ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace';
       for (const t of thresholds) {
         const y = u.valToPos(t.value, "y", true);
         if (y < u.bbox.top || y > u.bbox.top + u.bbox.height) continue;
-        ctx.strokeStyle = colors.accent;
+        ctx.strokeStyle = colors.threshold;
         ctx.setLineDash([4, 4]);
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -139,7 +142,7 @@ export function TrendChart({
         ctx.lineTo(u.bbox.left + u.bbox.width, y);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = colors.accent;
+        ctx.fillStyle = colors.threshold;
         ctx.textAlign = "right";
         ctx.fillText(t.label, u.bbox.left + u.bbox.width - 4, y - 4);
       }
@@ -160,7 +163,7 @@ export function TrendChart({
         {},
         {
           label: metric,
-          stroke: colors.accent,
+          stroke: colors.chart,
           width: 2,
           points: { show: chartData[0].length < 200 },
         },
@@ -209,7 +212,7 @@ export function TrendChart({
               type="button"
               aria-pressed={rangeMs === opt.ms}
               onClick={() => setRangeMs(opt.ms)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
+              className={`rounded-md px-2.5 py-1 font-mono text-xs font-medium transition-colors duration-150 ${
                 rangeMs === opt.ms
                   ? "bg-surface-raised text-ink"
                   : "text-ink-muted hover:bg-surface-raised hover:text-ink"
@@ -241,14 +244,24 @@ export function TrendChart({
         />
       )}
 
+      {/* The measured element is the *inner* unpadded div, not this padded
+          wrapper: sizing uPlot to a padded box's clientWidth makes its canvas
+          wider than the space it sits in, and flex items' default
+          min-width:auto lets that overshoot ratchet the layout wider on every
+          ResizeObserver tick — the "chart keeps growing horizontally" bug.
+          overflow-hidden + min-w-0 stop any residual off-by-one from doing the
+          same. */}
       <div
-        ref={containerRef}
         className={
           points.length === 0
             ? "hidden"
-            : `rounded-xl border border-border bg-surface p-2 ${fillHeight ? "min-h-0 flex-1" : ""}`
+            : `min-w-0 overflow-hidden rounded-xl border border-border border-t-panel-edge bg-surface p-2 ${
+                fillHeight ? "min-h-0 flex-1" : ""
+              }`
         }
-      />
+      >
+        <div ref={containerRef} className={fillHeight ? "h-full min-h-0" : ""} />
+      </div>
     </div>
   );
 }

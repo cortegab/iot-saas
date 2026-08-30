@@ -89,8 +89,10 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             className={cn(
-              "rounded-md px-3 py-2 text-sm font-medium text-white transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-              danger ? "bg-status-error hover:bg-status-error/90" : "bg-accent hover:bg-accent/90",
+              "rounded-md border px-3 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+              danger
+                ? "border-status-error bg-status-error text-white hover:bg-status-error/90"
+                : "border-accent bg-accent text-on-accent hover:bg-accent-strong hover:border-accent-strong",
             )}
           >
             {confirmLabel}
