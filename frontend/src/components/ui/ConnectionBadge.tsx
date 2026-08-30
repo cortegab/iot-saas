@@ -1,24 +1,25 @@
+import { Badge, type StatusTone } from "@/components/ui/Badge";
 import type { components } from "@/types/api";
 
 type ConnectionState = components["schemas"]["DeviceResponse"]["connection_state"];
 
-const CONFIG: Record<ConnectionState, { label: string; dot: string; text: string }> = {
-  online: { label: "Online", dot: "bg-status-online", text: "text-status-online" },
-  offline: { label: "Offline", dot: "bg-status-offline", text: "text-status-offline" },
-  never_connected: { label: "Never connected", dot: "bg-status-unknown", text: "text-ink-muted" },
+const TONE: Record<ConnectionState, StatusTone> = {
+  online: "online",
+  offline: "offline",
+  never_connected: "unknown",
+};
+const LABEL: Record<ConnectionState, string> = {
+  online: "Online",
+  offline: "Offline",
+  never_connected: "Never connected",
 };
 
 /**
  * Status is never color-alone (UX_UI_Description.md's Accessibility section):
  * every state pairs a dot with a text label, so it reads the same to a
- * color-blind user or a screen reader.
+ * color-blind user or a screen reader. Thin wrapper over `Badge` so device
+ * connection state renders in the one dot+label shape every list uses.
  */
 export function ConnectionBadge({ state }: { state: ConnectionState }) {
-  const cfg = CONFIG[state];
-  return (
-    <span className="inline-flex items-center gap-1.5 text-sm">
-      <span aria-hidden className={`h-2 w-2 rounded-full ${cfg.dot}`} />
-      <span className={cfg.text}>{cfg.label}</span>
-    </span>
-  );
+  return <Badge tone={TONE[state]} variant="dot" label={LABEL[state]} />;
 }

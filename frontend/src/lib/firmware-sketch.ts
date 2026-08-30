@@ -11,6 +11,8 @@
  * placeholder instead of a stale or fabricated secret).
  */
 
+import { wireId, type WireNamed } from "@/lib/wire-id";
+
 const PLACEHOLDER_METRIC = "temperature";
 const CREDENTIAL_PLACEHOLDER = "<paste your device credential here>";
 
@@ -56,6 +58,8 @@ export interface SketchCredential {
   password: string;
 }
 
+type SketchEntry = WireNamed;
+
 export interface SketchInfo {
   tenantSlug: string;
   deviceSlug: string;
@@ -68,10 +72,10 @@ export interface SketchInfo {
   /** Declared metrics from the device's catalog entry. Empty (a "Legacy"
    * device) falls back to a single placeholder metric, matching this
    * function's pre-catalog behavior. */
-  metrics: { name: string }[];
+  metrics: SketchEntry[];
   /** Declared actuators. Empty generates no subscribe/callback code at all —
    * also matching pre-catalog behavior, which never had any. */
-  actuators: { name: string }[];
+  actuators: SketchEntry[];
   /** The real one-time secret at creation, or null to omit it (Settings'
    * on-demand button — see module docstring). */
   credential: SketchCredential | null;
@@ -83,7 +87,7 @@ function toIdentifier(name: string): string {
 
 export function buildSketch(info: SketchInfo): string {
   const { tenantSlug, deviceSlug, host, tls, actuators } = info;
-  const metrics = info.metrics.length > 0 ? info.metrics : [{ name: PLACEHOLDER_METRIC }];
+  const metrics = info.metrics.length > 0 ? info.metrics : [{ name: PLACEHOLDER_METRIC, key: null }];
 
   const username = info.credential?.username ?? CREDENTIAL_PLACEHOLDER;
   const password = info.credential
@@ -93,23 +97,26 @@ export function buildSketch(info: SketchInfo): string {
   const metricTopicLines = metrics
     .map(
       (m) =>
-        `const char* TOPIC_METRIC_${toIdentifier(m.name)} = "${tenantSlug}/${deviceSlug}/${m.name}";`,
+        `const char* TOPIC_METRIC_${toIdentifier(wireId(m))} = "${tenantSlug}/${deviceSlug}/${wireId(m)}";`,
     )
     .join("\n");
 
   const actuatorTopicsBlock =
     actuators.length > 0
-      ? `\n// Actuator command topics — subscribed to below.\n${actuators
-          .map(
-            (a) =>
-              `const char* TOPIC_CMD_${toIdentifier(a.name)} = "${tenantSlug}/${deviceSlug}/cmd/${a.name}";`,
-          )
+      ? `\n// Actuator command topics (subscribed to below) and the ack topics the
+// device publishes back on so the platform can confirm delivery
+// ({tenant}/{device}/ack/{actuator}, CLAUDE.md §4).\n${actuators
+          .map((a) => {
+            const id = toIdentifier(wireId(a));
+            return `const char* TOPIC_CMD_${id} = "${tenantSlug}/${deviceSlug}/cmd/${wireId(a)}";
+const char* TOPIC_ACK_${id} = "${tenantSlug}/${deviceSlug}/ack/${wireId(a)}";`;
+          })
           .join("\n")}\n`
       : "";
 
   const publishCalls = metrics
     .map((m) => {
-      const id = toIdentifier(m.name);
+      const id = toIdentifier(wireId(m));
       return `  {
     // TODO: replace with a real reading for "${m.name}".
     float value_${id} = 20.0 + random(0, 100) / 10.0;
@@ -126,9 +133,9 @@ export function buildSketch(info: SketchInfo): string {
 
   const subscribeCalls = actuators
     .map(
-      (a) => `      mqttClient.subscribe(TOPIC_CMD_${toIdentifier(a.name)});
+      (a) => `      mqttClient.subscribe(TOPIC_CMD_${toIdentifier(wireId(a))});
       Serial.print("[MQTT] subscribed to ");
-      Serial.println(TOPIC_CMD_${toIdentifier(a.name)});`,
+      Serial.println(TOPIC_CMD_${toIdentifier(wireId(a))});`,
     )
     .join("\n");
 
@@ -145,7 +152,7 @@ export function buildSketch(info: SketchInfo): string {
 
   ${actuators
   .map((a) => {
-    const id = toIdentifier(a.name);
+    const id = toIdentifier(wireId(a));
     return `if (strcmp(topic, TOPIC_CMD_${id}) == 0) {
     // Payload is JSON: {"value":..., "issued_at":..., "ttl":..., "command_id":...} (CLAUDE.md §4).
     StaticJsonDocument<256> doc;
@@ -177,6 +184,16 @@ export function buildSketch(info: SketchInfo): string {
     Serial.println("s");
 
     // TODO: drive "${a.name}" here, e.g. digitalWrite(${id.toUpperCase()}_PIN, desiredValue);
+
+    // Acknowledge: echo the command_id back so the platform flips this
+    // command's status from "Pending" to "Confirmed". Send this once the
+    // actuator has actually been driven, not before.
+    if (strcmp(commandId, "unknown") != 0) {
+      char ackPayload_${id}[80];
+      snprintf(ackPayload_${id}, sizeof(ackPayload_${id}), "{\\"command_id\\":\\"%s\\"}", commandId);
+      bool acked_${id} = mqttClient.publish(TOPIC_ACK_${id}, ackPayload_${id});
+      Serial.println(acked_${id} ? "  ack sent" : "  ack FAILED to publish");
+    }
   }`;
   })
   .join(" else ")}

@@ -123,8 +123,6 @@ export default function UsersSettingsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <h1 className="text-lg font-semibold text-ink">Users</h1>
-
       {isAdmin && <InviteMemberForm onInvited={() => void mutate()} />}
 
       {isLoading && <LoadingSkeleton rows={2} rowClassName="h-14" />}

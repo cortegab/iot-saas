@@ -1,6 +1,5 @@
 """Tenant creation and membership queries."""
 
-import re
 import uuid
 
 from sqlalchemy import select
@@ -8,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import service as catalog_service
 from app.db import set_tenant_context
+from app.shared.slug import slugify
 from app.tenants.models import Tenant, TenantMembership, TenantRole
 
 LEGACY_CATALOG_ENTRY_NAME = "Legacy / Uncategorized"
@@ -21,13 +21,8 @@ class AlreadyAMemberError(Exception):
     pass
 
 
-def _slugify(name: str) -> str:
-    base = re.sub(r"[^a-z0-9]+", "-", name.strip().lower()).strip("-")
-    return base or "tenant"
-
-
 async def _unique_slug(session: AsyncSession, name: str) -> str:
-    base = _slugify(name)
+    base = slugify(name, fallback="tenant")
     slug = base
     suffix = 1
     while (

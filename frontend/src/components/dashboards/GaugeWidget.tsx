@@ -77,7 +77,7 @@ export function GaugeWidget({
             <path
               d={arcPath()}
               fill="none"
-              className="text-accent"
+              className="text-chart"
               stroke="currentColor"
               strokeWidth={8}
               strokeLinecap="round"
@@ -88,7 +88,7 @@ export function GaugeWidget({
               x={CENTER.x}
               y={CENTER.y - 4}
               textAnchor="middle"
-              className="fill-ink text-[16px] font-semibold"
+              className="fill-chart font-mono text-[16px] font-semibold"
             >
               {reading.value}
             </text>

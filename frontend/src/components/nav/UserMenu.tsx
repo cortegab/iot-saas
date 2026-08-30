@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { TenantSwitcher } from "@/components/nav/TenantSwitcher";
+import { ThemeToggle } from "@/components/nav/ThemeToggle";
 
 function initialsFor(name: string | null | undefined, email: string): string {
   if (name && name.trim()) {
@@ -34,7 +35,7 @@ export function UserMenu() {
     <DropdownMenu
       label="Account menu"
       panelClassName="w-64 p-1"
-      triggerClassName="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      triggerClassName="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-xs font-medium text-on-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       trigger={user ? initialsFor(user.name, user.email) : "…"}
     >
       <div className="border-b border-border px-3 py-2">
@@ -52,6 +53,10 @@ export function UserMenu() {
           />
         </div>
       )}
+
+      <div className="border-b border-border">
+        <ThemeToggle />
+      </div>
 
       <button
         type="button"

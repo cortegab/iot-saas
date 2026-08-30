@@ -16,6 +16,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { Table, type TableColumn } from "@/components/ui/Table";
+import { TableNameCell } from "@/components/ui/TableNameCell";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
@@ -27,6 +28,17 @@ const STATUS_OPTIONS: { value: CatalogEntryResponse["status"] | "all"; label: st
   { value: "active", label: "Active" },
   { value: "disabled", label: "Disabled" },
 ];
+
+/** The row sub-line under a template name — "3 metrics · 1 actuator". */
+function summarizeShape(e: CatalogEntryResponse): string {
+  const m = (e.metrics ?? []).length;
+  const a = (e.actuators ?? []).length;
+  if (m === 0 && a === 0) return "No metrics or actuators yet";
+  const parts: string[] = [];
+  if (m) parts.push(`${m} metric${m === 1 ? "" : "s"}`);
+  if (a) parts.push(`${a} actuator${a === 1 ? "" : "s"}`);
+  return parts.join(" · ");
+}
 
 export default function DeviceCatalogPage() {
   const router = useRouter();
@@ -71,10 +83,12 @@ export default function DeviceCatalogPage() {
     {
       header: "Name",
       render: (e) => (
-        <Link href={`/devices/templates/${e.id}`} className="font-medium text-ink hover:text-accent">
-          {e.name}
-          {e.is_legacy && <Badge tone="unknown" label="Legacy" className="ml-2" />}
-        </Link>
+        <TableNameCell
+          href={`/devices/templates/${e.id}`}
+          name={e.name}
+          trailing={e.is_legacy && <Badge tone="unknown" label="Legacy" className="ml-2" />}
+          sublabel={summarizeShape(e)}
+        />
       ),
     },
     { header: "Devices", render: (e) => e.device_count },
@@ -131,6 +145,7 @@ export default function DeviceCatalogPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Input
             compact
+            className="bg-surface"
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -138,6 +153,7 @@ export default function DeviceCatalogPage() {
           />
           <Select
             compact
+            className="bg-surface"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as CatalogEntryResponse["status"] | "all")}
           >

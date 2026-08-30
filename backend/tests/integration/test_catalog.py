@@ -55,7 +55,7 @@ async def test_create_catalog_entry_with_metrics_and_actuators(client: httpx.Asy
     assert body["metrics"] == [
         {
             "name": "temperature",
-            "key": None,
+            "key": "temperature",
             "unit": "°C",
             "data_type": "float",
             "decimals": None,
@@ -66,7 +66,7 @@ async def test_create_catalog_entry_with_metrics_and_actuators(client: httpx.Asy
     assert body["actuators"] == [
         {
             "name": "fan1",
-            "key": None,
+            "key": "fan1",
             "value_type": "bool",
             "allowed_values": None,
             "on_value": None,
@@ -75,6 +75,116 @@ async def test_create_catalog_entry_with_metrics_and_actuators(client: httpx.Asy
     ]
     assert body["status"] == "active"
     assert body["device_count"] == 0
+
+
+async def test_create_catalog_entry_auto_derives_key_from_name(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner2b@example.com", "Acme2b")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+
+    resp = await client.post(
+        "/catalog",
+        json={"name": "ESP32 Temperature", "metrics": [{"name": "Temperature"}]},
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    assert resp.json()["metrics"][0]["key"] == "temperature"
+
+
+async def test_create_catalog_entry_keeps_explicit_key(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner2c@example.com", "Acme2c")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+
+    resp = await client.post(
+        "/catalog",
+        json={"name": "Weird", "metrics": [{"name": "Temperature", "key": "Temperature"}]},
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    # An explicit key is never re-slugified — the author's exact-case string
+    # is preserved as-is (needed to match an already-deployed device's topic).
+    assert resp.json()["metrics"][0]["key"] == "Temperature"
+
+
+async def test_create_catalog_entry_accepts_bool_flag_metric(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner2c2@example.com", "Acme2c2")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+
+    resp = await client.post(
+        "/catalog",
+        json={
+            "name": "Door Sensor",
+            "metrics": [{"name": "Door", "data_type": "bool", "unit": None}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    # An on/off flag metric round-trips as data_type "bool" — still a bare
+    # float on the wire, but authoring/display can treat it as two-state.
+    assert resp.json()["metrics"][0]["data_type"] == "bool"
+
+    entry_id = resp.json()["id"]
+    fetched = await client.get(f"/catalog/{entry_id}", headers=headers)
+    assert fetched.json()["metrics"][0]["data_type"] == "bool"
+
+
+async def test_create_catalog_entry_dedupes_colliding_auto_derived_keys(
+    client: httpx.AsyncClient,
+) -> None:
+    owner = await _register(client, "owner2d@example.com", "Acme2d")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+
+    resp = await client.post(
+        "/catalog",
+        json={
+            "name": "Duplicate-ish",
+            "metrics": [{"name": "Temperature"}, {"name": "temperature"}],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    keys = [m["key"] for m in resp.json()["metrics"]]
+    assert keys == ["temperature", "temperature-2"]
+
+
+async def test_create_catalog_entry_rejects_explicit_duplicate_keys(
+    client: httpx.AsyncClient,
+) -> None:
+    owner = await _register(client, "owner2e@example.com", "Acme2e")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+
+    resp = await client.post(
+        "/catalog",
+        json={
+            "name": "Bad",
+            "metrics": [
+                {"name": "Temperature", "key": "temp"},
+                {"name": "Other", "key": "TEMP"},
+            ],
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 400
+
+
+async def test_update_catalog_entry_does_not_overwrite_existing_key(
+    client: httpx.AsyncClient,
+) -> None:
+    owner = await _register(client, "owner2f@example.com", "Acme2f")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    created = await client.post(
+        "/catalog",
+        json={"name": "Original", "metrics": [{"name": "Temperature", "key": "custom-key"}]},
+        headers=headers,
+    )
+    entry_id = created.json()["id"]
+
+    resp = await client.patch(
+        f"/catalog/{entry_id}",
+        json={"metrics": [{"name": "Temperature Renamed", "key": "custom-key"}]},
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["metrics"][0]["key"] == "custom-key"
 
 
 async def test_list_returns_legacy_plus_created(client: httpx.AsyncClient) -> None:

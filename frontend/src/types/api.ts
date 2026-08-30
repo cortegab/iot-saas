@@ -734,9 +734,9 @@ export interface components {
             /**
              * Data Type
              * @default float
-             * @constant
+             * @enum {string}
              */
-            data_type: "float";
+            data_type: "float" | "bool";
             /** Decimals */
             decimals?: number | null;
             /** Min */

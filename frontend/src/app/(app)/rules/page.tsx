@@ -83,13 +83,18 @@ export default function RulesPage() {
   }
 
   const columns: TableColumn<RuleWithDeviceResponse>[] = [
-    { header: "Rule", render: (r) => <RuleSummary rule={r} /> },
     {
-      header: "Device",
+      header: "Rule",
       render: (r) => (
-        <Link href={`/devices/${r.device_id}`} className="font-medium text-ink hover:text-accent">
-          {r.device_name}
-        </Link>
+        <div className="flex flex-col gap-0.5">
+          <RuleSummary rule={r} />
+          <span className="text-xs text-ink-muted">
+            on{" "}
+            <Link href={`/devices/${r.device_id}`} className="hover:text-ink">
+              {r.device_name}
+            </Link>
+          </span>
+        </div>
       ),
     },
     {
@@ -116,16 +121,6 @@ export default function RulesPage() {
     });
   }
 
-  if (isLoading) return <LoadingSkeleton rows={4} rowClassName="h-20" />;
-  if (error) {
-    return (
-      <ErrorState
-        message={error instanceof ApiRequestError ? error.message : "Couldn't load rules."}
-        onRetry={() => void mutate()}
-      />
-    );
-  }
-
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -145,12 +140,18 @@ export default function RulesPage() {
         <div className="flex flex-wrap items-center gap-2">
           <Input
             compact
+            className="bg-surface"
             type="search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             placeholder="Filter by metric or device…"
           />
-          <Select compact value={deviceFilter} onChange={(e) => setDeviceFilter(e.target.value)}>
+          <Select
+            compact
+            className="bg-surface"
+            value={deviceFilter}
+            onChange={(e) => setDeviceFilter(e.target.value)}
+          >
             <option value="all">All devices</option>
             {deviceOptions.map((d) => (
               <option key={d.value} value={d.value}>
@@ -161,7 +162,16 @@ export default function RulesPage() {
         </div>
       )}
 
-      {!rules || rules.length === 0 ? (
+      {isLoading && <LoadingSkeleton rows={4} rowClassName="h-20" />}
+
+      {error && (
+        <ErrorState
+          message={error instanceof ApiRequestError ? error.message : "Couldn't load rules."}
+          onRetry={() => void mutate()}
+        />
+      )}
+
+      {rules && rules.length === 0 && (
         <EmptyState
           title="No rules yet"
           description="Rules watch a metric and fire an action when it crosses a threshold."
@@ -173,11 +183,13 @@ export default function RulesPage() {
             ) : undefined
           }
         />
-      ) : filtered.length === 0 ? (
-        <EmptyState title="No matching rules" description="Try a different search term." />
-      ) : (
-        <Table columns={columns} rows={filtered} rowKey={(r) => r.id} />
       )}
+
+      {rules && rules.length > 0 && filtered.length === 0 && (
+        <EmptyState title="No matching rules" description="Try a different search term." />
+      )}
+
+      {filtered.length > 0 && <Table columns={columns} rows={filtered} rowKey={(r) => r.id} />}
 
       {dialog}
     </div>

@@ -52,10 +52,10 @@ export function DeviceTrendChart({
               type="button"
               aria-pressed={activeMetric === m.metric}
               onClick={() => setSelected(m.metric)}
-              className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
+              className={`rounded-md border px-2.5 py-1 font-mono text-xs font-medium transition-colors duration-150 ${
                 activeMetric === m.metric
-                  ? "bg-accent text-white"
-                  : "border border-border text-ink-muted hover:bg-surface-raised hover:text-ink"
+                  ? "border-accent bg-accent text-on-accent"
+                  : "border-border text-ink-muted hover:bg-surface-raised hover:text-ink"
               }`}
             >
               {m.metric}
