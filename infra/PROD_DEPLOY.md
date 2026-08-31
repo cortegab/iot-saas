@@ -152,19 +152,26 @@ curl http://app.yourdomain.com
 
 ## 7. Issue the TLS certificate
 
-One certificate, three SANs (api first — the nginx and EMQX configs both point at
-`/etc/letsencrypt/live/<DOMAIN_API>/`, since certbot names the lineage directory after the first `-d`):
+One certificate, five SANs — `DOMAIN_API` first, because the nginx and EMQX configs both point at
+`/etc/letsencrypt/live/<DOMAIN_API>/` and certbot names the lineage directory after the first `-d`.
+The apex (`DOMAIN_APP`) plus its `www.` and `app.` hostnames are all included so nginx can serve the
+apex and redirect the other two. A DNS A record must exist for each name before issuance.
 
 ```bash
 source infra/.env.prod
 docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod \
   --profile certbot run --rm certbot certonly --webroot -w /var/www/certbot \
-  -d "$DOMAIN_API" -d "$DOMAIN_APP" -d "$DOMAIN_MQTT" \
+  -d "$DOMAIN_API" -d "$DOMAIN_APP" -d "www.$DOMAIN_APP" -d "app.$DOMAIN_APP" -d "$DOMAIN_MQTT" \
   --email "$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email
 ```
 
-If this fails, it's almost always DNS not having propagated yet, or port 80 not reachable from the
-internet (check `ufw status` and that no other process is bound to 80 on the host).
+If this fails, it's almost always DNS not having propagated yet for one of the names, or port 80 not
+reachable from the internet (check `ufw status` and that no other process is bound to 80 on the host).
+
+To **add the apex/www/app names to an existing cert** (e.g. after migrating `DOMAIN_APP` from an
+`app.` subdomain to the apex), re-run the same command with `--cert-name "$DOMAIN_API" --expand`
+added — this keeps the lineage path so nothing in nginx/EMQX changes — then
+`bash scripts/render-prod-config.sh && docker compose ... exec nginx nginx -s reload`.
 
 ---
 
@@ -231,13 +238,17 @@ Adjust `WorkingDirectory=` in the two `.service` files first if the repo isn't a
 
 ## 11. Ongoing operations
 
-**Deploying a change:**
+**Deploying a change** (this is what `.github/workflows/deploy-prod.yml` automates on push to `prod`):
 
 ```bash
 cd ~/iot-saas
 git fetch && git checkout <new-tag-or-commit>
-docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod up -d --build
-docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod exec api uv run alembic upgrade head
+C="docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod"
+$C up -d --build
+bash scripts/render-prod-config.sh          # apply any nginx/emqx .template change in this commit
+$C exec api uv run alembic upgrade head
+$C exec nginx nginx -s reload                # up -d recreates api/frontend with new IPs — nginx
+                                             # caches the old ones and 502s until reloaded
 ```
 
 **Logs:**

@@ -49,7 +49,15 @@ jobs:
           git checkout --detach "${SHA}"
           C="docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod"
           \$C up -d --build
+          # Re-render the generated nginx/emqx configs so a .template change in
+          # this commit actually takes effect (both files are git-ignored).
+          bash scripts/render-prod-config.sh
           \$C exec -T api uv run alembic upgrade head
+          # \`up -d --build\` recreates api/frontend with NEW container IPs;
+          # nginx caches the old ones at config-load time and would 502 every
+          # proxied request until reloaded. This re-resolves the upstreams
+          # (and picks up the re-rendered config above).
+          \$C exec -T nginx nginx -s reload
           \$C ps
           EOF
 
