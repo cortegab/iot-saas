@@ -3,14 +3,16 @@
 # rendered file bakes in your real domain names. Edit this template, not the
 # generated file.
 #
-# One certificate, three SANs (app + api + mqtt — see infra/PROD_DEPLOY.md's
-# certbot step), so a single renewal keeps nginx's two server blocks AND
-# EMQX's MQTT TLS listener valid at once.
+# DOMAIN_APP is the canonical app host — set it to your apex (e.g.
+# iodriven.tech). www.<DOMAIN_APP> and app.<DOMAIN_APP> 301 to it. One
+# certificate, five SANs (apex + www + app + api + mqtt — see
+# infra/PROD_DEPLOY.md's certbot step), so a single renewal keeps nginx's
+# server blocks AND EMQX's MQTT TLS listener valid at once.
 
-# ── ACME challenge + HTTP → HTTPS redirect, both domains ───────────────────
+# ── ACME challenge + HTTP → HTTPS redirect, every hostname ─────────────────
 server {
     listen 80;
-    server_name ${DOMAIN_APP} ${DOMAIN_API};
+    server_name ${DOMAIN_APP} www.${DOMAIN_APP} app.${DOMAIN_APP} ${DOMAIN_API};
 
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
@@ -21,7 +23,21 @@ server {
     }
 }
 
-# ── Frontend (Next.js) ──────────────────────────────────────────────────────
+# ── Canonical-host redirect: www / app subdomain → apex ───────────────────
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name www.${DOMAIN_APP} app.${DOMAIN_APP};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_API}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_API}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+
+    return 301 https://${DOMAIN_APP}$request_uri;
+}
+
+# ── Frontend (Next.js) — served on the canonical apex host ─────────────────
 server {
     listen 443 ssl;
     http2 on;
