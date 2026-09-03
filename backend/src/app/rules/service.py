@@ -1,7 +1,7 @@
-"""Rule CRUD, the worker-side in-memory rule cache (keyed by device_id+metric,
-reloaded on Redis pub/sub invalidation — see rule_cache_loop in
-app/worker.py), the in-memory last-known-metric-value cache multi-metric
-conditions read from, and hot-path evaluation/dispatch.
+"""Rule CRUD, the worker-side in-memory rule cache (keyed by
+(device_id, metric) signal, reloaded on Redis pub/sub invalidation — see
+rule_cache_loop in app/worker.py), the in-memory last-known-value cache
+multi-device conditions read from, and hot-path evaluation/dispatch.
 """
 
 import logging
@@ -19,15 +19,15 @@ from app.db import add_post_commit_callback
 from app.notifications import service as notifications_service
 from app.redis import redis_client
 from app.rules.evaluators import (
-    Action,
     Evaluator,
     MetricSnapshot,
     MetricValue,
     RuleState,
+    SignalKey,
     ThresholdEvaluator,
-    referenced_metrics,
+    referenced_signals,
 )
-from app.rules.models import Rule, RuleType
+from app.rules.models import Rule, RuleDevice, RuleDeviceRole, RuleType
 
 log = logging.getLogger("rules")
 
@@ -46,10 +46,32 @@ _OPERATOR_WORDS: dict[str, str] = {
     "!=": "is different from",
 }
 
+_DEFAULT_POLICY: dict[str, Any] = {
+    "strategy": "edge",
+    "for_duration": 0,
+    "cooldown": 0,
+    "reset_condition": None,
+}
+
+
+class RuleNotFoundError(Exception):
+    pass
+
+
+class RuleValidationError(Exception):
+    """A rule references a device that isn't in the tenant (or doesn't exist)."""
+
+
+# ---- Condition helpers ----------------------------------------------------
+
+
+def _leaf_signal_key(leaf: dict[str, Any]) -> SignalKey:
+    return SignalKey(str(leaf["device_id"]), leaf["metric"])
+
 
 def _leaf_summary(leaf: dict[str, Any], snapshot: MetricSnapshot) -> str:
     op = _OPERATOR_WORDS.get(leaf["operator"], leaf["operator"])
-    current = snapshot.get(leaf["metric"])
+    current = snapshot.get(_leaf_signal_key(leaf))
     current_clause = f" (currently {current.value})" if current is not None else ""
     return f"{leaf['metric']} {op} {leaf['threshold']}{current_clause}"
 
@@ -61,84 +83,215 @@ def _condition_summary(condition: dict[str, Any], snapshot: MetricSnapshot) -> s
     return joiner.join(_condition_summary(child, snapshot) for child in condition["predicates"])
 
 
+def _plain_summary(condition: dict[str, Any]) -> str:
+    """No snapshot — used to auto-name a rule created without an explicit name."""
+    if condition["kind"] == "leaf":
+        op = _OPERATOR_WORDS.get(condition["operator"], condition["operator"])
+        return f"{condition['metric']} {op} {condition['threshold']}"
+    joiner = " and " if condition["op"] == "AND" else " or "
+    return joiner.join(_plain_summary(child) for child in condition["predicates"])
+
+
+def _auto_name(condition: dict[str, Any]) -> str:
+    summary = _plain_summary(condition)
+    summary = summary[0].upper() + summary[1:] if summary else "Rule"
+    return summary[:200]
+
+
 def _default_message(rule: Rule, snapshot: MetricSnapshot) -> str:
-    return f"{_condition_summary(rule.condition, snapshot)} on this device."
+    return f"{_condition_summary(rule.condition, snapshot)}."
 
 
-class RuleNotFoundError(Exception):
-    pass
+def _stamp_condition_device(node: dict[str, Any], device_id: uuid.UUID) -> dict[str, Any]:
+    """Fill in a leaf's `device_id` from the path device (the device-scoped
+    wrapper endpoint) — a canonical POST /rules leaf already carries its own.
+    """
+    if node.get("kind") == "leaf":
+        return {**node, "device_id": str(node.get("device_id") or device_id)}
+    return {
+        **node,
+        "predicates": [_stamp_condition_device(c, device_id) for c in node["predicates"]],
+    }
+
+
+def _condition_leaves(node: dict[str, Any]) -> list[dict[str, Any]]:
+    if node.get("kind") == "leaf":
+        return [node]
+    out: list[dict[str, Any]] = []
+    for child in node["predicates"]:
+        out.extend(_condition_leaves(child))
+    return out
+
+
+def _rule_device_map(
+    condition: dict[str, Any], actions: list[dict[str, Any]]
+) -> dict[uuid.UUID, set[str]]:
+    """device_id -> {roles} the rule references, for the rule_devices table."""
+    out: dict[uuid.UUID, set[str]] = {}
+    for leaf in _condition_leaves(condition):
+        did = leaf.get("device_id")
+        if did:
+            out.setdefault(uuid.UUID(str(did)), set()).add(RuleDeviceRole.INPUT.value)
+    for action in actions:
+        if action.get("type") == "actuator_command" and action.get("device_id"):
+            out.setdefault(uuid.UUID(str(action["device_id"])), set()).add(
+                RuleDeviceRole.TARGET.value
+            )
+    return out
 
 
 # ---- CRUD ------------------------------------------------------------------
 
 
-async def create_rule(
+async def _validate_devices_in_tenant(
+    session: AsyncSession, tenant_id: uuid.UUID, device_ids: set[uuid.UUID]
+) -> None:
+    if not device_ids:
+        return
+    result = await session.execute(
+        text("SELECT id FROM devices WHERE tenant_id = :tenant_id AND id = ANY(:ids)"),
+        {"tenant_id": tenant_id, "ids": [str(d) for d in device_ids]},
+    )
+    found = {row[0] for row in result}
+    missing = device_ids - found
+    if missing:
+        raise RuleValidationError(
+            "rule references device(s) not in this tenant: "
+            + ", ".join(sorted(str(m) for m in missing))
+        )
+
+
+async def _sync_rule_devices(
     session: AsyncSession,
     tenant_id: uuid.UUID,
-    device_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    device_map: dict[uuid.UUID, set[str]],
+) -> None:
+    await session.execute(
+        text("DELETE FROM rule_devices WHERE rule_id = :rule_id"), {"rule_id": rule_id}
+    )
+    for device_id, roles in device_map.items():
+        for role in roles:
+            session.add(
+                RuleDevice(
+                    tenant_id=tenant_id, rule_id=rule_id, device_id=device_id, role=role
+                )
+            )
+    # Flush so a raw text() read (list_rule_device_rows) in the same
+    # transaction sees these rows — ORM autoflush doesn't cover text().
+    await session.flush()
+
+
+def _assert_leaves_have_device(condition: dict[str, Any]) -> None:
+    if any(not leaf.get("device_id") for leaf in _condition_leaves(condition)):
+        raise RuleValidationError("every condition must name a device")
+
+
+async def _persist_rule(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    name: str,
+    description: str | None,
+    trigger: dict[str, Any],
     condition: dict[str, Any],
-    for_duration: int,
-    cooldown: int,
-    action: dict[str, Any],
+    execution_policy: dict[str, Any],
+    actions: list[dict[str, Any]],
+    editor_graph: dict[str, Any] | None,
     enabled: bool,
 ) -> Rule:
+    _assert_leaves_have_device(condition)
+    device_map = _rule_device_map(condition, actions)
+    await _validate_devices_in_tenant(session, tenant_id, set(device_map))
+
     rule = Rule(
         tenant_id=tenant_id,
-        device_id=device_id,
+        name=name,
+        description=description,
         type=RuleType.THRESHOLD.value,
+        trigger=trigger,
         condition=condition,
-        for_duration=for_duration,
-        cooldown=cooldown,
-        action=action,
+        execution_policy=execution_policy,
+        actions=actions,
+        editor_graph=editor_graph,
         enabled=enabled,
     )
     session.add(rule)
     await session.flush()
-    _publish_invalidation(session, device_id)
+    await _sync_rule_devices(session, tenant_id, rule.id, device_map)
+    _publish_invalidation(session)
     return rule
 
 
-async def list_rules(session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID) -> list[Rule]:
-    result = await session.execute(
-        select(Rule).where(Rule.tenant_id == tenant_id, Rule.device_id == device_id)
+async def create_rule_canonical(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    name: str,
+    description: str | None,
+    trigger: dict[str, Any],
+    condition: dict[str, Any],
+    execution_policy: dict[str, Any],
+    actions: list[dict[str, Any]],
+    editor_graph: dict[str, Any] | None,
+    enabled: bool,
+) -> Rule:
+    return await _persist_rule(
+        session,
+        tenant_id,
+        name=name or _auto_name(condition),
+        description=description,
+        trigger=trigger,
+        condition=condition,
+        execution_policy=execution_policy,
+        actions=actions,
+        editor_graph=editor_graph,
+        enabled=enabled,
     )
-    return list(result.scalars().all())
 
 
-class RuleWithDeviceRow(NamedTuple):
-    """One row of the tenant-wide /rules list. A plain tuple, not a `Rule` ORM
-    instance, because building it means joining against `devices` — and per
-    CLAUDE.md §6, rules/service.py must not import devices/models.py's `Device`
-    to do that. A raw `text()` join sidesteps the cross-module model import
-    the same way devices.service.lookup_device_by_slug does for its own
-    cross-cutting query.
-    """
-
-    id: uuid.UUID
-    device_id: uuid.UUID
-    type: str
-    condition: dict[str, Any]
-    for_duration: int
-    action: dict[str, Any]
-    cooldown: int
-    enabled: bool
-    created_at: datetime
-    device_name: str
-    device_slug: str
-
-
-async def list_all_rules(session: AsyncSession, tenant_id: uuid.UUID) -> list[RuleWithDeviceRow]:
-    result = await session.execute(
-        text(
-            "SELECT r.id, r.device_id, r.type, r.condition, "
-            "r.for_duration, r.action, r.cooldown, r.enabled, r.created_at, "
-            "d.name AS device_name, d.slug AS device_slug "
-            "FROM rules r JOIN devices d ON d.id = r.device_id "
-            "WHERE r.tenant_id = :tenant_id ORDER BY d.name, r.created_at"
-        ),
-        {"tenant_id": tenant_id},
+async def create_device_rule(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    *,
+    name: str | None,
+    condition: dict[str, Any],
+    for_duration: int,
+    cooldown: int,
+    action: dict[str, Any] | None,
+    actions: list[dict[str, Any]] | None,
+    enabled: bool,
+) -> Rule:
+    """Backward-compatible single-device create (POST /devices/{id}/rules)."""
+    stamped = _stamp_condition_device(condition, device_id)
+    resolved_actions = actions if actions is not None else ([action] if action is not None else [])
+    if not resolved_actions:
+        raise RuleValidationError("a rule needs at least one action")
+    stamped_actions = [
+        {**a, "device_id": str(a.get("device_id") or device_id)}
+        if a.get("type") == "actuator_command"
+        else a
+        for a in resolved_actions
+    ]
+    policy = {
+        "strategy": "edge",
+        "for_duration": for_duration,
+        "cooldown": cooldown,
+        "reset_condition": None,
+    }
+    return await _persist_rule(
+        session,
+        tenant_id,
+        name=name or _auto_name(stamped),
+        description=None,
+        trigger={"type": "metric"},
+        condition=stamped,
+        execution_policy=policy,
+        actions=stamped_actions,
+        editor_graph=None,
+        enabled=enabled,
     )
-    return [RuleWithDeviceRow(**row) for row in result.mappings().all()]
 
 
 async def get_rule(session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID) -> Rule:
@@ -151,64 +304,159 @@ async def get_rule(session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UU
     return rule
 
 
+class RuleDeviceRow(NamedTuple):
+    """One (rule, device, role) link plus the device's display name — for the
+    response `devices` list. A raw text() join to `devices` so this module
+    doesn't import devices/models.py (CLAUDE.md §6), the same way the old
+    list_all_rules query did.
+    """
+
+    rule_id: uuid.UUID
+    device_id: uuid.UUID
+    role: str
+    device_name: str | None
+
+
+async def list_rule_device_rows(
+    session: AsyncSession, tenant_id: uuid.UUID, rule_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[RuleDeviceRow]]:
+    if not rule_ids:
+        return {}
+    result = await session.execute(
+        text(
+            "SELECT rd.rule_id, rd.device_id, rd.role, d.name AS device_name "
+            "FROM rule_devices rd JOIN devices d ON d.id = rd.device_id "
+            "WHERE rd.tenant_id = :tenant_id AND rd.rule_id = ANY(:rule_ids) "
+            "ORDER BY rd.role, rd.created_at"
+        ),
+        {"tenant_id": tenant_id, "rule_ids": [str(r) for r in rule_ids]},
+    )
+    out: dict[uuid.UUID, list[RuleDeviceRow]] = {}
+    for row in result.mappings().all():
+        out.setdefault(row["rule_id"], []).append(RuleDeviceRow(**row))
+    return out
+
+
+async def list_rules(
+    session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID
+) -> list[Rule]:
+    """Rules this device feeds (`input`) or is commanded by (`target`)."""
+    result = await session.execute(
+        select(Rule)
+        .where(
+            Rule.tenant_id == tenant_id,
+            Rule.id.in_(
+                select(RuleDevice.rule_id).where(RuleDevice.device_id == device_id)
+            ),
+        )
+        .order_by(Rule.name)
+    )
+    return list(result.scalars().unique().all())
+
+
+async def list_all_rules(session: AsyncSession, tenant_id: uuid.UUID) -> list[Rule]:
+    result = await session.execute(
+        select(Rule).where(Rule.tenant_id == tenant_id).order_by(Rule.name)
+    )
+    return list(result.scalars().all())
+
+
 async def update_rule(
     session: AsyncSession,
     tenant_id: uuid.UUID,
     rule_id: uuid.UUID,
+    *,
+    name: str | None,
+    description: str | None,
+    trigger: dict[str, Any] | None,
     condition: dict[str, Any] | None,
+    execution_policy: dict[str, Any] | None,
+    actions: list[dict[str, Any]] | None,
+    editor_graph: dict[str, Any] | None,
+    enabled: bool | None,
     for_duration: int | None,
     cooldown: int | None,
     action: dict[str, Any] | None,
-    enabled: bool | None,
 ) -> Rule:
     rule = await get_rule(session, tenant_id, rule_id)
-    if condition is not None:
-        rule.condition = condition
-    if for_duration is not None:
-        rule.for_duration = for_duration
-    if cooldown is not None:
-        rule.cooldown = cooldown
-    if action is not None:
-        rule.action = action
+    # Fallback device for a legacy (device-less) leaf in an incoming
+    # condition — the rule's current primary input device.
+    existing_inputs = await session.execute(
+        select(RuleDevice.device_id).where(
+            RuleDevice.rule_id == rule_id, RuleDevice.role == RuleDeviceRole.INPUT.value
+        )
+    )
+    fallback = next(iter(existing_inputs.scalars()), None)
+
+    if name is not None:
+        rule.name = name
+    if description is not None:
+        rule.description = description
+    if trigger is not None:
+        rule.trigger = trigger
+    if editor_graph is not None:
+        rule.editor_graph = editor_graph
     if enabled is not None:
         rule.enabled = enabled
+
+    if condition is not None:
+        rule.condition = (
+            _stamp_condition_device(condition, fallback) if fallback is not None else condition
+        )
+
+    if execution_policy is not None:
+        rule.execution_policy = execution_policy
+    elif for_duration is not None or cooldown is not None:
+        policy = {**_DEFAULT_POLICY, **rule.execution_policy}
+        if for_duration is not None:
+            policy["for_duration"] = for_duration
+        if cooldown is not None:
+            policy["cooldown"] = cooldown
+        rule.execution_policy = policy
+
+    if actions is not None:
+        rule.actions = actions
+    elif action is not None:
+        rule.actions = [action]
+
+    _assert_leaves_have_device(rule.condition)
+    device_map = _rule_device_map(rule.condition, rule.actions)
+    await _validate_devices_in_tenant(session, tenant_id, set(device_map))
     await session.flush()
-    _publish_invalidation(session, rule.device_id)
+    await _sync_rule_devices(session, tenant_id, rule.id, device_map)
+    _publish_invalidation(session)
     return rule
 
 
 async def delete_rule(session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID) -> None:
     rule = await get_rule(session, tenant_id, rule_id)
-    device_id = rule.device_id
-    await session.delete(rule)
+    await session.delete(rule)  # rule_devices cascade via FK
     await session.flush()
-    _publish_invalidation(session, device_id)
+    _publish_invalidation(session)
 
 
-def _publish_invalidation(session: AsyncSession, device_id: uuid.UUID) -> None:
-    """Registers the actual Redis publish to run only after this session's
-    transaction commits — see db.add_post_commit_callback's docstring.
-    Publishing immediately (mid-transaction) would race the worker's reload
-    against a write Postgres hasn't made visible to that other connection
-    yet; confirmed live, not hypothetical.
+def _publish_invalidation(session: AsyncSession) -> None:
+    """Publish the Redis reload signal only after this session's transaction
+    commits — see db.add_post_commit_callback's docstring. The worker does a
+    full reload on any message, so the payload is just a marker.
     """
 
     async def _publish() -> None:
-        await redis_client.publish(RULES_INVALIDATE_CHANNEL, str(device_id))
+        await redis_client.publish(RULES_INVALIDATE_CHANNEL, "reload")
 
     add_post_commit_callback(session, _publish)
 
 
 # ---- Worker-side cache + hot path -------------------------------------------
 
-_rule_cache: dict[tuple[uuid.UUID, str], list[Rule]] = {}
+_rule_cache: dict[SignalKey, list[Rule]] = {}
 _rule_states: dict[uuid.UUID, RuleState] = {}
 
 # Last known value per (device_id, metric), updated unconditionally on every
 # telemetry message (pure dict write, zero I/O — stays in the hot-path
-# budget) so a multi-metric condition can synchronously read every metric it
+# budget) so a multi-device condition can synchronously read every signal it
 # references, not just the one that just triggered this message.
-_metric_value_cache: dict[tuple[uuid.UUID, str], MetricValue] = {}
+_signal_value_cache: dict[SignalKey, MetricValue] = {}
 
 
 async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
@@ -216,41 +464,38 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
     rules:invalidate pub/sub message. Simple and correct at 500-1000 device
     scale; no need for partial/targeted reload.
     """
-    # rules has RLS, and this reads across every tenant — the same escape
-    # hatch as devices.service.lookup_device_for_auth/lookup_device_by_slug
-    # (see the add_rule_cache_lookup_function migration).
     async with factory() as session:
         result = await session.execute(text("SELECT * FROM list_enabled_rules()"))
         rows = result.mappings().all()
 
-    new_cache: dict[tuple[uuid.UUID, str], list[Rule]] = {}
+    new_cache: dict[SignalKey, list[Rule]] = {}
     for row in rows:
         rule = Rule(
             id=row["id"],
             tenant_id=row["tenant_id"],
-            device_id=row["device_id"],
+            name=row["name"],
+            description=row["description"],
             type=row["type"],
+            trigger=row["trigger"],
             condition=row["condition"],
-            for_duration=row["for_duration"],
-            action=row["action"],
-            cooldown=row["cooldown"],
+            execution_policy=row["execution_policy"],
+            actions=row["actions"],
+            editor_graph=row["editor_graph"],
             enabled=row["enabled"],
         )
-        # Registered under every metric the tree references — not just one —
-        # so a message on any of them triggers re-evaluation of this rule.
-        for metric in referenced_metrics(rule.condition):
-            new_cache.setdefault((rule.device_id, metric), []).append(rule)
+        for signal in referenced_signals(rule.condition):
+            new_cache.setdefault(signal, []).append(rule)
     _rule_cache.clear()
     _rule_cache.update(new_cache)
     log.info("rule cache reloaded: %d active rules", len(rows))
 
 
-def _snapshot_for_device(device_id: uuid.UUID, metrics: set[str]) -> MetricSnapshot:
+def _snapshot_for_signals(signals: set[SignalKey]) -> MetricSnapshot:
     snapshot: MetricSnapshot = {}
-    for metric in metrics:
-        value = _metric_value_cache.get((device_id, metric))
+    for signal in signals:
+        value = _signal_value_cache.get(signal)
         if value is not None:
-            snapshot[metric] = value
+            snapshot[signal] = value
     return snapshot
 
 
@@ -269,35 +514,31 @@ async def evaluate_and_dispatch(
     Runs before the storage-path Redis XADD (see app/worker.py::handle_message)
     — CLAUDE.md §9 constraint 1.
 
-    Both the evaluator call and the dispatch are wrapped defensively: this
+    Both the evaluator call and each dispatch are wrapped defensively: this
     runs inside the single shared MQTT message loop for every device, so one
-    malformed rule or one failed dispatch (a webhook to a dead URL, an MQTT
-    publish error) must never stop evaluation for other rules on this
-    reading, or ingestion for every other device (CLAUDE.md constraint 11,
-    extended to this new hot path).
+    malformed rule or one failed dispatch must never stop evaluation for
+    other rules on this reading, or ingestion for every other device.
     """
-    # Record unconditionally, even if no rule watches this exact metric yet —
-    # a rule referencing it may be created (or another metric's rule may
-    # start referencing it) later, and it should see this value immediately.
-    _metric_value_cache[(device_id, metric)] = MetricValue(value=value, timestamp=timestamp)
+    signal = SignalKey(str(device_id), metric)
+    _signal_value_cache[signal] = MetricValue(value=value, timestamp=timestamp)
 
-    rules = _rule_cache.get((device_id, metric))
+    rules = _rule_cache.get(signal)
     if not rules:
         return
 
     for rule in rules:
-        needed_metrics = referenced_metrics(rule.condition)
-        snapshot = _snapshot_for_device(device_id, needed_metrics)
+        needed = referenced_signals(rule.condition)
+        snapshot = _snapshot_for_signals(needed)
         state = _rule_states.setdefault(rule.id, RuleState())
         try:
-            action = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, timestamp, state)
+            firing = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, timestamp, state)
         except Exception:
             log.exception("evaluator raised for rule %s -- treating as no-fire", rule.id)
             continue
-        if action is None:
+        if firing is None:
             continue
         try:
-            await _dispatch_action(
+            await _dispatch_actions(
                 client,
                 factory,
                 tenant_id,
@@ -306,14 +547,41 @@ async def evaluate_and_dispatch(
                 device_slug,
                 timestamp,
                 snapshot,
-                action,
                 rule,
             )
         except Exception:
             log.exception("dispatch failed for rule %s", rule.id)
 
 
-async def _dispatch_action(
+async def _resolve_target(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    trigger_device_id: uuid.UUID,
+    trigger_tenant_slug: str,
+    trigger_device_slug: str,
+    action_device_id: str | None,
+) -> tuple[uuid.UUID, str, str] | None:
+    """(device_id, tenant_slug, device_slug) for an actuator action's target.
+    None (skip the action) if the target isn't a live device in this tenant.
+    """
+    if not action_device_id or str(action_device_id) == str(trigger_device_id):
+        return trigger_device_id, trigger_tenant_slug, trigger_device_slug
+    async with factory() as session:
+        result = await session.execute(
+            text(
+                "SELECT device_id, tenant_id, tenant_slug, device_slug, status "
+                "FROM lookup_rule_dispatch_targets(:ids)"
+            ),
+            {"ids": [str(action_device_id)]},
+        )
+        row = result.mappings().first()
+    if row is None or row["tenant_id"] != tenant_id or row["status"] != "active":
+        log.warning("dropping actuator action for unusable target device %s", action_device_id)
+        return None
+    return row["device_id"], row["tenant_slug"], row["device_slug"]
+
+
+async def _dispatch_actions(
     client: aiomqtt.Client,
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
@@ -322,44 +590,55 @@ async def _dispatch_action(
     device_slug: str,
     timestamp: datetime,
     snapshot: MetricSnapshot,
-    action: Action,
     rule: Rule,
 ) -> None:
-    if action.action_type == "actuator_command":
-        await commands_service.dispatch_command(
-            client,
-            factory,
-            tenant_id,
-            device_id,
-            action.rule_id,
-            timestamp,
-            tenant_slug,
-            device_slug,
-            actuator=action.payload["actuator"],
-            value=action.payload["value"],
-        )
-    elif action.action_type == "webhook":
+    trigger_device_id = device_id
+    for action in rule.actions:
+        action_type = action.get("type")
         try:
-            async with httpx.AsyncClient(timeout=5) as http_client:
-                await http_client.post(action.payload["url"], json=action.payload.get("body", {}))
+            if action_type == "actuator_command":
+                target = await _resolve_target(
+                    factory,
+                    tenant_id,
+                    device_id,
+                    tenant_slug,
+                    device_slug,
+                    action.get("device_id"),
+                )
+                if target is None:
+                    continue
+                target_id, target_tenant_slug, target_device_slug = target
+                await commands_service.dispatch_command(
+                    client,
+                    factory,
+                    tenant_id,
+                    target_id,
+                    rule.id,
+                    timestamp,
+                    target_tenant_slug,
+                    target_device_slug,
+                    actuator=action["actuator"],
+                    value=action["value"],
+                )
+            elif action_type == "webhook":
+                async with httpx.AsyncClient(timeout=5) as http_client:
+                    await http_client.post(action["url"], json=action.get("body", {}))
+            elif action_type != "notification":
+                log.warning("unknown action type %r for rule %s", action_type, rule.id)
         except httpx.HTTPError as exc:
-            log.warning("webhook dispatch failed for rule %s: %s", action.rule_id, exc)
-    else:
-        log.warning("unknown action type %r for rule %s", action.action_type, action.rule_id)
+            log.warning("webhook dispatch failed for rule %s: %s", rule.id, exc)
+        except Exception:
+            log.exception("action %r failed for rule %s", action_type, rule.id)
 
-    # A notification row is written for every firing, regardless of the
-    # rule's configured action — this is what answers "did anything cross a
-    # threshold" (UX_UI_Description.md), not just rules explicitly configured
-    # to notify. `notification`-type actions use their own custom message
-    # verbatim; every other action type gets an auto-generated one.
-    message = (
-        action.payload["message"]
-        if action.action_type == "notification"
-        else _default_message(rule, snapshot)
-    )
+    # A notification row is written for every firing regardless of the rule's
+    # configured actions — this is what answers "did anything cross a
+    # threshold". A `notification`-type action supplies its own message;
+    # otherwise one is auto-generated.
+    notif = next((a for a in rule.actions if a.get("type") == "notification"), None)
+    message = notif["message"] if notif is not None else _default_message(rule, snapshot)
     try:
         await notifications_service.create_notification(
-            factory, tenant_id, device_id, action.rule_id, message
+            factory, tenant_id, trigger_device_id, rule.id, message
         )
     except Exception:
-        log.exception("notification write failed for rule %s", action.rule_id)
+        log.exception("notification write failed for rule %s", rule.id)

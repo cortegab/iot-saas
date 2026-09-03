@@ -22,7 +22,7 @@ import type { ChartThreshold } from "@/components/chart/TrendChart";
 import { RuleList } from "@/components/rules/RuleList";
 import { ActuatorControl } from "@/components/actuators/ActuatorControl";
 import { CommandHistory } from "@/components/actuators/CommandHistory";
-import { leafPredicates, parseAction, ruleSummaryText } from "@/components/rules/RuleSummary";
+import { leafPredicates } from "@/components/rules/RuleSummary";
 import { buildSketch } from "@/lib/firmware-sketch";
 import { ApiRequestError } from "@/lib/api-client";
 import { wireId } from "@/lib/wire-id";
@@ -134,11 +134,18 @@ function ActuatorStateSummary({ deviceId }: { deviceId: string }) {
   const actuators = useMemo(() => {
     const set = new Set<string>();
     for (const rule of rules ?? []) {
-      const action = parseAction(rule.action);
-      if (action?.type === "actuator_command") set.add(action.actuator);
+      for (const raw of rule.actions) {
+        if (
+          raw.type === "actuator_command" &&
+          typeof raw.actuator === "string" &&
+          (raw.device_id == null || raw.device_id === deviceId)
+        ) {
+          set.add(raw.actuator);
+        }
+      }
     }
     return Array.from(set);
-  }, [rules]);
+  }, [rules, deviceId]);
 
   if (rulesLoading) return <LoadingSkeleton rows={1} rowClassName="h-16" />;
   if (actuators.length === 0) return null;
@@ -226,10 +233,12 @@ function ActiveRulesRail({
           {active.map((rule) => (
             <li
               key={rule.id}
-              className="flex items-start gap-2 border-t border-border py-2 text-sm first:border-t-0"
+              className="flex items-center gap-2 border-t border-border py-2 text-sm first:border-t-0"
             >
-              <span aria-hidden className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-status-online" />
-              <span className="text-ink">{ruleSummaryText(rule)}</span>
+              <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-status-online" />
+              <Link href={`/rules/${rule.id}`} className="text-ink hover:text-accent">
+                {rule.name}
+              </Link>
             </li>
           ))}
         </ul>
@@ -432,6 +441,13 @@ export default function DeviceDetailPage() {
   const { data: device, error, isLoading, mutate } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
   // Same SWR key RuleList/ActuatorControl fetch — shared cache, one request.
   const { data: rules } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
+  // Same key CurrentReadings/DeviceTrendChart fetch — deduped. Lets the Overview
+  // tab show one "no readings" state instead of the readout and chart each
+  // rendering their own.
+  const { data: latest, isLoading: latestLoading } = useApiSWR<TelemetryLatestResponse[]>(
+    `/devices/${deviceId}/latest`,
+  );
+  const hasReadings = (latest?.length ?? 0) > 0;
   // Same key DeviceTopics fetches — deduped. Gives readings their unit + decimals.
   const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(
     device ? `/catalog/${device.catalog_entry_id}` : null,
@@ -446,6 +462,9 @@ export default function DeviceDetailPage() {
     for (const rule of rules ?? []) {
       if (!rule.enabled) continue;
       for (const leaf of leafPredicates(rule.condition)) {
+        // A multi-device rule may read another device's metric — only this
+        // device's leaves belong on this device's chart.
+        if (leaf.device_id != null && leaf.device_id !== deviceId) continue;
         (map[leaf.metric] ??= []).push({
           value: leaf.threshold,
           label: `${leaf.operator} ${leaf.threshold}`,
@@ -453,7 +472,7 @@ export default function DeviceDetailPage() {
       }
     }
     return map;
-  }, [rules]);
+  }, [rules, deviceId]);
 
   const [renaming, setRenaming] = useState(false);
   const [name, setName] = useState("");
@@ -526,12 +545,21 @@ export default function DeviceDetailPage() {
       <TabPanel id="overview" active={tab}>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="flex flex-col gap-6">
-            <CurrentReadings
-              deviceId={deviceId}
-              thresholdsByMetric={thresholdsByMetric}
-              metricMeta={metricMetaByWireId}
-            />
-            <DeviceTrendChart deviceId={deviceId} thresholdsByMetric={thresholdsByMetric} />
+            {!latestLoading && !hasReadings ? (
+              <EmptyState
+                title="No readings yet"
+                description="Once this device publishes telemetry, its latest values and trend chart appear here."
+              />
+            ) : (
+              <>
+                <CurrentReadings
+                  deviceId={deviceId}
+                  thresholdsByMetric={thresholdsByMetric}
+                  metricMeta={metricMetaByWireId}
+                />
+                <DeviceTrendChart deviceId={deviceId} thresholdsByMetric={thresholdsByMetric} />
+              </>
+            )}
             <ActuatorStateSummary deviceId={deviceId} />
           </div>
           <div className="flex flex-col gap-4">

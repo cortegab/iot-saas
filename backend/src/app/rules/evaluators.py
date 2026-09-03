@@ -9,10 +9,12 @@ is what keeps the hot path fast and what makes exhaustive testing cheap —
 there is no excuse for skipping it (see tests/unit/test_rule_evaluators.py).
 
 A condition is a tree of predicates (rules/schemas.py's ConditionLeaf/
-ConditionGroup, stored as opaque JSONB on Rule.condition). Per-leaf hysteresis
-stabilizes each predicate's own boolean contribution (a Schmitt-trigger
-latch); `for_duration`/`cooldown` then gate the *combined* tree result at the
-rule level, exactly as the old single-metric evaluator gated one comparison.
+ConditionGroup, stored as opaque JSONB on Rule.condition). Each leaf names its
+own `device_id`, so a tree can span several devices; the snapshot is keyed by
+`(device_id, metric)`. Per-leaf hysteresis stabilizes each predicate's own
+boolean contribution (a Schmitt-trigger latch); `execution_policy`'s
+`for_duration` / `cooldown` then gate the *combined* tree result, and
+`strategy` decides how a fired rule re-arms.
 """
 
 import operator as op_module
@@ -33,12 +35,15 @@ _COMPARATORS: dict[str, Callable[[float, float], bool]] = {
     "!=": op_module.ne,
 }
 
-# A cached metric value older than this is treated as unmet (fail closed) —
-# matches devices.device_offline_after_seconds, the existing online/offline
-# threshold: a predicate goes stale at the same moment the device itself
-# would show "offline". A rule can't fire on a device that's only partially
-# reporting.
+# A cached value older than this is treated as unmet (fail closed) — matches
+# devices.device_offline_after_seconds, the existing online/offline threshold.
+# Phase 2 replaces this with a per-metric expected-interval derived value.
 STALE_METRIC_AGE_SECONDS = 90
+
+
+class SignalKey(NamedTuple):
+    device_id: str
+    metric: str
 
 
 class MetricValue(NamedTuple):
@@ -46,7 +51,7 @@ class MetricValue(NamedTuple):
     timestamp: datetime
 
 
-MetricSnapshot = dict[str, MetricValue]
+MetricSnapshot = dict[SignalKey, MetricValue]
 
 
 @dataclass
@@ -72,18 +77,18 @@ class RuleState:
     armed: bool = True
     last_fired_at: datetime | None = None
     leaf_states: dict[tuple[int, ...], LeafState] = field(default_factory=dict)
+    # Only used when strategy == "reset_condition".
+    reset_leaf_states: dict[tuple[int, ...], LeafState] = field(default_factory=dict)
 
 
-class Action(NamedTuple):
+class Firing(NamedTuple):
     rule_id: uuid.UUID
-    action_type: str
-    payload: dict[str, Any]
 
 
 class Evaluator(Protocol):
     def evaluate(
         self, rule: Rule, snapshot: MetricSnapshot, now: datetime, state: RuleState
-    ) -> Action | None: ...
+    ) -> Firing | None: ...
 
 
 def _compare(value: float, operator: str, threshold: float) -> bool:
@@ -109,17 +114,21 @@ def _rearm_condition_met(
     return not condition_true
 
 
-def referenced_metrics(condition: dict[str, Any]) -> set[str]:
-    """Every metric name referenced anywhere in a condition tree — used both
-    to register a rule under every metric it watches (rules/service.py's
-    load_rule_cache) and to know which snapshot entries a rule needs when
-    evaluating (evaluate_and_dispatch).
+def _leaf_signal(leaf: dict[str, Any]) -> SignalKey:
+    return SignalKey(str(leaf["device_id"]), leaf["metric"])
+
+
+def referenced_signals(condition: dict[str, Any]) -> set[SignalKey]:
+    """Every (device_id, metric) referenced anywhere in a condition tree —
+    used both to register a rule under every signal it watches
+    (rules/service.py's load_rule_cache) and to know which snapshot entries a
+    rule needs when evaluating (evaluate_and_dispatch).
     """
     if condition["kind"] == "leaf":
-        return {condition["metric"]}
-    out: set[str] = set()
+        return {_leaf_signal(condition)}
+    out: set[SignalKey] = set()
     for child in condition["predicates"]:
-        out |= referenced_metrics(child)
+        out |= referenced_signals(child)
     return out
 
 
@@ -133,7 +142,7 @@ def _evaluate_leaf(
     value evaluates False without touching the latch — a device that stops
     reporting one metric can't leave a predicate permanently stuck true.
     """
-    metric_value = snapshot.get(leaf["metric"])
+    metric_value = snapshot.get(_leaf_signal(leaf))
     if (
         metric_value is None
         or (now - metric_value.timestamp).total_seconds() > STALE_METRIC_AGE_SECONDS
@@ -171,28 +180,45 @@ def _evaluate_node(
 
 
 class ThresholdEvaluator:
-    """The only Evaluator implemented in Phase 3 (CLAUDE.md §5's `type:
+    """The only Evaluator implemented this phase (CLAUDE.md §5's `type:
     "threshold"`). `state` is mutated in place — that mutation *is* the pure
-    contract described above, not a violation of it: nothing outside this
-    function's own arguments (rule, snapshot, now, state) is read or written,
-    and there is no I/O anywhere in this call.
+    contract (no I/O, nothing outside the four arguments touched), not a
+    violation of it.
 
-    Control flow mirrors the single-metric evaluator this replaced almost
-    line-for-line: duration-hold -> armed-check -> cooldown-check -> fire. The
-    only structural change is that the single scalar comparison becomes a
-    recursive tree evaluation (_evaluate_node); per-leaf hysteresis already
-    debounces rapid dithering before this level ever sees it, so rule-level
-    re-arm (`armed`) is now pure edge-detection, no magnitude check needed
-    here.
+    Control flow: tree eval -> re-arm -> duration-hold -> armed-check ->
+    cooldown-check -> fire. Per-leaf hysteresis already debounces rapid
+    dithering, so rule-level `armed` is pure edge-detection.
+
+    `strategy` decides re-arm:
+      - "edge" (default): re-arm once the combined tree goes false again.
+      - "continuous": re-arm every evaluation (fire repeatedly, subject to
+        `cooldown`).
+      - "reset_condition": stay disarmed until `policy["reset_condition"]`
+        evaluates true (independent of the tree going false).
     """
 
     def evaluate(
         self, rule: Rule, snapshot: MetricSnapshot, now: datetime, state: RuleState
-    ) -> Action | None:
+    ) -> Firing | None:
+        policy = rule.execution_policy
+        strategy: str = policy.get("strategy", "edge")
+        for_duration: int = policy.get("for_duration", 0)
+        cooldown: int = policy.get("cooldown", 0)
+
         tree_true = _evaluate_node(rule.condition, snapshot, now, state.leaf_states, ())
 
-        if not state.armed and not tree_true:
-            state.armed = True
+        if not state.armed:
+            if strategy == "continuous":
+                state.armed = True
+            elif strategy == "reset_condition":
+                reset = policy.get("reset_condition")
+                if reset is not None:
+                    if _evaluate_node(reset, snapshot, now, state.reset_leaf_states, ()):
+                        state.armed = True
+                elif not tree_true:
+                    state.armed = True
+            elif not tree_true:  # "edge"
+                state.armed = True
 
         if not tree_true:
             state.condition_since = None
@@ -201,7 +227,7 @@ class ThresholdEvaluator:
         if state.condition_since is None:
             state.condition_since = now
         held_for = (now - state.condition_since).total_seconds()
-        if held_for < rule.for_duration:
+        if held_for < for_duration:
             return None
 
         if not state.armed:
@@ -209,9 +235,9 @@ class ThresholdEvaluator:
 
         if state.last_fired_at is not None:
             since_last_fire = (now - state.last_fired_at).total_seconds()
-            if since_last_fire < rule.cooldown:
+            if since_last_fire < cooldown:
                 return None
 
         state.armed = False
         state.last_fired_at = now
-        return Action(rule_id=rule.id, action_type=rule.action["type"], payload=rule.action)
+        return Firing(rule_id=rule.id)

@@ -94,7 +94,7 @@ export default function NotificationsPage() {
           primary.push({ label: "View Device", onClick: () => router.push(`/devices/${n.device_id}`) });
         }
         if (n.rule_id) {
-          primary.push({ label: "View Rule", onClick: () => router.push("/rules") });
+          primary.push({ label: "View Rule", onClick: () => router.push(`/rules/${n.rule_id}`) });
         }
         const items: DropdownMenuItem[][] = [];
         if (primary.length > 0) items.push(primary);
