@@ -18,16 +18,37 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { Table, type TableColumn } from "@/components/ui/Table";
+import { TableNameCell } from "@/components/ui/TableNameCell";
 import { ApiRequestError } from "@/lib/api-client";
-import { RuleSummary, leafPredicates } from "@/components/rules/RuleSummary";
 import type { components } from "@/types/api";
 
-type RuleWithDeviceResponse = components["schemas"]["RuleWithDeviceResponse"];
+type RuleResponse = components["schemas"]["RuleResponse"];
+
+/** Unique devices a rule touches, in a stable order. */
+function ruleDevices(rule: RuleResponse): { id: string; name: string }[] {
+  const seen = new Map<string, string>();
+  for (const d of rule.devices) {
+    if (!seen.has(d.device_id)) seen.set(d.device_id, d.device_name ?? "Unnamed device");
+  }
+  return Array.from(seen, ([id, name]) => ({ id, name }));
+}
+
+function DeviceLine({ devices }: { devices: { id: string; name: string }[] }) {
+  if (devices.length === 0) return <span className="text-xs text-ink-muted">no devices</span>;
+  const shown = devices.slice(0, 3);
+  const extra = devices.length - shown.length;
+  return (
+    <span className="text-xs text-ink-muted">
+      {shown.map((d) => d.name).join(" · ")}
+      {extra > 0 && ` +${extra}`}
+    </span>
+  );
+}
 
 export default function RulesPage() {
   const api = useApi();
   const router = useRouter();
-  const { data: rules, error, isLoading, mutate } = useApiSWR<RuleWithDeviceResponse[]>("/rules");
+  const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>("/rules");
   const isAdmin = useIsAdmin();
   const { confirm, dialog } = useConfirm();
   const [filter, setFilter] = useState("");
@@ -36,32 +57,36 @@ export default function RulesPage() {
 
   const deviceOptions = useMemo(() => {
     const map = new Map<string, string>();
-    for (const r of rules ?? []) map.set(r.device_id, r.device_name);
-    return Array.from(map, ([value, label]) => ({ value, label }));
+    for (const r of rules ?? []) {
+      for (const d of ruleDevices(r)) map.set(d.id, d.name);
+    }
+    return Array.from(map, ([value, label]) => ({ value, label })).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
   }, [rules]);
 
   const filtered = useMemo(() => {
     if (!rules) return [];
     const q = filter.trim().toLowerCase();
     return rules.filter((r) => {
-      if (deviceFilter !== "all" && r.device_id !== deviceFilter) return false;
+      const devices = ruleDevices(r);
+      if (deviceFilter !== "all" && !devices.some((d) => d.id === deviceFilter)) return false;
       if (!q) return true;
       return (
-        leafPredicates(r.condition).some((leaf) => leaf.metric.toLowerCase().includes(q)) ||
-        r.device_name.toLowerCase().includes(q)
+        r.name.toLowerCase().includes(q) ||
+        devices.some((d) => d.name.toLowerCase().includes(q))
       );
     });
   }, [rules, filter, deviceFilter]);
 
-  // A rule's own device page caches its rules under a different SWR key
-  // (`/devices/{id}/rules`) — revalidate that too so it isn't left stale if
-  // the user navigates there next.
-  function onChanged(rule: RuleWithDeviceResponse) {
+  // A rule's device pages cache their rules under a different SWR key
+  // (`/devices/{id}/rules`) — revalidate each so none is left stale.
+  function onChanged(rule: RuleResponse) {
     void mutate();
-    void revalidate(`/devices/${rule.device_id}/rules`);
+    for (const d of rule.devices) void revalidate(`/devices/${d.device_id}/rules`);
   }
 
-  async function toggleEnabled(rule: RuleWithDeviceResponse) {
+  async function toggleEnabled(rule: RuleResponse) {
     setActionError(null);
     try {
       await api.patch(`/rules/${rule.id}`, { enabled: !rule.enabled });
@@ -71,7 +96,7 @@ export default function RulesPage() {
     }
   }
 
-  async function remove(rule: RuleWithDeviceResponse) {
+  async function remove(rule: RuleResponse) {
     if (!(await confirm("Delete this rule? This cannot be undone."))) return;
     setActionError(null);
     try {
@@ -82,25 +107,25 @@ export default function RulesPage() {
     }
   }
 
-  const columns: TableColumn<RuleWithDeviceResponse>[] = [
+  const columns: TableColumn<RuleResponse>[] = [
     {
       header: "Rule",
       render: (r) => (
-        <div className="flex flex-col gap-0.5">
-          <RuleSummary rule={r} />
-          <span className="text-xs text-ink-muted">
-            on{" "}
-            <Link href={`/devices/${r.device_id}`} className="hover:text-ink">
-              {r.device_name}
-            </Link>
-          </span>
-        </div>
+        <TableNameCell
+          href={`/rules/${r.id}`}
+          name={r.name}
+          sublabel={<DeviceLine devices={ruleDevices(r)} />}
+        />
       ),
     },
     {
       header: "Status",
       render: (r) => (
-        <Badge tone={r.enabled ? "online" : "unknown"} variant="dot" label={r.enabled ? "Enabled" : "Disabled"} />
+        <Badge
+          tone={r.enabled ? "online" : "unknown"}
+          variant="dot"
+          label={r.enabled ? "Enabled" : "Disabled"}
+        />
       ),
     },
   ];
@@ -116,7 +141,7 @@ export default function RulesPage() {
             { label: "Delete", danger: true, onClick: () => void remove(r) },
           ],
         ];
-        return <DropdownMenu groups={items} label={`Actions for rule on ${r.device_name}`} />;
+        return <DropdownMenu groups={items} label={`Actions for ${r.name}`} />;
       },
     });
   }
@@ -144,7 +169,7 @@ export default function RulesPage() {
             type="search"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by metric or device…"
+            placeholder="Filter by name or device…"
           />
           <Select
             compact
@@ -174,7 +199,7 @@ export default function RulesPage() {
       {rules && rules.length === 0 && (
         <EmptyState
           title="No rules yet"
-          description="Rules watch a metric and fire an action when it crosses a threshold."
+          description="Rules watch metrics and fire an action when a condition is met."
           action={
             isAdmin ? (
               <Link href="/rules/new" className={buttonClassName({ variant: "ghost" })}>

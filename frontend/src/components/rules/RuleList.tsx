@@ -6,14 +6,14 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Table, type TableColumn } from "@/components/ui/Table";
+import { TableNameCell } from "@/components/ui/TableNameCell";
 import { ApiRequestError } from "@/lib/api-client";
-import { RuleSummary } from "@/components/rules/RuleSummary";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 
 const COLUMNS: TableColumn<RuleResponse>[] = [
-  { header: "Rule", render: (r) => <RuleSummary rule={r} /> },
+  { header: "Rule", render: (r) => <TableNameCell href={`/rules/${r.id}`} name={r.name} /> },
   {
     header: "Status",
     render: (r) => (
@@ -22,8 +22,8 @@ const COLUMNS: TableColumn<RuleResponse>[] = [
   },
 ];
 
-/** Read-only: this device's rules are managed from /rules (or /rules/new for
- * creation) — this list just shows what's currently applied. */
+/** This device's rules, applied here but managed from /rules — each row links
+ * to the rule editor; there's no inline enable/delete on the device page. */
 export function RuleList({ deviceId }: { deviceId: string }) {
   const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
 

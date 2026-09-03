@@ -464,3 +464,68 @@ async def test_disabled_rule_excluded_from_cache(
     )
 
     mock_mqtt_client.publish.assert_not_called()
+
+
+async def test_cross_device_actuator_command_targets_other_device(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    """A rule triggered by device A's metric commands device B's actuator —
+    the dispatcher resolves B's topic slugs via lookup_rule_dispatch_targets.
+    """
+    owner = await _register(client, "ownerXdev@example.com", "AcmeXdev")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+
+    device_a = await _create_device(client, headers)
+    catalog_entry_id = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+    resp_b = await client.post(
+        "/devices", json={"name": "Actuator Box", "catalog_entry_id": catalog_entry_id}, headers=headers
+    )
+    device_b = resp_b.json()
+    a_id = device_a["device"]["id"]
+    a_slug = device_a["device"]["slug"]
+    b_id = device_b["device"]["id"]
+    b_slug = device_b["device"]["slug"]
+
+    rule_body = {
+        "name": "A hot -> B fan",
+        "condition": {
+            "kind": "leaf",
+            "device_id": a_id,
+            "metric": "temperature",
+            "operator": ">",
+            "threshold": 30.0,
+        },
+        "actions": [
+            {"type": "actuator_command", "device_id": b_id, "actuator": "fan1", "value": True}
+        ],
+    }
+    assert (await client.post("/rules", json=rule_body, headers=headers)).status_code == 201
+
+    await rules_service.load_rule_cache(app_session_factory)
+    tenant_slug = await _tenant_slug(admin_session, tenant_id)
+
+    await rules_service.evaluate_and_dispatch(
+        mock_mqtt_client,
+        app_session_factory,
+        uuid.UUID(tenant_id),
+        uuid.UUID(a_id),
+        tenant_slug,
+        a_slug,
+        "temperature",
+        35.0,
+        datetime.now(UTC),
+    )
+
+    assert mock_mqtt_client.publish.call_count == 2
+    cmd_call = mock_mqtt_client.publish.call_args_list[0]
+    assert cmd_call.args[0] == f"{tenant_slug}/{b_slug}/cmd/fan1"
+
+    result = await admin_session.execute(
+        select(Command).where(Command.device_id == uuid.UUID(b_id))
+    )
+    command = result.scalar_one()
+    assert command.actuator == "fan1"

@@ -1,12 +1,15 @@
 "use client";
 
 /**
- * Builds/edits a *flat* condition: N predicate rows combined by one top-level
- * AND/OR toggle — not a nested group builder (a deliberate v1 scope cut: the
- * backend's condition tree is fully recursive, but a nested group-editor UI
- * is a substantially bigger frontend task than the requirement needed). A
- * rule whose condition is a real nested tree (only reachable via direct API
- * use) falls back to a read-only view here — see NotFlatConditionNotice.
+ * Builds/edits a rule whose condition is a *flat* list of predicate rows
+ * combined by one top-level AND/OR toggle — but each row can read a metric
+ * from a *different device*, and the action can target a different device
+ * again (the multi-device rule engine). A rule whose condition is a real
+ * nested tree (only reachable via direct API use) falls back to a read-only
+ * view here — see NotFlatConditionNotice.
+ *
+ * Nested group editing is still a deliberate scope cut (the visual builder is
+ * the place for that); this form covers "IF A.x AND B.y THEN command D".
  */
 
 import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from "react";
@@ -31,32 +34,26 @@ type RuleResponse = components["schemas"]["RuleResponse"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogActuator = components["schemas"]["CatalogActuator"];
-type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 type ActionType = "actuator_command" | "notification" | "webhook";
 type ValueKind = "boolean" | "number" | "text";
 type Combinator = "AND" | "OR";
 
 interface LeafDraft {
+  /** Stable client-only key so a per-row disclosure's state doesn't leak to
+   * a neighbour when a row above it is removed. Never sent. */
+  uid: string;
+  deviceId: string;
   metric: string;
   operator: string;
   threshold: number;
   hysteresis: number;
 }
 
-/** A selectable metric/actuator: `id` is the stable wire identifier stored
- * on the rule (catalog `key`, falling back to a slugified `name` for legacy
- * entries), `label` is the pretty catalog `name` shown in the dropdown. */
 interface WireOption {
   id: string;
   label: string;
 }
 
-function addOption(options: Map<string, string>, id: string, label: string): void {
-  if (!options.has(id)) options.set(id, label);
-}
-
-// Backend `_OPERATOR_PATTERN` is `^(>|>=|<|<=|==|!=)$` — no "crosses above/below"
-// edge-trigger operators, so the prototype's extra comparisons aren't offered.
 const OPERATORS: { value: string; label: string }[] = [
   { value: ">", label: "> above" },
   { value: ">=", label: "≥ at or above" },
@@ -68,7 +65,6 @@ const OPERATORS: { value: string; label: string }[] = [
 
 const SECTION_LABEL = "text-xs font-medium uppercase tracking-wide text-ink-muted";
 
-// CatalogActuator.value_type → the value control shown for it.
 const TYPE_TO_KIND: Record<CatalogActuator["value_type"], ValueKind> = {
   bool: "boolean",
   float: "number",
@@ -80,57 +76,72 @@ const VALUE_TYPE_WORD: Record<CatalogActuator["value_type"], string> = {
   string: "text",
 };
 
-// Safe, non-zero starting points (UX_UI_Description.md §6: "their defaults
-// must be safe rather than zero. This is a hardware-safety requirement, not
-// a preference") — a user can still weaken them, but never by one click.
+// Safe, non-zero starting points (a hardware-safety requirement).
 const DEFAULT_FOR_DURATION = 10;
 const DEFAULT_HYSTERESIS = 1;
 const DEFAULT_COOLDOWN = 60;
+
+function newUid(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : String(Math.random());
+}
+
+function emptyPredicate(deviceId: string): LeafDraft {
+  return {
+    uid: newUid(),
+    deviceId,
+    metric: "",
+    operator: ">",
+    threshold: 0,
+    hysteresis: DEFAULT_HYSTERESIS,
+  };
+}
 
 function isFlatCondition(condition: ConditionNode): boolean {
   return condition.kind === "leaf" || condition.predicates.every((p) => p.kind === "leaf");
 }
 
-function draftsFromCondition(condition: ConditionNode): { predicates: LeafDraft[]; combinator: Combinator } {
-  if (condition.kind === "leaf") {
-    return {
-      predicates: [
-        {
-          metric: condition.metric,
-          operator: condition.operator,
-          threshold: condition.threshold,
-          hysteresis: condition.hysteresis,
-        },
-      ],
-      combinator: "AND",
-    };
-  }
+function leafDevice(leaf: ConditionLeaf, fallback: string): string {
+  const raw = (leaf as { device_id?: string | null }).device_id;
+  return typeof raw === "string" && raw ? raw : fallback;
+}
+
+function draftsFromCondition(
+  condition: ConditionNode,
+  fallbackDevice: string,
+): { predicates: LeafDraft[]; combinator: Combinator } {
+  const toDraft = (leaf: ConditionLeaf): LeafDraft => ({
+    uid: newUid(),
+    deviceId: leafDevice(leaf, fallbackDevice),
+    metric: leaf.metric,
+    operator: leaf.operator,
+    threshold: leaf.threshold,
+    hysteresis: leaf.hysteresis,
+  });
+  if (condition.kind === "leaf") return { predicates: [toDraft(condition)], combinator: "AND" };
   return {
-    predicates: (condition.predicates as ConditionLeaf[]).map((leaf) => ({
-      metric: leaf.metric,
-      operator: leaf.operator,
-      threshold: leaf.threshold,
-      hysteresis: leaf.hysteresis,
-    })),
+    predicates: (condition.predicates as ConditionLeaf[]).map(toDraft),
     combinator: condition.op,
   };
 }
 
 function buildCondition(predicates: LeafDraft[], combinator: Combinator): ConditionNode {
-  const leaves: ConditionLeaf[] = predicates.map((p) => ({
-    kind: "leaf",
-    metric: p.metric,
-    operator: p.operator,
-    threshold: p.threshold,
-    hysteresis: p.hysteresis,
-  }));
+  const leaves = predicates.map(
+    (p) =>
+      ({
+        kind: "leaf",
+        device_id: p.deviceId,
+        metric: p.metric,
+        operator: p.operator,
+        threshold: p.threshold,
+        hysteresis: p.hysteresis,
+      }) as ConditionLeaf,
+  );
   if (leaves.length === 1) return leaves[0];
   return { kind: "group", op: combinator, predicates: leaves };
 }
 
-/** A hardware-safety number field: the amber note when the value dips below a
- * recommended minimum is advisory — the backend re-validates `ge=0` and this
- * never blocks submit. */
 function NumberSafetyField({
   label,
   hint,
@@ -170,84 +181,161 @@ function NumberSafetyField({
   );
 }
 
+function DeviceSelect({
+  value,
+  devices,
+  onChange,
+  ariaLabel,
+}: {
+  value: string;
+  devices: DeviceResponse[];
+  onChange: (id: string) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <Select compact aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="" disabled>
+        Choose a device…
+      </option>
+      {devices.map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.name}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+function MetricControl({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: WireOption[];
+  onChange: (metric: string) => void;
+}) {
+  if (options.length === 0) {
+    return (
+      <Input
+        compact
+        placeholder="metric name"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    );
+  }
+  return (
+    <Select compact value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="" disabled>
+        Choose a metric…
+      </option>
+      {options.map((m) => (
+        <option key={m.id} value={m.id}>
+          {m.label}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
 function PredicateRow({
   predicate,
+  devices,
   metricOptions,
   onChange,
   onRemove,
   removable,
 }: {
   predicate: LeafDraft;
+  devices: DeviceResponse[];
   metricOptions: WireOption[];
   onChange: (next: LeafDraft) => void;
   onRemove: () => void;
   removable: boolean;
 }) {
+  const [showAdvanced, setShowAdvanced] = useState(predicate.hysteresis > 0);
+
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1.6fr_1.3fr_1fr_1fr_auto]">
-      <Field label="Metric">
-        {metricOptions.length > 0 ? (
-          <Select compact value={predicate.metric} onChange={(e) => onChange({ ...predicate, metric: e.target.value })}>
-            <option value="" disabled>
-              Choose a metric…
-            </option>
-            {metricOptions.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1.5fr_1.5fr_1.2fr_1fr_auto]">
+        <Field label="Device">
+          <DeviceSelect
+            ariaLabel="Condition device"
+            value={predicate.deviceId}
+            devices={devices}
+            onChange={(deviceId) => onChange({ ...predicate, deviceId, metric: "" })}
+          />
+        </Field>
+        <Field label="Metric">
+          <MetricControl
+            value={predicate.metric}
+            options={metricOptions}
+            onChange={(metric) => onChange({ ...predicate, metric })}
+          />
+        </Field>
+        <Field label="Comparison">
+          <Select
+            compact
+            value={predicate.operator}
+            onChange={(e) => onChange({ ...predicate, operator: e.target.value })}
+          >
+            {OPERATORS.map((op) => (
+              <option key={op.value} value={op.value}>
+                {op.label}
               </option>
             ))}
           </Select>
-        ) : (
-          <span className="rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-ink-muted">
-            No metrics declared
-          </span>
+        </Field>
+        <Field label="Threshold">
+          <Input
+            compact
+            type="number"
+            step="any"
+            value={predicate.threshold}
+            onChange={(e) => onChange({ ...predicate, threshold: Number(e.target.value) })}
+          />
+        </Field>
+        {removable && (
+          <div className="flex items-end">
+            <Button type="button" variant="destructive" onClick={onRemove}>
+              Remove
+            </Button>
+          </div>
         )}
-      </Field>
-      <Field label="Comparison">
-        <Select compact value={predicate.operator} onChange={(e) => onChange({ ...predicate, operator: e.target.value })}>
-          {OPERATORS.map((op) => (
-            <option key={op.value} value={op.value}>
-              {op.label}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Threshold">
-        <Input
-          compact
-          type="number"
-          step="any"
-          value={predicate.threshold}
-          onChange={(e) => onChange({ ...predicate, threshold: Number(e.target.value) })}
-        />
-      </Field>
-      <Field
-        label="Hysteresis"
-        hint="How far the reading must fall back past the threshold before the rule can fire again."
-      >
-        <Input
-          compact
-          type="number"
-          min={0}
-          step="any"
-          value={predicate.hysteresis}
-          onChange={(e) => onChange({ ...predicate, hysteresis: Number(e.target.value) })}
-        />
-      </Field>
-      {removable && (
-        <div className="flex items-end">
-          <Button type="button" variant="destructive" onClick={onRemove}>
-            Remove
-          </Button>
-        </div>
-      )}
+      </div>
+
+      <div>
+        <Button
+          type="button"
+          variant="ghost"
+          className="text-xs"
+          onClick={() => setShowAdvanced((v) => !v)}
+        >
+          {showAdvanced ? "Hide advanced" : "Advanced"}
+        </Button>
+        {showAdvanced && (
+          <div className="mt-1 max-w-xs">
+            <Field
+              label="Hysteresis"
+              hint="How far this reading must fall back past the threshold before the rule can fire again."
+            >
+              <Input
+                compact
+                type="number"
+                min={0}
+                step="any"
+                value={predicate.hysteresis}
+                onChange={(e) => onChange({ ...predicate, hysteresis: Number(e.target.value) })}
+              />
+            </Field>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-/** Shown instead of the form when an existing rule's condition is a real
- * nested tree — only reachable via direct API use, since this form never
- * builds one. Editing is blocked rather than risk silently flattening it. */
 function NotFlatConditionNotice({ rule, onCancel }: { rule: RuleResponse; onCancel: () => void }) {
   return (
     <Card padding="md">
@@ -271,16 +359,19 @@ export function RuleForm({
   onSaved,
   onCancel,
 }: {
-  deviceId: string;
+  /** Seeds the first condition row and the action target for a new rule.
+   * Optional — the builder stands alone, each row picks its own device. */
+  deviceId?: string;
   existing?: RuleResponse;
-  onSaved: () => void;
+  onSaved: (saved: RuleResponse) => void;
   onCancel: () => void;
 }) {
   if (existing && !isFlatCondition(existing.condition)) {
     return <NotFlatConditionNotice rule={existing} onCancel={onCancel} />;
   }
-
-  return <RuleFormInner deviceId={deviceId} existing={existing} onSaved={onSaved} onCancel={onCancel} />;
+  return (
+    <RuleFormInner deviceId={deviceId} existing={existing} onSaved={onSaved} onCancel={onCancel} />
+  );
 }
 
 function SectionCard({ title, children }: { title: string; children: ReactNode }) {
@@ -300,49 +391,49 @@ function RuleFormInner({
   onSaved,
   onCancel,
 }: {
-  deviceId: string;
+  deviceId?: string;
   existing?: RuleResponse;
-  onSaved: () => void;
+  onSaved: (saved: RuleResponse) => void;
   onCancel: () => void;
 }) {
   const api = useApi();
-  const { data: device } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
-  const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(
-    device ? `/catalog/${device.catalog_entry_id}` : null,
-  );
-  const { data: latest } = useApiSWR<TelemetryLatestResponse[]>(`/devices/${deviceId}/latest`);
+  const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
+  const { data: catalogEntries } = useApiSWR<CatalogEntryResponse[]>("/catalog");
+
+  const deviceList = useMemo(() => devices ?? [], [devices]);
+  const seedDevice = deviceId ?? "";
+
+  const catalogForDevice = useMemo(() => {
+    const catalogById = new Map((catalogEntries ?? []).map((c) => [c.id, c]));
+    const deviceById = new Map(deviceList.map((d) => [d.id, d]));
+    return (id: string): CatalogEntryResponse | undefined => {
+      const dev = deviceById.get(id);
+      return dev ? catalogById.get(dev.catalog_entry_id) : undefined;
+    };
+  }, [catalogEntries, deviceList]);
+
+  const metricOptionsFor = (id: string): WireOption[] => {
+    const opts = new Map<string, string>();
+    for (const m of catalogForDevice(id)?.metrics ?? []) opts.set(wireId(m), m.name);
+    return Array.from(opts, ([optId, label]) => ({ id: optId, label }));
+  };
+  const actuatorOptionsFor = (id: string): WireOption[] => {
+    const opts = new Map<string, string>();
+    for (const a of catalogForDevice(id)?.actuators ?? []) opts.set(wireId(a), a.name);
+    return Array.from(opts, ([optId, label]) => ({ id: optId, label }));
+  };
 
   const initial = useMemo(
-    () => (existing ? draftsFromCondition(existing.condition) : { predicates: [], combinator: "AND" as Combinator }),
-    [existing],
+    () =>
+      existing
+        ? draftsFromCondition(existing.condition, seedDevice)
+        : { predicates: [emptyPredicate(seedDevice)], combinator: "AND" as Combinator },
+    [existing, seedDevice],
   );
-  const [predicates, setPredicates] = useState<LeafDraft[]>(
-    initial.predicates.length > 0
-      ? initial.predicates
-      : [{ metric: "", operator: ">", threshold: 0, hysteresis: DEFAULT_HYSTERESIS }],
-  );
+
+  const [name, setName] = useState(existing?.name ?? "");
+  const [predicates, setPredicates] = useState<LeafDraft[]>(initial.predicates);
   const [combinator, setCombinator] = useState<Combinator>(initial.combinator);
-
-  // Catalog-declared metrics are the primary source (the original
-  // requirement: "each predicate references one metric of the catalog
-  // entry") — falls back to currently-reported telemetry for a device on
-  // the "Legacy" entry (no declared metrics), so undeclared devices aren't
-  // left with an empty picker. Existing predicates' metrics are always
-  // included so editing never silently drops a saved value from the list.
-  // The saved/stored value is the wire id (catalog `key`, or a slugified
-  // `name` for legacy entries) — the dropdown still shows the pretty `name`.
-  const metricOptions = useMemo(() => {
-    const declared = catalogEntry?.metrics ?? [];
-    const options = new Map<string, string>();
-    if (declared.length > 0) {
-      for (const m of declared) addOption(options, wireId(m), m.name);
-    } else {
-      for (const r of latest ?? []) addOption(options, r.metric, r.metric);
-    }
-    for (const p of predicates) if (p.metric) addOption(options, p.metric, p.metric);
-    return Array.from(options, ([id, label]) => ({ id, label }));
-  }, [catalogEntry, latest, predicates]);
-
   const [forDuration, setForDuration] = useState(existing?.for_duration ?? DEFAULT_FOR_DURATION);
   const [cooldown, setCooldown] = useState(existing?.cooldown ?? DEFAULT_COOLDOWN);
   const [enabled, setEnabled] = useState(existing?.enabled ?? true);
@@ -351,26 +442,17 @@ function RuleFormInner({
   const [actionType, setActionType] = useState<ActionType>(
     (existingAction?.type as ActionType) ?? "actuator_command",
   );
+  const [actionDeviceId, setActionDeviceId] = useState(
+    typeof existingAction?.device_id === "string" ? existingAction.device_id : seedDevice,
+  );
   const [actuator, setActuator] = useState(
     typeof existingAction?.actuator === "string" ? existingAction.actuator : "",
   );
 
-  // Same reasoning as metricOptions: the template's declared actuators are
-  // the primary source, plus the current value so editing never silently
-  // drops a saved actuator that's no longer declared.
-  const actuatorOptions = useMemo(() => {
-    const options = new Map<string, string>();
-    for (const a of catalogEntry?.actuators ?? []) addOption(options, wireId(a), a.name);
-    if (actuator) addOption(options, actuator, actuator);
-    return Array.from(options, ([id, label]) => ({ id, label }));
-  }, [catalogEntry, actuator]);
-
-  // The value control is driven by the chosen actuator's declared type. A
-  // manual "value kind" picker only surfaces for an actuator that isn't in
-  // the device's catalog (an old rule referencing a since-removed actuator).
+  const actuatorOptions = actuatorOptionsFor(actionDeviceId);
   const selectedActuator = useMemo(
-    () => (catalogEntry?.actuators ?? []).find((a) => wireId(a) === actuator),
-    [catalogEntry, actuator],
+    () => (catalogForDevice(actionDeviceId)?.actuators ?? []).find((a) => wireId(a) === actuator),
+    [catalogForDevice, actionDeviceId, actuator],
   );
   const catalogControlled = selectedActuator != null;
   const [valueKind, setValueKind] = useState<ValueKind>(
@@ -380,8 +462,10 @@ function RuleFormInner({
         ? "text"
         : "boolean",
   );
-  const effectiveKind: ValueKind = catalogControlled ? TYPE_TO_KIND[selectedActuator.value_type] : valueKind;
-  const showManualKind = catalogEntry !== undefined && actuator.trim() !== "" && !catalogControlled;
+  const effectiveKind: ValueKind = catalogControlled
+    ? TYPE_TO_KIND[selectedActuator.value_type]
+    : valueKind;
+  const showManualKind = actuator.trim() !== "" && !catalogControlled;
   const boolLabels = {
     off: String(selectedActuator?.off_value ?? "Off"),
     on: String(selectedActuator?.on_value ?? "On"),
@@ -408,19 +492,21 @@ function RuleFormInner({
   const [submitting, setSubmitting] = useState(false);
 
   function addPredicate() {
-    setPredicates([
-      ...predicates,
-      { metric: "", operator: ">", threshold: 0, hysteresis: DEFAULT_HYSTERESIS },
-    ]);
+    const last = predicates[predicates.length - 1];
+    setPredicates([...predicates, emptyPredicate(last?.deviceId ?? seedDevice)]);
   }
 
   function buildAction(): Record<string, unknown> | null {
     if (actionType === "actuator_command") {
-      if (!actuator.trim()) return null;
-      // Stored value stays a JS boolean for a bool actuator — on_value/off_value
-      // are display labels only (same as commands/ActuatorControl).
-      const value = effectiveKind === "boolean" ? boolValue : effectiveKind === "number" ? numValue : textValue;
-      return { type: "actuator_command", actuator: actuator.trim(), value };
+      if (!actuator.trim() || !actionDeviceId) return null;
+      const value =
+        effectiveKind === "boolean" ? boolValue : effectiveKind === "number" ? numValue : textValue;
+      return {
+        type: "actuator_command",
+        device_id: actionDeviceId,
+        actuator: actuator.trim(),
+        value,
+      };
     }
     if (actionType === "notification") {
       if (!message.trim()) return null;
@@ -446,8 +532,8 @@ function RuleFormInner({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (predicates.some((p) => !p.metric.trim())) {
-      setError("Every condition needs a metric.");
+    if (predicates.some((p) => !p.metric.trim() || !p.deviceId)) {
+      setError("Every condition needs a device and a metric.");
       return;
     }
     const finalAction = buildAction();
@@ -463,18 +549,16 @@ function RuleFormInner({
     setSubmitting(true);
     try {
       const body = {
+        name: name.trim() || undefined,
         condition: buildCondition(predicates, combinator),
-        for_duration: forDuration,
-        cooldown,
-        action: finalAction,
+        execution_policy: { strategy: "edge", for_duration: forDuration, cooldown },
+        actions: [finalAction],
         enabled,
       };
-      if (existing) {
-        await api.patch(`/rules/${existing.id}`, body);
-      } else {
-        await api.post(`/devices/${deviceId}/rules`, body);
-      }
-      onSaved();
+      const saved = existing
+        ? await api.patch<RuleResponse>(`/rules/${existing.id}`, body)
+        : await api.post<RuleResponse>(`/rules`, body);
+      onSaved(saved);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Couldn't save this rule.");
     } finally {
@@ -483,24 +567,25 @@ function RuleFormInner({
   }
 
   const detectedHint = catalogControlled
-    ? `Detected from “${selectedActuator.name}” — a ${VALUE_TYPE_WORD[selectedActuator.value_type]} actuator, so ${
-        effectiveKind === "boolean" ? "the value is a simple choice" : "the value is typed directly"
-      }.`
+    ? `Detected from “${selectedActuator.name}” — a ${VALUE_TYPE_WORD[selectedActuator.value_type]} actuator.`
     : undefined;
 
   return (
     <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
-      <Card padding="md">
-        <RuleSummary
-          rule={{ condition: previewCondition, for_duration: forDuration, action: previewAction }}
-          placeholder="…"
-          className="text-[15px] leading-relaxed"
-        />
-      </Card>
+      <SectionCard title="Name">
+        <Field label="Rule name" hint="Left blank, a name is generated from the condition.">
+          <Input
+            compact
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Boiler overheat interlock"
+          />
+        </Field>
+      </SectionCard>
 
       <SectionCard title="Condition">
         {predicates.map((predicate, i) => (
-          <Fragment key={i}>
+          <Fragment key={predicate.uid}>
             {i > 0 && (
               <div className="flex items-center gap-3">
                 <span className="h-px flex-1 bg-border" />
@@ -522,7 +607,8 @@ function RuleFormInner({
             )}
             <PredicateRow
               predicate={predicate}
-              metricOptions={metricOptions}
+              devices={deviceList}
+              metricOptions={metricOptionsFor(predicate.deviceId)}
               removable={predicates.length > 1}
               onChange={(next) => setPredicates(predicates.map((p, j) => (i === j ? next : p)))}
               onRemove={() => setPredicates(predicates.filter((_, j) => i !== j))}
@@ -535,9 +621,6 @@ function RuleFormInner({
         </Button>
       </SectionCard>
 
-      {/* Safety fields — protect real hardware from flapping on noisy
-          readings (UX_UI_Description.md §6). Never bypassable: the backend
-          re-validates ge=0 regardless of what this form allows. */}
       <SectionCard title="Flapping protection">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <NumberSafetyField
@@ -557,8 +640,6 @@ function RuleFormInner({
         </div>
       </SectionCard>
 
-      {/* Action — one editor per type; every type must read naturally in the
-          summary above (UX_UI_Description.md §6: "Cover every action type"). */}
       <SectionCard title="Action">
         <SegmentedControl
           ariaLabel="Action type"
@@ -573,7 +654,18 @@ function RuleFormInner({
 
         {actionType === "actuator_command" && (
           <div className="flex flex-col gap-4">
-            <div className={cn("grid grid-cols-1 gap-4", showManualKind && "sm:grid-cols-2")}>
+            <div className={cn("grid grid-cols-1 gap-4", "sm:grid-cols-2")}>
+              <Field label="Device">
+                <DeviceSelect
+                  ariaLabel="Action device"
+                  value={actionDeviceId}
+                  devices={deviceList}
+                  onChange={(id) => {
+                    setActionDeviceId(id);
+                    setActuator("");
+                  }}
+                />
+              </Field>
               <Field label="Actuator">
                 {actuatorOptions.length > 0 ? (
                   <Select compact value={actuator} onChange={(e) => setActuator(e.target.value)}>
@@ -587,24 +679,32 @@ function RuleFormInner({
                     ))}
                   </Select>
                 ) : (
-                  <span className="rounded-md border border-dashed border-border px-3 py-1.5 text-sm text-ink-muted">
-                    No actuators declared
-                  </span>
+                  <Input
+                    compact
+                    placeholder="actuator name"
+                    value={actuator}
+                    onChange={(e) => setActuator(e.target.value)}
+                  />
                 )}
               </Field>
-              {showManualKind && (
-                <Field
-                  label="Value kind"
-                  hint="This actuator isn't in the device template — pick how its value is sent."
-                >
-                  <Select compact value={valueKind} onChange={(e) => setValueKind(e.target.value as ValueKind)}>
-                    <option value="boolean">On / Off</option>
-                    <option value="number">Number</option>
-                    <option value="text">Text</option>
-                  </Select>
-                </Field>
-              )}
             </div>
+
+            {showManualKind && (
+              <Field
+                label="Value kind"
+                hint="This actuator isn't in the device template — pick how its value is sent."
+              >
+                <Select
+                  compact
+                  value={valueKind}
+                  onChange={(e) => setValueKind(e.target.value as ValueKind)}
+                >
+                  <option value="boolean">On / Off</option>
+                  <option value="number">Number</option>
+                  <option value="text">Text</option>
+                </Select>
+              </Field>
+            )}
 
             <Field label="Value" hint={detectedHint}>
               {effectiveKind === "boolean" && (
@@ -674,6 +774,17 @@ function RuleFormInner({
           />
           Enabled
         </label>
+      </Card>
+
+      <Card padding="md">
+        <div className="flex flex-col gap-1">
+          <span className={SECTION_LABEL}>Summary</span>
+          <RuleSummary
+            rule={{ condition: previewCondition, for_duration: forDuration, action: previewAction }}
+            placeholder="…"
+            className="text-[15px] leading-relaxed"
+          />
+        </div>
       </Card>
 
       {error && (
