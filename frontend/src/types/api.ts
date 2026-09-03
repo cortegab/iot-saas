@@ -405,8 +405,8 @@ export interface paths {
         /** List Rules */
         get: operations["list_rules_devices__device_id__rules_get"];
         put?: never;
-        /** Create Rule */
-        post: operations["create_rule_devices__device_id__rules_post"];
+        /** Create Device Rule */
+        post: operations["create_device_rule_devices__device_id__rules_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -423,7 +423,8 @@ export interface paths {
         /** List All Rules */
         get: operations["list_all_rules_rules_get"];
         put?: never;
-        post?: never;
+        /** Create Rule */
+        post: operations["create_rule_rules_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -600,6 +601,8 @@ export interface components {
              * @enum {string}
              */
             type: "actuator_command";
+            /** Device Id */
+            device_id?: string | null;
             /** Actuator */
             actuator: string;
             /** Value */
@@ -820,6 +823,8 @@ export interface components {
              * @enum {string}
              */
             kind: "leaf";
+            /** Device Id */
+            device_id?: string | null;
             /** Metric */
             metric: string;
             /** Operator */
@@ -926,6 +931,38 @@ export interface components {
             connection_state: "online" | "offline" | "never_connected";
         };
         /**
+         * DeviceRuleCreateRequest
+         * @description Backward-compatible single-device create — POST /devices/{id}/rules.
+         *
+         *     Leaves and actuator actions inherit the path device; the pre-multi-device
+         *     `action` / `for_duration` / `cooldown` fields are still accepted.
+         */
+        DeviceRuleCreateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Condition */
+            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"];
+            /**
+             * For Duration
+             * @default 0
+             */
+            for_duration: number;
+            /**
+             * Cooldown
+             * @default 0
+             */
+            cooldown: number;
+            /** Action */
+            action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"]) | null;
+            /** Actions */
+            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[] | null;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+        };
+        /**
          * DeviceStatus
          * @enum {string}
          */
@@ -966,6 +1003,48 @@ export interface components {
         EmqxAuthorizeResponse: {
             /** Result */
             result: string;
+        };
+        /** ExecutionPolicy */
+        "ExecutionPolicy-Input": {
+            /**
+             * Strategy
+             * @default edge
+             * @enum {string}
+             */
+            strategy: "edge" | "continuous" | "reset_condition";
+            /**
+             * For Duration
+             * @default 0
+             */
+            for_duration: number;
+            /**
+             * Cooldown
+             * @default 0
+             */
+            cooldown: number;
+            /** Reset Condition */
+            reset_condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
+        };
+        /** ExecutionPolicy */
+        "ExecutionPolicy-Output": {
+            /**
+             * Strategy
+             * @default edge
+             * @enum {string}
+             */
+            strategy: "edge" | "continuous" | "reset_condition";
+            /**
+             * For Duration
+             * @default 0
+             */
+            for_duration: number;
+            /**
+             * Cooldown
+             * @default 0
+             */
+            cooldown: number;
+            /** Reset Condition */
+            reset_condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"]) | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1030,6 +1109,14 @@ export interface components {
             /** Role */
             role: string;
         };
+        /** MetricTrigger */
+        MetricTrigger: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "metric";
+        };
         /** NotificationAction */
         NotificationAction: {
             /**
@@ -1077,27 +1164,46 @@ export interface components {
             /** Name */
             name?: string | null;
         };
-        /** RuleCreateRequest */
+        /**
+         * RuleCreateRequest
+         * @description Canonical multi-device create — POST /rules.
+         */
         RuleCreateRequest: {
+            /** Name */
+            name: string;
+            /** Description */
+            description?: string | null;
+            /** Trigger */
+            trigger?: components["schemas"]["MetricTrigger"];
             /** Condition */
             condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"];
-            /**
-             * For Duration
-             * @default 0
-             */
-            for_duration: number;
-            /**
-             * Cooldown
-             * @default 0
-             */
-            cooldown: number;
-            /** Action */
-            action: components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"];
+            execution_policy?: components["schemas"]["ExecutionPolicy-Input"];
+            /** Actions */
+            actions: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[];
+            /** Editor Graph */
+            editor_graph?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Enabled
              * @default true
              */
             enabled: boolean;
+        };
+        /** RuleDeviceRef */
+        RuleDeviceRef: {
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "input" | "target";
+            /** Device Name */
+            device_name?: string | null;
         };
         /** RuleResponse */
         RuleResponse: {
@@ -1106,23 +1212,25 @@ export interface components {
              * Format: uuid
              */
             id: string;
-            /**
-             * Device Id
-             * Format: uuid
-             */
-            device_id: string;
+            /** Name */
+            name: string;
+            /** Description */
+            description: string | null;
             /** Type */
             type: string;
-            /** Condition */
-            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"];
-            /** For Duration */
-            for_duration: number;
-            /** Cooldown */
-            cooldown: number;
-            /** Action */
-            action: {
+            /** Trigger */
+            trigger: {
                 [key: string]: unknown;
             };
+            /** Condition */
+            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"];
+            execution_policy: components["schemas"]["ExecutionPolicy-Output"];
+            /** Actions */
+            actions: {
+                [key: string]: unknown;
+            }[];
+            /** Devices */
+            devices: components["schemas"]["RuleDeviceRef"][];
             /** Enabled */
             enabled: boolean;
             /**
@@ -1130,60 +1238,40 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Action */
+            action: {
+                [key: string]: unknown;
+            };
+            /** For Duration */
+            for_duration: number;
+            /** Cooldown */
+            cooldown: number;
         };
         /** RuleUpdateRequest */
         RuleUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Trigger */
+            trigger?: components["schemas"]["MetricTrigger"] | null;
             /** Condition */
             condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
+            execution_policy?: components["schemas"]["ExecutionPolicy-Input"] | null;
+            /** Actions */
+            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[] | null;
+            /** Editor Graph */
+            editor_graph?: {
+                [key: string]: unknown;
+            } | null;
+            /** Enabled */
+            enabled?: boolean | null;
             /** For Duration */
             for_duration?: number | null;
             /** Cooldown */
             cooldown?: number | null;
             /** Action */
             action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"]) | null;
-            /** Enabled */
-            enabled?: boolean | null;
-        };
-        /**
-         * RuleWithDeviceResponse
-         * @description The tenant-wide /rules list needs to say which device each rule
-         *     belongs to — the per-device endpoints don't, since the device is already
-         *     implied by the URL.
-         */
-        RuleWithDeviceResponse: {
-            /**
-             * Id
-             * Format: uuid
-             */
-            id: string;
-            /**
-             * Device Id
-             * Format: uuid
-             */
-            device_id: string;
-            /** Type */
-            type: string;
-            /** Condition */
-            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"];
-            /** For Duration */
-            for_duration: number;
-            /** Cooldown */
-            cooldown: number;
-            /** Action */
-            action: {
-                [key: string]: unknown;
-            };
-            /** Enabled */
-            enabled: boolean;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /** Device Name */
-            device_name: string;
-            /** Device Slug */
-            device_slug: string;
         };
         /** TelemetryDataPoint */
         TelemetryDataPoint: {
@@ -2519,7 +2607,7 @@ export interface operations {
             };
         };
     };
-    create_rule_devices__device_id__rules_post: {
+    create_device_rule_devices__device_id__rules_post: {
         parameters: {
             query?: never;
             header: {
@@ -2533,7 +2621,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["RuleCreateRequest"];
+                "application/json": components["schemas"]["DeviceRuleCreateRequest"];
             };
         };
         responses: {
@@ -2575,7 +2663,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RuleWithDeviceResponse"][];
+                    "application/json": components["schemas"]["RuleResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_rule_rules_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleResponse"];
                 };
             };
             /** @description Validation Error */

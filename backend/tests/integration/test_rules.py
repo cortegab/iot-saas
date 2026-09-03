@@ -52,11 +52,23 @@ async def test_create_rule_returns_rule(client: httpx.AsyncClient) -> None:
     resp = await _create_rule(client, headers, device["device"]["id"])
     assert resp.status_code == 201
     body = resp.json()
-    assert body["device_id"] == device["device"]["id"]
-    assert body["condition"] == {**_TEMPERATURE_CONDITION, "hysteresis": 0.0}
+    device_id = device["device"]["id"]
+    assert "device_id" not in body
+    assert body["condition"]["metric"] == "temperature"
+    assert body["condition"]["operator"] == ">"
+    assert body["condition"]["threshold"] == 30.0
+    assert body["condition"]["hysteresis"] == 0.0
+    assert body["condition"]["device_id"] == device_id
     assert body["type"] == "threshold"
     assert body["enabled"] is True
-    assert body["action"] == _ACTION
+    assert body["action"]["type"] == "actuator_command"
+    assert body["actions"] == [{**_ACTION, "device_id": device_id}]
+    assert body["name"]
+    assert {(d["device_id"], d["role"]) for d in body["devices"]} == {
+        (device_id, "input"),
+        (device_id, "target"),
+    }
+    assert all(d["device_name"] == device["device"]["name"] for d in body["devices"])
 
 
 async def test_list_rules(client: httpx.AsyncClient) -> None:
@@ -248,11 +260,13 @@ async def test_list_all_rules_across_devices(client: httpx.AsyncClient) -> None:
     resp = await client.get("/rules", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert [r["device_name"] for r in body] == ["A Sensor", "B Sensor"]
-    assert body[0]["device_slug"] == device_a["device"]["slug"]
-    assert body[0]["condition"]["metric"] == "temperature"
-    assert body[1]["device_slug"] == device_b["device"]["slug"]
-    assert body[1]["condition"]["metric"] == "humidity"
+    assert len(body) == 2
+    # Ordered by rule name; neither carries a singular device pointer.
+    assert [r["name"] for r in body] == sorted(r["name"] for r in body)
+    assert all("device_id" not in r for r in body)
+    by_metric = {r["condition"]["metric"]: r for r in body}
+    assert {d["device_name"] for d in by_metric["temperature"]["devices"]} == {"A Sensor"}
+    assert {d["device_name"] for d in by_metric["humidity"]["devices"]} == {"B Sensor"}
 
 
 async def test_list_all_rules_tenant_isolation(client: httpx.AsyncClient) -> None:
@@ -289,3 +303,73 @@ async def test_viewer_can_list_all_rules(client: httpx.AsyncClient) -> None:
     resp = await client.get("/rules", headers=viewer_headers)
     assert resp.status_code == 200
     assert len(resp.json()) == 1
+
+
+async def test_create_canonical_multi_device_rule(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner17@example.com", "Acme17")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device_a = await _create_device(client, headers, name="A")
+    device_b = await _create_device(client, headers, name="B")
+    a_id = device_a["device"]["id"]
+    b_id = device_b["device"]["id"]
+
+    body = {
+        "name": "Cross-device interlock",
+        "condition": {
+            "kind": "group",
+            "op": "AND",
+            "predicates": [
+                {"kind": "leaf", "device_id": a_id, "metric": "temperature", "operator": ">", "threshold": 80.0},
+                {"kind": "leaf", "device_id": b_id, "metric": "pressure", "operator": ">", "threshold": 120.0},
+            ],
+        },
+        "execution_policy": {"strategy": "edge", "for_duration": 5, "cooldown": 30},
+        "actions": [
+            {"type": "actuator_command", "device_id": b_id, "actuator": "fan1", "value": True},
+            {"type": "notification", "message": "both breached"},
+        ],
+    }
+    resp = await client.post("/rules", json=body, headers=headers)
+    assert resp.status_code == 201, resp.text
+    rule = resp.json()
+    assert rule["name"] == "Cross-device interlock"
+    assert len(rule["actions"]) == 2
+    assert rule["for_duration"] == 5
+    assert {(d["device_id"], d["role"]) for d in rule["devices"]} == {
+        (a_id, "input"),
+        (b_id, "input"),
+        (b_id, "target"),
+    }
+    # The rule shows up under both input devices.
+    for did in (a_id, b_id):
+        listed = await client.get(f"/devices/{did}/rules", headers=headers)
+        assert any(r["id"] == rule["id"] for r in listed.json())
+
+
+async def test_canonical_rule_rejects_cross_tenant_device(client: httpx.AsyncClient) -> None:
+    owner_a = await _register(client, "owner18@example.com", "Acme18")
+    tenant_a = owner_a["memberships"][0]["tenant_id"]
+    headers_a = _auth_headers(owner_a, tenant_a)
+    device_a = await _create_device(client, headers_a)
+
+    owner_b = await _register(client, "owner19@example.com", "Acme19")
+    tenant_b = owner_b["memberships"][0]["tenant_id"]
+    headers_b = _auth_headers(owner_b, tenant_b)
+    device_b = await _create_device(client, headers_b)
+
+    body = {
+        "name": "sneaky",
+        "condition": {
+            "kind": "leaf",
+            "device_id": device_b["device"]["id"],
+            "metric": "temperature",
+            "operator": ">",
+            "threshold": 1.0,
+        },
+        "actions": [
+            {"type": "actuator_command", "device_id": device_a["device"]["id"], "actuator": "x", "value": True}
+        ],
+    }
+    resp = await client.post("/rules", json=body, headers=headers_a)
+    assert resp.status_code == 422

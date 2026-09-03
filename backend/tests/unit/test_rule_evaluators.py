@@ -16,18 +16,32 @@ from typing import Any
 
 import pytest
 
-from app.rules.evaluators import MetricSnapshot, MetricValue, RuleState, ThresholdEvaluator
+from app.rules.evaluators import (
+    Firing,
+    MetricSnapshot,
+    MetricValue,
+    RuleState,
+    SignalKey,
+    ThresholdEvaluator,
+)
 from app.rules.models import Rule
 
 _EVALUATOR = ThresholdEvaluator()
 _BASE_TIME = datetime(2026, 1, 1, tzinfo=UTC)
+_DEVICE_A = str(uuid.uuid4())
+_DEVICE_B = str(uuid.uuid4())
 
 
 def _leaf(
-    operator: str, threshold: float, hysteresis: float = 0.0, metric: str = "temperature"
+    operator: str,
+    threshold: float,
+    hysteresis: float = 0.0,
+    metric: str = "temperature",
+    device_id: str | None = None,
 ) -> dict[str, Any]:
     return {
         "kind": "leaf",
+        "device_id": device_id or _DEVICE_A,
         "metric": metric,
         "operator": operator,
         "threshold": threshold,
@@ -35,36 +49,51 @@ def _leaf(
     }
 
 
-def _rule(condition: dict[str, Any], for_duration: int = 0, cooldown: int = 0) -> Rule:
+def _rule(
+    condition: dict[str, Any],
+    for_duration: int = 0,
+    cooldown: int = 0,
+    strategy: str = "edge",
+    reset_condition: dict[str, Any] | None = None,
+    actions: list[dict[str, Any]] | None = None,
+) -> Rule:
     return Rule(
         id=uuid.uuid4(),
         tenant_id=uuid.uuid4(),
-        device_id=uuid.uuid4(),
+        name="test rule",
         type="threshold",
+        trigger={"type": "metric"},
         condition=condition,
-        for_duration=for_duration,
-        cooldown=cooldown,
-        action={"type": "actuator_command", "actuator": "fan1", "value": True},
+        execution_policy={
+            "strategy": strategy,
+            "for_duration": for_duration,
+            "cooldown": cooldown,
+            "reset_condition": reset_condition,
+        },
+        actions=actions or [{"type": "actuator_command", "actuator": "fan1", "value": True}],
         enabled=True,
     )
 
 
-def _at(value: float, offset_seconds: float = 0, metric: str = "temperature") -> tuple[MetricSnapshot, datetime]:
-    """A single-metric snapshot plus the timestamp to evaluate "now" as —
-    mirrors the old single-metric Reading's dual role (its timestamp was both
-    the value's own timestamp and "now" for duration/cooldown purposes).
-    """
+def _at(
+    value: float, offset_seconds: float = 0, metric: str = "temperature", device_id: str | None = None
+) -> tuple[MetricSnapshot, datetime]:
+    """A single-signal snapshot plus the timestamp to evaluate "now" as."""
     now = _BASE_TIME + timedelta(seconds=offset_seconds)
-    return {metric: MetricValue(value=value, timestamp=now)}, now
+    return {SignalKey(device_id or _DEVICE_A, metric): MetricValue(value=value, timestamp=now)}, now
 
 
-def _multi_at(values: dict[str, tuple[float, float]]) -> tuple[MetricSnapshot, datetime]:
-    """Multiple metrics, each with its own value/offset, all evaluated at the
-    latest of their offsets (as if that metric's message just triggered
-    evaluation).
+def _multi_at(
+    values: dict[str, tuple[float, float]], device_id: str | None = None
+) -> tuple[MetricSnapshot, datetime]:
+    """Multiple metrics on one device, each with its own value/offset, all
+    evaluated at the latest of their offsets.
     """
+    did = device_id or _DEVICE_A
     snapshot = {
-        metric: MetricValue(value=value, timestamp=_BASE_TIME + timedelta(seconds=offset))
+        SignalKey(did, metric): MetricValue(
+            value=value, timestamp=_BASE_TIME + timedelta(seconds=offset)
+        )
         for metric, (value, offset) in values.items()
     }
     now = _BASE_TIME + timedelta(seconds=max(offset for _, offset in values.values()))
@@ -308,17 +337,15 @@ def test_full_lifecycle_breach_hold_fire_oscillate_cooldown_rearm_refire() -> No
     assert action is not None
 
 
-# ---- Action payload -----------------------------------------------------------
+# ---- Firing result ----------------------------------------------------------
 
 
-def test_action_matches_rule() -> None:
+def test_firing_carries_rule_id() -> None:
     rule = _rule(_leaf(">", 30.0))
     state = RuleState()
-    action = _EVALUATOR.evaluate(rule, *_at(35.0), state)
-    assert action is not None
-    assert action.rule_id == rule.id
-    assert action.action_type == "actuator_command"
-    assert action.payload == rule.action
+    firing = _EVALUATOR.evaluate(rule, *_at(35.0), state)
+    assert isinstance(firing, Firing)
+    assert firing.rule_id == rule.id
 
 
 # ---- Multi-predicate AND/OR trees ----------------------------------------------
@@ -374,7 +401,9 @@ def test_leaf_with_no_snapshot_entry_is_unmet() -> None:
 def test_leaf_with_stale_snapshot_entry_is_unmet() -> None:
     rule = _rule(_leaf(">", 30.0))
     state = RuleState()
-    stale_snapshot = {"temperature": MetricValue(value=35.0, timestamp=_BASE_TIME)}
+    stale_snapshot = {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(value=35.0, timestamp=_BASE_TIME)
+    }
     just_over_90s = _BASE_TIME + timedelta(seconds=91)
     action = _EVALUATOR.evaluate(rule, stale_snapshot, just_over_90s, state)
     assert action is None
@@ -383,7 +412,9 @@ def test_leaf_with_stale_snapshot_entry_is_unmet() -> None:
 def test_leaf_snapshot_entry_exactly_at_staleness_boundary_still_fresh() -> None:
     rule = _rule(_leaf(">", 30.0))
     state = RuleState()
-    snapshot = {"temperature": MetricValue(value=35.0, timestamp=_BASE_TIME)}
+    snapshot = {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(value=35.0, timestamp=_BASE_TIME)
+    }
     exactly_90s = _BASE_TIME + timedelta(seconds=90)
     action = _EVALUATOR.evaluate(rule, snapshot, exactly_90s, state)
     assert action is not None
@@ -435,3 +466,73 @@ def test_and_duration_and_cooldown_apply_to_combined_result_not_per_leaf() -> No
         rule, *_multi_at({"temperature": (35.0, 16), "humidity": (35.0, 16)}), state
     )
     assert action is not None
+
+
+# ---- Multi-device conditions ------------------------------------------------
+
+
+def test_multi_device_and_reads_each_leaf_from_its_own_device() -> None:
+    condition = {
+        "kind": "group",
+        "op": "AND",
+        "predicates": [
+            _leaf(">", 80.0, metric="temperature", device_id=_DEVICE_A),
+            _leaf(">", 120.0, metric="pressure", device_id=_DEVICE_B),
+        ],
+    }
+    rule = _rule(condition)
+    state = RuleState()
+    now = _BASE_TIME + timedelta(seconds=1)
+    snapshot = {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(85.0, now),
+        SignalKey(_DEVICE_B, "pressure"): MetricValue(90.0, now),
+    }
+    assert _EVALUATOR.evaluate(rule, snapshot, now, state) is None  # pressure not met
+
+    snapshot[SignalKey(_DEVICE_B, "pressure")] = MetricValue(130.0, now)
+    assert _EVALUATOR.evaluate(rule, snapshot, now, state) is not None
+
+
+def test_same_metric_name_on_two_devices_is_not_confused() -> None:
+    condition = {
+        "kind": "group",
+        "op": "AND",
+        "predicates": [
+            _leaf(">", 30.0, metric="temperature", device_id=_DEVICE_A),
+            _leaf("<", 10.0, metric="temperature", device_id=_DEVICE_B),
+        ],
+    }
+    rule = _rule(condition)
+    state = RuleState()
+    now = _BASE_TIME
+    snapshot = {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(35.0, now),
+        SignalKey(_DEVICE_B, "temperature"): MetricValue(5.0, now),
+    }
+    assert _EVALUATOR.evaluate(rule, snapshot, now, state) is not None
+
+
+# ---- execution_policy strategies ------------------------------------------
+
+
+def test_continuous_strategy_refires_every_evaluation_subject_to_cooldown() -> None:
+    rule = _rule(_leaf(">", 30.0), strategy="continuous", cooldown=10)
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 5), state) is None  # cooldown
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 11), state) is not None  # still true -> refires
+
+
+def test_reset_condition_holds_disarmed_until_reset_tree_true() -> None:
+    reset = _leaf("<", 20.0)
+    rule = _rule(_leaf(">", 30.0), strategy="reset_condition", reset_condition=reset)
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    # Drops below the bare threshold — but "edge" re-arm doesn't apply here.
+    assert _EVALUATOR.evaluate(rule, *_at(25.0, 1), state) is None
+    assert state.armed is False
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 2), state) is None  # still disarmed
+    # Reset condition met (< 20) -> re-arms.
+    assert _EVALUATOR.evaluate(rule, *_at(15.0, 3), state) is None
+    assert state.armed is True
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 4), state) is not None

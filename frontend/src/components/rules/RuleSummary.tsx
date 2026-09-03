@@ -50,46 +50,11 @@ export function parseAction(action: RuleSummaryData["action"]): RuleAction | nul
   return null;
 }
 
-function actionClause(action: RuleAction | null): string {
-  if (action === null) return "do nothing (unrecognized action)";
-  switch (action.type) {
-    case "actuator_command": {
-      const value =
-        typeof action.value === "boolean" ? (action.value ? "ON" : "OFF") : String(action.value);
-      return `turn ${action.actuator} ${value}`;
-    }
-    case "notification":
-      return `send a notification: "${action.message}"`;
-    case "webhook":
-      return `call the webhook at ${action.url}`;
-  }
-}
-
 /** Every leaf predicate in a condition tree, flattened — for callers that
  * need to iterate every metric a rule references regardless of tree shape
  * (e.g. per-metric chart threshold markers, search-by-metric filtering). */
 export function leafPredicates(node: ConditionNode): ConditionLeaf[] {
   return node.kind === "leaf" ? [node] : node.predicates.flatMap(leafPredicates);
-}
-
-function leafClause(leaf: ConditionLeaf): string {
-  const op = OPERATOR_WORDS[leaf.operator] ?? leaf.operator;
-  return `${leaf.metric} ${op} ${leaf.threshold}`;
-}
-
-/** Recursive — a bare leaf is the common case, but this also renders a real
- * nested tree correctly for display even though RuleForm only ever builds a
- * flat one-level group (see RuleForm.tsx's module docstring). */
-function conditionClause(node: ConditionNode): string {
-  if (node.kind === "leaf") return leafClause(node);
-  const joiner = node.op === "AND" ? " and " : " or ";
-  return node.predicates.map(conditionClause).join(joiner);
-}
-
-export function ruleSummaryText(rule: RuleSummaryData): string {
-  const holds = rule.for_duration > 0 ? ` for ${rule.for_duration}s` : "";
-  const action = actionClause(parseAction(rule.action));
-  return `When ${conditionClause(rule.condition)}${holds}, ${action}.`;
 }
 
 /** A bolded value in the sentence — rendered as an accent "unfilled" chip
