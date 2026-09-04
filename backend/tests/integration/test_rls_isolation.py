@@ -329,5 +329,74 @@ async def test_devices_with_check_blocks_cross_tenant_insert(
                         "INSERT INTO devices (id, tenant_id, catalog_entry_id, name, slug, token_hash, status) "
                         "VALUES (:id, :tenant_id, :catalog_entry_id, 'x', 'x', 'x', 'active')"
                     ),
-                    {"id": uuid.uuid4(), "tenant_id": tenant_b, "catalog_entry_id": catalog_entry_id},
+                    {
+                        "id": uuid.uuid4(),
+                        "tenant_id": tenant_b,
+                        "catalog_entry_id": catalog_entry_id,
+                    },
+                )
+
+
+# ── device_metric_health: same standard single-tenant predicate as devices ──
+
+
+async def _create_metric_health_row(
+    session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID
+) -> uuid.UUID:
+    row_id = uuid.uuid4()
+    await session.execute(
+        text(
+            "INSERT INTO device_metric_health (id, tenant_id, device_id, metric, last_value, last_seen_at) "
+            "VALUES (:id, :tenant_id, :device_id, 'temperature', 21.5, now())"
+        ),
+        {"id": row_id, "tenant_id": tenant_id, "device_id": device_id},
+    )
+    return row_id
+
+
+async def test_device_metric_health_fails_closed_with_no_tenant_context(
+    admin_session: AsyncSession, app_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    tenant_a, _tenant_b, device_a, _device_b = await _seed_two_tenants_with_devices(admin_session)
+    async with admin_session.begin():
+        await _create_metric_health_row(admin_session, tenant_a, device_a)
+
+    async with app_session_factory() as session, session.begin():
+        rows = (await session.execute(text("SELECT id FROM device_metric_health"))).all()
+    assert rows == []
+
+
+async def test_device_metric_health_rls_policy_blocks_cross_tenant_select(
+    admin_session: AsyncSession, app_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    tenant_a, tenant_b, device_a, device_b = await _seed_two_tenants_with_devices(admin_session)
+    async with admin_session.begin():
+        row_a = await _create_metric_health_row(admin_session, tenant_a, device_a)
+        await _create_metric_health_row(admin_session, tenant_b, device_b)
+
+    async with app_session_factory() as session, session.begin():
+        await session.execute(
+            text("SELECT set_config('app.tenant_id', :v, true)"), {"v": str(tenant_a)}
+        )
+        rows = (await session.execute(text("SELECT id FROM device_metric_health"))).scalars().all()
+    assert rows == [row_a]
+
+
+async def test_device_metric_health_with_check_blocks_cross_tenant_insert(
+    admin_session: AsyncSession, app_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    tenant_a, tenant_b, _device_a, device_b = await _seed_two_tenants_with_devices(admin_session)
+
+    async with app_session_factory() as session:
+        with pytest.raises(DBAPIError):
+            async with session.begin():
+                await session.execute(
+                    text("SELECT set_config('app.tenant_id', :v, true)"), {"v": str(tenant_a)}
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO device_metric_health (id, tenant_id, device_id, metric) "
+                        "VALUES (:id, :tenant_id, :device_id, 'temperature')"
+                    ),
+                    {"id": uuid.uuid4(), "tenant_id": tenant_b, "device_id": device_b},
                 )

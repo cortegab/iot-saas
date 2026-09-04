@@ -170,7 +170,11 @@ considered.**
 {tenant}/{device}/cmd/{actuator}           command    (platform → device, QoS 1)
 {tenant}/{device}/state/{actuator}         desired state (retained)
 {tenant}/{device}/ack/{actuator}           acknowledgement (device → platform)
+{tenant}/{device}/config                   telemetry profile (retained, platform → device)
+{tenant}/{device}/status                   health snapshot (retained, device → platform; Last-Will target)
 ```
+`status` and `config` are reserved metric-key segments — a tenant-authored metric can never collide
+with them (enforced at catalog write time).
 
 **Telemetry payload**
 ```json
@@ -182,6 +186,21 @@ considered.**
 ```json
 { "value": true, "issued_at": 1770001111, "ttl": 30, "command_id": "uuid" }
 ```
+
+**Config payload** (retained; the device subscribes on connect, same as the desired-state topic)
+```json
+{ "metrics": [{ "key": "temperature", "publish": "periodic", "interval_seconds": 30 }], "issued_at": 1770001111 }
+```
+`publish` is `"periodic"` (default) / `"on_change"` / `"streaming"` — the device enforces its own
+publish cadence locally; the platform only defines and distributes the profile.
+
+**Status payload** (retained; also the device's Last-Will payload with `online: false` on ungraceful
+disconnect)
+```json
+{ "online": true, "rssi": -63, "battery_pct": 87, "uptime_s": 1234, "fw_version": "1.2.0", "timestamp": 1770001111 }
+```
+The platform stamps its own receive time for staleness math and never trusts this payload's own
+`timestamp` — a Last-Will fires at an unpredictable moment its payload can't reflect.
 
 **Device auth:** per-device tokens / API keys, **stored hashed** (argon2id), never in plaintext.
 MQTT credentials map 1:1 to a device; EMQX ACLs restrict each device to its own topic subtree.

@@ -35,11 +35,6 @@ _COMPARATORS: dict[str, Callable[[float, float], bool]] = {
     "!=": op_module.ne,
 }
 
-# A cached value older than this is treated as unmet (fail closed) — matches
-# devices.device_offline_after_seconds, the existing online/offline threshold.
-# Phase 2 replaces this with a per-metric expected-interval derived value.
-STALE_METRIC_AGE_SECONDS = 90
-
 
 class SignalKey(NamedTuple):
     device_id: str
@@ -49,6 +44,15 @@ class SignalKey(NamedTuple):
 class MetricValue(NamedTuple):
     value: float
     timestamp: datetime
+    # A cached value older than this is treated as unmet (fail closed) — the
+    # bound varies per (device, metric), derived from the metric's catalog
+    # publish profile (rules/service.py's DEFAULT_STALE_METRIC_AGE_SECONDS /
+    # reload_staleness_thresholds) and set at the point this is constructed
+    # (rules/service.py's evaluate_and_dispatch), not here — evaluators.py
+    # only ever reads a value already present in its own arguments, keeping
+    # `evaluate()` pure. The literal default below exists only so call sites
+    # that don't care about staleness (most tests) need not specify it.
+    max_age_seconds: int = 90
 
 
 MetricSnapshot = dict[SignalKey, MetricValue]
@@ -145,7 +149,7 @@ def _evaluate_leaf(
     metric_value = snapshot.get(_leaf_signal(leaf))
     if (
         metric_value is None
-        or (now - metric_value.timestamp).total_seconds() > STALE_METRIC_AGE_SECONDS
+        or (now - metric_value.timestamp).total_seconds() > metric_value.max_age_seconds
     ):
         return False
 

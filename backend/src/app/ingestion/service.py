@@ -29,6 +29,14 @@ TELEMETRY_TOPIC_FILTER = "+/+/+"
 # app/commands/service.py can mark a command acknowledged.
 ACK_TOPIC_FILTER = "+/+/ack/+"
 
+# Reserved wire-format metric segment for the device-health snapshot topic
+# {tenant}/{device}/status (CLAUDE.md §4) — same 3-segment shape as telemetry,
+# so it rides the existing TELEMETRY_TOPIC_FILTER subscription; app.worker's
+# handle_message branches on this before treating a message as telemetry.
+# catalog/service.py rejects a tenant-authored metric key that collides with
+# this (or "config") at write time.
+RESERVED_METRIC_STATUS = "status"
+
 _DIRECTORY_CACHE_TTL_SECONDS = 300
 
 
@@ -150,5 +158,3 @@ async def record_telemetry_direct(
             "time": payload.timestamp or int(time.time()),
         },
     )
-
-

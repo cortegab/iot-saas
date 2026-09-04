@@ -23,7 +23,9 @@ from app.db import Base
 class DeviceCatalogEntry(Base):
     __tablename__ = "device_catalog_entries"
     __table_args__ = (
-        CheckConstraint("status IN ('active', 'disabled')", name="ck_device_catalog_entries_status"),
+        CheckConstraint(
+            "status IN ('active', 'disabled')", name="ck_device_catalog_entries_status"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -31,7 +33,8 @@ class DeviceCatalogEntry(Base):
         ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
     )
     name: Mapped[str] = mapped_column(nullable=False)
-    # list[{"name", "key", "unit", "data_type", "decimals", "min", "max"}] — see
+    # list[{"name", "key", "unit", "data_type", "decimals", "min", "max",
+    # "publish", "publish_interval_seconds", "publish_deadband"}] — see
     # catalog/schemas.py's CatalogMetric.
     metrics: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
     # list[{"name", "key", "value_type", "allowed_values", "on_value", "off_value"}]

@@ -48,6 +48,7 @@ ALL_TABLES = (
     "commands",
     "dashboards",
     "notifications",
+    "device_metric_health",
 )
 
 
