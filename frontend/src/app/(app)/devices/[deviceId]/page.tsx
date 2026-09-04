@@ -25,6 +25,7 @@ import { CommandHistory } from "@/components/actuators/CommandHistory";
 import { leafPredicates } from "@/components/rules/RuleSummary";
 import { buildSketch } from "@/lib/firmware-sketch";
 import { ApiRequestError } from "@/lib/api-client";
+import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
@@ -36,16 +37,6 @@ type CommandResponse = components["schemas"]["CommandResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
 type NotificationResponse = components["schemas"]["NotificationResponse"];
-
-function timeAgo(iso: string | null): string {
-  if (!iso) return "never";
-  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
 
 function formatCommandValue(value: unknown): string {
   if (typeof value === "boolean") return value ? "ON" : "OFF";
