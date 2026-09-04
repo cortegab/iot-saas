@@ -15,6 +15,7 @@ type Resolution = "raw" | "1m" | "1h";
 
 const HOUR = 60 * 60 * 1000;
 const RANGE_OPTIONS: { label: string; ms: number }[] = [
+  { label: "10m", ms: 10 * 60 * 1000 },
   { label: "1h", ms: HOUR },
   { label: "6h", ms: 6 * HOUR },
   { label: "24h", ms: 24 * HOUR },
@@ -86,7 +87,7 @@ export function TrendChart({
    * and the chart resizes with it via the ResizeObserver below. */
   fillHeight?: boolean;
 }) {
-  const [rangeMs, setRangeMs] = useState(RANGE_OPTIONS[1].ms);
+  const [rangeMs, setRangeMs] = useState(RANGE_OPTIONS[0].ms);
   const resolution = resolutionFor(rangeMs);
   const colors = useThemeColors();
 
@@ -101,9 +102,10 @@ export function TrendChart({
   const from = new Date(now - rangeMs).toISOString();
   const queryKey = `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}&from=${encodeURIComponent(from)}&resolution=${resolution}`;
 
-  // A fallback, not the primary freshness mechanism — useRealtime revalidates
-  // any matching /devices/{id}/data?metric=... key the moment a telemetry
-  // message for this device+metric arrives.
+  // The reconciling backstop — useRealtime appends each live telemetry frame
+  // straight onto this key's `points` (revalidate:false), so the tip moves
+  // in real time; this periodic refetch just resnaps to the authoritative
+  // series (and, on wider ranges, the bucket averages).
   const { data, error, isLoading } = useApiSWR<TelemetryDataResponse>(queryKey, {
     refreshInterval: rangeMs <= 6 * HOUR ? 20_000 : 60_000,
   });
