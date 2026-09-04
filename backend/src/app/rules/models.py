@@ -36,7 +36,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -106,3 +106,71 @@ class RuleDevice(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class RuleExecution(Base):
+    """One row per `Firing` (rules/evaluators.py) — written unconditionally by
+    rules/service.py's _record_rule_execution, decoupling "the rule fired"
+    from "a notification exists" (a Notification is also still written on
+    every firing, unchanged; the two are parallel audit trails, not one
+    replacing the other). `summary` snapshots the rendered condition text at
+    fire time so the Activity tab still reads sensibly after the rule's
+    condition later changes or the rule itself is deleted.
+    """
+
+    __tablename__ = "rule_executions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    # Nullable + SET NULL: execution history survives the rule being deleted,
+    # same treatment commands.rule_id/notifications.rule_id already get.
+    rule_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("rules.id", ondelete="SET NULL"), nullable=True
+    )
+    # The triggering device — nullable + SET NULL for the same reason.
+    device_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("devices.id", ondelete="SET NULL"), nullable=True
+    )
+    metric: Mapped[str] = mapped_column(String, nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    fired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    summary: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ActionExecution(Base):
+    """One row per action *attempt* within a RuleExecution — actuator_command/
+    webhook/notification/unknown, each with a success|failed status and a
+    loose JSONB `detail` bag (never re-parsed, purely for display — see
+    RuleResponse.actions' own precedent for a loose dict alongside a sibling
+    discriminator field). `action_index` reflects rule.actions' shape at
+    dispatch time only — it is NOT a stable live reference; a later rule edit
+    can reorder/change actions without touching old rows, so nothing should
+    ever re-resolve it against the *current* rule (detail already carries
+    everything needed to render a row standalone).
+    """
+
+    __tablename__ = "action_executions"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    # CASCADE, unlike the SET NULL FKs above — action rows die with their
+    # parent execution rather than surviving as orphans.
+    rule_execution_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rule_executions.id", ondelete="CASCADE"), nullable=False
+    )
+    action_type: Mapped[str] = mapped_column(String, nullable=False)
+    action_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    status: Mapped[str] = mapped_column(String, nullable=False)
+    detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # Only set for a successful actuator_command row — SET NULL rather than
+    # CASCADE since a Command row outliving its action_execution (or vice
+    # versa) is fine; they're independently useful audit records.
+    command_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("commands.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

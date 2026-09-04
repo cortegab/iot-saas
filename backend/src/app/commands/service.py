@@ -50,8 +50,14 @@ async def dispatch_command(
     device_slug: str,
     actuator: str,
     value: Any,
+    command_id: uuid.UUID | None = None,
 ) -> None:
-    command_id = uuid.uuid4()
+    """`command_id` is normally generated here — a rule firing pre-generates
+    and passes one in instead, so it can record the same id on its own
+    action_executions row (rules/service.py) before knowing whether dispatch
+    succeeds, without this function needing to return anything.
+    """
+    command_id = command_id if command_id is not None else uuid.uuid4()
     issued_at = datetime.now(UTC)
     ttl = settings.command_default_ttl_seconds
 

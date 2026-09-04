@@ -15,8 +15,9 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.commands import service as commands_service
-from app.db import add_post_commit_callback
+from app.db import add_post_commit_callback, set_tenant_context
 from app.notifications import service as notifications_service
+from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules.evaluators import (
     Evaluator,
@@ -27,7 +28,14 @@ from app.rules.evaluators import (
     ThresholdEvaluator,
     referenced_signals,
 )
-from app.rules.models import Rule, RuleDevice, RuleDeviceRole, RuleType
+from app.rules.models import (
+    ActionExecution,
+    Rule,
+    RuleDevice,
+    RuleDeviceRole,
+    RuleExecution,
+    RuleType,
+)
 
 log = logging.getLogger("rules")
 
@@ -572,6 +580,8 @@ async def evaluate_and_dispatch(
                 device_id,
                 tenant_slug,
                 device_slug,
+                metric,
+                value,
                 timestamp,
                 snapshot,
                 rule,
@@ -608,6 +618,25 @@ async def _resolve_target(
     return row["device_id"], row["tenant_slug"], row["device_slug"]
 
 
+class _ActionOutcome(NamedTuple):
+    """One action's dispatch result — collected in-memory during
+    _dispatch_actions' loop (zero new I/O) and written to `action_executions`
+    only after every action has been attempted, alongside the existing
+    notification write (see _record_rule_execution)."""
+
+    action_type: str
+    action_index: int | None
+    status: str  # "success" | "failed"
+    detail: dict[str, Any] | None
+    command_id: uuid.UUID | None
+
+
+# Truncate any captured string field (URL, error message) before it lands in
+# action_executions.detail — cheap insurance against JSONB bloat on this
+# single-host deployment (CLAUDE.md §1).
+_DETAIL_STRING_MAX = 500
+
+
 async def _dispatch_actions(
     client: aiomqtt.Client,
     factory: async_sessionmaker[AsyncSession],
@@ -615,12 +644,24 @@ async def _dispatch_actions(
     device_id: uuid.UUID,
     tenant_slug: str,
     device_slug: str,
+    metric: str,
+    value: float,
     timestamp: datetime,
     snapshot: MetricSnapshot,
     rule: Rule,
 ) -> None:
+    """Dispatch every configured action, exactly in today's order (the
+    actuator-command MQTT publish inside dispatch_command happens before any
+    new bookkeeping here — CLAUDE.md §9 constraint 1's <2s budget depends on
+    nothing being inserted in front of it). Outcomes are only collected in
+    memory during the loop; the combined rule_executions/action_executions
+    write happens once, after the loop, at the same point the (unchanged)
+    unconditional notification write already happens.
+    """
     trigger_device_id = device_id
-    for action in rule.actions:
+    outcomes: list[_ActionOutcome] = []
+
+    for action_index, action in enumerate(rule.actions):
         action_type = action.get("type")
         try:
             if action_type == "actuator_command":
@@ -633,8 +674,18 @@ async def _dispatch_actions(
                     action.get("device_id"),
                 )
                 if target is None:
+                    outcomes.append(
+                        _ActionOutcome(
+                            "actuator_command",
+                            action_index,
+                            "failed",
+                            {"reason": "target_unresolvable", "device_id": action.get("device_id")},
+                            None,
+                        )
+                    )
                     continue
                 target_id, target_tenant_slug, target_device_slug = target
+                command_id = uuid.uuid4()
                 await commands_service.dispatch_command(
                     client,
                     factory,
@@ -646,26 +697,246 @@ async def _dispatch_actions(
                     target_device_slug,
                     actuator=action["actuator"],
                     value=action["value"],
+                    command_id=command_id,
+                )
+                outcomes.append(
+                    _ActionOutcome(
+                        "actuator_command",
+                        action_index,
+                        "success",
+                        {
+                            "actuator": action["actuator"],
+                            "value": action["value"],
+                            "device_id": str(target_id),
+                        },
+                        command_id,
+                    )
                 )
             elif action_type == "webhook":
                 async with httpx.AsyncClient(timeout=5) as http_client:
-                    await http_client.post(action["url"], json=action.get("body", {}))
+                    response = await http_client.post(action["url"], json=action.get("body", {}))
+                outcomes.append(
+                    _ActionOutcome(
+                        "webhook",
+                        action_index,
+                        "success",
+                        {
+                            "url": action["url"][:_DETAIL_STRING_MAX],
+                            "status_code": response.status_code,
+                        },
+                        None,
+                    )
+                )
             elif action_type != "notification":
                 log.warning("unknown action type %r for rule %s", action_type, rule.id)
+                outcomes.append(
+                    _ActionOutcome(
+                        "unknown", action_index, "failed", {"action_type": action_type}, None
+                    )
+                )
+            # "notification"-type actions stay a no-op here, same as today —
+            # handled once, after the loop, by the unconditional write below.
         except httpx.HTTPError as exc:
             log.warning("webhook dispatch failed for rule %s: %s", rule.id, exc)
-        except Exception:
+            outcomes.append(
+                _ActionOutcome(
+                    "webhook",
+                    action_index,
+                    "failed",
+                    {
+                        "url": action.get("url", "")[:_DETAIL_STRING_MAX],
+                        "error": str(exc)[:_DETAIL_STRING_MAX],
+                    },
+                    None,
+                )
+            )
+        except Exception as exc:
             log.exception("action %r failed for rule %s", action_type, rule.id)
+            outcomes.append(
+                _ActionOutcome(
+                    action_type or "unknown",
+                    action_index,
+                    "failed",
+                    {"error": str(exc)[:_DETAIL_STRING_MAX]},
+                    None,
+                )
+            )
 
     # A notification row is written for every firing regardless of the rule's
     # configured actions — this is what answers "did anything cross a
     # threshold". A `notification`-type action supplies its own message;
     # otherwise one is auto-generated.
-    notif = next((a for a in rule.actions if a.get("type") == "notification"), None)
+    notif_index, notif = next(
+        ((i, a) for i, a in enumerate(rule.actions) if a.get("type") == "notification"),
+        (None, None),
+    )
     message = notif["message"] if notif is not None else _default_message(rule, snapshot)
     try:
         await notifications_service.create_notification(
             factory, tenant_id, trigger_device_id, rule.id, message
         )
-    except Exception:
+        outcomes.append(
+            _ActionOutcome("notification", notif_index, "success", {"message": message}, None)
+        )
+    except Exception as exc:
         log.exception("notification write failed for rule %s", rule.id)
+        outcomes.append(
+            _ActionOutcome(
+                "notification",
+                notif_index,
+                "failed",
+                {"message": message, "error": str(exc)[:_DETAIL_STRING_MAX]},
+                None,
+            )
+        )
+
+    # Own defensive try/except, separate from every one above — a
+    # history-write failure must never be conflated with, or able to break,
+    # actual dispatch (already complete by this point regardless).
+    try:
+        await _record_rule_execution(
+            factory,
+            tenant_id,
+            rule,
+            trigger_device_id,
+            metric,
+            value,
+            timestamp,
+            snapshot,
+            outcomes,
+        )
+    except Exception:
+        log.exception("execution history write failed for rule %s", rule.id)
+
+
+async def _record_rule_execution(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule: Rule,
+    trigger_device_id: uuid.UUID,
+    metric: str,
+    value: float,
+    fired_at: datetime,
+    snapshot: MetricSnapshot,
+    outcomes: list[_ActionOutcome],
+) -> None:
+    summary = _default_message(rule, snapshot)
+    execution_id = uuid.uuid4()
+    async with factory() as session, session.begin():
+        await set_tenant_context(session, tenant_id)
+        session.add(
+            RuleExecution(
+                id=execution_id,
+                tenant_id=tenant_id,
+                rule_id=rule.id,
+                device_id=trigger_device_id,
+                metric=metric,
+                value=value,
+                fired_at=fired_at,
+                summary=summary,
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                ActionExecution(
+                    tenant_id=tenant_id,
+                    rule_execution_id=execution_id,
+                    action_type=o.action_type,
+                    action_index=o.action_index,
+                    status=o.status,
+                    detail=o.detail,
+                    command_id=o.command_id,
+                )
+                for o in outcomes
+            ]
+        )
+    await realtime_service.publish_event(
+        tenant_id, {"type": "rule_execution", "rule_id": str(rule.id), "id": str(execution_id)}
+    )
+
+
+class ActionExecutionRow(NamedTuple):
+    id: uuid.UUID
+    action_type: str
+    action_index: int | None
+    status: str
+    detail: dict[str, Any] | None
+    command_id: uuid.UUID | None
+    created_at: datetime
+
+
+class RuleExecutionRow(NamedTuple):
+    id: uuid.UUID
+    rule_id: uuid.UUID | None
+    device_id: uuid.UUID | None
+    device_name: str | None
+    metric: str
+    value: float
+    fired_at: datetime
+    summary: str
+    created_at: datetime
+    actions: list[ActionExecutionRow]
+
+
+async def list_rule_executions(
+    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID, limit: int = 100
+) -> list[RuleExecutionRow]:
+    """Flat capped list, newest first — matches this codebase's only existing
+    pagination convention (commands/notifications' hardcoded .limit(N), no
+    offset/cursor anywhere). Device display name resolved via a raw text()
+    join, same reason list_rule_device_rows does — rules/ never imports
+    devices/models.py directly (CLAUDE.md §6).
+    """
+    result = await session.execute(
+        select(RuleExecution)
+        .where(RuleExecution.tenant_id == tenant_id, RuleExecution.rule_id == rule_id)
+        .order_by(RuleExecution.fired_at.desc())
+        .limit(limit)
+    )
+    executions = list(result.scalars().all())
+    if not executions:
+        return []
+
+    device_ids = {e.device_id for e in executions if e.device_id is not None}
+    device_names: dict[uuid.UUID, str] = {}
+    if device_ids:
+        device_rows = await session.execute(
+            text("SELECT id, name FROM devices WHERE tenant_id = :tenant_id AND id = ANY(:ids)"),
+            {"tenant_id": tenant_id, "ids": [str(d) for d in device_ids]},
+        )
+        device_names = {row["id"]: row["name"] for row in device_rows.mappings().all()}
+
+    execution_ids = [e.id for e in executions]
+    action_result = await session.execute(
+        select(ActionExecution).where(ActionExecution.rule_execution_id.in_(execution_ids))
+    )
+    actions_by_execution: dict[uuid.UUID, list[ActionExecutionRow]] = {}
+    for a in action_result.scalars().all():
+        actions_by_execution.setdefault(a.rule_execution_id, []).append(
+            ActionExecutionRow(
+                id=a.id,
+                action_type=a.action_type,
+                action_index=a.action_index,
+                status=a.status,
+                detail=a.detail,
+                command_id=a.command_id,
+                created_at=a.created_at,
+            )
+        )
+
+    return [
+        RuleExecutionRow(
+            id=e.id,
+            rule_id=e.rule_id,
+            device_id=e.device_id,
+            device_name=device_names.get(e.device_id) if e.device_id is not None else None,
+            metric=e.metric,
+            value=e.value,
+            fired_at=e.fired_at,
+            summary=e.summary,
+            created_at=e.created_at,
+            actions=actions_by_execution.get(e.id, []),
+        )
+        for e in executions
+    ]

@@ -130,6 +130,8 @@ export function useRealtime(): RealtimeStatus {
         void mutate(`/devices/${message.device_id}/commands`);
       } else if (message.type === "notification") {
         void mutate("/notifications");
+      } else if (message.type === "rule_execution" && message.rule_id) {
+        void mutate(`/rules/${message.rule_id}/executions`);
       }
     }
 

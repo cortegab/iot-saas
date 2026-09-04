@@ -450,6 +450,23 @@ export interface paths {
         patch: operations["update_rule_rules__rule_id__patch"];
         trace?: never;
     };
+    "/rules/{rule_id}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Rule Executions */
+        get: operations["list_rule_executions_rules__rule_id__executions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/{device_id}/commands": {
         parameters: {
             query?: never;
@@ -594,6 +611,34 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ActionExecutionResponse */
+        ActionExecutionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Action Type */
+            action_type: string;
+            /** Action Index */
+            action_index: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "success" | "failed";
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            } | null;
+            /** Command Id */
+            command_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** ActuatorCommandAction */
         ActuatorCommandAction: {
             /**
@@ -1235,6 +1280,38 @@ export interface components {
             role: "input" | "target";
             /** Device Name */
             device_name?: string | null;
+        };
+        /** RuleExecutionResponse */
+        RuleExecutionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Rule Id */
+            rule_id: string | null;
+            /** Device Id */
+            device_id: string | null;
+            /** Device Name */
+            device_name: string | null;
+            /** Metric */
+            metric: string;
+            /** Value */
+            value: number;
+            /**
+             * Fired At
+             * Format: date-time
+             */
+            fired_at: string;
+            /** Summary */
+            summary: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Actions */
+            actions: components["schemas"]["ActionExecutionResponse"][];
         };
         /** RuleResponse */
         RuleResponse: {
@@ -2835,6 +2912,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_rule_executions_rules__rule_id__executions_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleExecutionResponse"][];
                 };
             };
             /** @description Validation Error */
