@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { mutate } from "swr";
+import { mutate, useSWRConfig } from "swr";
 import { useAuth } from "@/hooks/useAuth";
 import { connectRealtime, type RealtimeMessage, type RealtimeStatus } from "@/lib/realtime";
-import { appendPoint, markOnline, mergeLatest } from "@/lib/live-telemetry";
+import { applyDeviceHealth, appendPoint, markOnline, mergeLatest } from "@/lib/live-telemetry";
 import type { components } from "@/types/api";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
@@ -23,14 +23,22 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
  * refetch on those keys stays as the reconciling backstop, and a WS
  * reconnect triggers one real revalidation to catch up on missed frames.
  *
+ * It only writes keys that are *already cached with data* — writing into a
+ * key that has no cached value (a page not open, or a request in flight)
+ * would bump SWR's version counter and make it discard the in-flight fetch's
+ * result, leaving that key empty until the next trigger.
+ *
  * `command_ack` / `notification` still just invalidate — no useful payload
  * to apply.
  */
 export function useRealtime(): RealtimeStatus {
   const { accessToken, currentTenantId, refresh } = useAuth();
+  const { cache } = useSWRConfig();
   const [status, setStatus] = useState<RealtimeStatus>("connecting");
   const tokenRef = useRef(accessToken);
   tokenRef.current = accessToken;
+  const cacheRef = useRef(cache);
+  cacheRef.current = cache;
   const droppedRef = useRef(false);
 
   useEffect(() => {
@@ -45,6 +53,27 @@ export function useRealtime(): RealtimeStatus {
       return refreshed?.access_token ?? null;
     }
 
+    function hasData(key: string): boolean {
+      return cacheRef.current.get(key)?.data != null;
+    }
+
+    /** The `/devices/{id}/data?...` key whose window is on screen: same
+     * device+metric, the largest `from` (the chart re-anchors `from` to "now"
+     * every 15s, so older keys linger in the cache but aren't displayed). */
+    function liveChartKey(prefix: string): string | null {
+      let best: string | null = null;
+      let bestFrom = "";
+      for (const key of cacheRef.current.keys()) {
+        if (typeof key !== "string" || !key.startsWith(prefix) || !hasData(key)) continue;
+        const from = new URLSearchParams(key.split("?")[1] ?? "").get("from") ?? "";
+        if (from > bestFrom) {
+          bestFrom = from;
+          best = key;
+        }
+      }
+      return best;
+    }
+
     function onMessage(message: RealtimeMessage) {
       if (
         message.type === "telemetry" &&
@@ -57,19 +86,46 @@ export function useRealtime(): RealtimeStatus {
         const value = message.value;
         const seconds = message.time ?? Math.floor(Date.now() / 1000);
         const iso = new Date(seconds * 1000).toISOString();
-        const dataPrefix = `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}`;
 
-        void mutate<TelemetryLatestResponse[]>(
-          `/devices/${deviceId}/latest`,
-          mergeLatest(metric, value, iso),
-          { revalidate: false },
+        const latestKey = `/devices/${deviceId}/latest`;
+        if (hasData(latestKey)) {
+          void mutate<TelemetryLatestResponse[]>(latestKey, mergeLatest(metric, value, iso), {
+            revalidate: false,
+          });
+        }
+
+        const deviceKey = `/devices/${deviceId}`;
+        if (hasData(deviceKey)) {
+          void mutate<DeviceResponse>(deviceKey, markOnline(iso), { revalidate: false });
+        }
+
+        const chartKey = liveChartKey(
+          `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}`,
         );
-        void mutate<DeviceResponse>(`/devices/${deviceId}`, markOnline(iso), { revalidate: false });
-        void mutate<TelemetryDataResponse>(
-          (key) => typeof key === "string" && key.startsWith(dataPrefix),
-          appendPoint(iso, value),
-          { revalidate: false },
-        );
+        if (chartKey) {
+          void mutate<TelemetryDataResponse>(chartKey, appendPoint(iso, value), {
+            revalidate: false,
+          });
+        }
+      } else if (
+        message.type === "device_health" &&
+        message.device_id &&
+        typeof message.online === "boolean"
+      ) {
+        const deviceKey = `/devices/${message.device_id}`;
+        if (hasData(deviceKey)) {
+          void mutate<DeviceResponse>(
+            deviceKey,
+            applyDeviceHealth({
+              online: message.online,
+              rssi: message.rssi ?? null,
+              battery_pct: message.battery_pct ?? null,
+              uptime_s: message.uptime_s ?? null,
+              fw_version: message.fw_version ?? null,
+            }),
+            { revalidate: false },
+          );
+        }
       } else if (message.type === "command_ack" && message.device_id) {
         void mutate(`/devices/${message.device_id}/commands`);
       } else if (message.type === "notification") {

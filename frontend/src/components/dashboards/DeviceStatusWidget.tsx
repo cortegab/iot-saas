@@ -23,6 +23,13 @@ export function DeviceStatusWidget({ deviceId, onRemove }: { deviceId: string; o
         <div className="flex h-full flex-col justify-center gap-2">
           <span className="text-sm text-ink">{device.name}</span>
           <ConnectionBadge state={device.connection_state} />
+          {(device.rssi != null || device.battery_pct != null || device.fw_version != null) && (
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-muted">
+              {device.rssi != null && <span>{device.rssi} dBm</span>}
+              {device.battery_pct != null && <span>{device.battery_pct}% battery</span>}
+              {device.fw_version != null && <span>fw {device.fw_version}</span>}
+            </div>
+          )}
         </div>
       )}
     </WidgetCard>

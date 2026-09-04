@@ -33,6 +33,14 @@ log = logging.getLogger("rules")
 
 RULES_INVALIDATE_CHANNEL = "rules:invalidate"
 
+# The one staleness bound this codebase used to hardcode twice (once here,
+# once as devices.device_offline_after_seconds — see evaluators.py's old
+# STALE_METRIC_AGE_SECONDS). Now the fallback for any (device, metric) signal
+# health_monitor_loop hasn't computed a catalog-derived bound for yet
+# (worker startup race, or no matching catalog metric) — see
+# reload_staleness_thresholds below and app.health.service's derivation.
+DEFAULT_STALE_METRIC_AGE_SECONDS = 90
+
 _THRESHOLD_EVALUATOR: Evaluator = ThresholdEvaluator()
 
 # Mirrors frontend/src/components/rules/RuleSummary.tsx's OPERATOR_WORDS —
@@ -173,9 +181,7 @@ async def _sync_rule_devices(
     for device_id, roles in device_map.items():
         for role in roles:
             session.add(
-                RuleDevice(
-                    tenant_id=tenant_id, rule_id=rule_id, device_id=device_id, role=role
-                )
+                RuleDevice(tenant_id=tenant_id, rule_id=rule_id, device_id=device_id, role=role)
             )
     # Flush so a raw text() read (list_rule_device_rows) in the same
     # transaction sees these rows — ORM autoflush doesn't cover text().
@@ -345,9 +351,7 @@ async def list_rules(
         select(Rule)
         .where(
             Rule.tenant_id == tenant_id,
-            Rule.id.in_(
-                select(RuleDevice.rule_id).where(RuleDevice.device_id == device_id)
-            ),
+            Rule.id.in_(select(RuleDevice.rule_id).where(RuleDevice.device_id == device_id)),
         )
         .order_by(Rule.name)
     )
@@ -458,6 +462,26 @@ _rule_states: dict[uuid.UUID, RuleState] = {}
 # references, not just the one that just triggered this message.
 _signal_value_cache: dict[SignalKey, MetricValue] = {}
 
+# Per-(device_id, metric) staleness bound, derived from the metric's catalog
+# publish profile and reloaded by app.worker's health_monitor_loop (see
+# reload_staleness_thresholds) — a lookaside cache the hot path only ever
+# reads, same discipline as _rule_cache above. Never populated inline in the
+# hot path itself: that would put a DB read between message arrival and rule
+# evaluation (CLAUDE.md §9 constraint 1).
+_staleness_thresholds: dict[SignalKey, int] = {}
+
+
+def reload_staleness_thresholds(mapping: dict[SignalKey, int]) -> None:
+    """Full replace, called by health_monitor_loop after it recomputes every
+    active device/metric's expected max-age from catalog data — mirrors
+    load_rule_cache's full-reload-on-invalidation shape. A signal absent from
+    `mapping` (worker startup race, or no matching catalog metric) falls back
+    to DEFAULT_STALE_METRIC_AGE_SECONDS wherever it's looked up below.
+    """
+    _staleness_thresholds.clear()
+    _staleness_thresholds.update(mapping)
+    log.info("staleness thresholds reloaded: %d signals", len(mapping))
+
 
 async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
     """Full reload — called once at worker startup and on every
@@ -520,7 +544,10 @@ async def evaluate_and_dispatch(
     other rules on this reading, or ingestion for every other device.
     """
     signal = SignalKey(str(device_id), metric)
-    _signal_value_cache[signal] = MetricValue(value=value, timestamp=timestamp)
+    max_age = _staleness_thresholds.get(signal, DEFAULT_STALE_METRIC_AGE_SECONDS)
+    _signal_value_cache[signal] = MetricValue(
+        value=value, timestamp=timestamp, max_age_seconds=max_age
+    )
 
     rules = _rule_cache.get(signal)
     if not rules:

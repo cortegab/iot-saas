@@ -1,4 +1,4 @@
-"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Four
+"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Five
 concurrent loops in one process; there is no third process (the API server
 never subscribes to MQTT, the worker never serves HTTP):
 
@@ -6,7 +6,10 @@ never subscribes to MQTT, the worker never serves HTTP):
    payloads, resolves each topic to a real device via
    app.ingestion.service's cache, runs rule evaluation/dispatch (the hot
    path — CLAUDE.md §9 constraint 1: before any queue hop), then XADDs a
-   normalized telemetry entry onto the `telemetry` Redis stream.
+   normalized telemetry entry onto the `telemetry` Redis stream. The reserved
+   {tenant}/{device}/status topic (device health, CLAUDE.md §4) rides this
+   same subscription and is routed to _handle_status instead — see
+   RESERVED_METRIC_STATUS.
 2. stream_writer_loop — drains that stream through a consumer group (durable
    across worker restarts — the alternative, plain XREAD, would silently lose
    any buffered-but-unwritten telemetry on a crash, PLAN.md's called-out
@@ -14,19 +17,31 @@ never subscribes to MQTT, the worker never serves HTTP):
    hypertable in one multi-row INSERT per flush, regardless of how many
    tenants are in the batch. `telemetry` intentionally has no RLS — see the
    create_telemetry_hypertable migration for why — so unlike every other
-   write path in this codebase, there's no per-tenant transaction to open here.
+   write path in this codebase, there's no per-tenant transaction to open
+   here. The same flush also batches the per-metric health (Tier B) upsert
+   next to the existing touch_last_seen call.
 3. rule_cache_loop — loads active rules into memory at startup, then reloads
    on every app.rules.service.RULES_INVALIDATE_CHANNEL pub/sub message, so a
    rule CRUD change reaches the hot path within milliseconds.
 4. manual_command_loop — fulfils dashboard-triggered actuator commands (Phase
-   4). The API process has no MQTT client of its own, so a manual toggle is a
-   request on app.commands.service.MANUAL_COMMAND_CHANNEL; this loop holds its
-   own dedicated aiomqtt connection (separate from mqtt_ingest_loop's) and
-   calls commands_service.dispatch_command with rule_id=None. Kept off
-   mqtt_ingest_loop's connection deliberately: manual clicks are rare,
-   user-triggered, and outside the <2s hot-path budget, so there's no
-   throughput case for sharing that connection, and a slow/dead manual
-   publish must never risk blocking telemetry ingestion.
+   4) AND retained-config-publish requests (Phase 2's device health/telemetry
+   profiles). The API process has no MQTT client of its own, so both a manual
+   toggle and a catalog publish-profile edit are requests, on
+   app.commands.service.MANUAL_COMMAND_CHANNEL and
+   app.catalog.service.CONFIG_PUBLISH_CHANNEL respectively; this loop holds
+   its own dedicated aiomqtt connection (separate from mqtt_ingest_loop's) and
+   calls commands_service.dispatch_command (rule_id=None) or
+   _handle_config_publish. Kept off mqtt_ingest_loop's connection
+   deliberately: both are rare, low-frequency, and outside the <2s hot-path
+   budget, so there's no throughput case for sharing that connection, and a
+   slow/dead publish here must never risk blocking telemetry ingestion.
+5. health_monitor_loop — NOT a liveness poller (device liveness is fully
+   event-driven: a device's own retained status message + MQTT Last-Will, see
+   _handle_status). This is a profile-cache refresh: it recomputes every
+   active device/metric's expected max-age from the catalog's publish profile
+   and hands it to app.rules.service.reload_staleness_thresholds, a lookaside
+   cache the hot path only ever reads. Reloads at startup and on every
+   app.catalog.service.CATALOG_INVALIDATE_CHANNEL message.
 """
 
 import asyncio
@@ -42,15 +57,18 @@ from pydantic import ValidationError
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.catalog import service as catalog_service
 from app.commands import service as commands_service
 from app.commands.schemas import AckPayload
 from app.config import settings
 from app.db import session_factory
 from app.devices import service as devices_service
 from app.devices.models import DeviceStatus
+from app.health import service as health_service
 from app.ingestion import service as ingestion_service
-from app.ingestion.schemas import TelemetryPayload
+from app.ingestion.schemas import StatusPayload, TelemetryPayload
 from app.logging_config import configure_logging
+from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules import service as rules_service
 
@@ -91,6 +109,10 @@ async def handle_message(
         log.warning("dropping message on unparseable topic %r", topic)
         return
 
+    if parsed.metric == ingestion_service.RESERVED_METRIC_STATUS:
+        await _handle_status(factory, parsed, payload)
+        return
+
     try:
         data = TelemetryPayload.model_validate_json(payload)
     except ValidationError:
@@ -129,6 +151,66 @@ async def handle_message(
     log.info("telemetry %s -> value=%s", topic, data.value)
 
 
+async def _handle_status(
+    factory: async_sessionmaker[AsyncSession],
+    parsed: ingestion_service.ParsedTopic,
+    payload: bytes,
+) -> None:
+    """Tier A device-health write, from a retained {tenant}/{device}/status
+    message (CLAUDE.md §4) — the device's own periodic self-report, or its
+    Last-Will firing `online: false` on ungraceful disconnect. Off the hot
+    path deliberately: status messages are low-frequency (connect + periodic
+    + one LWT), nowhere near telemetry volume, so this doesn't need
+    stream_writer_loop's batching discipline (same reasoning
+    commands_service.dispatch_command's synchronous command-row insert uses).
+    """
+    try:
+        data = StatusPayload.model_validate_json(payload)
+    except ValidationError:
+        log.warning(
+            "dropping malformed status payload on %s/%s/status: %r",
+            parsed.tenant_slug,
+            parsed.device_slug,
+            payload[:120],
+        )
+        return
+
+    resolved = await ingestion_service.resolve_device_for_topic(
+        factory, parsed.tenant_slug, parsed.device_slug
+    )
+    if resolved is None:
+        log.warning(
+            "dropping status for unknown device %s/%s", parsed.tenant_slug, parsed.device_slug
+        )
+        return
+
+    received_at = datetime.now(UTC)
+    await devices_service.record_status_snapshot(
+        factory,
+        resolved.tenant_id,
+        resolved.device_id,
+        online=data.online,
+        rssi=data.rssi,
+        battery_pct=data.battery_pct,
+        uptime_s=data.uptime_s,
+        fw_version=data.fw_version,
+        received_at=received_at,
+    )
+    await realtime_service.publish_event(
+        resolved.tenant_id,
+        {
+            "type": "device_health",
+            "device_id": str(resolved.device_id),
+            "online": data.online,
+            "rssi": data.rssi,
+            "battery_pct": data.battery_pct,
+            "uptime_s": data.uptime_s,
+            "fw_version": data.fw_version,
+        },
+    )
+    log.info("status %s/%s -> online=%s", parsed.tenant_slug, parsed.device_slug, data.online)
+
+
 async def _handle_ack(
     factory: async_sessionmaker[AsyncSession],
     ack_topic: ingestion_service.ParsedAckTopic,
@@ -154,8 +236,12 @@ async def _handle_ack(
         )
         return
 
-    await commands_service.record_ack(factory, resolved.tenant_id, resolved.device_id, ack.command_id)
-    log.info("command %s acked by %s/%s", ack.command_id, ack_topic.tenant_slug, ack_topic.device_slug)
+    await commands_service.record_ack(
+        factory, resolved.tenant_id, resolved.device_id, ack.command_id
+    )
+    log.info(
+        "command %s acked by %s/%s", ack.command_id, ack_topic.tenant_slug, ack_topic.device_slug
+    )
 
 
 async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
@@ -245,6 +331,47 @@ async def _handle_manual_command(
     )
 
 
+async def _handle_config_publish(
+    client: aiomqtt.Client, factory: async_sessionmaker[AsyncSession], raw: str
+) -> None:
+    """Publish the retained {tenant}/{device}/config message (CLAUDE.md §4)
+    to every active device on a catalog entry — requested by
+    app.catalog.service after a metrics/publish-profile edit or a new
+    device's creation, never a side effect of an inbound message. Malformed
+    or empty requests are dropped, never raised (CLAUDE.md constraint 11
+    extended to this request path, same as _handle_manual_command).
+    """
+    try:
+        data = json.loads(raw)
+        entry_id = uuid.UUID(data["catalog_entry_id"])
+    except (KeyError, TypeError, ValueError) as exc:
+        log.warning("dropping malformed config-publish request: %s", exc)
+        return
+
+    devices = await catalog_service.list_devices_for_config_publish(factory, entry_id)
+    if not devices:
+        return
+
+    metrics_payload = [
+        {
+            "key": m["key"],
+            "publish": m.get("publish", "periodic"),
+            "interval_seconds": m.get("publish_interval_seconds"),
+            "deadband": m.get("publish_deadband"),
+        }
+        for m in devices[0].metrics
+        if m.get("key")
+    ]
+    payload = json.dumps(
+        {"metrics": metrics_payload, "issued_at": int(datetime.now(UTC).timestamp())}
+    )
+    for row in devices:
+        await client.publish(
+            f"{row.tenant_slug}/{row.device_slug}/config", payload, qos=1, retain=True
+        )
+    log.info("published config to %d device(s) for catalog entry %s", len(devices), entry_id)
+
+
 async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
     while True:
         try:
@@ -257,11 +384,16 @@ async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redi
                 ) as client,
                 redis_client.pubsub() as pubsub,
             ):
-                await pubsub.subscribe(commands_service.MANUAL_COMMAND_CHANNEL)
+                await pubsub.subscribe(
+                    commands_service.MANUAL_COMMAND_CHANNEL, catalog_service.CONFIG_PUBLISH_CHANNEL
+                )
                 async for message in pubsub.listen():
                     if message["type"] != "message":
                         continue
-                    await _handle_manual_command(client, factory, message["data"])
+                    if message["channel"] == catalog_service.CONFIG_PUBLISH_CHANNEL:
+                        await _handle_config_publish(client, factory, message["data"])
+                    else:
+                        await _handle_manual_command(client, factory, message["data"])
         except (aiomqtt.MqttError, redis.RedisError) as exc:
             log.warning(
                 "manual command loop error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS
@@ -326,6 +458,18 @@ async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis
                 await devices_service.touch_last_seen(
                     session, list({did for _, _, did, _, _ in buffer}), datetime.now(UTC)
                 )
+                # Per-(device, metric) freshness (Tier B), batched with this
+                # flush for the same reason touch_last_seen is: the last
+                # value per key within the batch wins, one shared seen_at
+                # for the whole batch.
+                latest: dict[tuple[uuid.UUID, str], float] = {}
+                for _, _, did, metric, value in buffer:
+                    latest[(did, metric)] = value
+                await health_service.record_batch(
+                    session,
+                    [(did, metric, value) for (did, metric), value in latest.items()],
+                    datetime.now(UTC),
+                )
             await r.xack(ingestion_service.TELEMETRY_STREAM, CONSUMER_GROUP, *ack_ids)
             log.info("flushed %d telemetry rows", len(buffer))
         buffer = []
@@ -354,12 +498,42 @@ async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis
             await flush()
 
 
+async def health_monitor_loop(factory: async_sessionmaker[AsyncSession]) -> None:
+    """Profile-cache refresh, not a liveness poller — see the module
+    docstring. Reload at startup, then on every catalog:invalidate message,
+    so a publish-profile edit reaches the hot path's staleness bound within
+    seconds, not just at worker restart. Mirrors rule_cache_loop's shape.
+    """
+
+    async def _reload() -> None:
+        thresholds = await health_service.compute_staleness_thresholds(factory)
+        rules_service.reload_staleness_thresholds(thresholds)
+
+    await _reload()
+    while True:
+        try:
+            async with redis_client.pubsub() as pubsub:
+                await pubsub.subscribe(catalog_service.CATALOG_INVALIDATE_CHANNEL)
+                async for message in pubsub.listen():
+                    if message["type"] != "message":
+                        continue
+                    await _reload()
+        except redis.RedisError as exc:
+            log.warning(
+                "catalog invalidation channel error (%s); reconnecting in %ss",
+                exc,
+                RECONNECT_SECONDS,
+            )
+            await asyncio.sleep(RECONNECT_SECONDS)
+
+
 async def run() -> None:
     await asyncio.gather(
         mqtt_ingest_loop(session_factory, redis_client),
         stream_writer_loop(session_factory, redis_client),
         rule_cache_loop(session_factory),
         manual_command_loop(session_factory, redis_client),
+        health_monitor_loop(session_factory),
     )
 
 

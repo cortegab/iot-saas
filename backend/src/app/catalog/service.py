@@ -5,15 +5,49 @@ Every function takes tenant_id explicitly — RLS enforces the tenant boundary
 `devices/service.py` reuses when a device is created against a catalog entry.
 """
 
+import json
 import uuid
-from typing import Any
+from typing import Any, NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.catalog.models import DeviceCatalogEntry
+from app.catalog.schemas import RESERVED_METRIC_KEYS
+from app.db import add_post_commit_callback
+from app.redis import redis_client
 from app.shared.slug import slugify
+
+# Signals app.health.service's staleness-threshold derivation (read by
+# app.worker's health_monitor_loop) to recompute — a publish-profile edit
+# reaches the hot path within seconds, not just at worker restart. Mirrors
+# app.rules.service.RULES_INVALIDATE_CHANNEL.
+CATALOG_INVALIDATE_CHANNEL = "catalog:invalidate"
+
+# Requests app.worker's manual_command_loop to (re)publish the retained
+# {tenant}/{device}/config topic (CLAUDE.md §4) for every device on a catalog
+# entry — the API process has no MQTT client of its own (CLAUDE.md: API never
+# touches MQTT), so this is a request, not a direct publish, mirroring
+# app.commands.service.MANUAL_COMMAND_CHANNEL's shape for the same reason.
+CONFIG_PUBLISH_CHANNEL = "catalog:config-publish"
+
+
+def request_config_publish(session: AsyncSession, entry_id: uuid.UUID) -> None:
+    """Requested only after this session's transaction commits (see
+    db.add_post_commit_callback's docstring) — used both after a catalog
+    entry's metrics change (so existing devices pick up the new publish
+    profile) and after a new device is created against an entry (so the
+    retained message exists before that device's first-ever connect,
+    app.devices.service.create_device).
+    """
+
+    async def _publish() -> None:
+        await redis_client.publish(
+            CONFIG_PUBLISH_CHANNEL, json.dumps({"catalog_entry_id": str(entry_id)})
+        )
+
+    add_post_commit_callback(session, _publish)
 
 
 class CatalogEntryNotFoundError(Exception):
@@ -36,7 +70,17 @@ class DuplicateKeyError(Exception):
     """
 
 
-def _normalize_keyed_items(items: list[dict[str, Any]], *, fallback_prefix: str) -> list[dict[str, Any]]:
+class ReservedMetricKeyError(Exception):
+    """Raised when a metric's wire `key` collides with a reserved device-health
+    topic segment (`status`/`config`, see catalog/schemas.py's
+    RESERVED_METRIC_KEYS) — those 3-segment topics would otherwise be
+    indistinguishable from telemetry on the wire (ingestion/service.py).
+    """
+
+
+def _normalize_keyed_items(
+    items: list[dict[str, Any]], *, fallback_prefix: str
+) -> list[dict[str, Any]]:
     """Fill in a blank `key` from a slugified `name`, and make sure every key
     in the list is unique (case-insensitively — `key` is the MQTT topic
     segment / wire identifier, and "Temperature" vs "temperature" colliding
@@ -73,11 +117,30 @@ def _normalize_keyed_items(items: list[dict[str, Any]], *, fallback_prefix: str)
 
 
 def _normalize_metrics(metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return _normalize_keyed_items(metrics, fallback_prefix="metric")
+    normalized = _normalize_keyed_items(metrics, fallback_prefix="metric")
+    for item in normalized:
+        key = item.get("key")
+        if isinstance(key, str) and key.strip().lower() in RESERVED_METRIC_KEYS:
+            raise ReservedMetricKeyError(key)
+    return normalized
 
 
 def _normalize_actuators(actuators: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return _normalize_keyed_items(actuators, fallback_prefix="actuator")
+
+
+def _publish_invalidation(session: AsyncSession) -> None:
+    """Publish the staleness-threshold reload signal only after this
+    session's transaction commits — see db.add_post_commit_callback's
+    docstring. app.health.service does a full recompute on any message, so
+    the payload is just a marker (mirrors app.rules.service's own
+    _publish_invalidation).
+    """
+
+    async def _publish() -> None:
+        await redis_client.publish(CATALOG_INVALIDATE_CHANNEL, "reload")
+
+    add_post_commit_callback(session, _publish)
 
 
 async def create_catalog_entry(
@@ -97,6 +160,8 @@ async def create_catalog_entry(
     )
     session.add(entry)
     await session.flush()
+    _publish_invalidation(session)
+    request_config_publish(session, entry.id)
     return entry
 
 
@@ -126,6 +191,7 @@ async def get_catalog_entry(
 
 
 async def update_catalog_entry(
+    session: AsyncSession,
     entry: DeviceCatalogEntry,
     name: str | None,
     metrics: list[dict[str, Any]] | None,
@@ -136,11 +202,40 @@ async def update_catalog_entry(
         entry.name = name
     if metrics is not None:
         entry.metrics = _normalize_metrics(metrics)
+        _publish_invalidation(session)
+        request_config_publish(session, entry.id)
     if actuators is not None:
         entry.actuators = _normalize_actuators(actuators)
     if entry_status is not None:
         entry.status = entry_status
     return entry
+
+
+class CatalogConfigDeviceRow(NamedTuple):
+    """One active device on a catalog entry, plus what app.worker needs to
+    publish a retained {tenant}/{device}/config message to it — resolved via
+    the list_devices_for_catalog_entry SECURITY DEFINER function since the
+    worker (unlike an API request) has no tenant context of its own.
+    """
+
+    device_id: uuid.UUID
+    tenant_slug: str
+    device_slug: str
+    metrics: list[dict[str, Any]]
+
+
+async def list_devices_for_config_publish(
+    factory: async_sessionmaker[AsyncSession], entry_id: uuid.UUID
+) -> list[CatalogConfigDeviceRow]:
+    async with factory() as session:
+        result = await session.execute(
+            text(
+                "SELECT device_id, tenant_slug, device_slug, metrics "
+                "FROM list_devices_for_catalog_entry(:entry_id)"
+            ),
+            {"entry_id": str(entry_id)},
+        )
+        return [CatalogConfigDeviceRow(**row) for row in result.mappings().all()]
 
 
 async def delete_catalog_entry(

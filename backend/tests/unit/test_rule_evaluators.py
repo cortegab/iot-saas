@@ -420,6 +420,40 @@ def test_leaf_snapshot_entry_exactly_at_staleness_boundary_still_fresh() -> None
     assert action is not None
 
 
+# ---- Phase 2: per-signal max_age_seconds (replaces the old global constant) -
+
+
+def test_custom_max_age_seconds_makes_a_signal_stale_earlier_than_the_default() -> None:
+    """A signal with a tighter bound (e.g. a "streaming" catalog metric) must
+    go stale before the 90s default would — the bound lives on the value
+    itself (rules/service.py's per-signal cache), not a module constant.
+    """
+    rule = _rule(_leaf(">", 30.0))
+    state = RuleState()
+    snapshot = {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(
+            value=35.0, timestamp=_BASE_TIME, max_age_seconds=10
+        )
+    }
+    just_over_10s = _BASE_TIME + timedelta(seconds=11)
+    assert _EVALUATOR.evaluate(rule, snapshot, just_over_10s, state) is None
+
+
+def test_custom_max_age_seconds_can_stay_fresh_longer_than_the_default() -> None:
+    """A signal with a looser bound (e.g. an "on_change" catalog metric) must
+    stay fresh well past the 90s default.
+    """
+    rule = _rule(_leaf(">", 30.0))
+    state = RuleState()
+    snapshot = {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(
+            value=35.0, timestamp=_BASE_TIME, max_age_seconds=24 * 60 * 60
+        )
+    }
+    well_past_90s = _BASE_TIME + timedelta(seconds=3600)
+    assert _EVALUATOR.evaluate(rule, snapshot, well_past_90s, state) is not None
+
+
 def test_leaf_states_are_independent() -> None:
     """One leaf's hysteresis latch must not affect another leaf's — each
     predicate stabilizes its own contribution independently.
