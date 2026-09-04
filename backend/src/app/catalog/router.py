@@ -73,6 +73,11 @@ async def create_catalog_entry(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Duplicate key: {exc}",
         ) from exc
+    except service.ReservedMetricKeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{exc}' is a reserved metric key",
+        ) from exc
     return _to_response(entry)
 
 
@@ -93,16 +98,25 @@ async def update_catalog_entry(
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
     session: AsyncSession = Depends(get_session),
 ) -> CatalogEntryResponse:
-    metrics = [m.model_dump(mode="json") for m in body.metrics] if body.metrics is not None else None
+    metrics = (
+        [m.model_dump(mode="json") for m in body.metrics] if body.metrics is not None else None
+    )
     actuators = (
         [a.model_dump(mode="json") for a in body.actuators] if body.actuators is not None else None
     )
     try:
-        updated = await service.update_catalog_entry(entry, body.name, metrics, actuators, body.status)
+        updated = await service.update_catalog_entry(
+            session, entry, body.name, metrics, actuators, body.status
+        )
     except service.DuplicateKeyError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Duplicate key: {exc}",
+        ) from exc
+    except service.ReservedMetricKeyError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"'{exc}' is a reserved metric key",
         ) from exc
     await session.flush()
     await session.refresh(updated)

@@ -23,6 +23,9 @@ from app.devices.schemas import (
     DeviceResponse,
     DeviceUpdateRequest,
 )
+from app.health import service as health_service
+from app.health.models import DeviceMetricHealth
+from app.health.schemas import MetricHealthResponse
 from app.tenants import service as tenants_service
 from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import TenantRole
@@ -30,14 +33,23 @@ from app.tenants.models import TenantRole
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
-def _connection_state(last_seen_at: datetime | None) -> ConnectionState:
-    if last_seen_at is None:
+def _connection_state(device: Device) -> ConnectionState:
+    # last_status_online is push-driven (a retained status message or its
+    # Last-Will) and authoritative when present — an LWT firing "offline"
+    # means offline right now, independent of elapsed time. Devices that have
+    # never sent a status message (older firmware — permanent, not a
+    # migration-window case) fall back to the last_seen_at heuristic.
+    if device.last_status_online is not None:
+        return "online" if device.last_status_online else "offline"
+    if device.last_seen_at is None:
         return "never_connected"
     offline_after = timedelta(seconds=settings.device_offline_after_seconds)
-    return "online" if datetime.now(UTC) - last_seen_at <= offline_after else "offline"
+    return "online" if datetime.now(UTC) - device.last_seen_at <= offline_after else "offline"
 
 
-def _to_response(device: Device) -> DeviceResponse:
+def _to_response(
+    device: Device, metrics_health: list[DeviceMetricHealth] | None = None
+) -> DeviceResponse:
     return DeviceResponse(
         id=device.id,
         name=device.name,
@@ -46,7 +58,18 @@ def _to_response(device: Device) -> DeviceResponse:
         status=device.status,
         last_seen_at=device.last_seen_at,
         created_at=device.created_at,
-        connection_state=_connection_state(device.last_seen_at),
+        connection_state=_connection_state(device),
+        last_status_at=device.last_status_at,
+        rssi=device.rssi,
+        battery_pct=device.battery_pct,
+        uptime_s=device.uptime_s,
+        fw_version=device.fw_version,
+        metrics_health=[
+            MetricHealthResponse(
+                metric=h.metric, last_value=h.last_value, last_seen_at=h.last_seen_at
+            )
+            for h in (metrics_health or [])
+        ],
     )
 
 
@@ -82,8 +105,13 @@ async def create_device(
 
 
 @router.get("/{device_id}", response_model=DeviceResponse)
-async def get_device(device: Device = Depends(get_device_or_404)) -> DeviceResponse:
-    return _to_response(device)
+async def get_device(
+    device: Device = Depends(get_device_or_404),
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session),
+) -> DeviceResponse:
+    metrics_health = await health_service.list_for_device(session, ctx.tenant_id, device.id)
+    return _to_response(device, metrics_health)
 
 
 @router.patch("/{device_id}", response_model=DeviceResponse)

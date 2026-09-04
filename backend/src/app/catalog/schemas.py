@@ -14,6 +14,18 @@ from pydantic import BaseModel, Field
 MetricDataType = Literal["float", "bool"]
 ActuatorValueType = Literal["bool", "float", "string"]
 CatalogEntryStatus = Literal["active", "disabled"]
+# "periodic": device publishes on a fixed interval (the default — matches
+# today's implicit behavior). "on_change": device publishes only when the
+# value moves past `publish_deadband`. "streaming": device publishes as fast
+# as it samples. The platform stores/distributes this; the device enforces
+# it locally (CLAUDE.md's hot-path rule means the platform never throttles
+# inbound telemetry itself).
+PublishProfile = Literal["periodic", "on_change", "streaming"]
+
+# Wire-format metric keys reserved for the device-health contract (see
+# ingestion/service.py's RESERVED_METRIC_STATUS) — a tenant-authored metric
+# can never collide with the `.../status` or `.../config` topics.
+RESERVED_METRIC_KEYS = {"status", "config"}
 
 
 class CatalogMetric(BaseModel):
@@ -27,6 +39,12 @@ class CatalogMetric(BaseModel):
     decimals: int | None = Field(default=None, ge=0, le=10)
     min: float | None = None
     max: float | None = None
+    publish: PublishProfile = "periodic"
+    # Meaningful for "periodic"/"streaming" — the interval the device should
+    # enforce locally. Unset means the device's own firmware default applies.
+    publish_interval_seconds: int | None = Field(default=None, gt=0)
+    # Meaningful only for "on_change" — minimum delta before republishing.
+    publish_deadband: float | None = Field(default=None, ge=0)
 
 
 class CatalogActuator(BaseModel):

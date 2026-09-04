@@ -9,6 +9,13 @@ export interface RealtimeMessage {
   value?: number;
   time?: number;
   command_id?: string;
+  // device_health frame fields (a retained {tenant}/{device}/status message
+  // relayed live, CLAUDE.md §4).
+  online?: boolean;
+  rssi?: number | null;
+  battery_pct?: number | null;
+  uptime_s?: number | null;
+  fw_version?: string | null;
 }
 
 const MAX_BACKOFF_MS = 15_000;

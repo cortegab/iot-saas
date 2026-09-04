@@ -49,3 +49,28 @@ export function appendPoint(iso: string, value: number) {
     return { ...current, points: [...current.points, { time: iso, value }] };
   };
 }
+
+/** Applies a `device_health` WS frame (a retained {tenant}/{device}/status
+ * message relayed live, see CLAUDE.md §4) — push-driven and authoritative,
+ * so unlike markOnline above this always overwrites connection_state rather
+ * than only ever moving it toward "online".
+ */
+export function applyDeviceHealth(fields: {
+  online: boolean;
+  rssi: number | null;
+  battery_pct: number | null;
+  uptime_s: number | null;
+  fw_version: string | null;
+}) {
+  return (current: DeviceResponse | undefined): DeviceResponse | undefined => {
+    if (!current) return current;
+    return {
+      ...current,
+      connection_state: fields.online ? "online" : "offline",
+      rssi: fields.rssi,
+      battery_pct: fields.battery_pct,
+      uptime_s: fields.uptime_s,
+      fw_version: fields.fw_version,
+    };
+  };
+}

@@ -54,6 +54,9 @@ function newMetric(): MetricDraft {
     decimals: null,
     min: null,
     max: null,
+    publish: "periodic",
+    publish_interval_seconds: null,
+    publish_deadband: null,
   };
 }
 
@@ -78,8 +81,18 @@ function toMetric(m: MetricDraft): CatalogMetric {
     decimals: m.decimals,
     min: m.min,
     max: m.max,
+    publish: m.publish,
+    publish_interval_seconds: m.publish_interval_seconds,
+    publish_deadband: m.publish_deadband,
   };
 }
+
+const PUBLISH_PROFILES: NonNullable<CatalogMetric["publish"]>[] = ["periodic", "on_change", "streaming"];
+const PUBLISH_PROFILE_LABELS: Record<NonNullable<CatalogMetric["publish"]>, string> = {
+  periodic: "Periodic",
+  on_change: "On change",
+  streaming: "Streaming",
+};
 
 function toActuator(a: ActuatorDraft): CatalogActuator {
   return {
@@ -203,6 +216,63 @@ function MetricRow({
             </Field>
           </div>
         )}
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <Field label="Publish" hint="How the device decides when to send a new reading.">
+            <Select
+              compact
+              value={metric.publish ?? "periodic"}
+              onChange={(e) => {
+                const publish = e.target.value as NonNullable<CatalogMetric["publish"]>;
+                onChange({
+                  ...metric,
+                  publish,
+                  publish_interval_seconds: publish === "on_change" ? null : metric.publish_interval_seconds,
+                  publish_deadband: publish === "on_change" ? metric.publish_deadband : null,
+                });
+              }}
+            >
+              {PUBLISH_PROFILES.map((p) => (
+                <option key={p} value={p}>
+                  {PUBLISH_PROFILE_LABELS[p]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {metric.publish === "on_change" ? (
+            <Field label="Deadband">
+              <Input
+                compact
+                type="number"
+                min={0}
+                value={metric.publish_deadband ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...metric,
+                    publish_deadband: e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+                placeholder="e.g. 0.5"
+              />
+            </Field>
+          ) : (
+            <Field label="Interval (s)">
+              <Input
+                compact
+                type="number"
+                min={1}
+                value={metric.publish_interval_seconds ?? ""}
+                onChange={(e) =>
+                  onChange({
+                    ...metric,
+                    publish_interval_seconds: e.target.value === "" ? null : Number(e.target.value),
+                  })
+                }
+                placeholder="e.g. 30"
+              />
+            </Field>
+          )}
+        </div>
 
         <div className="flex justify-end">
           <Button type="button" variant="destructive" onClick={onRemove}>

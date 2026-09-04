@@ -746,6 +746,16 @@ export interface components {
             min?: number | null;
             /** Max */
             max?: number | null;
+            /**
+             * Publish
+             * @default periodic
+             * @enum {string}
+             */
+            publish: "periodic" | "on_change" | "streaming";
+            /** Publish Interval Seconds */
+            publish_interval_seconds?: number | null;
+            /** Publish Deadband */
+            publish_deadband?: number | null;
         };
         /** ChangeRoleRequest */
         ChangeRoleRequest: {
@@ -929,6 +939,18 @@ export interface components {
              * @enum {string}
              */
             connection_state: "online" | "offline" | "never_connected";
+            /** Last Status At */
+            last_status_at: string | null;
+            /** Rssi */
+            rssi: number | null;
+            /** Battery Pct */
+            battery_pct: number | null;
+            /** Uptime S */
+            uptime_s: number | null;
+            /** Fw Version */
+            fw_version: string | null;
+            /** Metrics Health */
+            metrics_health?: components["schemas"]["MetricHealthResponse"][];
         };
         /**
          * DeviceRuleCreateRequest
@@ -1108,6 +1130,15 @@ export interface components {
             tenant_slug: string;
             /** Role */
             role: string;
+        };
+        /** MetricHealthResponse */
+        MetricHealthResponse: {
+            /** Metric */
+            metric: string;
+            /** Last Value */
+            last_value: number | null;
+            /** Last Seen At */
+            last_seen_at: string | null;
         };
         /** MetricTrigger */
         MetricTrigger: {

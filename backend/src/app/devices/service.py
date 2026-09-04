@@ -12,11 +12,12 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import NamedTuple
 
-from sqlalchemy import func, select, text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, select, text, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth import service as auth_service
 from app.catalog import service as catalog_service
+from app.db import set_tenant_context
 from app.devices.models import Device, DeviceStatus
 from app.shared.slug import slugify
 
@@ -93,6 +94,10 @@ async def create_device(
     )
     session.add(device)
     await session.flush()
+    # So the retained {tenant}/{device}/config message already exists before
+    # this device's first-ever connect (CLAUDE.md §4) — not a side effect of
+    # its first message, which would be too late.
+    catalog_service.request_config_publish(session, catalog_entry_id)
     return device, secret
 
 
@@ -202,3 +207,42 @@ async def touch_last_seen(
         text("SELECT touch_devices_last_seen(:ids, :seen_at)"),
         {"ids": [str(d) for d in device_ids], "seen_at": seen_at},
     )
+
+
+async def record_status_snapshot(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    *,
+    online: bool,
+    rssi: int | None,
+    battery_pct: int | None,
+    uptime_s: int | None,
+    fw_version: str | None,
+    received_at: datetime,
+) -> None:
+    """Tier A device-health write — called once per retained
+    {tenant}/{device}/status message (app.worker._handle_status), a single
+    row, not batched like touch_last_seen above: a status message already
+    carries a resolved tenant_id (the same device-directory cache the
+    telemetry/ack paths use), so this can set_tenant_context and do a plain
+    RLS-scoped UPDATE, the same pattern app.commands.service.record_ack uses
+    for a worker-side single-row write — no SECURITY DEFINER function needed.
+    `received_at` is the worker's own receive time, never the payload's own
+    embedded timestamp (CLAUDE.md §4: an LWT's `online: false` fires at an
+    unpredictable moment its payload can't reflect).
+    """
+    async with factory() as session, session.begin():
+        await set_tenant_context(session, tenant_id)
+        await session.execute(
+            update(Device)
+            .where(Device.id == device_id, Device.tenant_id == tenant_id)
+            .values(
+                last_status_at=received_at,
+                last_status_online=online,
+                rssi=rssi,
+                battery_pct=battery_pct,
+                uptime_s=uptime_s,
+                fw_version=fw_version,
+            )
+        )

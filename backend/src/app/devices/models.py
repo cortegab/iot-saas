@@ -49,6 +49,20 @@ class Device(Base):
     token_hash: Mapped[str] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(nullable=False, default=DeviceStatus.ACTIVE.value)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Tier A device-health snapshot — written synchronously from a retained
+    # {tenant}/{device}/status message (app.worker._handle_status), not
+    # batched like last_seen_at above. `last_status_online` is push-driven and
+    # authoritative when present (an LWT-triggered False means offline, full
+    # stop); devices/router.py's _connection_state prefers it over the
+    # last_seen_at heuristic, falling back for devices that have never sent a
+    # status message (older firmware — this fallback is permanent, not a
+    # migration window).
+    last_status_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_status_online: Mapped[bool | None] = mapped_column(nullable=True)
+    rssi: Mapped[int | None] = mapped_column(nullable=True)
+    battery_pct: Mapped[int | None] = mapped_column(nullable=True)
+    uptime_s: Mapped[int | None] = mapped_column(nullable=True)
+    fw_version: Mapped[str | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

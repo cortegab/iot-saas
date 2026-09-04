@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { mutate, useSWRConfig } from "swr";
 import { useAuth } from "@/hooks/useAuth";
 import { connectRealtime, type RealtimeMessage, type RealtimeStatus } from "@/lib/realtime";
-import { appendPoint, markOnline, mergeLatest } from "@/lib/live-telemetry";
+import { applyDeviceHealth, appendPoint, markOnline, mergeLatest } from "@/lib/live-telemetry";
 import type { components } from "@/types/api";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
@@ -106,6 +106,25 @@ export function useRealtime(): RealtimeStatus {
           void mutate<TelemetryDataResponse>(chartKey, appendPoint(iso, value), {
             revalidate: false,
           });
+        }
+      } else if (
+        message.type === "device_health" &&
+        message.device_id &&
+        typeof message.online === "boolean"
+      ) {
+        const deviceKey = `/devices/${message.device_id}`;
+        if (hasData(deviceKey)) {
+          void mutate<DeviceResponse>(
+            deviceKey,
+            applyDeviceHealth({
+              online: message.online,
+              rssi: message.rssi ?? null,
+              battery_pct: message.battery_pct ?? null,
+              uptime_s: message.uptime_s ?? null,
+              fw_version: message.fw_version ?? null,
+            }),
+            { revalidate: false },
+          );
         }
       } else if (message.type === "command_ack" && message.device_id) {
         void mutate(`/devices/${message.device_id}/commands`);
