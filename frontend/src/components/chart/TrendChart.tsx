@@ -106,8 +106,13 @@ export function TrendChart({
   // straight onto this key's `points` (revalidate:false), so the tip moves
   // in real time; this periodic refetch just resnaps to the authoritative
   // series (and, on wider ranges, the bucket averages).
+  //
+  // keepPreviousData: `from` re-anchors to "now" every 15s (below), minting a
+  // fresh key each time — without this the chart would blank to a loading
+  // skeleton / "no data" on every re-anchor while that key's first fetch runs.
   const { data, error, isLoading } = useApiSWR<TelemetryDataResponse>(queryKey, {
     refreshInterval: rangeMs <= 6 * HOUR ? 20_000 : 60_000,
+    keepPreviousData: true,
   });
 
   const containerRef = useRef<HTMLDivElement>(null);
