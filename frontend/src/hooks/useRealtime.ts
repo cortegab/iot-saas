@@ -4,20 +4,34 @@ import { useEffect, useRef, useState } from "react";
 import { mutate } from "swr";
 import { useAuth } from "@/hooks/useAuth";
 import { connectRealtime, type RealtimeMessage, type RealtimeStatus } from "@/lib/realtime";
+import { appendPoint, markOnline, mergeLatest } from "@/lib/live-telemetry";
+import type { components } from "@/types/api";
+
+type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
+type TelemetryDataResponse = components["schemas"]["TelemetryDataResponse"];
+type DeviceResponse = components["schemas"]["DeviceResponse"];
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-/** Mounted once (frontend/src/app/(app)/layout.tsx), not per-component. Its
- * only job is telling SWR "something changed for device X" — the REST
- * endpoints stay the single source of truth for what that data actually is,
- * so every existing useApiSWR('/devices/{id}/...') call site benefits from
- * this without being touched, simply by sharing the same cache key.
+/** Mounted once (frontend/src/app/(app)/layout.tsx), not per-component.
+ *
+ * For a telemetry frame it **applies** the pushed `{metric, value, time}`
+ * straight into the relevant SWR caches (`revalidate: false`) rather than
+ * invalidating and re-fetching — the frame already carries everything the
+ * live surfaces need, and a refetch would only race the ~1s DB batch flush
+ * and return the previous sample. The existing `refreshInterval` / on-focus
+ * refetch on those keys stays as the reconciling backstop, and a WS
+ * reconnect triggers one real revalidation to catch up on missed frames.
+ *
+ * `command_ack` / `notification` still just invalidate — no useful payload
+ * to apply.
  */
 export function useRealtime(): RealtimeStatus {
   const { accessToken, currentTenantId, refresh } = useAuth();
   const [status, setStatus] = useState<RealtimeStatus>("connecting");
   const tokenRef = useRef(accessToken);
   tokenRef.current = accessToken;
+  const droppedRef = useRef(false);
 
   useEffect(() => {
     if (!currentTenantId) return;
@@ -32,19 +46,29 @@ export function useRealtime(): RealtimeStatus {
     }
 
     function onMessage(message: RealtimeMessage) {
-      if (message.type === "telemetry" && message.device_id) {
+      if (
+        message.type === "telemetry" &&
+        message.device_id &&
+        message.metric != null &&
+        typeof message.value === "number"
+      ) {
         const deviceId = message.device_id;
-        const metricPrefix = `/devices/${deviceId}/data?metric=${encodeURIComponent(message.metric ?? "")}`;
-        void mutate(
-          (key) =>
-            typeof key === "string" &&
-            (key === `/devices/${deviceId}/latest` ||
-              // A telemetry message is also the only signal a device just
-              // came online (connection_state is derived from last_seen_at
-              // server-side) — revalidate the plain device endpoint too, so
-              // every ConnectionBadge reading it updates live.
-              key === `/devices/${deviceId}` ||
-              key.startsWith(metricPrefix)),
+        const metric = message.metric;
+        const value = message.value;
+        const seconds = message.time ?? Math.floor(Date.now() / 1000);
+        const iso = new Date(seconds * 1000).toISOString();
+        const dataPrefix = `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}`;
+
+        void mutate<TelemetryLatestResponse[]>(
+          `/devices/${deviceId}/latest`,
+          mergeLatest(metric, value, iso),
+          { revalidate: false },
+        );
+        void mutate<DeviceResponse>(`/devices/${deviceId}`, markOnline(iso), { revalidate: false });
+        void mutate<TelemetryDataResponse>(
+          (key) => typeof key === "string" && key.startsWith(dataPrefix),
+          appendPoint(iso, value),
+          { revalidate: false },
         );
       } else if (message.type === "command_ack" && message.device_id) {
         void mutate(`/devices/${message.device_id}/commands`);
@@ -53,12 +77,25 @@ export function useRealtime(): RealtimeStatus {
       }
     }
 
+    function onStatusChange(next: RealtimeStatus) {
+      setStatus(next);
+      if (next === "reconnecting") droppedRef.current = true;
+      if (next === "open" && droppedRef.current) {
+        droppedRef.current = false;
+        // Frames that arrived while the socket was down were missed — do one
+        // real revalidation of every device-scoped key to catch up.
+        void mutate((key) => typeof key === "string" && key.startsWith("/devices/"), undefined, {
+          revalidate: true,
+        });
+      }
+    }
+
     const connection = connectRealtime({
       getToken,
       tenantId: currentTenantId,
       apiUrl: API_URL,
       onMessage,
-      onStatusChange: setStatus,
+      onStatusChange,
     });
 
     return () => connection.close();
