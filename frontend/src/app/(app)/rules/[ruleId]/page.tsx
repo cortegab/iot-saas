@@ -10,6 +10,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Tabs, TabPanel } from "@/components/ui/Tabs";
 import { RuleExecutionHistory } from "@/components/rules/RuleExecutionHistory";
 import { RuleForm } from "@/components/rules/RuleForm";
+import { RunNowButton } from "@/components/rules/RunNowButton";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { ApiRequestError } from "@/lib/api-client";
 import { upsertRuleInCache } from "@/lib/rule-cache";
 import type { components } from "@/types/api";
@@ -30,6 +32,7 @@ export default function EditRulePage() {
   const params = useParams<{ ruleId: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isAdmin = useIsAdmin();
   const [tab, setTab] = useState(searchParams.get("tab") ?? "edit");
   const { data: rule, error, isLoading, mutate } = useApiSWR<RuleResponse>(`/rules/${params.ruleId}`);
   const seedDevice = rule ? primaryInputDevice(rule) : undefined;
@@ -59,6 +62,7 @@ export default function EditRulePage() {
           device ? `on ${device.name}` : rule.devices.length > 1 ? "multi-device" : undefined
         }
         back={{ href: "/rules", label: "Rules" }}
+        actions={isAdmin ? <RunNowButton ruleId={params.ruleId} /> : undefined}
       />
 
       <Tabs tabs={TABS} active={tab} onChange={setTab} />

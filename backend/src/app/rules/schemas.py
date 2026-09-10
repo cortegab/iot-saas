@@ -41,15 +41,36 @@ class ActuatorCommandAction(BaseModel):
     value: bool | float | str
 
 
+NotificationChannel = Literal["platform", "email"]
+
+
+def _default_channels() -> list[NotificationChannel]:
+    return ["platform"]
+
+
 class NotificationAction(BaseModel):
     type: Literal["notification"] = "notification"
     message: str = Field(min_length=1, max_length=1000)
+    # "platform" = the in-app activity feed row (always written on a firing
+    # regardless). "email" = also send to the tenant's notification_emails
+    # (or, if unset, owner/admin members). Pre-Phase-4 rules have no
+    # `channels` field — readers default to ["platform"].
+    channels: list[NotificationChannel] = Field(default_factory=_default_channels, min_length=1)
+
+
+class RetryConfig(BaseModel):
+    max_attempts: int = Field(default=4, ge=2, le=6)
+    timeout_s: float = Field(default=5.0, ge=1, le=30)
 
 
 class WebhookAction(BaseModel):
     type: Literal["webhook"] = "webhook"
     url: str = Field(min_length=1, max_length=2000)
     body: dict[str, object] = Field(default_factory=dict)
+    # Optional per-action override of the default retry policy (4 attempts,
+    # exponential backoff, 5s per-attempt timeout).
+    retry: RetryConfig | None = None
+    timeout_s: float | None = Field(default=None, ge=1, le=30)
 
 
 ActionRequest = Annotated[
@@ -64,7 +85,21 @@ class MetricTrigger(BaseModel):
     type: Literal["metric"] = "metric"
 
 
-TriggerRequest = Annotated[MetricTrigger, Field(discriminator="type")]
+class ScheduleTrigger(BaseModel):
+    type: Literal["schedule"] = "schedule"
+    # A standard 5-field cron expression. Validated in rules/service.py
+    # (croniter.is_valid) — there's no field_validator precedent in this file.
+    cron: str = Field(min_length=1, max_length=120)
+    timezone: str = "UTC"
+
+
+class ManualTrigger(BaseModel):
+    type: Literal["manual"] = "manual"
+
+
+TriggerRequest = Annotated[
+    MetricTrigger | ScheduleTrigger | ManualTrigger, Field(discriminator="type")
+]
 
 
 # ---- Condition tree ---------------------------------------------------------
@@ -204,11 +239,28 @@ class RuleExecutionResponse(BaseModel):
     rule_id: uuid.UUID | None
     device_id: uuid.UUID | None
     device_name: str | None
-    metric: str
-    value: float
+    # Null for schedule/manual fires — there's no triggering signal.
+    metric: str | None
+    value: float | None
+    trigger_source: str  # "metric" | "schedule" | "manual"
     fired_at: datetime
     # Snapshotted condition summary at fire time — still reads sensibly after
     # the rule's condition later changes or the rule itself is deleted.
     summary: str
     created_at: datetime
     actions: list[ActionExecutionResponse]
+
+
+class FailedActionResponse(BaseModel):
+    """One failed delivery attempt across the whole tenant — the
+    /rules/failed-actions operational feed."""
+
+    id: uuid.UUID
+    rule_id: uuid.UUID | None
+    rule_name: str | None
+    action_type: str
+    action_index: int | None
+    detail: dict[str, object] | None
+    summary: str
+    fired_at: datetime
+    created_at: datetime

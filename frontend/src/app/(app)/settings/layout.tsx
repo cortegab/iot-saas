@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 
 const TABS = [
   { href: "/settings/organization", label: "Organization" },
+  { href: "/settings/alerts", label: "Alerts" },
   { href: "/settings/users", label: "Users" },
   { href: "/settings/roles", label: "Roles & Permissions" },
   { href: "/settings/tokens", label: "API tokens" },

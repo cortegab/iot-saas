@@ -16,7 +16,12 @@ from app.rules import service as rules_service
 from app.tenants.models import Tenant
 
 _ACTION = {"type": "actuator_command", "actuator": "fan1", "value": True}
-_TEMPERATURE_CONDITION = {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0}
+_TEMPERATURE_CONDITION = {
+    "kind": "leaf",
+    "metric": "temperature",
+    "operator": ">",
+    "threshold": 30.0,
+}
 
 
 async def _tenant_slug(admin_session: AsyncSession, tenant_id: str) -> str:
@@ -134,7 +139,12 @@ async def test_update_rule(client: httpx.AsyncClient) -> None:
     resp = await client.patch(
         f"/rules/{rule_id}",
         json={
-            "condition": {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 40.0},
+            "condition": {
+                "kind": "leaf",
+                "metric": "temperature",
+                "operator": ">",
+                "threshold": 40.0,
+            },
             "enabled": False,
         },
         headers=headers,
@@ -161,7 +171,9 @@ async def test_update_rule_to_multi_predicate_condition(client: httpx.AsyncClien
             {"kind": "leaf", "metric": "humidity", "operator": "<", "threshold": 40.0},
         ],
     }
-    resp = await client.patch(f"/rules/{rule_id}", json={"condition": and_condition}, headers=headers)
+    resp = await client.patch(
+        f"/rules/{rule_id}", json={"condition": and_condition}, headers=headers
+    )
     assert resp.status_code == 200
     body = resp.json()
     assert body["condition"]["kind"] == "group"
@@ -341,8 +353,20 @@ async def test_create_canonical_multi_device_rule(client: httpx.AsyncClient) -> 
             "kind": "group",
             "op": "AND",
             "predicates": [
-                {"kind": "leaf", "device_id": a_id, "metric": "temperature", "operator": ">", "threshold": 80.0},
-                {"kind": "leaf", "device_id": b_id, "metric": "pressure", "operator": ">", "threshold": 120.0},
+                {
+                    "kind": "leaf",
+                    "device_id": a_id,
+                    "metric": "temperature",
+                    "operator": ">",
+                    "threshold": 80.0,
+                },
+                {
+                    "kind": "leaf",
+                    "device_id": b_id,
+                    "metric": "pressure",
+                    "operator": ">",
+                    "threshold": 120.0,
+                },
             ],
         },
         "execution_policy": {"strategy": "edge", "for_duration": 5, "cooldown": 30},
@@ -389,7 +413,12 @@ async def test_canonical_rule_rejects_cross_tenant_device(client: httpx.AsyncCli
             "threshold": 1.0,
         },
         "actions": [
-            {"type": "actuator_command", "device_id": device_a["device"]["id"], "actuator": "x", "value": True}
+            {
+                "type": "actuator_command",
+                "device_id": device_a["device"]["id"],
+                "actuator": "x",
+                "value": True,
+            }
         ],
     }
     resp = await client.post("/rules", json=body, headers=headers_a)
@@ -414,7 +443,10 @@ async def test_list_rule_executions_newest_first_and_nests_actions(
     await rules_service.load_rule_cache(app_session_factory)
     tenant_slug = await _tenant_slug(admin_session, tenant_id)
 
-    for value in (35.0, 36.0):
+    # 35.0 fires; 20.0 drops the condition so the edge-strategy rule re-arms;
+    # 36.0 fires again. (Two consecutive above-threshold readings would only
+    # fire once — the rule stays disarmed until the condition goes false.)
+    for value in (35.0, 20.0, 36.0):
         await rules_service.evaluate_and_dispatch(
             mock_mqtt_client,
             app_session_factory,

@@ -133,8 +133,11 @@ class RuleExecution(Base):
     device_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("devices.id", ondelete="SET NULL"), nullable=True
     )
-    metric: Mapped[str] = mapped_column(String, nullable=False)
-    value: Mapped[float] = mapped_column(Float, nullable=False)
+    # Null for schedule/manual fires — there's no triggering signal.
+    metric: Mapped[str | None] = mapped_column(String, nullable=True)
+    value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # "metric" | "schedule" | "manual" — which path fired the rule.
+    trigger_source: Mapped[str] = mapped_column(String, nullable=False, server_default="metric")
     fired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     summary: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

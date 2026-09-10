@@ -27,6 +27,7 @@ from app.rules.schemas import (
     ConditionNode,
     DeviceRuleCreateRequest,
     ExecutionPolicy,
+    FailedActionResponse,
     RuleCreateRequest,
     RuleDeviceRef,
     RuleExecutionResponse,
@@ -158,6 +159,31 @@ async def create_device_rule(
     return await _response(session, ctx.tenant_id, rule)
 
 
+@router.get("/rules/failed-actions", response_model=list[FailedActionResponse])
+async def list_failed_actions(
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session),
+) -> list[FailedActionResponse]:
+    # Declared above GET /rules/{rule_id} so "failed-actions" isn't matched as
+    # a rule_id. Read-side feed — membership is enough, no admin gate (same
+    # reasoning as notifications/router.py).
+    rows = await service.list_failed_actions(session, ctx.tenant_id)
+    return [
+        FailedActionResponse(
+            id=row.id,
+            rule_id=row.rule_id,
+            rule_name=row.rule_name,
+            action_type=row.action_type,
+            action_index=row.action_index,
+            detail=row.detail,
+            summary=row.summary,
+            fired_at=row.fired_at,
+            created_at=row.created_at,
+        )
+        for row in rows
+    ]
+
+
 @router.get("/rules/{rule_id}", response_model=RuleResponse)
 async def get_rule(
     rule: Rule = Depends(get_rule_or_404),
@@ -165,6 +191,18 @@ async def get_rule(
     session: AsyncSession = Depends(get_session),
 ) -> RuleResponse:
     return await _response(session, ctx.tenant_id, rule)
+
+
+@router.post("/rules/{rule_id}/run", status_code=status.HTTP_202_ACCEPTED)
+async def run_rule(
+    rule: Rule = Depends(get_rule_or_404),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Manual "Run now" — publishes a one-shot run request; app.worker
+    evaluates the condition against the live signal cache and fires only if
+    it's currently met."""
+    await service.request_manual_run(session, ctx.tenant_id, rule.id)
 
 
 @router.get("/rules/{rule_id}/executions", response_model=list[RuleExecutionResponse])
@@ -182,6 +220,7 @@ async def list_rule_executions(
             device_name=row.device_name,
             metric=row.metric,
             value=row.value,
+            trigger_source=row.trigger_source,
             fired_at=row.fired_at,
             summary=row.summary,
             created_at=row.created_at,

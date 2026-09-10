@@ -17,13 +17,18 @@ class TenantCreateRequest(BaseModel):
 
 
 class TenantUpdateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    # Recipient list for rule notification email alerts. Bare `str` — the repo
+    # has no `pydantic[email]` dependency (see auth/schemas.py). At most 50, so
+    # a fat-fingered paste can't blow up every alert.
+    notification_emails: list[str] | None = Field(default=None, max_length=50)
 
 
 class TenantResponse(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
+    notification_emails: list[str]
     created_at: datetime
 
 

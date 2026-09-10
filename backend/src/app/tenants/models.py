@@ -14,6 +14,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -37,6 +38,13 @@ class Tenant(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     name: Mapped[str] = mapped_column(nullable=False)
     slug: Mapped[str] = mapped_column(nullable=False, unique=True)
+    # Recipient list for rule notification `email`-channel alerts, editable
+    # from Settings -> Alerts. Empty ⇒ fall back to owner/admin member emails
+    # (resolved in app.rules.service). Not a separate table — one small JSONB
+    # list, same treatment dashboards.layout / catalog.metrics get.
+    notification_emails: Mapped[list[str]] = mapped_column(
+        JSONB, nullable=False, server_default="[]"
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

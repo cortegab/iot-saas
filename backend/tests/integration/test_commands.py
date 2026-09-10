@@ -63,7 +63,9 @@ async def _create_rule(
 
 
 async def _tenant_slug(admin_session: AsyncSession, tenant_id: str) -> str:
-    result = await admin_session.execute(select(Tenant.slug).where(Tenant.id == uuid.UUID(tenant_id)))
+    result = await admin_session.execute(
+        select(Tenant.slug).where(Tenant.id == uuid.UUID(tenant_id))
+    )
     return result.scalar_one()
 
 
@@ -250,12 +252,13 @@ async def test_dispatch_command_and_record_ack(
     assert command.acked_at is not None
 
 
-async def test_webhook_action_posts_to_url(
+async def test_webhook_action_deferred_then_posts_to_url(
     client: httpx.AsyncClient,
     app_session_factory: async_sessionmaker[AsyncSession],
     admin_session: AsyncSession,
     mock_mqtt_client: AsyncMock,
     monkeypatch: pytest.MonkeyPatch,
+    deferred_actions: Any,
 ) -> None:
     owner = await _register(client, "owner3@example.com", "Acme3")
     tenant_id = owner["memberships"][0]["tenant_id"]
@@ -288,10 +291,16 @@ async def test_webhook_action_posts_to_url(
         datetime.now(UTC),
     )
 
+    # Webhook is deferred — not touched on the hot path.
+    mock_post.assert_not_awaited()
+    assert len(deferred_actions.pending) == 1
+    mock_mqtt_client.publish.assert_not_called()
+
+    await deferred_actions.drain()
+
     mock_post.assert_awaited_once()
     assert mock_post.call_args.args[0] == "https://example.com/hook"
     assert mock_post.call_args.kwargs["json"] == {"foo": "bar"}
-    mock_mqtt_client.publish.assert_not_called()
 
     execution_result = await admin_session.execute(
         select(RuleExecution).where(RuleExecution.device_id == uuid.UUID(device_id))
@@ -307,6 +316,7 @@ async def test_webhook_action_posts_to_url(
     assert webhook_action.status == "success"
     assert webhook_action.detail is not None
     assert webhook_action.detail["status_code"] == 200
+    assert webhook_action.detail["attempts"] == 1
 
 
 async def test_manual_command_publishes_request_as_admin(
@@ -320,6 +330,7 @@ async def test_manual_command_publishes_request_as_admin(
     device_id = device["device"]["id"]
     device_slug = device["device"]["slug"]
 
+    _mock_redis_publish.reset_mock()  # ignore the register/create-device config-publish calls
     resp = await client.post(
         f"/devices/{device_id}/commands",
         json={"actuator": "fan1", "value": True},
@@ -327,10 +338,13 @@ async def test_manual_command_publishes_request_as_admin(
     )
     assert resp.status_code == 202
 
-    _mock_redis_publish.assert_awaited_once()
-    channel, payload = _mock_redis_publish.call_args.args
-    assert channel == commands_service.MANUAL_COMMAND_CHANNEL
-    data = json.loads(payload)
+    manual_calls = [
+        c
+        for c in _mock_redis_publish.call_args_list
+        if c.args[0] == commands_service.MANUAL_COMMAND_CHANNEL
+    ]
+    assert len(manual_calls) == 1
+    data = json.loads(manual_calls[0].args[1])
     assert data["device_id"] == device_id
     assert data["device_slug"] == device_slug
     assert data["actuator"] == "fan1"
@@ -531,7 +545,9 @@ async def test_cross_device_actuator_command_targets_other_device(
     device_a = await _create_device(client, headers)
     catalog_entry_id = (await client.get("/catalog", headers=headers)).json()[0]["id"]
     resp_b = await client.post(
-        "/devices", json={"name": "Actuator Box", "catalog_entry_id": catalog_entry_id}, headers=headers
+        "/devices",
+        json={"name": "Actuator Box", "catalog_entry_id": catalog_entry_id},
+        headers=headers,
     )
     device_b = resp_b.json()
     a_id = device_a["device"]["id"]
@@ -616,7 +632,9 @@ async def test_actuator_command_to_disabled_target_records_failed_action_no_dang
     device_a = await _create_device(client, headers)
     catalog_entry_id = (await client.get("/catalog", headers=headers)).json()[0]["id"]
     resp_b = await client.post(
-        "/devices", json={"name": "Actuator Box", "catalog_entry_id": catalog_entry_id}, headers=headers
+        "/devices",
+        json={"name": "Actuator Box", "catalog_entry_id": catalog_entry_id},
+        headers=headers,
     )
     device_b = resp_b.json()
     a_id = device_a["device"]["id"]
@@ -677,12 +695,13 @@ async def test_actuator_command_to_disabled_target_records_failed_action_no_dang
     assert actuator_action.command_id is None
 
 
-async def test_webhook_http_error_records_failed_action_and_dispatch_continues(
+async def test_webhook_exhausts_retries_records_failed_action(
     client: httpx.AsyncClient,
     app_session_factory: async_sessionmaker[AsyncSession],
     admin_session: AsyncSession,
     mock_mqtt_client: AsyncMock,
     monkeypatch: pytest.MonkeyPatch,
+    deferred_actions: Any,
 ) -> None:
     owner = await _register(client, "ownerWebhookFail@example.com", "AcmeWebhookFail")
     tenant_id = owner["memberships"][0]["tenant_id"]
@@ -699,9 +718,8 @@ async def test_webhook_http_error_records_failed_action_and_dispatch_continues(
     await rules_service.load_rule_cache(app_session_factory)
     tenant_slug = await _tenant_slug(admin_session, tenant_id)
 
-    monkeypatch.setattr(
-        httpx.AsyncClient, "post", AsyncMock(side_effect=httpx.ConnectError("boom"))
-    )
+    mock_post = AsyncMock(side_effect=httpx.ConnectError("boom"))
+    monkeypatch.setattr(httpx.AsyncClient, "post", mock_post)
 
     await rules_service.evaluate_and_dispatch(
         mock_mqtt_client,
@@ -714,13 +732,15 @@ async def test_webhook_http_error_records_failed_action_and_dispatch_continues(
         35.0,
         datetime.now(UTC),
     )
-
-    # Dispatch continues to the notification write despite the webhook failure.
+    # The platform notification row is written inline, before the deferred drain.
     notification_result = await admin_session.execute(
         select(Notification).where(Notification.device_id == uuid.UUID(device_id))
     )
     assert notification_result.scalar_one_or_none() is not None
 
+    await deferred_actions.drain()
+
+    assert mock_post.await_count == 4  # initial + 3 retries
     execution_result = await admin_session.execute(
         select(RuleExecution).where(RuleExecution.device_id == uuid.UUID(device_id))
     )
@@ -734,7 +754,13 @@ async def test_webhook_http_error_records_failed_action_and_dispatch_continues(
     webhook_action = action_result.scalar_one()
     assert webhook_action.status == "failed"
     assert webhook_action.detail is not None
+    assert webhook_action.detail["attempts"] == 4
     assert "boom" in webhook_action.detail["error"]
+
+    # And it surfaces in the tenant-wide failed-actions feed.
+    failed = await client.get("/rules/failed-actions", headers=headers)
+    assert failed.status_code == 200
+    assert any(a["action_type"] == "webhook" for a in failed.json())
 
 
 async def test_execution_history_write_failure_never_breaks_dispatch(
@@ -807,7 +833,6 @@ async def test_unknown_action_type_records_failed_unknown_action(
     device = await _create_device(client, headers)
     device_id = uuid.UUID(device["device"]["id"])
     device_slug = device["device"]["slug"]
-    tenant_slug = await _tenant_slug(admin_session, str(tenant_id))
 
     rule_id = uuid.uuid4()
     async with admin_session.begin():
@@ -831,6 +856,7 @@ async def test_unknown_action_type_records_failed_unknown_action(
             )
         )
 
+    tenant_slug = await _tenant_slug(admin_session, str(tenant_id))
     await rules_service.load_rule_cache(app_session_factory)
 
     await rules_service.evaluate_and_dispatch(

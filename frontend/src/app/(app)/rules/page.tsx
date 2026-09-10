@@ -151,11 +151,16 @@ export default function RulesPage() {
       <PageHeader
         title="Rules"
         actions={
-          isAdmin && (
-            <Link href="/rules/new" className={buttonClassName()}>
-              Create Rule
+          <div className="flex items-center gap-2">
+            <Link href="/rules/failed-actions" className="text-sm text-ink-muted hover:text-ink">
+              Failed actions
             </Link>
-          )
+            {isAdmin && (
+              <Link href="/rules/new" className={buttonClassName()}>
+                Create Rule
+              </Link>
+            )}
+          </div>
         }
       />
 

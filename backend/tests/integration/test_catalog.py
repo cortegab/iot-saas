@@ -61,6 +61,9 @@ async def test_create_catalog_entry_with_metrics_and_actuators(client: httpx.Asy
             "decimals": None,
             "min": -20.0,
             "max": 80.0,
+            "publish": "periodic",
+            "publish_interval_seconds": None,
+            "publish_deadband": None,
         }
     ]
     assert body["actuators"] == [

@@ -4,6 +4,8 @@ This is the single source of truth for connection details shared by the API
 server and the ingestion worker.
 """
 
+from typing import Literal
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -61,6 +63,19 @@ class Settings(BaseSettings):
     # Comma-separated. Defaults to the local Next.js dev server; prod sets this
     # to the real frontend origin(s) via CORS_ALLOW_ORIGINS in infra/.env.prod.
     cors_allow_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    # Notification email delivery (Phase 4). "console" logs the rendered email
+    # and sends nothing — the dev/test default, no SMTP server needed. "smtp"
+    # sends via aiosmtplib and requires smtp_host (app.notifications.email
+    # fails fast at startup if it's blank). A future provider (Resend/SES) is a
+    # drop-in behind the same EmailProvider protocol.
+    email_provider: Literal["console", "smtp"] = "console"
+    email_from: str = "alerts@example.com"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_use_tls: bool = True
 
     @property
     def cors_allow_origins_list(self) -> list[str]:

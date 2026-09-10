@@ -4,21 +4,27 @@ rule_cache_loop in app/worker.py), the in-memory last-known-value cache
 multi-device conditions read from, and hot-path evaluation/dispatch.
 """
 
+import asyncio
+import json
 import logging
 import uuid
-from datetime import datetime
+from collections.abc import Coroutine
+from datetime import UTC, datetime
 from typing import Any, NamedTuple
+from zoneinfo import ZoneInfo
 
 import aiomqtt
-import httpx
+from croniter import CroniterError, croniter
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.auth import service as auth_service
 from app.commands import service as commands_service
 from app.db import add_post_commit_callback, set_tenant_context
 from app.notifications import service as notifications_service
 from app.realtime import service as realtime_service
 from app.redis import redis_client
+from app.rules import executors
 from app.rules.evaluators import (
     Evaluator,
     MetricSnapshot,
@@ -26,6 +32,7 @@ from app.rules.evaluators import (
     RuleState,
     SignalKey,
     ThresholdEvaluator,
+    evaluate_condition,
     referenced_signals,
 )
 from app.rules.models import (
@@ -36,10 +43,15 @@ from app.rules.models import (
     RuleExecution,
     RuleType,
 )
+from app.tenants import service as tenants_service
 
 log = logging.getLogger("rules")
 
 RULES_INVALIDATE_CHANNEL = "rules:invalidate"
+# One out-of-band evaluation of a single rule — carries {tenant_id, rule_id,
+# trigger_source}. Published by request_manual_run (POST /rules/{id}/run) and
+# by app.worker's schedule_loop; consumed by app.worker's manual_command_loop.
+RULES_MANUAL_CHANNEL = "rules:manual"
 
 # The one staleness bound this codebase used to hardcode twice (once here,
 # once as devices.device_offline_after_seconds — see evaluators.py's old
@@ -201,6 +213,22 @@ def _assert_leaves_have_device(condition: dict[str, Any]) -> None:
         raise RuleValidationError("every condition must name a device")
 
 
+def _validate_trigger(trigger: dict[str, Any]) -> None:
+    """Cron + timezone sanity for a schedule trigger — done here rather than a
+    Pydantic field_validator (this schema module has no such precedent).
+    Metric / manual triggers carry nothing to validate.
+    """
+    if trigger.get("type") != "schedule":
+        return
+    cron = trigger.get("cron", "")
+    if not croniter.is_valid(cron):
+        raise RuleValidationError(f"invalid cron expression: {cron!r}")
+    try:
+        ZoneInfo(trigger.get("timezone", "UTC"))
+    except (KeyError, ValueError) as exc:
+        raise RuleValidationError(f"invalid timezone: {trigger.get('timezone')!r}") from exc
+
+
 async def _persist_rule(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -215,6 +243,7 @@ async def _persist_rule(
     enabled: bool,
 ) -> Rule:
     _assert_leaves_have_device(condition)
+    _validate_trigger(trigger)
     device_map = _rule_device_map(condition, actions)
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
 
@@ -405,6 +434,7 @@ async def update_rule(
     if description is not None:
         rule.description = description
     if trigger is not None:
+        _validate_trigger(trigger)
         rule.trigger = trigger
     if editor_graph is not None:
         rule.editor_graph = editor_graph
@@ -461,8 +491,21 @@ def _publish_invalidation(session: AsyncSession) -> None:
 
 # ---- Worker-side cache + hot path -------------------------------------------
 
+# Metric-triggered rules only, keyed by the signals their condition reads.
+# schedule/manual rules are deliberately NOT here — otherwise a scheduled rule
+# whose condition names a live metric would also fire on the metric hot path.
 _rule_cache: dict[SignalKey, list[Rule]] = {}
+# Every enabled rule by id — for the out-of-band (schedule/manual) run path,
+# which targets one rule and can't reach it through the signal-keyed cache.
+_rules_by_id: dict[uuid.UUID, Rule] = {}
+# Enabled rules with trigger.type == "schedule" — iterated by schedule_loop.
+_scheduled_rules: list[Rule] = []
 _rule_states: dict[uuid.UUID, RuleState] = {}
+
+# Deferred (webhook/email) delivery tasks — strong refs so asyncio can't GC a
+# task mid-flight; the semaphore bounds concurrency during an endpoint outage.
+_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
+_DEFERRED_SEMAPHORE = asyncio.Semaphore(100)
 
 # Last known value per (device_id, metric), updated unconditionally on every
 # telemetry message (pure dict write, zero I/O — stays in the hot-path
@@ -501,6 +544,8 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
         rows = result.mappings().all()
 
     new_cache: dict[SignalKey, list[Rule]] = {}
+    new_by_id: dict[uuid.UUID, Rule] = {}
+    new_scheduled: list[Rule] = []
     for row in rows:
         rule = Rule(
             id=row["id"],
@@ -515,11 +560,24 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
             editor_graph=row["editor_graph"],
             enabled=row["enabled"],
         )
-        for signal in referenced_signals(rule.condition):
-            new_cache.setdefault(signal, []).append(rule)
+        new_by_id[rule.id] = rule
+        trigger_type = (rule.trigger or {}).get("type", "metric")
+        if trigger_type == "schedule":
+            new_scheduled.append(rule)
+        elif trigger_type != "manual":  # metric (or an unknown/legacy shape)
+            for signal in referenced_signals(rule.condition):
+                new_cache.setdefault(signal, []).append(rule)
     _rule_cache.clear()
     _rule_cache.update(new_cache)
-    log.info("rule cache reloaded: %d active rules", len(rows))
+    _rules_by_id.clear()
+    _rules_by_id.update(new_by_id)
+    _scheduled_rules[:] = new_scheduled
+    log.info("rule cache reloaded: %d active (%d scheduled)", len(rows), len(new_scheduled))
+
+
+def scheduled_rules_snapshot() -> list[Rule]:
+    """A copy for app.worker's schedule_loop to iterate without racing a reload."""
+    return list(_scheduled_rules)
 
 
 def _snapshot_for_signals(signals: set[SignalKey]) -> MetricSnapshot:
@@ -619,16 +677,26 @@ async def _resolve_target(
 
 
 class _ActionOutcome(NamedTuple):
-    """One action's dispatch result — collected in-memory during
-    _dispatch_actions' loop (zero new I/O) and written to `action_executions`
-    only after every action has been attempted, alongside the existing
-    notification write (see _record_rule_execution)."""
+    """One inline action's dispatch result — actuator_command, the unconditional
+    notification row, an unknown action type, or a webhook/email that couldn't
+    be deferred (executor saturated). Collected in-memory during
+    _dispatch_actions and written to `action_executions` by _record_rule_execution."""
 
     action_type: str
     action_index: int | None
     status: str  # "success" | "failed"
     detail: dict[str, Any] | None
     command_id: uuid.UUID | None
+
+
+class _DeferredAction(NamedTuple):
+    """A webhook or email action to run in a background task after the
+    execution record commits — so a slow/failing endpoint can't stall the
+    hot path, and can be retried with backoff."""
+
+    kind: str  # "webhook" | "email"
+    action_index: int | None
+    config: dict[str, Any]
 
 
 # Truncate any captured string field (URL, error message) before it lands in
@@ -644,22 +712,26 @@ async def _dispatch_actions(
     device_id: uuid.UUID,
     tenant_slug: str,
     device_slug: str,
-    metric: str,
-    value: float,
+    metric: str | None,
+    value: float | None,
     timestamp: datetime,
     snapshot: MetricSnapshot,
     rule: Rule,
+    *,
+    trigger_source: str = "metric",
 ) -> None:
-    """Dispatch every configured action, exactly in today's order (the
-    actuator-command MQTT publish inside dispatch_command happens before any
-    new bookkeeping here — CLAUDE.md §9 constraint 1's <2s budget depends on
-    nothing being inserted in front of it). Outcomes are only collected in
-    memory during the loop; the combined rule_executions/action_executions
-    write happens once, after the loop, at the same point the (unchanged)
-    unconditional notification write already happens.
+    """Dispatch every configured action.
+
+    Actuator commands run INLINE, in today's order (the MQTT publish inside
+    dispatch_command happens before any bookkeeping — CLAUDE.md §9 constraint
+    1's <2s budget). Webhook/email actions are collected as descriptors and
+    handed to background tasks AFTER the execution record commits — one slow
+    or failing endpoint can no longer stall telemetry ingestion for every
+    device, and each gets bounded exponential-backoff retry.
     """
     trigger_device_id = device_id
     outcomes: list[_ActionOutcome] = []
+    deferred: list[_DeferredAction] = []
 
     for action_index, action in enumerate(rule.actions):
         action_type = action.get("type")
@@ -713,20 +785,7 @@ async def _dispatch_actions(
                     )
                 )
             elif action_type == "webhook":
-                async with httpx.AsyncClient(timeout=5) as http_client:
-                    response = await http_client.post(action["url"], json=action.get("body", {}))
-                outcomes.append(
-                    _ActionOutcome(
-                        "webhook",
-                        action_index,
-                        "success",
-                        {
-                            "url": action["url"][:_DETAIL_STRING_MAX],
-                            "status_code": response.status_code,
-                        },
-                        None,
-                    )
-                )
+                deferred.append(_DeferredAction("webhook", action_index, dict(action)))
             elif action_type != "notification":
                 log.warning("unknown action type %r for rule %s", action_type, rule.id)
                 outcomes.append(
@@ -734,22 +793,9 @@ async def _dispatch_actions(
                         "unknown", action_index, "failed", {"action_type": action_type}, None
                     )
                 )
-            # "notification"-type actions stay a no-op here, same as today —
-            # handled once, after the loop, by the unconditional write below.
-        except httpx.HTTPError as exc:
-            log.warning("webhook dispatch failed for rule %s: %s", rule.id, exc)
-            outcomes.append(
-                _ActionOutcome(
-                    "webhook",
-                    action_index,
-                    "failed",
-                    {
-                        "url": action.get("url", "")[:_DETAIL_STRING_MAX],
-                        "error": str(exc)[:_DETAIL_STRING_MAX],
-                    },
-                    None,
-                )
-            )
+            # "notification"-type actions stay a no-op here — the platform row
+            # is written unconditionally below; the "email" channel (if any) is
+            # queued as a deferred action there.
         except Exception as exc:
             log.exception("action %r failed for rule %s", action_type, rule.id)
             outcomes.append(
@@ -762,10 +808,10 @@ async def _dispatch_actions(
                 )
             )
 
-    # A notification row is written for every firing regardless of the rule's
-    # configured actions — this is what answers "did anything cross a
-    # threshold". A `notification`-type action supplies its own message;
-    # otherwise one is auto-generated.
+    # A platform notification row is written for every firing regardless of the
+    # rule's configured actions — this is what answers "did anything cross a
+    # threshold". A `notification`-type action supplies its own message and may
+    # add the "email" channel; otherwise one message is auto-generated.
     notif_index, notif = next(
         ((i, a) for i, a in enumerate(rule.actions) if a.get("type") == "notification"),
         (None, None),
@@ -789,12 +835,34 @@ async def _dispatch_actions(
                 None,
             )
         )
+    if notif is not None and "email" in (notif.get("channels") or ["platform"]):
+        deferred.append(
+            _DeferredAction("email", notif_index, {"message": message, "rule_name": rule.name})
+        )
 
-    # Own defensive try/except, separate from every one above — a
-    # history-write failure must never be conflated with, or able to break,
-    # actual dispatch (already complete by this point regardless).
+    # When the executor is saturated (a webhook/email outage backing everything
+    # up), record the deferred actions as failed inline rather than piling up
+    # unbounded background tasks.
+    to_spawn: list[_DeferredAction] = []
+    for descriptor in deferred:
+        if _DEFERRED_SEMAPHORE.locked():
+            outcomes.append(
+                _ActionOutcome(
+                    descriptor.kind,
+                    descriptor.action_index,
+                    "failed",
+                    {"reason": "executor_saturated"},
+                    None,
+                )
+            )
+        else:
+            to_spawn.append(descriptor)
+
+    # Own defensive try/except, separate from every one above — a history-write
+    # failure must never be conflated with, or able to break, actual dispatch.
+    execution_id: uuid.UUID | None = None
     try:
-        await _record_rule_execution(
+        execution_id = await _record_rule_execution(
             factory,
             tenant_id,
             rule,
@@ -804,22 +872,37 @@ async def _dispatch_actions(
             timestamp,
             snapshot,
             outcomes,
+            trigger_source,
         )
     except Exception:
         log.exception("execution history write failed for rule %s", rule.id)
+
+    # Spawn the deferred deliveries only after the parent rule_executions row
+    # has committed — each task INSERTs an action_executions row FK'd to it.
+    if execution_id is not None:
+        for descriptor in to_spawn:
+            _spawn_deferred(
+                _run_deferred_action(
+                    factory, tenant_id, rule.id, rule.name, execution_id, descriptor
+                )
+            )
 
 
 async def _record_rule_execution(
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
     rule: Rule,
-    trigger_device_id: uuid.UUID,
-    metric: str,
-    value: float,
+    trigger_device_id: uuid.UUID | None,
+    metric: str | None,
+    value: float | None,
     fired_at: datetime,
     snapshot: MetricSnapshot,
     outcomes: list[_ActionOutcome],
-) -> None:
+    trigger_source: str,
+) -> uuid.UUID:
+    """Writes the rule_executions row + the inline action_executions rows in
+    one transaction. Returns the execution id so _dispatch_actions can FK the
+    deferred (webhook/email) action rows to it."""
     summary = _default_message(rule, snapshot)
     execution_id = uuid.uuid4()
     async with factory() as session, session.begin():
@@ -832,6 +915,7 @@ async def _record_rule_execution(
                 device_id=trigger_device_id,
                 metric=metric,
                 value=value,
+                trigger_source=trigger_source,
                 fired_at=fired_at,
                 summary=summary,
             )
@@ -854,6 +938,114 @@ async def _record_rule_execution(
     await realtime_service.publish_event(
         tenant_id, {"type": "rule_execution", "rule_id": str(rule.id), "id": str(execution_id)}
     )
+    return execution_id
+
+
+# ---- Deferred action delivery (webhook / email, off the hot path) -----------
+
+
+def _spawn_deferred(coro: Coroutine[Any, Any, None]) -> None:
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+
+
+async def _resolve_email_recipients(
+    factory: async_sessionmaker[AsyncSession], tenant_id: uuid.UUID
+) -> list[str]:
+    """The tenant's explicit notification_emails, or (if unset) the emails of
+    every owner/admin member. Composed here rather than in tenants/service.py —
+    that module can't import auth/service (circular)."""
+    async with factory() as session:
+        await set_tenant_context(session, tenant_id)
+        tenant = await tenants_service.get_tenant(session, tenant_id)
+        if tenant.notification_emails:
+            return [str(e) for e in tenant.notification_emails]
+        member_ids = await tenants_service.list_member_ids_by_roles(
+            session, tenant_id, {"owner", "admin"}
+        )
+        emails = await auth_service.get_emails_by_user_ids(session, member_ids)
+    return list(emails.values())
+
+
+async def _write_deferred_result(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    execution_id: uuid.UUID,
+    descriptor: _DeferredAction,
+    status: str,
+    detail: dict[str, Any],
+) -> None:
+    async with factory() as session, session.begin():
+        await set_tenant_context(session, tenant_id)
+        session.add(
+            ActionExecution(
+                tenant_id=tenant_id,
+                rule_execution_id=execution_id,
+                action_type=descriptor.kind,
+                action_index=descriptor.action_index,
+                status=status,
+                detail=detail,
+                command_id=None,
+            )
+        )
+    await realtime_service.publish_event(
+        tenant_id, {"type": "rule_execution", "rule_id": str(rule_id), "id": str(execution_id)}
+    )
+
+
+async def _run_deferred_action(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    rule_name: str,
+    execution_id: uuid.UUID,
+    descriptor: _DeferredAction,
+) -> None:
+    """Background task: run a webhook/email with bounded retry, then append its
+    terminal action_executions row. Its own defensive try/except — a failure
+    here must never surface as an unhandled task exception.
+
+    Known gap (Phase 7 fixes it with a Redis-Streams dispatcher + DLQ): a
+    worker restart mid-retry loses the task, so no row is ever written for
+    that delivery.
+    """
+    try:
+        async with _DEFERRED_SEMAPHORE:
+            ctx = executors.ActionContext(tenant_id=tenant_id, rule_id=rule_id, rule_name=rule_name)
+            if descriptor.kind == "email":
+                recipients = await _resolve_email_recipients(factory, tenant_id)
+                if not recipients:
+                    await _write_deferred_result(
+                        factory,
+                        tenant_id,
+                        rule_id,
+                        execution_id,
+                        descriptor,
+                        "failed",
+                        {"reason": "no_recipients"},
+                    )
+                    return
+                config: dict[str, Any] = {
+                    "to": recipients,
+                    "subject": f"[{rule_name}] alert",
+                    "body": descriptor.config["message"],
+                }
+            else:  # webhook
+                config = descriptor.config
+            result = await executors.execute_with_retry(descriptor.kind, config, ctx)
+            await _write_deferred_result(
+                factory,
+                tenant_id,
+                rule_id,
+                execution_id,
+                descriptor,
+                result.status,
+                result.detail,
+            )
+    except Exception:
+        log.exception("deferred %s action failed for rule %s", descriptor.kind, rule_id)
 
 
 class ActionExecutionRow(NamedTuple):
@@ -871,8 +1063,9 @@ class RuleExecutionRow(NamedTuple):
     rule_id: uuid.UUID | None
     device_id: uuid.UUID | None
     device_name: str | None
-    metric: str
-    value: float
+    metric: str | None
+    value: float | None
+    trigger_source: str
     fired_at: datetime
     summary: str
     created_at: datetime
@@ -933,6 +1126,7 @@ async def list_rule_executions(
             device_name=device_names.get(e.device_id) if e.device_id is not None else None,
             metric=e.metric,
             value=e.value,
+            trigger_source=e.trigger_source,
             fired_at=e.fired_at,
             summary=e.summary,
             created_at=e.created_at,
@@ -940,3 +1134,154 @@ async def list_rule_executions(
         )
         for e in executions
     ]
+
+
+class FailedActionRow(NamedTuple):
+    id: uuid.UUID
+    rule_id: uuid.UUID | None
+    rule_name: str | None
+    action_type: str
+    action_index: int | None
+    detail: dict[str, Any] | None
+    summary: str
+    fired_at: datetime
+    created_at: datetime
+
+
+async def list_failed_actions(
+    session: AsyncSession, tenant_id: uuid.UUID, limit: int = 100
+) -> list[FailedActionRow]:
+    """Tenant-wide feed of failed deliveries (webhook/email that exhausted
+    retries, unresolvable actuator targets, etc.) — the operational "what is
+    broken right now" view. Uses ix_action_executions_failed. Rule name via a
+    raw text() join, same no-cross-module-import discipline as elsewhere here.
+    """
+    result = await session.execute(
+        text(
+            "SELECT ae.id, re.rule_id, r.name AS rule_name, ae.action_type, ae.action_index, "
+            "ae.detail, re.summary, re.fired_at, ae.created_at "
+            "FROM action_executions ae "
+            "JOIN rule_executions re ON re.id = ae.rule_execution_id "
+            "LEFT JOIN rules r ON r.id = re.rule_id "
+            "WHERE ae.tenant_id = :tenant_id AND ae.status = 'failed' "
+            "ORDER BY ae.created_at DESC LIMIT :limit"
+        ),
+        {"tenant_id": tenant_id, "limit": limit},
+    )
+    return [FailedActionRow(**row) for row in result.mappings().all()]
+
+
+# ---- Out-of-band runs: manual "Run now" + scheduled triggers ----------------
+
+
+async def request_manual_run(
+    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID
+) -> None:
+    """Publish a one-shot run request for app.worker's manual_command_loop.
+    No DB write, so — like commands.service.request_manual_command — no
+    add_post_commit_callback is needed (nothing to race against a commit)."""
+    await redis_client.publish(
+        RULES_MANUAL_CHANNEL,
+        json.dumps(
+            {"tenant_id": str(tenant_id), "rule_id": str(rule_id), "trigger_source": "manual"}
+        ),
+    )
+
+
+def schedule_due(rule: Rule, now: datetime) -> bool:
+    """Whether `rule`'s cron matches `now` (a UTC datetime the caller has
+    truncated to the minute). Evaluated in the rule's own timezone. Returns
+    False, never raises, on a malformed cron/timezone (validated at write
+    time, but a hand-edited DB row could still be bad)."""
+    trigger = rule.trigger or {}
+    try:
+        tz = ZoneInfo(trigger.get("timezone", "UTC"))
+        return bool(croniter.match(trigger["cron"], now.astimezone(tz)))
+    except (CroniterError, ValueError, KeyError) as exc:
+        log.warning("bad schedule trigger on rule %s: %s", rule.id, exc)
+        return False
+
+
+async def _resolve_rule_context(
+    factory: async_sessionmaker[AsyncSession], rule: Rule
+) -> tuple[uuid.UUID, str, str] | None:
+    """The rule's primary input device as (device_id, tenant_slug,
+    device_slug), for an out-of-band run that needs to dispatch an actuator.
+    None if that device is gone or disabled."""
+    device_id = next(
+        (
+            leaf.get("device_id")
+            for leaf in _condition_leaves(rule.condition)
+            if leaf.get("device_id")
+        ),
+        None,
+    )
+    if device_id is None:
+        return None
+    async with factory() as session:
+        result = await session.execute(
+            text(
+                "SELECT device_id, tenant_id, tenant_slug, device_slug, status "
+                "FROM lookup_rule_dispatch_targets(:ids)"
+            ),
+            {"ids": [str(device_id)]},
+        )
+        row = result.mappings().first()
+    if row is None or row["tenant_id"] != rule.tenant_id or row["status"] != "active":
+        return None
+    return row["device_id"], row["tenant_slug"], row["device_slug"]
+
+
+async def run_rule_out_of_band(
+    client: aiomqtt.Client,
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    trigger_source: str,
+) -> None:
+    """Evaluate one rule outside the metric hot path (manual "Run now" or a
+    schedule tick) and dispatch its actions if the condition is currently met.
+
+    - `manual` bypasses for_duration / cooldown / armed (evaluate_condition) —
+      a "test it now" action, same trust tier as a manual actuator toggle.
+    - `schedule` keeps the full ThresholdEvaluator (flapping protection must
+      not be bypassable on an automated path — CLAUDE.md §9 constraint 7).
+    """
+    rule = _rules_by_id.get(rule_id)
+    if rule is None or rule.tenant_id != tenant_id:
+        log.warning("out-of-band run for unknown/mismatched rule %s", rule_id)
+        return
+
+    now = datetime.now(UTC)
+    snapshot = _snapshot_for_signals(referenced_signals(rule.condition))
+
+    if trigger_source == "manual":
+        fired = evaluate_condition(rule.condition, snapshot, now)
+    else:
+        state = _rule_states.setdefault(rule.id, RuleState())
+        fired = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, now, state) is not None
+    if not fired:
+        return
+
+    ctx = await _resolve_rule_context(factory, rule)
+    if ctx is None:
+        log.warning("out-of-band run: no usable device for rule %s", rule_id)
+        return
+    device_id, tenant_slug, device_slug = ctx
+    try:
+        await _dispatch_actions(
+            client,
+            factory,
+            tenant_id,
+            device_id,
+            tenant_slug,
+            device_slug,
+            None,
+            None,
+            now,
+            snapshot,
+            rule,
+            trigger_source=trigger_source,
+        )
+    except Exception:
+        log.exception("out-of-band dispatch failed for rule %s", rule_id)

@@ -67,16 +67,43 @@ async def get_tenant(session: AsyncSession, tenant_id: uuid.UUID) -> Tenant:
     return result.scalar_one()
 
 
-async def rename_tenant(session: AsyncSession, tenant_id: uuid.UUID, name: str) -> Tenant:
-    """Rename the tenant. Callers gate this to TenantRole.OWNER (tenants/router.py)
-    — `tenants` itself carries no RLS (see tenants/models.py's docstring), so
-    the role check at the route layer is the only thing standing between any
-    member and renaming the whole workspace.
+async def update_tenant(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    name: str | None = None,
+    notification_emails: list[str] | None = None,
+) -> Tenant:
+    """Update workspace settings. Callers gate this to TenantRole.OWNER
+    (tenants/router.py) — `tenants` itself carries no RLS (see
+    tenants/models.py's docstring), so the role check at the route layer is
+    the only thing standing between any member and editing the whole
+    workspace.
     """
     tenant = await get_tenant(session, tenant_id)
-    tenant.name = name
+    if name is not None:
+        tenant.name = name
+    if notification_emails is not None:
+        tenant.notification_emails = [e.strip() for e in notification_emails if e.strip()]
     await session.flush()
     return tenant
+
+
+async def list_member_ids_by_roles(
+    session: AsyncSession, tenant_id: uuid.UUID, roles: set[str]
+) -> list[uuid.UUID]:
+    """user_ids of every member of the tenant in context whose role is in
+    `roles`. Relies on tenant_memberships' RLS tenant_id branch — the caller
+    must have set_tenant_context. Email enrichment is the caller's job (via
+    auth.service.get_emails_by_user_ids) so this module never imports
+    app.auth.models.User.
+    """
+    result = await session.execute(
+        select(TenantMembership.user_id).where(
+            TenantMembership.tenant_id == tenant_id, TenantMembership.role.in_(roles)
+        )
+    )
+    return list(result.scalars().all())
 
 
 async def get_tenant_slug(session: AsyncSession, tenant_id: uuid.UUID) -> str:

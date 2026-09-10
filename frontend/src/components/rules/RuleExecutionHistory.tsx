@@ -17,7 +17,13 @@ const ACTION_TYPE_LABELS: Record<string, string> = {
   actuator_command: "Actuator",
   webhook: "Webhook",
   notification: "Notification",
+  email: "Email",
   unknown: "Unknown",
+};
+
+const TRIGGER_SOURCE_LABELS: Record<string, string> = {
+  schedule: "Scheduled",
+  manual: "Run now",
 };
 
 function ActionBadges({ actions }: { actions: ActionExecutionResponse[] }) {
@@ -71,8 +77,13 @@ export function RuleExecutionHistory({ ruleId }: { ruleId: string }) {
     {
       header: "Fired",
       render: (e) => (
-        <span className="text-ink-muted" title={new Date(e.fired_at).toLocaleString()}>
-          {timeAgo(e.fired_at)}
+        <span className="flex items-center gap-2">
+          <span className="text-ink-muted" title={new Date(e.fired_at).toLocaleString()}>
+            {timeAgo(e.fired_at)}
+          </span>
+          {TRIGGER_SOURCE_LABELS[e.trigger_source] && (
+            <Badge tone="unknown" label={TRIGGER_SOURCE_LABELS[e.trigger_source]} />
+          )}
         </span>
       ),
     },

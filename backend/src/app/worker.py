@@ -1,4 +1,4 @@
-"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Five
+"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Six
 concurrent loops in one process; there is no third process (the API server
 never subscribes to MQTT, the worker never serves HTTP):
 
@@ -23,18 +23,16 @@ never subscribes to MQTT, the worker never serves HTTP):
 3. rule_cache_loop — loads active rules into memory at startup, then reloads
    on every app.rules.service.RULES_INVALIDATE_CHANNEL pub/sub message, so a
    rule CRUD change reaches the hot path within milliseconds.
-4. manual_command_loop — fulfils dashboard-triggered actuator commands (Phase
-   4) AND retained-config-publish requests (Phase 2's device health/telemetry
-   profiles). The API process has no MQTT client of its own, so both a manual
-   toggle and a catalog publish-profile edit are requests, on
-   app.commands.service.MANUAL_COMMAND_CHANNEL and
-   app.catalog.service.CONFIG_PUBLISH_CHANNEL respectively; this loop holds
-   its own dedicated aiomqtt connection (separate from mqtt_ingest_loop's) and
-   calls commands_service.dispatch_command (rule_id=None) or
-   _handle_config_publish. Kept off mqtt_ingest_loop's connection
-   deliberately: both are rare, low-frequency, and outside the <2s hot-path
-   budget, so there's no throughput case for sharing that connection, and a
-   slow/dead publish here must never risk blocking telemetry ingestion.
+4. manual_command_loop — fulfils dashboard-triggered actuator commands,
+   retained-config-publish requests (Phase 2), AND out-of-band rule runs
+   (Phase 4: manual "Run now" + schedule ticks, on
+   app.rules.service.RULES_MANUAL_CHANNEL). The API process has no MQTT client
+   of its own, so each is a Redis request; this loop holds its own dedicated
+   aiomqtt connection (separate from mqtt_ingest_loop's) and branches on the
+   channel. Kept off mqtt_ingest_loop's connection deliberately: all are rare,
+   low-frequency, and outside the <2s hot-path budget, so there's no
+   throughput case for sharing that connection, and a slow/dead publish here
+   must never risk blocking telemetry ingestion.
 5. health_monitor_loop — NOT a liveness poller (device liveness is fully
    event-driven: a device's own retained status message + MQTT Last-Will, see
    _handle_status). This is a profile-cache refresh: it recomputes every
@@ -42,6 +40,11 @@ never subscribes to MQTT, the worker never serves HTTP):
    and hands it to app.rules.service.reload_staleness_thresholds, a lookaside
    cache the hot path only ever reads. Reloads at startup and on every
    app.catalog.service.CATALOG_INVALIDATE_CHANNEL message.
+6. schedule_loop — timer-driven (aligned to minute boundaries). Each tick,
+   publishes a RULES_MANUAL_CHANNEL request for every scheduled rule whose
+   cron matches — manual_command_loop does the actual evaluate + dispatch, so
+   there's one shared out-of-band run path. Missed ticks on a restart are
+   dropped, not caught up.
 """
 
 import asyncio
@@ -372,6 +375,24 @@ async def _handle_config_publish(
     log.info("published config to %d device(s) for catalog entry %s", len(devices), entry_id)
 
 
+async def _handle_rule_trigger(
+    client: aiomqtt.Client, factory: async_sessionmaker[AsyncSession], raw: str
+) -> None:
+    """One out-of-band rule run — a manual "Run now" (`POST /rules/{id}/run`)
+    or a schedule_loop tick. Malformed requests are dropped, never raised
+    (CLAUDE.md constraint 11, same as _handle_manual_command)."""
+    try:
+        data = json.loads(raw)
+        tenant_id = uuid.UUID(data["tenant_id"])
+        rule_id = uuid.UUID(data["rule_id"])
+        trigger_source = str(data["trigger_source"])
+    except (KeyError, TypeError, ValueError) as exc:
+        log.warning("dropping malformed rule-trigger request: %s", exc)
+        return
+
+    await rules_service.run_rule_out_of_band(client, factory, tenant_id, rule_id, trigger_source)
+
+
 async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
     while True:
         try:
@@ -385,13 +406,17 @@ async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redi
                 redis_client.pubsub() as pubsub,
             ):
                 await pubsub.subscribe(
-                    commands_service.MANUAL_COMMAND_CHANNEL, catalog_service.CONFIG_PUBLISH_CHANNEL
+                    commands_service.MANUAL_COMMAND_CHANNEL,
+                    catalog_service.CONFIG_PUBLISH_CHANNEL,
+                    rules_service.RULES_MANUAL_CHANNEL,
                 )
                 async for message in pubsub.listen():
                     if message["type"] != "message":
                         continue
                     if message["channel"] == catalog_service.CONFIG_PUBLISH_CHANNEL:
                         await _handle_config_publish(client, factory, message["data"])
+                    elif message["channel"] == rules_service.RULES_MANUAL_CHANNEL:
+                        await _handle_rule_trigger(client, factory, message["data"])
                     else:
                         await _handle_manual_command(client, factory, message["data"])
         except (aiomqtt.MqttError, redis.RedisError) as exc:
@@ -399,6 +424,46 @@ async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redi
                 "manual command loop error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS
             )
             await asyncio.sleep(RECONNECT_SECONDS)
+
+
+def _seconds_to_next_minute() -> float:
+    now = datetime.now(UTC)
+    return 60.0 - now.second - now.microsecond / 1_000_000
+
+
+async def _tick_schedules() -> None:
+    """One scheduler pass: publish a run request for every scheduled rule
+    whose cron matches this minute. manual_command_loop does the actual
+    evaluation + dispatch (shared with manual "Run now")."""
+    now = datetime.now(UTC).replace(second=0, microsecond=0)
+    for rule in rules_service.scheduled_rules_snapshot():
+        if rules_service.schedule_due(rule, now):
+            await redis_client.publish(
+                rules_service.RULES_MANUAL_CHANNEL,
+                json.dumps(
+                    {
+                        "tenant_id": str(rule.tenant_id),
+                        "rule_id": str(rule.id),
+                        "trigger_source": "schedule",
+                    }
+                ),
+            )
+
+
+async def schedule_loop(factory: async_sessionmaker[AsyncSession]) -> None:
+    """Timer-driven — fires scheduled rules on their cron. Reads the
+    in-process `_scheduled_rules` cache (kept current by rule_cache_loop);
+    holds no MQTT client and no DB session. Missed ticks on a restart are
+    dropped, not caught up — documented, same posture as RuleState not
+    surviving a restart."""
+    while True:
+        try:
+            await _tick_schedules()
+        except redis.RedisError as exc:
+            log.warning("schedule loop error (%s); retrying in %ss", exc, RECONNECT_SECONDS)
+            await asyncio.sleep(RECONNECT_SECONDS)
+            continue
+        await asyncio.sleep(_seconds_to_next_minute())
 
 
 async def _ensure_consumer_group(r: redis.Redis) -> None:
@@ -528,13 +593,24 @@ async def health_monitor_loop(factory: async_sessionmaker[AsyncSession]) -> None
 
 
 async def run() -> None:
-    await asyncio.gather(
-        mqtt_ingest_loop(session_factory, redis_client),
-        stream_writer_loop(session_factory, redis_client),
-        rule_cache_loop(session_factory),
-        manual_command_loop(session_factory, redis_client),
-        health_monitor_loop(session_factory),
-    )
+    try:
+        await asyncio.gather(
+            mqtt_ingest_loop(session_factory, redis_client),
+            stream_writer_loop(session_factory, redis_client),
+            rule_cache_loop(session_factory),
+            manual_command_loop(session_factory, redis_client),
+            health_monitor_loop(session_factory),
+            schedule_loop(session_factory),
+        )
+    finally:
+        # Best-effort drain of in-flight webhook/email deliveries on shutdown.
+        pending = [t for t in rules_service._BACKGROUND_TASKS if not t.done()]
+        if pending:
+            log.info("draining %d in-flight deferred actions", len(pending))
+            try:
+                await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5)
+            except TimeoutError:
+                log.warning("deferred-action drain timed out; %d still pending", len(pending))
 
 
 if __name__ == "__main__":
