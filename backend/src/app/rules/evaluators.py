@@ -183,6 +183,17 @@ def _evaluate_node(
     return all(results) if node["op"] == "AND" else any(results)
 
 
+def evaluate_condition(condition: dict[str, Any], snapshot: MetricSnapshot, now: datetime) -> bool:
+    """A one-shot "is this condition tree true right now" check — throwaway
+    leaf states, so no hysteresis-latch persistence and none of the
+    rule-level for_duration / cooldown / armed gates. Used by the manual
+    "Run now" path (rules/service.py), which deliberately bypasses flapping
+    protection — the same trust tier as a manual actuator toggle. The
+    automated schedule path uses the full ThresholdEvaluator instead.
+    """
+    return _evaluate_node(condition, snapshot, now, {}, ())
+
+
 class ThresholdEvaluator:
     """The only Evaluator implemented this phase (CLAUDE.md §5's `type:
     "threshold"`). `state` is mutated in place — that mutation *is* the pure

@@ -37,6 +37,13 @@ type CatalogActuator = components["schemas"]["CatalogActuator"];
 type ActionType = "actuator_command" | "notification" | "webhook";
 type ValueKind = "boolean" | "number" | "text";
 type Combinator = "AND" | "OR";
+type TriggerType = "metric" | "schedule" | "manual";
+
+const CRON_PRESETS: { label: string; cron: string }[] = [
+  { label: "Every 15 min", cron: "*/15 * * * *" },
+  { label: "Hourly", cron: "0 * * * *" },
+  { label: "Daily 08:00", cron: "0 8 * * *" },
+];
 
 interface LeafDraft {
   /** Stable client-only key so a per-row disclosure's state doesn't leak to
@@ -438,6 +445,17 @@ function RuleFormInner({
   const [cooldown, setCooldown] = useState(existing?.cooldown ?? DEFAULT_COOLDOWN);
   const [enabled, setEnabled] = useState(existing?.enabled ?? true);
 
+  const existingTrigger = (existing?.trigger ?? {}) as Record<string, unknown>;
+  const [triggerType, setTriggerType] = useState<TriggerType>(
+    (existingTrigger.type as TriggerType) ?? "metric",
+  );
+  const [cron, setCron] = useState(
+    typeof existingTrigger.cron === "string" ? existingTrigger.cron : "0 8 * * *",
+  );
+  const [timezone, setTimezone] = useState(
+    typeof existingTrigger.timezone === "string" ? existingTrigger.timezone : "UTC",
+  );
+
   const existingAction = existing?.action as Record<string, unknown> | undefined;
   const [actionType, setActionType] = useState<ActionType>(
     (existingAction?.type as ActionType) ?? "actuator_command",
@@ -481,6 +499,10 @@ function RuleFormInner({
   const [message, setMessage] = useState(
     typeof existingAction?.message === "string" ? existingAction.message : "",
   );
+  const [emailChannel, setEmailChannel] = useState(
+    Array.isArray(existingAction?.channels) &&
+      (existingAction.channels as string[]).includes("email"),
+  );
   const [webhookUrl, setWebhookUrl] = useState(
     typeof existingAction?.url === "string" ? existingAction.url : "",
   );
@@ -510,7 +532,11 @@ function RuleFormInner({
     }
     if (actionType === "notification") {
       if (!message.trim()) return null;
-      return { type: "notification", message: message.trim() };
+      return {
+        type: "notification",
+        message: message.trim(),
+        channels: emailChannel ? ["platform", "email"] : ["platform"],
+      };
     }
     if (!webhookUrl.trim()) return null;
     let body: Record<string, unknown> = {};
@@ -520,6 +546,13 @@ function RuleFormInner({
       return null;
     }
     return { type: "webhook", url: webhookUrl.trim(), body };
+  }
+
+  function buildTrigger(): Record<string, unknown> {
+    if (triggerType === "schedule")
+      return { type: "schedule", cron: cron.trim(), timezone: timezone.trim() || "UTC" };
+    if (triggerType === "manual") return { type: "manual" };
+    return { type: "metric" };
   }
 
   const action = buildAction();
@@ -536,6 +569,10 @@ function RuleFormInner({
       setError("Every condition needs a device and a metric.");
       return;
     }
+    if (triggerType === "schedule" && !cron.trim()) {
+      setError("A scheduled rule needs a cron expression.");
+      return;
+    }
     const finalAction = buildAction();
     if (finalAction === null) {
       setError(
@@ -550,6 +587,7 @@ function RuleFormInner({
     try {
       const body = {
         name: name.trim() || undefined,
+        trigger: buildTrigger(),
         condition: buildCondition(predicates, combinator),
         execution_policy: { strategy: "edge", for_duration: forDuration, cooldown },
         actions: [finalAction],
@@ -581,6 +619,57 @@ function RuleFormInner({
             placeholder="e.g. Boiler overheat interlock"
           />
         </Field>
+      </SectionCard>
+
+      <SectionCard title="Trigger">
+        <SegmentedControl
+          ariaLabel="Trigger type"
+          value={triggerType}
+          onChange={setTriggerType}
+          options={[
+            { value: "metric", label: "On reading" },
+            { value: "schedule", label: "Schedule" },
+            { value: "manual", label: "Manual only" },
+          ]}
+        />
+        {triggerType === "metric" && (
+          <p className="text-sm text-ink-muted">
+            Evaluated every time one of its metrics reports a new value.
+          </p>
+        )}
+        {triggerType === "manual" && (
+          <p className="text-sm text-ink-muted">
+            Only runs when you press “Run now” on the rule — never automatically.
+          </p>
+        )}
+        {triggerType === "schedule" && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Cron" hint="Standard 5-field cron. The condition is still checked on each run.">
+              <Input
+                compact
+                value={cron}
+                onChange={(e) => setCron(e.target.value)}
+                placeholder="0 8 * * *"
+              />
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {CRON_PRESETS.map((p) => (
+                  <Button
+                    key={p.cron}
+                    type="button"
+                    variant="ghost"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setCron(p.cron)}
+                  >
+                    {p.label}
+                  </Button>
+                ))}
+              </div>
+            </Field>
+            <Field label="Timezone" hint="IANA name, e.g. America/New_York.">
+              <Input compact value={timezone} onChange={(e) => setTimezone(e.target.value)} />
+            </Field>
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard title="Condition">
@@ -736,9 +825,33 @@ function RuleFormInner({
         )}
 
         {actionType === "notification" && (
-          <Field label="Message">
-            <Textarea compact value={message} onChange={(e) => setMessage(e.target.value)} rows={2} />
-          </Field>
+          <div className="flex flex-col gap-4">
+            <Field label="Message">
+              <Textarea
+                compact
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={2}
+              />
+            </Field>
+            <Field label="Channels">
+              <div className="flex flex-col gap-1.5 text-sm text-ink">
+                <label className="flex items-center gap-2 text-ink-muted">
+                  <input type="checkbox" className="accent-accent" checked disabled />
+                  In-app activity feed
+                </label>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    className="accent-accent"
+                    checked={emailChannel}
+                    onChange={(e) => setEmailChannel(e.target.checked)}
+                  />
+                  Email the workspace alert recipients
+                </label>
+              </div>
+            </Field>
+          </div>
         )}
 
         {actionType === "webhook" && (

@@ -138,8 +138,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Rename Current Tenant */
-        patch: operations["rename_current_tenant_tenants_current_patch"];
+        /** Update Current Tenant */
+        patch: operations["update_current_tenant_tenants_current_patch"];
         trace?: never;
     };
     "/tenants/members": {
@@ -431,6 +431,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rules/failed-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Failed Actions */
+        get: operations["list_failed_actions_rules_failed_actions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rules/{rule_id}": {
         parameters: {
             query?: never;
@@ -448,6 +465,28 @@ export interface paths {
         head?: never;
         /** Update Rule */
         patch: operations["update_rule_rules__rule_id__patch"];
+        trace?: never;
+    };
+    "/rules/{rule_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Rule
+         * @description Manual "Run now" — publishes a one-shot run request; app.worker
+         *     evaluates the condition against the live signal cache and fires only if
+         *     it's currently met.
+         */
+        post: operations["run_rule_rules__rule_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/rules/{rule_id}/executions": {
@@ -1113,6 +1152,42 @@ export interface components {
             /** Reset Condition */
             reset_condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"]) | null;
         };
+        /**
+         * FailedActionResponse
+         * @description One failed delivery attempt across the whole tenant — the
+         *     /rules/failed-actions operational feed.
+         */
+        FailedActionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Rule Id */
+            rule_id: string | null;
+            /** Rule Name */
+            rule_name: string | null;
+            /** Action Type */
+            action_type: string;
+            /** Action Index */
+            action_index: number | null;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            } | null;
+            /** Summary */
+            summary: string;
+            /**
+             * Fired At
+             * Format: date-time
+             */
+            fired_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1149,6 +1224,14 @@ export interface components {
             actuator: string;
             /** Value */
             value: boolean | number | string;
+        };
+        /** ManualTrigger */
+        ManualTrigger: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "manual";
         };
         /** MemberResponse */
         MemberResponse: {
@@ -1202,6 +1285,8 @@ export interface components {
             type: "notification";
             /** Message */
             message: string;
+            /** Channels */
+            channels?: ("platform" | "email")[];
         };
         /** NotificationResponse */
         NotificationResponse: {
@@ -1240,6 +1325,19 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** RetryConfig */
+        RetryConfig: {
+            /**
+             * Max Attempts
+             * @default 4
+             */
+            max_attempts: number;
+            /**
+             * Timeout S
+             * @default 5
+             */
+            timeout_s: number;
+        };
         /**
          * RuleCreateRequest
          * @description Canonical multi-device create — POST /rules.
@@ -1250,7 +1348,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Trigger */
-            trigger?: components["schemas"]["MetricTrigger"];
+            trigger?: components["schemas"]["MetricTrigger"] | components["schemas"]["ScheduleTrigger"] | components["schemas"]["ManualTrigger"];
             /** Condition */
             condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"];
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"];
@@ -1295,9 +1393,11 @@ export interface components {
             /** Device Name */
             device_name: string | null;
             /** Metric */
-            metric: string;
+            metric: string | null;
             /** Value */
-            value: number;
+            value: number | null;
+            /** Trigger Source */
+            trigger_source: string;
             /**
              * Fired At
              * Format: date-time
@@ -1362,7 +1462,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Trigger */
-            trigger?: components["schemas"]["MetricTrigger"] | null;
+            trigger?: (components["schemas"]["MetricTrigger"] | components["schemas"]["ScheduleTrigger"] | components["schemas"]["ManualTrigger"]) | null;
             /** Condition */
             condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"] | null;
@@ -1380,6 +1480,21 @@ export interface components {
             cooldown?: number | null;
             /** Action */
             action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"]) | null;
+        };
+        /** ScheduleTrigger */
+        ScheduleTrigger: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "schedule";
+            /** Cron */
+            cron: string;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
         };
         /** TelemetryDataPoint */
         TelemetryDataPoint: {
@@ -1428,6 +1543,8 @@ export interface components {
             name: string;
             /** Slug */
             slug: string;
+            /** Notification Emails */
+            notification_emails: string[];
             /**
              * Created At
              * Format: date-time
@@ -1446,7 +1563,9 @@ export interface components {
         /** TenantUpdateRequest */
         TenantUpdateRequest: {
             /** Name */
-            name: string;
+            name?: string | null;
+            /** Notification Emails */
+            notification_emails?: string[] | null;
         };
         /** TokenPairResponse */
         TokenPairResponse: {
@@ -1510,6 +1629,9 @@ export interface components {
             body?: {
                 [key: string]: unknown;
             };
+            retry?: components["schemas"]["RetryConfig"] | null;
+            /** Timeout S */
+            timeout_s?: number | null;
         };
         /**
          * Widget
@@ -1849,7 +1971,7 @@ export interface operations {
             };
         };
     };
-    rename_current_tenant_tenants_current_patch: {
+    update_current_tenant_tenants_current_patch: {
         parameters: {
             query?: never;
             header: {
@@ -2821,6 +2943,38 @@ export interface operations {
             };
         };
     };
+    list_failed_actions_rules_failed_actions_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FailedActionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_rule_rules__rule_id__get: {
         parameters: {
             query?: never;
@@ -2912,6 +3066,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RuleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_rule_rules__rule_id__run_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

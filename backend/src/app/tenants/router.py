@@ -32,7 +32,13 @@ router = APIRouter(prefix="/tenants", tags=["tenants"])
 
 
 def _tenant_response(tenant: Tenant) -> TenantResponse:
-    return TenantResponse(id=tenant.id, name=tenant.name, slug=tenant.slug, created_at=tenant.created_at)
+    return TenantResponse(
+        id=tenant.id,
+        name=tenant.name,
+        slug=tenant.slug,
+        notification_emails=list(tenant.notification_emails),
+        created_at=tenant.created_at,
+    )
 
 
 @router.get("/mine", response_model=list[MembershipSummary])
@@ -72,12 +78,17 @@ async def get_current_tenant(
 
 
 @router.patch("/current", response_model=TenantResponse)
-async def rename_current_tenant(
+async def update_current_tenant(
     body: TenantUpdateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.OWNER)),
     session: AsyncSession = Depends(get_session),
 ) -> TenantResponse:
-    tenant = await service.rename_tenant(session, ctx.tenant_id, body.name)
+    tenant = await service.update_tenant(
+        session,
+        ctx.tenant_id,
+        name=body.name,
+        notification_emails=body.notification_emails,
+    )
     return _tenant_response(tenant)
 
 

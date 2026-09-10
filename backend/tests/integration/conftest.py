@@ -13,7 +13,9 @@ connections/event-loop state across dozens of back-to-back tests that never
 needed a connection in the first place).
 """
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Coroutine
+from dataclasses import dataclass, field
+from typing import Any
 from unittest.mock import AsyncMock
 
 import httpx
@@ -49,6 +51,8 @@ ALL_TABLES = (
     "dashboards",
     "notifications",
     "device_metric_health",
+    "rule_executions",
+    "action_executions",
 )
 
 
@@ -135,6 +139,29 @@ def _mock_redis_publish(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     mock = AsyncMock(return_value=0)
     monkeypatch.setattr("app.redis.redis_client.publish", mock)
     return mock
+
+
+@dataclass
+class DeferredActions:
+    """Collects the webhook/email delivery coroutines app.rules.service would
+    spawn as background tasks, so a test can run them synchronously."""
+
+    pending: list[Coroutine[Any, Any, None]] = field(default_factory=list)
+
+    async def drain(self) -> None:
+        while self.pending:
+            await self.pending.pop(0)
+
+
+@pytest.fixture
+def deferred_actions(monkeypatch: pytest.MonkeyPatch) -> DeferredActions:
+    from app.rules import executors
+    from app.rules import service as rules_service
+
+    box = DeferredActions()
+    monkeypatch.setattr(rules_service, "_spawn_deferred", box.pending.append)
+    monkeypatch.setattr(executors, "_sleep", AsyncMock())
+    return box
 
 
 @pytest_asyncio.fixture(autouse=True)
