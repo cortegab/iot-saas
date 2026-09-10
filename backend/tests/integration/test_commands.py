@@ -20,6 +20,7 @@ from app.commands import service as commands_service
 from app.commands.models import Command
 from app.notifications.models import Notification
 from app.rules import service as rules_service
+from app.rules.models import ActionExecution, Rule, RuleExecution
 from app.tenants.models import Tenant
 
 
@@ -124,6 +125,23 @@ async def test_evaluate_and_dispatch_fires_actuator_command(
     notification = notification_result.scalar_one()
     assert "temperature" in notification.message
     assert notification.read_at is None
+
+    execution_result = await admin_session.execute(
+        select(RuleExecution).where(RuleExecution.device_id == uuid.UUID(device_id))
+    )
+    execution = execution_result.scalar_one()
+    assert execution.metric == "temperature"
+    assert execution.value == 35.0
+    assert "temperature" in execution.summary
+
+    action_result = await admin_session.execute(
+        select(ActionExecution).where(ActionExecution.rule_execution_id == execution.id)
+    )
+    actions = {a.action_type: a for a in action_result.scalars().all()}
+    assert actions["actuator_command"].status == "success"
+    assert actions["actuator_command"].command_id == command.id
+    assert actions["notification"].status == "success"
+    assert actions["notification"].action_index is None
 
 
 async def test_and_condition_fires_only_once_both_metrics_satisfied(
@@ -255,6 +273,7 @@ async def test_webhook_action_posts_to_url(
     tenant_slug = await _tenant_slug(admin_session, tenant_id)
 
     mock_post = AsyncMock()
+    mock_post.return_value.status_code = 200
     monkeypatch.setattr(httpx.AsyncClient, "post", mock_post)
 
     await rules_service.evaluate_and_dispatch(
@@ -273,6 +292,21 @@ async def test_webhook_action_posts_to_url(
     assert mock_post.call_args.args[0] == "https://example.com/hook"
     assert mock_post.call_args.kwargs["json"] == {"foo": "bar"}
     mock_mqtt_client.publish.assert_not_called()
+
+    execution_result = await admin_session.execute(
+        select(RuleExecution).where(RuleExecution.device_id == uuid.UUID(device_id))
+    )
+    execution = execution_result.scalar_one()
+    action_result = await admin_session.execute(
+        select(ActionExecution).where(
+            ActionExecution.rule_execution_id == execution.id,
+            ActionExecution.action_type == "webhook",
+        )
+    )
+    webhook_action = action_result.scalar_one()
+    assert webhook_action.status == "success"
+    assert webhook_action.detail is not None
+    assert webhook_action.detail["status_code"] == 200
 
 
 async def test_manual_command_publishes_request_as_admin(
@@ -432,6 +466,21 @@ async def test_notification_action_creates_notification_row(
     notification = notification_result.scalar_one()
     assert notification.message == "temp too high"
 
+    execution_result = await admin_session.execute(
+        select(RuleExecution).where(RuleExecution.device_id == uuid.UUID(device_id))
+    )
+    execution = execution_result.scalar_one()
+    action_result = await admin_session.execute(
+        select(ActionExecution).where(ActionExecution.rule_execution_id == execution.id)
+    )
+    notif_action = action_result.scalar_one()
+    assert notif_action.action_type == "notification"
+    assert notif_action.status == "success"
+    # The rule's only configured action is this notification — its index
+    # (0) must be captured, not left null (null is only for the *synthetic*
+    # auto-generated case with no configured notification action).
+    assert notif_action.action_index == 0
+
 
 async def test_disabled_rule_excluded_from_cache(
     client: httpx.AsyncClient,
@@ -529,3 +578,284 @@ async def test_cross_device_actuator_command_targets_other_device(
     )
     command = result.scalar_one()
     assert command.actuator == "fan1"
+
+    execution_result = await admin_session.execute(
+        select(RuleExecution).where(RuleExecution.device_id == uuid.UUID(a_id))
+    )
+    execution = execution_result.scalar_one()
+    action_result = await admin_session.execute(
+        select(ActionExecution).where(
+            ActionExecution.rule_execution_id == execution.id,
+            ActionExecution.action_type == "actuator_command",
+        )
+    )
+    actuator_action = action_result.scalar_one()
+    # command_id links to the Command row created for the *target* device
+    # (B), not the triggering device (A).
+    assert actuator_action.command_id == command.id
+    assert actuator_action.detail is not None
+    assert actuator_action.detail["device_id"] == b_id
+
+
+async def test_actuator_command_to_disabled_target_records_failed_action_no_dangling_command(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    """A target device disabled after the rule was created makes
+    _resolve_target return None (an "unusable target") — the action must
+    record status="failed" with command_id left NULL, never a dangling id
+    with no matching Command row (action_executions.command_id has a real
+    FK to commands.id).
+    """
+    owner = await _register(client, "ownerDisabledTarget@example.com", "AcmeDisabledTarget")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+
+    device_a = await _create_device(client, headers)
+    catalog_entry_id = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+    resp_b = await client.post(
+        "/devices", json={"name": "Actuator Box", "catalog_entry_id": catalog_entry_id}, headers=headers
+    )
+    device_b = resp_b.json()
+    a_id = device_a["device"]["id"]
+    a_slug = device_a["device"]["slug"]
+    b_id = device_b["device"]["id"]
+
+    rule_body = {
+        "name": "A hot -> B fan",
+        "condition": {
+            "kind": "leaf",
+            "device_id": a_id,
+            "metric": "temperature",
+            "operator": ">",
+            "threshold": 30.0,
+        },
+        "actions": [
+            {"type": "actuator_command", "device_id": b_id, "actuator": "fan1", "value": True}
+        ],
+    }
+    assert (await client.post("/rules", json=rule_body, headers=headers)).status_code == 201
+    assert (
+        await client.patch(f"/devices/{b_id}", json={"status": "disabled"}, headers=headers)
+    ).status_code == 200
+
+    await rules_service.load_rule_cache(app_session_factory)
+    tenant_slug = await _tenant_slug(admin_session, tenant_id)
+
+    await rules_service.evaluate_and_dispatch(
+        mock_mqtt_client,
+        app_session_factory,
+        uuid.UUID(tenant_id),
+        uuid.UUID(a_id),
+        tenant_slug,
+        a_slug,
+        "temperature",
+        35.0,
+        datetime.now(UTC),
+    )
+
+    mock_mqtt_client.publish.assert_not_called()
+    command_result = await admin_session.execute(
+        select(Command).where(Command.device_id == uuid.UUID(b_id))
+    )
+    assert command_result.scalar_one_or_none() is None
+
+    execution_result = await admin_session.execute(
+        select(RuleExecution).where(RuleExecution.device_id == uuid.UUID(a_id))
+    )
+    execution = execution_result.scalar_one()
+    action_result = await admin_session.execute(
+        select(ActionExecution).where(
+            ActionExecution.rule_execution_id == execution.id,
+            ActionExecution.action_type == "actuator_command",
+        )
+    )
+    actuator_action = action_result.scalar_one()
+    assert actuator_action.status == "failed"
+    assert actuator_action.command_id is None
+
+
+async def test_webhook_http_error_records_failed_action_and_dispatch_continues(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = await _register(client, "ownerWebhookFail@example.com", "AcmeWebhookFail")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    device_id = device["device"]["id"]
+    device_slug = device["device"]["slug"]
+    await _create_rule(
+        client,
+        headers,
+        device_id,
+        action={"type": "webhook", "url": "https://example.com/hook", "body": {}},
+    )
+    await rules_service.load_rule_cache(app_session_factory)
+    tenant_slug = await _tenant_slug(admin_session, tenant_id)
+
+    monkeypatch.setattr(
+        httpx.AsyncClient, "post", AsyncMock(side_effect=httpx.ConnectError("boom"))
+    )
+
+    await rules_service.evaluate_and_dispatch(
+        mock_mqtt_client,
+        app_session_factory,
+        uuid.UUID(tenant_id),
+        uuid.UUID(device_id),
+        tenant_slug,
+        device_slug,
+        "temperature",
+        35.0,
+        datetime.now(UTC),
+    )
+
+    # Dispatch continues to the notification write despite the webhook failure.
+    notification_result = await admin_session.execute(
+        select(Notification).where(Notification.device_id == uuid.UUID(device_id))
+    )
+    assert notification_result.scalar_one_or_none() is not None
+
+    execution_result = await admin_session.execute(
+        select(RuleExecution).where(RuleExecution.device_id == uuid.UUID(device_id))
+    )
+    execution = execution_result.scalar_one()
+    action_result = await admin_session.execute(
+        select(ActionExecution).where(
+            ActionExecution.rule_execution_id == execution.id,
+            ActionExecution.action_type == "webhook",
+        )
+    )
+    webhook_action = action_result.scalar_one()
+    assert webhook_action.status == "failed"
+    assert webhook_action.detail is not None
+    assert "boom" in webhook_action.detail["error"]
+
+
+async def test_execution_history_write_failure_never_breaks_dispatch(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Forces the combined rule_executions/action_executions write to raise —
+    evaluate_and_dispatch must still complete without raising, the Command/
+    Notification rows must still exist, and no RuleExecution row should
+    exist. Proves the history-write's own defensive try/except end to end,
+    not just by code inspection.
+    """
+    owner = await _register(client, "ownerHistoryFail@example.com", "AcmeHistoryFail")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    device_id = device["device"]["id"]
+    device_slug = device["device"]["slug"]
+    await _create_rule(client, headers, device_id)
+    await rules_service.load_rule_cache(app_session_factory)
+    tenant_slug = await _tenant_slug(admin_session, tenant_id)
+
+    monkeypatch.setattr(
+        rules_service, "_record_rule_execution", AsyncMock(side_effect=Exception("boom"))
+    )
+
+    await rules_service.evaluate_and_dispatch(
+        mock_mqtt_client,
+        app_session_factory,
+        uuid.UUID(tenant_id),
+        uuid.UUID(device_id),
+        tenant_slug,
+        device_slug,
+        "temperature",
+        35.0,
+        datetime.now(UTC),
+    )
+
+    command_result = await admin_session.execute(
+        select(Command).where(Command.device_id == uuid.UUID(device_id))
+    )
+    assert command_result.scalar_one_or_none() is not None
+    notification_result = await admin_session.execute(
+        select(Notification).where(Notification.device_id == uuid.UUID(device_id))
+    )
+    assert notification_result.scalar_one_or_none() is not None
+    execution_result = await admin_session.execute(
+        select(RuleExecution).where(RuleExecution.device_id == uuid.UUID(device_id))
+    )
+    assert execution_result.scalar_one_or_none() is None
+
+
+async def test_unknown_action_type_records_failed_unknown_action(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    """`ActionRequest`'s discriminated union rejects any type outside
+    actuator_command/webhook/notification at the API boundary, so this path
+    is only reachable via data that bypasses request validation — construct
+    it directly via the ORM (admin_session, bypasses RLS) rather than the API.
+    """
+    owner = await _register(client, "ownerUnknownAction@example.com", "AcmeUnknownAction")
+    tenant_id = uuid.UUID(owner["memberships"][0]["tenant_id"])
+    headers = _auth_headers(owner, str(tenant_id))
+    device = await _create_device(client, headers)
+    device_id = uuid.UUID(device["device"]["id"])
+    device_slug = device["device"]["slug"]
+    tenant_slug = await _tenant_slug(admin_session, str(tenant_id))
+
+    rule_id = uuid.uuid4()
+    async with admin_session.begin():
+        admin_session.add(
+            Rule(
+                id=rule_id,
+                tenant_id=tenant_id,
+                name="Unknown action rule",
+                type="threshold",
+                trigger={"type": "metric"},
+                condition={
+                    "kind": "leaf",
+                    "device_id": str(device_id),
+                    "metric": "temperature",
+                    "operator": ">",
+                    "threshold": 30.0,
+                },
+                execution_policy={"strategy": "edge", "for_duration": 0, "cooldown": 0},
+                actions=[{"type": "carrier_pigeon"}],
+                enabled=True,
+            )
+        )
+
+    await rules_service.load_rule_cache(app_session_factory)
+
+    await rules_service.evaluate_and_dispatch(
+        mock_mqtt_client,
+        app_session_factory,
+        tenant_id,
+        device_id,
+        tenant_slug,
+        device_slug,
+        "temperature",
+        35.0,
+        datetime.now(UTC),
+    )
+
+    execution_result = await admin_session.execute(
+        select(RuleExecution).where(RuleExecution.rule_id == rule_id)
+    )
+    execution = execution_result.scalar_one()
+    action_result = await admin_session.execute(
+        select(ActionExecution).where(
+            ActionExecution.rule_execution_id == execution.id,
+            ActionExecution.action_type == "unknown",
+        )
+    )
+    unknown_action = action_result.scalar_one()
+    assert unknown_action.status == "failed"
+    assert unknown_action.detail is not None
+    assert unknown_action.detail["action_type"] == "carrier_pigeon"

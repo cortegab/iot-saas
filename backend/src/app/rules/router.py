@@ -23,11 +23,13 @@ from app.rules import service
 from app.rules.deps import get_rule_or_404
 from app.rules.models import Rule
 from app.rules.schemas import (
+    ActionExecutionResponse,
     ConditionNode,
     DeviceRuleCreateRequest,
     ExecutionPolicy,
     RuleCreateRequest,
     RuleDeviceRef,
+    RuleExecutionResponse,
     RuleResponse,
     RuleUpdateRequest,
 )
@@ -163,6 +165,41 @@ async def get_rule(
     session: AsyncSession = Depends(get_session),
 ) -> RuleResponse:
     return await _response(session, ctx.tenant_id, rule)
+
+
+@router.get("/rules/{rule_id}/executions", response_model=list[RuleExecutionResponse])
+async def list_rule_executions(
+    rule: Rule = Depends(get_rule_or_404),
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session),
+) -> list[RuleExecutionResponse]:
+    rows = await service.list_rule_executions(session, ctx.tenant_id, rule.id)
+    return [
+        RuleExecutionResponse(
+            id=row.id,
+            rule_id=row.rule_id,
+            device_id=row.device_id,
+            device_name=row.device_name,
+            metric=row.metric,
+            value=row.value,
+            fired_at=row.fired_at,
+            summary=row.summary,
+            created_at=row.created_at,
+            actions=[
+                ActionExecutionResponse(
+                    id=a.id,
+                    action_type=a.action_type,
+                    action_index=a.action_index,
+                    status=a.status,  # type: ignore[arg-type]
+                    detail=a.detail,
+                    command_id=a.command_id,
+                    created_at=a.created_at,
+                )
+                for a in row.actions
+            ],
+        )
+        for row in rows
+    ]
 
 
 @router.patch("/rules/{rule_id}", response_model=RuleResponse)

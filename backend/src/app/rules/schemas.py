@@ -177,3 +177,38 @@ class RuleResponse(BaseModel):
     action: dict[str, object]
     for_duration: int
     cooldown: int
+
+
+# ---- Execution history -----------------------------------------------------
+
+
+class ActionExecutionResponse(BaseModel):
+    id: uuid.UUID
+    action_type: str
+    # Position in the rule's actions list at dispatch time — NOT a stable
+    # live reference (a later rule edit can reorder/change actions without
+    # touching old rows). `detail` below already carries everything needed
+    # to render a row standalone.
+    action_index: int | None
+    status: Literal["success", "failed"]
+    # Loose by design, not a discriminated union — mirrors RuleResponse
+    # .actions' own precedent (a display/config bag the frontend switches on
+    # via the sibling `action_type` field, never re-parsed or re-executed).
+    detail: dict[str, object] | None
+    command_id: uuid.UUID | None
+    created_at: datetime
+
+
+class RuleExecutionResponse(BaseModel):
+    id: uuid.UUID
+    rule_id: uuid.UUID | None
+    device_id: uuid.UUID | None
+    device_name: str | None
+    metric: str
+    value: float
+    fired_at: datetime
+    # Snapshotted condition summary at fire time — still reads sensibly after
+    # the rule's condition later changes or the rule itself is deleted.
+    summary: str
+    created_at: datetime
+    actions: list[ActionExecutionResponse]

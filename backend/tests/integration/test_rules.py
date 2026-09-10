@@ -2,12 +2,33 @@
 the real FastAPI app and iot_test Postgres.
 """
 
+import uuid
+from datetime import UTC, datetime
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
+import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from app.rules import service as rules_service
+from app.tenants.models import Tenant
 
 _ACTION = {"type": "actuator_command", "actuator": "fan1", "value": True}
 _TEMPERATURE_CONDITION = {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0}
+
+
+async def _tenant_slug(admin_session: AsyncSession, tenant_id: str) -> str:
+    result = await admin_session.execute(
+        select(Tenant.slug).where(Tenant.id == uuid.UUID(tenant_id))
+    )
+    return result.scalar_one()
+
+
+@pytest.fixture
+def mock_mqtt_client() -> AsyncMock:
+    return AsyncMock()
 
 
 async def _register(client: httpx.AsyncClient, email: str, tenant_name: str) -> dict[str, Any]:
@@ -373,3 +394,114 @@ async def test_canonical_rule_rejects_cross_tenant_device(client: httpx.AsyncCli
     }
     resp = await client.post("/rules", json=body, headers=headers_a)
     assert resp.status_code == 422
+
+
+async def test_list_rule_executions_newest_first_and_nests_actions(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    owner = await _register(client, "ownerExec1@example.com", "AcmeExec1")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    device_id = device["device"]["id"]
+    device_slug = device["device"]["slug"]
+    created = await _create_rule(client, headers, device_id)
+    rule_id = created.json()["id"]
+
+    await rules_service.load_rule_cache(app_session_factory)
+    tenant_slug = await _tenant_slug(admin_session, tenant_id)
+
+    for value in (35.0, 36.0):
+        await rules_service.evaluate_and_dispatch(
+            mock_mqtt_client,
+            app_session_factory,
+            uuid.UUID(tenant_id),
+            uuid.UUID(device_id),
+            tenant_slug,
+            device_slug,
+            "temperature",
+            value,
+            datetime.now(UTC),
+        )
+
+    resp = await client.get(f"/rules/{rule_id}/executions", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body) == 2
+    # Newest first.
+    assert body[0]["value"] == 36.0
+    assert body[1]["value"] == 35.0
+    for execution in body:
+        assert execution["device_name"] == device["device"]["name"]
+        action_types = {a["action_type"] for a in execution["actions"]}
+        assert action_types == {"actuator_command", "notification"}
+
+
+async def test_list_rule_executions_cross_tenant_404(client: httpx.AsyncClient) -> None:
+    owner_a = await _register(client, "ownerExec2a@example.com", "AcmeExec2a")
+    tenant_a = owner_a["memberships"][0]["tenant_id"]
+    headers_a = _auth_headers(owner_a, tenant_a)
+    device_a = await _create_device(client, headers_a)
+    created = await _create_rule(client, headers_a, device_a["device"]["id"])
+    rule_id = created.json()["id"]
+
+    owner_b = await _register(client, "ownerExec2b@example.com", "AcmeExec2b")
+    tenant_b = owner_b["memberships"][0]["tenant_id"]
+    headers_b = _auth_headers(owner_b, tenant_b)
+
+    resp = await client.get(f"/rules/{rule_id}/executions", headers=headers_b)
+    assert resp.status_code == 404
+
+
+async def test_rule_execution_summary_is_a_snapshot_not_a_live_join(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    owner = await _register(client, "ownerExec3@example.com", "AcmeExec3")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    device_id = device["device"]["id"]
+    device_slug = device["device"]["slug"]
+    created = await _create_rule(client, headers, device_id)
+    rule_id = created.json()["id"]
+
+    await rules_service.load_rule_cache(app_session_factory)
+    tenant_slug = await _tenant_slug(admin_session, tenant_id)
+    await rules_service.evaluate_and_dispatch(
+        mock_mqtt_client,
+        app_session_factory,
+        uuid.UUID(tenant_id),
+        uuid.UUID(device_id),
+        tenant_slug,
+        device_slug,
+        "temperature",
+        35.0,
+        datetime.now(UTC),
+    )
+
+    before = await client.get(f"/rules/{rule_id}/executions", headers=headers)
+    original_summary = before.json()[0]["summary"]
+    assert "30.0" in original_summary
+
+    await client.patch(
+        f"/rules/{rule_id}",
+        json={
+            "name": "Renamed",
+            "condition": {
+                "kind": "leaf",
+                "metric": "temperature",
+                "operator": ">",
+                "threshold": 99.0,
+            },
+        },
+        headers=headers,
+    )
+
+    after = await client.get(f"/rules/{rule_id}/executions", headers=headers)
+    assert after.json()[0]["summary"] == original_summary
