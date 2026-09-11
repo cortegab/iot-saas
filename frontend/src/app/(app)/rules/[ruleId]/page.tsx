@@ -7,9 +7,11 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Callout } from "@/components/ui/Callout";
 import { Tabs, TabPanel } from "@/components/ui/Tabs";
 import { RuleExecutionHistory } from "@/components/rules/RuleExecutionHistory";
 import { RuleForm } from "@/components/rules/RuleForm";
+import { RuleSimulatePanel } from "@/components/rules/RuleSimulatePanel";
 import { RunNowButton } from "@/components/rules/RunNowButton";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { ApiRequestError } from "@/lib/api-client";
@@ -21,8 +23,18 @@ type DeviceResponse = components["schemas"]["DeviceResponse"];
 
 const TABS = [
   { id: "edit", label: "Edit" },
+  { id: "simulate", label: "Simulate" },
   { id: "activity", label: "Activity" },
 ];
+
+function unhealthySummary(rule: RuleResponse): string | null {
+  if (rule.health.evaluatable) return null;
+  const bad = rule.health.signals.filter((s) => s.state !== "fresh");
+  if (bad.length === 0) return "One or more input signals are unavailable.";
+  return bad
+    .map((s) => `${s.metric} from ${s.device_name ?? "a device"} is ${s.state}`)
+    .join("; ");
+}
 
 function primaryInputDevice(rule: RuleResponse): string | undefined {
   return (rule.devices.find((d) => d.role === "input") ?? rule.devices[0])?.device_id;
@@ -34,7 +46,12 @@ export default function EditRulePage() {
   const searchParams = useSearchParams();
   const isAdmin = useIsAdmin();
   const [tab, setTab] = useState(searchParams.get("tab") ?? "edit");
-  const { data: rule, error, isLoading, mutate } = useApiSWR<RuleResponse>(`/rules/${params.ruleId}`);
+  const {
+    data: rule,
+    error,
+    isLoading,
+    mutate,
+  } = useApiSWR<RuleResponse>(`/rules/${params.ruleId}`, { refreshInterval: 30_000 });
   const seedDevice = rule ? primaryInputDevice(rule) : undefined;
   const { data: device } = useApiSWR<DeviceResponse>(seedDevice ? `/devices/${seedDevice}` : null);
 
@@ -65,6 +82,10 @@ export default function EditRulePage() {
         actions={isAdmin ? <RunNowButton ruleId={params.ruleId} /> : undefined}
       />
 
+      {unhealthySummary(rule) && (
+        <Callout tone="warning">This rule can&rsquo;t evaluate right now — {unhealthySummary(rule)}.</Callout>
+      )}
+
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
       <TabPanel id="edit" active={tab}>
@@ -74,6 +95,10 @@ export default function EditRulePage() {
           onSaved={onSaved}
           onCancel={() => router.push("/rules")}
         />
+      </TabPanel>
+
+      <TabPanel id="simulate" active={tab}>
+        <RuleSimulatePanel rule={rule} />
       </TabPanel>
 
       <TabPanel id="activity" active={tab}>

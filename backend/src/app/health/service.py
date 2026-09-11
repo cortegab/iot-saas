@@ -18,8 +18,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.health.models import DeviceMetricHealth
-from app.rules.evaluators import SignalKey
-from app.rules.service import DEFAULT_STALE_METRIC_AGE_SECONDS
+from app.rules.evaluators import DEFAULT_STALE_METRIC_AGE_SECONDS, SignalKey
 
 log = logging.getLogger("health")
 
@@ -78,7 +77,11 @@ async def record_batch(
     )
 
 
-def _derive_max_age(publish: str, publish_interval_seconds: int | None) -> int:
+def derive_max_age(publish: str, publish_interval_seconds: int | None) -> int:
+    """The staleness bound for one metric: how long its last reading stays
+    usable before a rule leaf reading it fails closed. Shared by the worker's
+    hot-path threshold cache (compute_staleness_thresholds) and the API-side
+    rule-health / simulate computation (rules/service.py)."""
     if publish == "on_change":
         return _ON_CHANGE_MAX_AGE_SECONDS
     if publish_interval_seconds:
@@ -104,7 +107,7 @@ async def compute_staleness_thresholds(
     for row in rows:
         if not row["metric"]:
             continue
-        thresholds[SignalKey(str(row["device_id"]), row["metric"])] = _derive_max_age(
+        thresholds[SignalKey(str(row["device_id"]), row["metric"])] = derive_max_age(
             row["publish"], row["publish_interval_seconds"]
         )
     log.info("staleness thresholds computed for %d signals", len(thresholds))

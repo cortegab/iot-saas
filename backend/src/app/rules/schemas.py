@@ -193,6 +193,28 @@ class RuleDeviceRef(BaseModel):
     device_name: str | None = None
 
 
+class RuleSignalHealth(BaseModel):
+    """The freshness of one `(device, metric)` a rule reads — computed from
+    device_metric_health + the catalog publish profile (Phase 5)."""
+
+    device_id: uuid.UUID
+    device_name: str | None
+    metric: str
+    # "missing" covers no health row yet, the device removed from the tenant,
+    # or the device no longer active.
+    state: Literal["fresh", "stale", "missing"]
+    last_value: float | None
+    last_seen_at: datetime | None
+    max_age_seconds: int
+
+
+class RuleHealth(BaseModel):
+    # True iff every referenced signal is "fresh" — i.e. the rule can actually
+    # evaluate its condition right now rather than silently failing leaves closed.
+    evaluatable: bool
+    signals: list[RuleSignalHealth]
+
+
 class RuleResponse(BaseModel):
     id: uuid.UUID
     name: str
@@ -207,6 +229,8 @@ class RuleResponse(BaseModel):
     devices: list[RuleDeviceRef]
     enabled: bool
     created_at: datetime
+    # Computed per request: can this rule currently evaluate (all inputs fresh)?
+    health: RuleHealth
     # Back-compat: the first action / the policy's timing, so existing
     # single-action clients keep reading the fields they always have.
     action: dict[str, object]
@@ -264,3 +288,54 @@ class FailedActionResponse(BaseModel):
     summary: str
     fired_at: datetime
     created_at: datetime
+
+
+# ---- Simulate / dry-run --------------------------------------------------
+
+
+class SignalOverride(BaseModel):
+    device_id: uuid.UUID
+    metric: str
+    value: float
+
+
+class SimulateReplayWindow(BaseModel):
+    from_: datetime = Field(alias="from")
+    to: datetime
+
+
+class SimulateRequest(BaseModel):
+    # Substitute specific signal values before evaluating ("what if temperature
+    # were 45?"). An override is always treated as fresh.
+    overrides: list[SignalOverride] = Field(default_factory=list)
+    # When set, ignore live values and replay the rule over stored telemetry
+    # for this window instead.
+    replay: SimulateReplayWindow | None = None
+
+
+class SimulateActionPreview(BaseModel):
+    index: int
+    type: str
+    summary: str
+
+
+class SimulateReplayResult(BaseModel):
+    resolution: Literal["raw", "1m"]
+    samples: int
+    would_have_fired_at: list[datetime]
+    # True when the window hit simulate_replay_max_samples and the walk stopped early.
+    truncated: bool
+
+
+class SimulateResponse(BaseModel):
+    mode: Literal["live", "replay"]
+    evaluated_at: datetime
+    would_fire: bool
+    # The annotated condition tree (leaf/group dicts from evaluators
+    # .explain_condition). None in replay mode.
+    condition: dict[str, Any] | None
+    # Referenced signals that were stale/missing (and not overridden) at
+    # evaluation time — why `would_fire` may be False.
+    unavailable_signals: list[RuleSignalHealth]
+    actions: list[SimulateActionPreview]
+    replay: SimulateReplayResult | None

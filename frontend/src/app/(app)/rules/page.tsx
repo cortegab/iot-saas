@@ -48,7 +48,15 @@ function DeviceLine({ devices }: { devices: { id: string; name: string }[] }) {
 export default function RulesPage() {
   const api = useApi();
   const router = useRouter();
-  const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>("/rules");
+  // refreshInterval: rule health is time-based (a signal crosses its staleness
+  // bound with no user action), and the rule_health realtime event only fires
+  // for tenants with a live worker — this is the belt-and-suspenders.
+  const {
+    data: rules,
+    error,
+    isLoading,
+    mutate,
+  } = useApiSWR<RuleResponse[]>("/rules", { refreshInterval: 30_000 });
   const isAdmin = useIsAdmin();
   const { confirm, dialog } = useConfirm();
   const [filter, setFilter] = useState("");
@@ -121,11 +129,16 @@ export default function RulesPage() {
     {
       header: "Status",
       render: (r) => (
-        <Badge
-          tone={r.enabled ? "online" : "unknown"}
-          variant="dot"
-          label={r.enabled ? "Enabled" : "Disabled"}
-        />
+        <div className="flex items-center gap-2">
+          <Badge
+            tone={r.enabled ? "online" : "unknown"}
+            variant="dot"
+            label={r.enabled ? "Enabled" : "Disabled"}
+          />
+          {r.enabled && !r.health.evaluatable && (
+            <Badge tone="pending" variant="dot" label="Can't evaluate" />
+          )}
+        </div>
       ),
     },
   ];

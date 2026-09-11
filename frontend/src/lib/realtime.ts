@@ -19,6 +19,9 @@ export interface RealtimeMessage {
   // rule_execution: a rule fired — "just invalidate" like command_ack/
   // notification, not a payload to apply (the row is server-derived state).
   rule_id?: string;
+  // rule_health: a rule's inputs went stale/missing (or recovered) — the
+  // "can it currently evaluate" state flipped. Invalidate the rules views.
+  evaluatable?: boolean;
 }
 
 const MAX_BACKOFF_MS = 15_000;

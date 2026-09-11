@@ -141,6 +141,26 @@ def _mock_redis_publish(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     return mock
 
 
+@pytest.fixture(autouse=True)
+def redis_kv(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """In-memory stand-in for redis_client.set/get — the rule-state checkpoint
+    (Phase 5) is the only KV use. Same process-wide-singleton / event-loop
+    reason as the xadd/publish mocks above. A test can read/write the returned
+    dict directly to inspect or seed the checkpoint blob."""
+    store: dict[str, str] = {}
+
+    async def _set(key: str, value: str, **_kwargs: Any) -> bool:
+        store[key] = value
+        return True
+
+    async def _get(key: str) -> str | None:
+        return store.get(key)
+
+    monkeypatch.setattr("app.redis.redis_client.set", _set)
+    monkeypatch.setattr("app.redis.redis_client.get", _get)
+    return store
+
+
 @dataclass
 class DeferredActions:
     """Collects the webhook/email delivery coroutines app.rules.service would
@@ -175,3 +195,22 @@ async def clean_tables(admin_session: AsyncSession) -> AsyncGenerator[None, None
         text(f"TRUNCATE TABLE {', '.join(ALL_TABLES)} RESTART IDENTITY CASCADE")
     )
     await admin_session.commit()
+
+
+@pytest.fixture(autouse=True)
+def _reset_worker_rule_caches() -> Any:
+    """The worker-side module globals in app.rules.service (populated by
+    load_rule_cache and mutated by the hot path) are process-wide and NOT
+    rebuilt between tests the way the DB is truncated. Clear the mutable ones
+    after each test so rule-state / rule-health carry-over can't cross tests.
+    """
+    yield
+    from app.rules import service as rules_service
+
+    rules_service._rule_cache.clear()
+    rules_service._rules_by_id.clear()
+    rules_service._scheduled_rules.clear()
+    rules_service._rule_states.clear()
+    rules_service._rule_health_tracks.clear()
+    rules_service._signal_value_cache.clear()
+    rules_service._staleness_thresholds.clear()
