@@ -29,6 +29,7 @@ from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules import executors
 from app.rules.evaluators import (
+    CHANGE_OPERATORS,
     DEFAULT_STALE_METRIC_AGE_SECONDS,
     Evaluator,
     MetricSnapshot,
@@ -88,6 +89,13 @@ _OPERATOR_WORDS: dict[str, str] = {
     "<=": "falls to or below",
     "==": "equals",
     "!=": "is different from",
+    "between": "goes between",
+    "not_between": "goes outside",
+    "in": "is one of",
+    "not_in": "is none of",
+    "changed": "changes",
+    "increased": "increases",
+    "decreased": "decreases",
 }
 
 _DEFAULT_POLICY: dict[str, Any] = {
@@ -113,11 +121,30 @@ def _leaf_signal_key(leaf: dict[str, Any]) -> SignalKey:
     return SignalKey(str(leaf["device_id"]), leaf["metric"])
 
 
+def _rhs_clause(leaf: dict[str, Any]) -> str:
+    """The right-hand-side phrase after the operator word, if any —
+    changed/increased/decreased take none (they compare a signal to its own
+    previous reading, nothing to name)."""
+    if leaf["operator"] in CHANGE_OPERATORS:
+        return ""
+    rhs = leaf.get("rhs") or {}
+    source = rhs.get("source")
+    if source == "static":
+        return f" {rhs['value']}"
+    if source == "metric":
+        return f" {rhs['metric']}"
+    if source == "range":
+        return f" {rhs['low']} and {rhs['high']}"
+    if source == "set":
+        return " " + ", ".join(str(v) for v in rhs.get("values", []))
+    return ""
+
+
 def _leaf_summary(leaf: dict[str, Any], snapshot: MetricSnapshot) -> str:
     op = _OPERATOR_WORDS.get(leaf["operator"], leaf["operator"])
     current = snapshot.get(_leaf_signal_key(leaf))
     current_clause = f" (currently {current.value})" if current is not None else ""
-    return f"{leaf['metric']} {op} {leaf['threshold']}{current_clause}"
+    return f"{leaf['metric']} {op}{_rhs_clause(leaf)}{current_clause}"
 
 
 def _condition_summary(condition: dict[str, Any], snapshot: MetricSnapshot) -> str:
@@ -131,19 +158,27 @@ def _plain_summary(condition: dict[str, Any]) -> str:
     """No snapshot — used to auto-name a rule created without an explicit name."""
     if condition["kind"] == "leaf":
         op = _OPERATOR_WORDS.get(condition["operator"], condition["operator"])
-        return f"{condition['metric']} {op} {condition['threshold']}"
+        return f"{condition['metric']} {op}{_rhs_clause(condition)}"
     joiner = " and " if condition["op"] == "AND" else " or "
     return joiner.join(_plain_summary(child) for child in condition["predicates"])
 
 
-def _auto_name(condition: dict[str, Any]) -> str:
+def _auto_name(condition: dict[str, Any] | None) -> str:
+    if condition is None:
+        return "Device status rule"
     summary = _plain_summary(condition)
     summary = summary[0].upper() + summary[1:] if summary else "Rule"
     return summary[:200]
 
 
 def _default_message(rule: Rule, snapshot: MetricSnapshot) -> str:
-    return f"{_condition_summary(rule.condition, snapshot)}."
+    if rule.condition is not None:
+        return f"{_condition_summary(rule.condition, snapshot)}."
+    trigger = rule.trigger or {}
+    if trigger.get("type") == "device_status":
+        verb = "connected" if trigger.get("transition") == "connected" else "disconnected"
+        return f"Device {verb}."
+    return f"{rule.name}."
 
 
 def _stamp_condition_device(node: dict[str, Any], device_id: uuid.UUID) -> dict[str, Any]:
@@ -158,7 +193,9 @@ def _stamp_condition_device(node: dict[str, Any], device_id: uuid.UUID) -> dict[
     }
 
 
-def _condition_leaves(node: dict[str, Any]) -> list[dict[str, Any]]:
+def _condition_leaves(node: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if node is None:
+        return []
     if node.get("kind") == "leaf":
         return [node]
     out: list[dict[str, Any]] = []
@@ -168,14 +205,24 @@ def _condition_leaves(node: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _rule_device_map(
-    condition: dict[str, Any], actions: list[dict[str, Any]]
+    condition: dict[str, Any] | None,
+    actions: list[dict[str, Any]],
+    trigger: dict[str, Any] | None = None,
 ) -> dict[uuid.UUID, set[str]]:
-    """device_id -> {roles} the rule references, for the rule_devices table."""
+    """device_id -> {roles} the rule references, for the rule_devices table.
+    A device_status trigger's device counts as an input too — the rule
+    watches it even though no condition leaf need reference it (condition
+    may be None entirely)."""
     out: dict[uuid.UUID, set[str]] = {}
     for leaf in _condition_leaves(condition):
         did = leaf.get("device_id")
         if did:
             out.setdefault(uuid.UUID(str(did)), set()).add(RuleDeviceRole.INPUT.value)
+        rhs = leaf.get("rhs") or {}
+        if rhs.get("source") == "metric" and rhs.get("device_id"):
+            out.setdefault(uuid.UUID(str(rhs["device_id"])), set()).add(RuleDeviceRole.INPUT.value)
+    if trigger and trigger.get("type") == "device_status" and trigger.get("device_id"):
+        out.setdefault(uuid.UUID(str(trigger["device_id"])), set()).add(RuleDeviceRole.INPUT.value)
     for action in actions:
         if action.get("type") == "actuator_command" and action.get("device_id"):
             out.setdefault(uuid.UUID(str(action["device_id"])), set()).add(
@@ -224,7 +271,7 @@ async def _sync_rule_devices(
     await session.flush()
 
 
-def _assert_leaves_have_device(condition: dict[str, Any]) -> None:
+def _assert_leaves_have_device(condition: dict[str, Any] | None) -> None:
     if any(not leaf.get("device_id") for leaf in _condition_leaves(condition)):
         raise RuleValidationError("every condition must name a device")
 
@@ -252,7 +299,7 @@ async def _persist_rule(
     name: str,
     description: str | None,
     trigger: dict[str, Any],
-    condition: dict[str, Any],
+    condition: dict[str, Any] | None,
     execution_policy: dict[str, Any],
     actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
@@ -260,7 +307,7 @@ async def _persist_rule(
 ) -> Rule:
     _assert_leaves_have_device(condition)
     _validate_trigger(trigger)
-    device_map = _rule_device_map(condition, actions)
+    device_map = _rule_device_map(condition, actions, trigger)
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
 
     rule = Rule(
@@ -289,7 +336,7 @@ async def create_rule_canonical(
     name: str,
     description: str | None,
     trigger: dict[str, Any],
-    condition: dict[str, Any],
+    condition: dict[str, Any] | None,
     execution_policy: dict[str, Any],
     actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
@@ -477,8 +524,11 @@ async def update_rule(
     elif action is not None:
         rule.actions = [action]
 
+    if rule.condition is None and (rule.trigger or {}).get("type") != "device_status":
+        raise RuleValidationError('condition is required unless trigger.type == "device_status"')
+
     _assert_leaves_have_device(rule.condition)
-    device_map = _rule_device_map(rule.condition, rule.actions)
+    device_map = _rule_device_map(rule.condition, rule.actions, rule.trigger)
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
     await session.flush()
     await _sync_rule_devices(session, tenant_id, rule.id, device_map)
@@ -516,7 +566,26 @@ _rule_cache: dict[SignalKey, list[Rule]] = {}
 _rules_by_id: dict[uuid.UUID, Rule] = {}
 # Enabled rules with trigger.type == "schedule" — iterated by schedule_loop.
 _scheduled_rules: list[Rule] = []
+# Enabled rules with trigger.type == "device_status", keyed by the device
+# they watch — checked by run_device_status_rules on a connectivity flip.
+_device_status_rules: dict[uuid.UUID, list[Rule]] = {}
 _rule_states: dict[uuid.UUID, RuleState] = {}
+
+# A device's last-known connectivity, for detecting a genuine transition
+# (worker.py's _handle_status publishes a "device_health" event on *every*
+# status message, transition or not — this is what turns that into an edge
+# for the device_status trigger). Worker-only, in-memory, lost on restart —
+# the first observation after a restart just establishes the baseline (same
+# "don't cry wolf on restart" rule _rule_health_tracks already follows).
+_device_online_tracks: dict[uuid.UUID, bool] = {}
+
+
+def note_device_status(device_id: uuid.UUID, online: bool) -> bool:
+    """Record this device's connectivity; return True iff this is a genuine
+    flip from what was last recorded (not the first observation)."""
+    prev = _device_online_tracks.get(device_id)
+    _device_online_tracks[device_id] = online
+    return prev is not None and prev != online
 
 
 class _RuleHealthTrack(NamedTuple):
@@ -575,6 +644,7 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
     new_cache: dict[SignalKey, list[Rule]] = {}
     new_by_id: dict[uuid.UUID, Rule] = {}
     new_scheduled: list[Rule] = []
+    new_device_status: dict[uuid.UUID, list[Rule]] = {}
     for row in rows:
         rule = Rule(
             id=row["id"],
@@ -593,15 +663,26 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
         trigger_type = (rule.trigger or {}).get("type", "metric")
         if trigger_type == "schedule":
             new_scheduled.append(rule)
+        elif trigger_type == "device_status":
+            watched = rule.trigger.get("device_id")
+            if watched:
+                new_device_status.setdefault(uuid.UUID(str(watched)), []).append(rule)
         elif trigger_type != "manual":  # metric (or an unknown/legacy shape)
             for signal in referenced_signals(rule.condition):
                 new_cache.setdefault(signal, []).append(rule)
     _rule_cache.clear()
     _rule_cache.update(new_cache)
+    _device_status_rules.clear()
+    _device_status_rules.update(new_device_status)
     _rules_by_id.clear()
     _rules_by_id.update(new_by_id)
     _scheduled_rules[:] = new_scheduled
-    log.info("rule cache reloaded: %d active (%d scheduled)", len(rows), len(new_scheduled))
+    log.info(
+        "rule cache reloaded: %d active (%d scheduled, %d device_status)",
+        len(rows),
+        len(new_scheduled),
+        sum(len(rs) for rs in new_device_status.values()),
+    )
 
 
 def scheduled_rules_snapshot() -> list[Rule]:
@@ -640,8 +721,16 @@ async def evaluate_and_dispatch(
     """
     signal = SignalKey(str(device_id), metric)
     max_age = _staleness_thresholds.get(signal, DEFAULT_STALE_METRIC_AGE_SECONDS)
+    # Shift the outgoing value into previous_* (for changed/increased/
+    # decreased) before overwriting — a signal seen for the first time has no
+    # previous reading yet.
+    prior = _signal_value_cache.get(signal)
     _signal_value_cache[signal] = MetricValue(
-        value=value, timestamp=timestamp, max_age_seconds=max_age
+        value=value,
+        timestamp=timestamp,
+        max_age_seconds=max_age,
+        previous_value=prior.value if prior is not None else None,
+        previous_timestamp=prior.timestamp if prior is not None else None,
     )
 
     rules = _rule_cache.get(signal)
@@ -1232,19 +1321,23 @@ def schedule_due(rule: Rule, now: datetime) -> bool:
 
 
 async def _resolve_rule_context(
-    factory: async_sessionmaker[AsyncSession], rule: Rule
+    factory: async_sessionmaker[AsyncSession], rule: Rule, *, device_id: uuid.UUID | None = None
 ) -> tuple[uuid.UUID, str, str] | None:
-    """The rule's primary input device as (device_id, tenant_slug,
-    device_slug), for an out-of-band run that needs to dispatch an actuator.
-    None if that device is gone or disabled."""
-    device_id = next(
-        (
-            leaf.get("device_id")
-            for leaf in _condition_leaves(rule.condition)
-            if leaf.get("device_id")
-        ),
-        None,
-    )
+    """The device to dispatch actuator actions against and record as the
+    execution's triggering device, as (device_id, tenant_slug, device_slug).
+    Defaults to the rule's primary input condition leaf's device; an explicit
+    `device_id` overrides that (device_status: the device whose connectivity
+    changed, which a condition-less — or condition-unrelated — rule has no
+    leaf to derive it from). None if that device is gone or disabled."""
+    if device_id is None:
+        device_id = next(
+            (
+                leaf.get("device_id")
+                for leaf in _condition_leaves(rule.condition)
+                if leaf.get("device_id")
+            ),
+            None,
+        )
     if device_id is None:
         return None
     async with factory() as session:
@@ -1267,14 +1360,22 @@ async def run_rule_out_of_band(
     tenant_id: uuid.UUID,
     rule_id: uuid.UUID,
     trigger_source: str,
+    *,
+    device_id: uuid.UUID | None = None,
 ) -> None:
-    """Evaluate one rule outside the metric hot path (manual "Run now" or a
-    schedule tick) and dispatch its actions if the condition is currently met.
+    """Evaluate one rule outside the metric hot path (manual "Run now", a
+    schedule tick, or a device_status transition) and dispatch its actions if
+    the condition is currently met.
 
     - `manual` bypasses for_duration / cooldown / armed (evaluate_condition) —
       a "test it now" action, same trust tier as a manual actuator toggle.
-    - `schedule` keeps the full ThresholdEvaluator (flapping protection must
-      not be bypassable on an automated path — CLAUDE.md §9 constraint 7).
+    - `schedule` and `device_status` keep the full ThresholdEvaluator
+      (flapping protection must not be bypassable on an automated path —
+      CLAUDE.md §9 constraint 7).
+
+    `device_id`, when given, is the device to dispatch against and record —
+    passed straight to `_resolve_rule_context` (device_status: the device
+    whose connectivity changed, not necessarily one any condition leaf names).
     """
     rule = _rules_by_id.get(rule_id)
     if rule is None or rule.tenant_id != tenant_id:
@@ -1292,17 +1393,17 @@ async def run_rule_out_of_band(
     if not fired:
         return
 
-    ctx = await _resolve_rule_context(factory, rule)
+    ctx = await _resolve_rule_context(factory, rule, device_id=device_id)
     if ctx is None:
         log.warning("out-of-band run: no usable device for rule %s", rule_id)
         return
-    device_id, tenant_slug, device_slug = ctx
+    resolved_device_id, tenant_slug, device_slug = ctx
     try:
         await _dispatch_actions(
             client,
             factory,
             tenant_id,
-            device_id,
+            resolved_device_id,
             tenant_slug,
             device_slug,
             None,
@@ -1314,6 +1415,30 @@ async def run_rule_out_of_band(
         )
     except Exception:
         log.exception("out-of-band dispatch failed for rule %s", rule_id)
+
+
+async def run_device_status_rules(
+    client: aiomqtt.Client,
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    online: bool,
+) -> None:
+    """Evaluate every enabled device_status rule watching `device_id` whose
+    configured transition matches this connectivity flip. Called from
+    worker.py's status/LWT branch only after note_device_status confirms a
+    genuine transition — off the telemetry hot path, so awaiting the full
+    out-of-band dispatch per matching rule here doesn't touch the
+    actuator-latency budget."""
+    transition = "connected" if online else "disconnected"
+    for rule in _device_status_rules.get(device_id, []):
+        if rule.tenant_id != tenant_id:
+            continue
+        if (rule.trigger or {}).get("transition") != transition:
+            continue
+        await run_rule_out_of_band(
+            client, factory, tenant_id, rule.id, "device_status", device_id=device_id
+        )
 
 
 # ---- Rule health (API-side, from the device_metric_health projection) ------
@@ -1492,11 +1617,13 @@ async def simulate_rule(
         else:
             unavailable.append(sig)
 
-    tree = explain_condition(rule.condition, snapshot, now)
+    # A condition-less device_status rule has nothing to walk — it's always
+    # true, matching ThresholdEvaluator/evaluate_condition's own None handling.
+    tree = explain_condition(rule.condition, snapshot, now) if rule.condition is not None else None
     return SimulateResponse(
         mode="live",
         evaluated_at=now,
-        would_fire=bool(tree["result"]),
+        would_fire=True if tree is None else bool(tree["result"]),
         condition=tree,
         unavailable_signals=unavailable,
         actions=_action_previews(rule),

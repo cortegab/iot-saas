@@ -210,6 +210,8 @@ def _reset_worker_rule_caches() -> Any:
     rules_service._rule_cache.clear()
     rules_service._rules_by_id.clear()
     rules_service._scheduled_rules.clear()
+    rules_service._device_status_rules.clear()
+    rules_service._device_online_tracks.clear()
     rules_service._rule_states.clear()
     rules_service._rule_health_tracks.clear()
     rules_service._signal_value_cache.clear()

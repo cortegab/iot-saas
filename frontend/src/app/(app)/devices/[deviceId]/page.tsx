@@ -464,10 +464,20 @@ export default function DeviceDetailPage() {
         // A multi-device rule may read another device's metric — only this
         // device's leaves belong on this device's chart.
         if (leaf.device_id != null && leaf.device_id !== deviceId) continue;
-        (map[leaf.metric] ??= []).push({
-          value: leaf.threshold,
-          label: `${leaf.operator} ${leaf.threshold}`,
-        });
+        // Only a fixed number has a line to draw — a set/metric-vs-metric/
+        // changed-family rhs has no single value to mark on the chart.
+        const rhs = leaf.rhs;
+        if (rhs?.source === "static") {
+          (map[leaf.metric] ??= []).push({
+            value: rhs.value,
+            label: `${leaf.operator} ${rhs.value}`,
+          });
+        } else if (rhs?.source === "range") {
+          (map[leaf.metric] ??= []).push(
+            { value: rhs.low, label: `${leaf.operator} ${rhs.low}` },
+            { value: rhs.high, label: `${leaf.operator} ${rhs.high}` },
+          );
+        }
       }
     }
     return map;

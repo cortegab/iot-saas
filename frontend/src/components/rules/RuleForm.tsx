@@ -27,7 +27,12 @@ import { Textarea } from "@/components/ui/Textarea";
 import { cn } from "@/lib/cn";
 import { ApiRequestError } from "@/lib/api-client";
 import { wireId } from "@/lib/wire-id";
-import { RuleSummary, type ConditionLeaf, type ConditionNode } from "@/components/rules/RuleSummary";
+import {
+  RuleSummary,
+  type ConditionLeaf,
+  type ConditionNode,
+  type RhsSpec,
+} from "@/components/rules/RuleSummary";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -37,7 +42,13 @@ type CatalogActuator = components["schemas"]["CatalogActuator"];
 type ActionType = "actuator_command" | "notification" | "webhook";
 type ValueKind = "boolean" | "number" | "text";
 type Combinator = "AND" | "OR";
-type TriggerType = "metric" | "schedule" | "manual";
+type TriggerType = "metric" | "schedule" | "manual" | "device_status";
+type DeviceStatusTransition = "connected" | "disconnected";
+/** How many rhs values an operator takes, and of what shape — drives
+ * PredicateRow's value-column render. "one" additionally supports either a
+ * static number or another device's metric (see RhsKind below). */
+type OperatorArity = "none" | "one" | "range" | "set";
+type RhsKind = "static" | "metric";
 
 const CRON_PRESETS: { label: string; cron: string }[] = [
   { label: "Every 15 min", cron: "*/15 * * * *" },
@@ -52,8 +63,18 @@ interface LeafDraft {
   deviceId: string;
   metric: string;
   operator: string;
-  threshold: number;
   hysteresis: number;
+  // rhs — only the fields matching the operator's arity/kind are read when
+  // building the wire condition; the rest just sit inert in the draft so
+  // switching operators back and forth doesn't lose what was typed.
+  rhsKind: RhsKind;
+  value: number;
+  low: number;
+  high: number;
+  /** Comma-separated — parsed to number[] on build (in/not_in). */
+  setText: string;
+  rhsDeviceId: string;
+  rhsMetric: string;
 }
 
 interface WireOption {
@@ -68,7 +89,30 @@ const OPERATORS: { value: string; label: string }[] = [
   { value: "<=", label: "≤ at or below" },
   { value: "==", label: "= equal to" },
   { value: "!=", label: "≠ different from" },
+  { value: "between", label: "between" },
+  { value: "not_between", label: "outside" },
+  { value: "in", label: "is one of" },
+  { value: "not_in", label: "is none of" },
+  { value: "changed", label: "changes" },
+  { value: "increased", label: "increases" },
+  { value: "decreased", label: "decreases" },
 ];
+
+const OPERATOR_ARITY: Record<string, OperatorArity> = {
+  ">": "one",
+  ">=": "one",
+  "<": "one",
+  "<=": "one",
+  "==": "one",
+  "!=": "one",
+  between: "range",
+  not_between: "range",
+  in: "set",
+  not_in: "set",
+  changed: "none",
+  increased: "none",
+  decreased: "none",
+};
 
 const SECTION_LABEL = "text-xs font-medium uppercase tracking-wide text-ink-muted";
 
@@ -100,13 +144,19 @@ function emptyPredicate(deviceId: string): LeafDraft {
     deviceId,
     metric: "",
     operator: ">",
-    threshold: 0,
     hysteresis: DEFAULT_HYSTERESIS,
+    rhsKind: "static",
+    value: 0,
+    low: 0,
+    high: 0,
+    setText: "",
+    rhsDeviceId: "",
+    rhsMetric: "",
   };
 }
 
-function isFlatCondition(condition: ConditionNode): boolean {
-  return condition.kind === "leaf" || condition.predicates.every((p) => p.kind === "leaf");
+function isFlatCondition(condition: ConditionNode | null): boolean {
+  return condition == null || condition.kind === "leaf" || condition.predicates.every((p) => p.kind === "leaf");
 }
 
 function leafDevice(leaf: ConditionLeaf, fallback: string): string {
@@ -115,17 +165,33 @@ function leafDevice(leaf: ConditionLeaf, fallback: string): string {
 }
 
 function draftsFromCondition(
-  condition: ConditionNode,
+  condition: ConditionNode | null,
   fallbackDevice: string,
 ): { predicates: LeafDraft[]; combinator: Combinator } {
-  const toDraft = (leaf: ConditionLeaf): LeafDraft => ({
-    uid: newUid(),
-    deviceId: leafDevice(leaf, fallbackDevice),
-    metric: leaf.metric,
-    operator: leaf.operator,
-    threshold: leaf.threshold,
-    hysteresis: leaf.hysteresis,
-  });
+  const toDraft = (leaf: ConditionLeaf): LeafDraft => {
+    const base = {
+      uid: newUid(),
+      deviceId: leafDevice(leaf, fallbackDevice),
+      metric: leaf.metric,
+      operator: leaf.operator,
+      hysteresis: leaf.hysteresis,
+    };
+    const rhs = leaf.rhs;
+    if (rhs == null) {
+      return { ...base, rhsKind: "static", value: 0, low: 0, high: 0, setText: "", rhsDeviceId: "", rhsMetric: "" };
+    }
+    if (rhs.source === "range") {
+      return { ...base, rhsKind: "static", value: 0, low: rhs.low, high: rhs.high, setText: "", rhsDeviceId: "", rhsMetric: "" };
+    }
+    if (rhs.source === "set") {
+      return { ...base, rhsKind: "static", value: 0, low: 0, high: 0, setText: rhs.values.join(", "), rhsDeviceId: "", rhsMetric: "" };
+    }
+    if (rhs.source === "metric") {
+      return { ...base, rhsKind: "metric", value: 0, low: 0, high: 0, setText: "", rhsDeviceId: rhs.device_id, rhsMetric: rhs.metric };
+    }
+    return { ...base, rhsKind: "static", value: rhs.value, low: 0, high: 0, setText: "", rhsDeviceId: "", rhsMetric: "" };
+  };
+  if (condition == null) return { predicates: [], combinator: "AND" };
   if (condition.kind === "leaf") return { predicates: [toDraft(condition)], combinator: "AND" };
   return {
     predicates: (condition.predicates as ConditionLeaf[]).map(toDraft),
@@ -133,7 +199,25 @@ function draftsFromCondition(
   };
 }
 
-function buildCondition(predicates: LeafDraft[], combinator: Combinator): ConditionNode {
+function buildRhs(p: LeafDraft): RhsSpec | null {
+  const arity = OPERATOR_ARITY[p.operator] ?? "one";
+  if (arity === "none") return null;
+  if (arity === "range") return { source: "range", low: p.low, high: p.high };
+  if (arity === "set") {
+    const values = p.setText
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s !== "")
+      .map(Number)
+      .filter((n) => !Number.isNaN(n));
+    return { source: "set", values };
+  }
+  if (p.rhsKind === "metric") return { source: "metric", device_id: p.rhsDeviceId, metric: p.rhsMetric };
+  return { source: "static", value: p.value };
+}
+
+function buildCondition(predicates: LeafDraft[], combinator: Combinator): ConditionNode | null {
+  if (predicates.length === 0) return null;
   const leaves = predicates.map(
     (p) =>
       ({
@@ -141,7 +225,7 @@ function buildCondition(predicates: LeafDraft[], combinator: Combinator): Condit
         device_id: p.deviceId,
         metric: p.metric,
         operator: p.operator,
-        threshold: p.threshold,
+        rhs: buildRhs(p),
         hysteresis: p.hysteresis,
       }) as ConditionLeaf,
   );
@@ -246,10 +330,68 @@ function MetricControl({
   );
 }
 
+function RhsValueControl({
+  predicate,
+  onChange,
+}: {
+  predicate: LeafDraft;
+  onChange: (next: LeafDraft) => void;
+}) {
+  const arity = OPERATOR_ARITY[predicate.operator] ?? "one";
+  if (arity === "none") {
+    return <span className="flex h-9 items-center text-sm text-ink-muted">—</span>;
+  }
+  if (arity === "range") {
+    return (
+      <div className="flex items-center gap-1.5">
+        <Input
+          compact
+          type="number"
+          step="any"
+          aria-label="Low"
+          value={predicate.low}
+          onChange={(e) => onChange({ ...predicate, low: Number(e.target.value) })}
+        />
+        <span className="text-xs text-ink-muted">–</span>
+        <Input
+          compact
+          type="number"
+          step="any"
+          aria-label="High"
+          value={predicate.high}
+          onChange={(e) => onChange({ ...predicate, high: Number(e.target.value) })}
+        />
+      </div>
+    );
+  }
+  if (arity === "set") {
+    return (
+      <Input
+        compact
+        placeholder="e.g. 1, 2, 3"
+        value={predicate.setText}
+        onChange={(e) => onChange({ ...predicate, setText: e.target.value })}
+      />
+    );
+  }
+  // arity "one" — a static number (the common case) unless switched to metric mode.
+  if (predicate.rhsKind === "metric") return null; // rendered below the main grid instead
+  return (
+    <Input
+      compact
+      type="number"
+      step="any"
+      value={predicate.value}
+      onChange={(e) => onChange({ ...predicate, value: Number(e.target.value) })}
+    />
+  );
+}
+
 function PredicateRow({
   predicate,
   devices,
   metricOptions,
+  rhsMetricOptions,
   onChange,
   onRemove,
   removable,
@@ -257,11 +399,14 @@ function PredicateRow({
   predicate: LeafDraft;
   devices: DeviceResponse[];
   metricOptions: WireOption[];
+  rhsMetricOptions: WireOption[];
   onChange: (next: LeafDraft) => void;
   onRemove: () => void;
   removable: boolean;
 }) {
   const [showAdvanced, setShowAdvanced] = useState(predicate.hysteresis > 0);
+  const arity = OPERATOR_ARITY[predicate.operator] ?? "one";
+  const canCompareToMetric = arity === "one";
 
   return (
     <div className="flex flex-col gap-2">
@@ -294,14 +439,8 @@ function PredicateRow({
             ))}
           </Select>
         </Field>
-        <Field label="Threshold">
-          <Input
-            compact
-            type="number"
-            step="any"
-            value={predicate.threshold}
-            onChange={(e) => onChange({ ...predicate, threshold: Number(e.target.value) })}
-          />
+        <Field label="Value">
+          <RhsValueControl predicate={predicate} onChange={onChange} />
         </Field>
         {removable && (
           <div className="flex items-end">
@@ -312,33 +451,69 @@ function PredicateRow({
         )}
       </div>
 
-      <div>
-        <Button
-          type="button"
-          variant="ghost"
-          className="text-xs"
-          onClick={() => setShowAdvanced((v) => !v)}
-        >
-          {showAdvanced ? "Hide advanced" : "Advanced"}
-        </Button>
-        {showAdvanced && (
-          <div className="mt-1 max-w-xs">
-            <Field
-              label="Hysteresis"
-              hint="How far this reading must fall back past the threshold before the rule can fire again."
-            >
-              <Input
-                compact
-                type="number"
-                min={0}
-                step="any"
-                value={predicate.hysteresis}
-                onChange={(e) => onChange({ ...predicate, hysteresis: Number(e.target.value) })}
-              />
-            </Field>
-          </div>
-        )}
-      </div>
+      {canCompareToMetric && (
+        <div className="flex flex-col gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            className="self-start text-xs"
+            onClick={() =>
+              onChange({ ...predicate, rhsKind: predicate.rhsKind === "metric" ? "static" : "metric" })
+            }
+          >
+            {predicate.rhsKind === "metric" ? "Compare to a fixed value instead" : "Compare to another device instead"}
+          </Button>
+          {predicate.rhsKind === "metric" && (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Device">
+                <DeviceSelect
+                  ariaLabel="Comparison device"
+                  value={predicate.rhsDeviceId}
+                  devices={devices}
+                  onChange={(rhsDeviceId) => onChange({ ...predicate, rhsDeviceId, rhsMetric: "" })}
+                />
+              </Field>
+              <Field label="Metric">
+                <MetricControl
+                  value={predicate.rhsMetric}
+                  options={rhsMetricOptions}
+                  onChange={(rhsMetric) => onChange({ ...predicate, rhsMetric })}
+                />
+              </Field>
+            </div>
+          )}
+        </div>
+      )}
+
+      {arity === "one" && (
+        <div>
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-xs"
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            {showAdvanced ? "Hide advanced" : "Advanced"}
+          </Button>
+          {showAdvanced && (
+            <div className="mt-1 max-w-xs">
+              <Field
+                label="Hysteresis"
+                hint="How far this reading must fall back past the threshold before the rule can fire again."
+              >
+                <Input
+                  compact
+                  type="number"
+                  min={0}
+                  step="any"
+                  value={predicate.hysteresis}
+                  onChange={(e) => onChange({ ...predicate, hysteresis: Number(e.target.value) })}
+                />
+              </Field>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -455,6 +630,12 @@ function RuleFormInner({
   const [timezone, setTimezone] = useState(
     typeof existingTrigger.timezone === "string" ? existingTrigger.timezone : "UTC",
   );
+  const [deviceStatusDeviceId, setDeviceStatusDeviceId] = useState(
+    typeof existingTrigger.device_id === "string" ? existingTrigger.device_id : seedDevice,
+  );
+  const [deviceStatusTransition, setDeviceStatusTransition] = useState<DeviceStatusTransition>(
+    existingTrigger.transition === "disconnected" ? "disconnected" : "connected",
+  );
 
   const existingAction = existing?.action as Record<string, unknown> | undefined;
   const [actionType, setActionType] = useState<ActionType>(
@@ -552,6 +733,12 @@ function RuleFormInner({
     if (triggerType === "schedule")
       return { type: "schedule", cron: cron.trim(), timezone: timezone.trim() || "UTC" };
     if (triggerType === "manual") return { type: "manual" };
+    if (triggerType === "device_status")
+      return {
+        type: "device_status",
+        device_id: deviceStatusDeviceId,
+        transition: deviceStatusTransition,
+      };
     return { type: "metric" };
   }
 
@@ -561,16 +748,32 @@ function RuleFormInner({
     predicates.map((p) => ({ ...p, metric: p.metric || "…" })),
     combinator,
   );
+  const deviceNameById = useMemo(
+    () => Object.fromEntries(deviceList.map((d) => [d.id, d.name])),
+    [deviceList],
+  );
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    if (predicates.length === 0 && triggerType !== "device_status") {
+      setError("Add at least one condition.");
+      return;
+    }
     if (predicates.some((p) => !p.metric.trim() || !p.deviceId)) {
       setError("Every condition needs a device and a metric.");
       return;
     }
+    if (predicates.some((p) => p.rhsKind === "metric" && (!p.rhsDeviceId || !p.rhsMetric))) {
+      setError("A device comparison needs both a device and a metric.");
+      return;
+    }
     if (triggerType === "schedule" && !cron.trim()) {
       setError("A scheduled rule needs a cron expression.");
+      return;
+    }
+    if (triggerType === "device_status" && !deviceStatusDeviceId) {
+      setError("A device-status trigger needs a device.");
       return;
     }
     const finalAction = buildAction();
@@ -630,6 +833,7 @@ function RuleFormInner({
             { value: "metric", label: "On reading" },
             { value: "schedule", label: "Schedule" },
             { value: "manual", label: "Manual only" },
+            { value: "device_status", label: "Device connects/disconnects" },
           ]}
         />
         {triggerType === "metric" && (
@@ -641,6 +845,35 @@ function RuleFormInner({
           <p className="text-sm text-ink-muted">
             Only runs when you press “Run now” on the rule — never automatically.
           </p>
+        )}
+        {triggerType === "device_status" && (
+          <div className="flex flex-col gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <Field label="Device">
+                <DeviceSelect
+                  ariaLabel="Device status trigger device"
+                  value={deviceStatusDeviceId}
+                  devices={deviceList}
+                  onChange={setDeviceStatusDeviceId}
+                />
+              </Field>
+              <Field label="When it">
+                <SegmentedControl
+                  ariaLabel="Transition"
+                  value={deviceStatusTransition}
+                  onChange={setDeviceStatusTransition}
+                  options={[
+                    { value: "connected", label: "Connects" },
+                    { value: "disconnected", label: "Disconnects" },
+                  ]}
+                />
+              </Field>
+            </div>
+            <p className="text-sm text-ink-muted">
+              No condition below is needed — this fires on every matching transition. Add one only
+              to also gate on another signal (e.g. only alert if a backup sensor is also offline).
+            </p>
+          </div>
         )}
         {triggerType === "schedule" && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -672,7 +905,7 @@ function RuleFormInner({
         )}
       </SectionCard>
 
-      <SectionCard title="Condition">
+      <SectionCard title={triggerType === "device_status" ? "Condition (optional)" : "Condition"}>
         {predicates.map((predicate, i) => (
           <Fragment key={predicate.uid}>
             {i > 0 && (
@@ -698,7 +931,8 @@ function RuleFormInner({
               predicate={predicate}
               devices={deviceList}
               metricOptions={metricOptionsFor(predicate.deviceId)}
-              removable={predicates.length > 1}
+              rhsMetricOptions={metricOptionsFor(predicate.rhsDeviceId)}
+              removable={triggerType === "device_status" ? predicates.length > 0 : predicates.length > 1}
               onChange={(next) => setPredicates(predicates.map((p, j) => (i === j ? next : p)))}
               onRemove={() => setPredicates(predicates.filter((_, j) => i !== j))}
             />
@@ -893,9 +1127,15 @@ function RuleFormInner({
         <div className="flex flex-col gap-1">
           <span className={SECTION_LABEL}>Summary</span>
           <RuleSummary
-            rule={{ condition: previewCondition, for_duration: forDuration, action: previewAction }}
+            rule={{
+              condition: previewCondition,
+              for_duration: forDuration,
+              action: previewAction,
+              trigger: buildTrigger(),
+            }}
             placeholder="…"
             className="text-[15px] leading-relaxed"
+            deviceNameById={deviceNameById}
           />
         </div>
       </Card>

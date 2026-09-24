@@ -55,7 +55,7 @@ async def _create_notify_rule(
             "device_id": device_id,
             "metric": "temperature",
             "operator": ">",
-            "threshold": 30.0,
+            "rhs": {"source": "static", "value": 30.0},
         },
         "actions": [
             {
@@ -271,7 +271,7 @@ async def test_executor_saturation_records_failed_inline(
             "device_id": device["device"]["id"],
             "metric": "temperature",
             "operator": ">",
-            "threshold": 30.0,
+            "rhs": {"source": "static", "value": 30.0},
         },
         "actions": [{"type": "webhook", "url": "https://x/h", "body": {}}],
     }

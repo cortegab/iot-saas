@@ -30,7 +30,7 @@ def _rule(*, for_duration: int = 0, cooldown: int = 0) -> Rule:
             "device_id": str(_DEVICE),
             "metric": "temperature",
             "operator": ">",
-            "threshold": 30.0,
+            "rhs": {"source": "static", "value": 30.0},
             "hysteresis": 0.0,
         },
         execution_policy={"strategy": "edge", "for_duration": for_duration, "cooldown": cooldown},

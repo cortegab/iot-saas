@@ -11,10 +11,13 @@ export type RuleAction = ActuatorCommandAction | NotificationAction | WebhookAct
 export type ConditionLeaf = components["schemas"]["ConditionLeaf"];
 export type ConditionGroup = components["schemas"]["ConditionGroup-Output"];
 export type ConditionNode = ConditionLeaf | ConditionGroup;
+export type RhsSpec = NonNullable<ConditionLeaf["rhs"]>;
 
 /** What the summary needs — a full RuleResponse satisfies this structurally,
- * but RuleForm's live preview (no id/device_id/created_at yet) can too. */
-export type RuleSummaryData = Pick<RuleResponse, "condition" | "for_duration" | "action">;
+ * but RuleForm's live preview (no id/device_id/created_at yet) can too.
+ * `trigger` is needed to render a condition-less device_status rule's
+ * sentence (the only case `condition` is null). */
+export type RuleSummaryData = Pick<RuleResponse, "condition" | "for_duration" | "action" | "trigger">;
 
 const OPERATOR_WORDS: Record<string, string> = {
   ">": "goes above",
@@ -23,7 +26,16 @@ const OPERATOR_WORDS: Record<string, string> = {
   "<=": "falls to or below",
   "==": "equals",
   "!=": "is different from",
+  between: "goes between",
+  not_between: "goes outside",
+  in: "is one of",
+  not_in: "is none of",
+  changed: "changes",
+  increased: "increases",
+  decreased: "decreases",
 };
+
+const CHANGE_OPERATORS = new Set(["changed", "increased", "decreased"]);
 
 /** RuleResponse.action is an untyped dict at the API-contract level (the
  * backend stores it as JSONB and only request bodies carry the discriminated
@@ -52,8 +64,10 @@ export function parseAction(action: RuleSummaryData["action"]): RuleAction | nul
 
 /** Every leaf predicate in a condition tree, flattened — for callers that
  * need to iterate every metric a rule references regardless of tree shape
- * (e.g. per-metric chart threshold markers, search-by-metric filtering). */
-export function leafPredicates(node: ConditionNode): ConditionLeaf[] {
+ * (e.g. per-metric chart threshold markers, search-by-metric filtering).
+ * `null` (a condition-less device_status rule) has no leaves. */
+export function leafPredicates(node: ConditionNode | null): ConditionLeaf[] {
+  if (node == null) return [];
   return node.kind === "leaf" ? [node] : node.predicates.flatMap(leafPredicates);
 }
 
@@ -68,13 +82,53 @@ function Value({ children, placeholder }: { children: string | number; placehold
   return <strong>{children}</strong>;
 }
 
-function ConditionText({ node, placeholder }: { node: ConditionNode; placeholder?: string }) {
+/** The right-hand-side clause after the operator word — changed/increased/
+ * decreased have none (they compare a signal to its own previous reading). */
+function RhsText({
+  rhs,
+  placeholder,
+  deviceNameById,
+}: {
+  rhs: RhsSpec | null | undefined;
+  placeholder?: string;
+  deviceNameById?: Record<string, string>;
+}) {
+  if (rhs == null) return null;
+  if (rhs.source === "static") return <Value placeholder={placeholder}>{rhs.value}</Value>;
+  if (rhs.source === "range")
+    return (
+      <>
+        <Value placeholder={placeholder}>{rhs.low}</Value> and{" "}
+        <Value placeholder={placeholder}>{rhs.high}</Value>
+      </>
+    );
+  if (rhs.source === "set")
+    return <Value placeholder={placeholder}>{rhs.values.join(", ")}</Value>;
+  // "metric" — another device's live reading instead of a static number.
+  const name = deviceNameById?.[rhs.device_id] ?? rhs.device_id;
+  return <Value placeholder={placeholder}>{`${name} ${rhs.metric}`}</Value>;
+}
+
+function ConditionText({
+  node,
+  placeholder,
+  deviceNameById,
+}: {
+  node: ConditionNode;
+  placeholder?: string;
+  deviceNameById?: Record<string, string>;
+}) {
   if (node.kind === "leaf") {
     const op = OPERATOR_WORDS[node.operator] ?? node.operator;
     return (
       <>
-        <Value placeholder={placeholder}>{node.metric}</Value> {op}{" "}
-        <Value placeholder={placeholder}>{node.threshold}</Value>
+        <Value placeholder={placeholder}>{node.metric}</Value> {op}
+        {!CHANGE_OPERATORS.has(node.operator) && (
+          <>
+            {" "}
+            <RhsText rhs={node.rhs} placeholder={placeholder} deviceNameById={deviceNameById} />
+          </>
+        )}
       </>
     );
   }
@@ -84,9 +138,30 @@ function ConditionText({ node, placeholder }: { node: ConditionNode; placeholder
       {node.predicates.map((child, i) => (
         <Fragment key={i}>
           {i > 0 && joiner}
-          <ConditionText node={child} placeholder={placeholder} />
+          <ConditionText node={child} placeholder={placeholder} deviceNameById={deviceNameById} />
         </Fragment>
       ))}
+    </>
+  );
+}
+
+/** A condition-less device_status rule's "When ..." clause — the trigger
+ * itself is the condition, so there's no ConditionText to render. */
+function DeviceStatusText({
+  trigger,
+  placeholder,
+  deviceNameById,
+}: {
+  trigger: Record<string, unknown>;
+  placeholder?: string;
+  deviceNameById?: Record<string, string>;
+}) {
+  const deviceId = typeof trigger.device_id === "string" ? trigger.device_id : "";
+  const name = (deviceId && deviceNameById?.[deviceId]) || deviceId || "a device";
+  const verb = trigger.transition === "connected" ? "connects" : "disconnects";
+  return (
+    <>
+      <Value placeholder={placeholder}>{name}</Value> {verb}
     </>
   );
 }
@@ -97,18 +172,29 @@ export function RuleSummary({
   rule,
   placeholder,
   className,
+  deviceNameById,
 }: {
   rule: RuleSummaryData;
   /** Values equal to this render as an "unfilled" accent chip (the live
    * preview passes "…"). */
   placeholder?: string;
   className?: string;
+  /** Resolves a device_id to its display name for a device_status trigger's
+   * sentence and for a metric-vs-metric leaf's rhs. Falls back to the raw id
+   * when omitted or the id isn't in the map. */
+  deviceNameById?: Record<string, string>;
 }) {
   const action = parseAction(rule.action);
+  const trigger = (rule.trigger ?? {}) as Record<string, unknown>;
 
   return (
     <p className={cn("text-sm text-ink", className)}>
-      When <ConditionText node={rule.condition} placeholder={placeholder} />
+      When{" "}
+      {rule.condition ? (
+        <ConditionText node={rule.condition} placeholder={placeholder} deviceNameById={deviceNameById} />
+      ) : (
+        <DeviceStatusText trigger={trigger} placeholder={placeholder} deviceNameById={deviceNameById} />
+      )}
       {rule.for_duration > 0 && (
         <>
           {" "}

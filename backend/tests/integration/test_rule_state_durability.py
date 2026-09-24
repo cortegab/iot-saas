@@ -44,7 +44,12 @@ async def _create_device(client: httpx.AsyncClient, headers: dict[str, str]) -> 
 
 async def _create_rule(client: httpx.AsyncClient, headers: dict[str, str], device_id: str) -> str:
     body = {
-        "condition": {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0},
+        "condition": {
+            "kind": "leaf",
+            "metric": "temperature",
+            "operator": ">",
+            "rhs": {"source": "static", "value": 30.0},
+        },
         "action": {"type": "actuator_command", "actuator": "fan1", "value": True},
     }
     resp = await client.post(f"/devices/{device_id}/rules", json=body, headers=headers)

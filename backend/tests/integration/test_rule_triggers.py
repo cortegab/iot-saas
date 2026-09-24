@@ -61,7 +61,7 @@ def _rule_body(
             "device_id": device_id,
             "metric": "temperature",
             "operator": ">",
-            "threshold": threshold,
+            "rhs": {"source": "static", "value": threshold},
         },
         "actions": [
             {"type": "actuator_command", "device_id": device_id, "actuator": "fan1", "value": True}

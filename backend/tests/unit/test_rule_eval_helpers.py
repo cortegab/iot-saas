@@ -32,7 +32,7 @@ def _leaf(metric: str, operator: str, threshold: float) -> dict[str, Any]:
         "device_id": _DEVICE,
         "metric": metric,
         "operator": operator,
-        "threshold": threshold,
+        "rhs": {"source": "static", "value": threshold},
         "hysteresis": 0.0,
     }
 

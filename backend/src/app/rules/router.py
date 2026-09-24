@@ -56,7 +56,11 @@ def _to_response(
         description=rule.description,
         type=rule.type,
         trigger=rule.trigger,
-        condition=_condition_adapter.validate_python(rule.condition),
+        condition=(
+            _condition_adapter.validate_python(rule.condition)
+            if rule.condition is not None
+            else None
+        ),
         execution_policy=policy,
         actions=actions,
         devices=[
@@ -126,7 +130,9 @@ async def create_rule(
             name=body.name,
             description=body.description,
             trigger=body.trigger.model_dump(mode="json"),
-            condition=body.condition.model_dump(mode="json"),
+            condition=body.condition.model_dump(mode="json")
+            if body.condition is not None
+            else None,
             execution_policy=body.execution_policy.model_dump(mode="json"),
             actions=[a.model_dump(mode="json") for a in body.actions],
             editor_graph=body.editor_graph,
