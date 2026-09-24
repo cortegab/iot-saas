@@ -360,7 +360,8 @@ this codegen step is what replaces the type safety a single-language stack would
 hysteresis, duration, cooldown) and for payload normalization. Integration test for the ingestion →
 rule → command path. Evaluators are pure and synchronous specifically so they are trivial to test
 exhaustively — take advantage of that. Also keep an explicit test proving one tenant cannot read
-another's rows, run against real RLS policies rather than mocks.
+another's rows, run against real RLS policies rather than mocks. Frontend E2E coverage
+(`frontend/e2e/`, Playwright) is separate and local-only — see §8.
 
 ---
 
@@ -448,6 +449,18 @@ to watch it.
 ```bash
 cd backend && uv run pytest && uv run ruff check . && uv run mypy src/app
 ```
+
+**Frontend E2E (Playwright)** — one-time setup, then run against the dev stack from §8:
+
+```bash
+cd frontend && npx playwright install chromium
+cp .env.test.example .env.test   # fill in a dev account's E2E_EMAIL / E2E_PASSWORD
+pnpm test:e2e
+```
+
+Specs live in `frontend/e2e/`. The suite creates and deletes its own fixture rule via the API
+(`frontend/e2e/fixtures.ts`) rather than depending on whatever rules happen to already exist. Local
+only — the repo has no test CI (§7 covers backend `pytest`; this is the frontend equivalent).
 
 ---
 
