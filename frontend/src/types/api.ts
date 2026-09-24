@@ -489,6 +489,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rules/{rule_id}/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate Rule
+         * @description Dry-run: evaluate the rule against current values (or overrides, or a
+         *     replay window) and report what would happen — writes nothing, dispatches
+         *     nothing. Any member may run it; there are no side effects.
+         */
+        post: operations["simulate_rule_rules__rule_id__simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rules/{rule_id}/executions": {
         parameters: {
             query?: never;
@@ -1413,6 +1435,13 @@ export interface components {
             /** Actions */
             actions: components["schemas"]["ActionExecutionResponse"][];
         };
+        /** RuleHealth */
+        RuleHealth: {
+            /** Evaluatable */
+            evaluatable: boolean;
+            /** Signals */
+            signals: components["schemas"]["RuleSignalHealth"][];
+        };
         /** RuleResponse */
         RuleResponse: {
             /**
@@ -1446,6 +1475,7 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            health: components["schemas"]["RuleHealth"];
             /** Action */
             action: {
                 [key: string]: unknown;
@@ -1454,6 +1484,33 @@ export interface components {
             for_duration: number;
             /** Cooldown */
             cooldown: number;
+        };
+        /**
+         * RuleSignalHealth
+         * @description The freshness of one `(device, metric)` a rule reads — computed from
+         *     device_metric_health + the catalog publish profile (Phase 5).
+         */
+        RuleSignalHealth: {
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Device Name */
+            device_name: string | null;
+            /** Metric */
+            metric: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "fresh" | "stale" | "missing";
+            /** Last Value */
+            last_value: number | null;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Max Age Seconds */
+            max_age_seconds: number;
         };
         /** RuleUpdateRequest */
         RuleUpdateRequest: {
@@ -1495,6 +1552,84 @@ export interface components {
              * @default UTC
              */
             timezone: string;
+        };
+        /** SignalOverride */
+        SignalOverride: {
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Metric */
+            metric: string;
+            /** Value */
+            value: number;
+        };
+        /** SimulateActionPreview */
+        SimulateActionPreview: {
+            /** Index */
+            index: number;
+            /** Type */
+            type: string;
+            /** Summary */
+            summary: string;
+        };
+        /** SimulateReplayResult */
+        SimulateReplayResult: {
+            /**
+             * Resolution
+             * @enum {string}
+             */
+            resolution: "raw" | "1m";
+            /** Samples */
+            samples: number;
+            /** Would Have Fired At */
+            would_have_fired_at: string[];
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** SimulateReplayWindow */
+        SimulateReplayWindow: {
+            /**
+             * From
+             * Format: date-time
+             */
+            from: string;
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
+        };
+        /** SimulateRequest */
+        SimulateRequest: {
+            /** Overrides */
+            overrides?: components["schemas"]["SignalOverride"][];
+            replay?: components["schemas"]["SimulateReplayWindow"] | null;
+        };
+        /** SimulateResponse */
+        SimulateResponse: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "live" | "replay";
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at: string;
+            /** Would Fire */
+            would_fire: boolean;
+            /** Condition */
+            condition: {
+                [key: string]: unknown;
+            } | null;
+            /** Unavailable Signals */
+            unavailable_signals: components["schemas"]["RuleSignalHealth"][];
+            /** Actions */
+            actions: components["schemas"]["SimulateActionPreview"][];
+            replay: components["schemas"]["SimulateReplayResult"] | null;
         };
         /** TelemetryDataPoint */
         TelemetryDataPoint: {
@@ -3100,6 +3235,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate_rule_rules__rule_id__simulate_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulateResponse"];
                 };
             };
             /** @description Validation Error */

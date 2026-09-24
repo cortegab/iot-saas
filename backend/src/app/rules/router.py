@@ -31,8 +31,11 @@ from app.rules.schemas import (
     RuleCreateRequest,
     RuleDeviceRef,
     RuleExecutionResponse,
+    RuleHealth,
     RuleResponse,
     RuleUpdateRequest,
+    SimulateRequest,
+    SimulateResponse,
 )
 from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import TenantRole
@@ -42,7 +45,9 @@ router = APIRouter(tags=["rules"])
 _condition_adapter: TypeAdapter[ConditionNode] = TypeAdapter(ConditionNode)
 
 
-def _to_response(rule: Rule, device_rows: list[service.RuleDeviceRow]) -> RuleResponse:
+def _to_response(
+    rule: Rule, device_rows: list[service.RuleDeviceRow], health: RuleHealth
+) -> RuleResponse:
     policy = ExecutionPolicy.model_validate(rule.execution_policy)
     actions: list[dict[str, object]] = list(rule.actions)
     return RuleResponse(
@@ -64,22 +69,30 @@ def _to_response(rule: Rule, device_rows: list[service.RuleDeviceRow]) -> RuleRe
         ],
         enabled=rule.enabled,
         created_at=rule.created_at,
+        health=health,
         action=actions[0] if actions else {},
         for_duration=policy.for_duration,
         cooldown=policy.cooldown,
     )
 
 
+_NO_SIGNALS_HEALTH = RuleHealth(evaluatable=True, signals=[])
+
+
 async def _responses(
     session: AsyncSession, tenant_id: uuid.UUID, rules: list[Rule]
 ) -> list[RuleResponse]:
     by_rule = await service.list_rule_device_rows(session, tenant_id, [r.id for r in rules])
-    return [_to_response(r, by_rule.get(r.id, [])) for r in rules]
+    health = await service.compute_rule_health(session, tenant_id, rules)
+    return [
+        _to_response(r, by_rule.get(r.id, []), health.get(r.id, _NO_SIGNALS_HEALTH)) for r in rules
+    ]
 
 
 async def _response(session: AsyncSession, tenant_id: uuid.UUID, rule: Rule) -> RuleResponse:
     by_rule = await service.list_rule_device_rows(session, tenant_id, [rule.id])
-    return _to_response(rule, by_rule.get(rule.id, []))
+    health = await service.compute_rule_health(session, tenant_id, [rule])
+    return _to_response(rule, by_rule.get(rule.id, []), health.get(rule.id, _NO_SIGNALS_HEALTH))
 
 
 @router.get("/devices/{device_id}/rules", response_model=list[RuleResponse])
@@ -203,6 +216,22 @@ async def run_rule(
     evaluates the condition against the live signal cache and fires only if
     it's currently met."""
     await service.request_manual_run(session, ctx.tenant_id, rule.id)
+
+
+@router.post("/rules/{rule_id}/simulate", response_model=SimulateResponse)
+async def simulate_rule(
+    body: SimulateRequest,
+    rule: Rule = Depends(get_rule_or_404),
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session),
+) -> SimulateResponse:
+    """Dry-run: evaluate the rule against current values (or overrides, or a
+    replay window) and report what would happen — writes nothing, dispatches
+    nothing. Any member may run it; there are no side effects."""
+    try:
+        return await service.simulate_rule(session, ctx.tenant_id, rule, body)
+    except service.RuleValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @router.get("/rules/{rule_id}/executions", response_model=list[RuleExecutionResponse])

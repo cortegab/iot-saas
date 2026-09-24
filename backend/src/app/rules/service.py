@@ -9,23 +9,27 @@ import json
 import logging
 import uuid
 from collections.abc import Coroutine
-from datetime import UTC, datetime
-from typing import Any, NamedTuple
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal, NamedTuple
 from zoneinfo import ZoneInfo
 
 import aiomqtt
+import redis.asyncio as redis
 from croniter import CroniterError, croniter
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth import service as auth_service
 from app.commands import service as commands_service
+from app.config import settings
 from app.db import add_post_commit_callback, set_tenant_context
+from app.health.service import derive_max_age
 from app.notifications import service as notifications_service
 from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules import executors
 from app.rules.evaluators import (
+    DEFAULT_STALE_METRIC_AGE_SECONDS,
     Evaluator,
     MetricSnapshot,
     MetricValue,
@@ -33,7 +37,10 @@ from app.rules.evaluators import (
     SignalKey,
     ThresholdEvaluator,
     evaluate_condition,
+    explain_condition,
     referenced_signals,
+    rule_state_from_dict,
+    rule_state_to_dict,
 )
 from app.rules.models import (
     ActionExecution,
@@ -43,6 +50,16 @@ from app.rules.models import (
     RuleExecution,
     RuleType,
 )
+from app.rules.schemas import (
+    RuleHealth,
+    RuleSignalHealth,
+    SimulateActionPreview,
+    SimulateReplayResult,
+    SimulateReplayWindow,
+    SimulateRequest,
+    SimulateResponse,
+)
+from app.telemetry import service as telemetry_service
 from app.tenants import service as tenants_service
 
 log = logging.getLogger("rules")
@@ -53,13 +70,12 @@ RULES_INVALIDATE_CHANNEL = "rules:invalidate"
 # by app.worker's schedule_loop; consumed by app.worker's manual_command_loop.
 RULES_MANUAL_CHANNEL = "rules:manual"
 
-# The one staleness bound this codebase used to hardcode twice (once here,
-# once as devices.device_offline_after_seconds — see evaluators.py's old
-# STALE_METRIC_AGE_SECONDS). Now the fallback for any (device, metric) signal
-# health_monitor_loop hasn't computed a catalog-derived bound for yet
-# (worker startup race, or no matching catalog metric) — see
-# reload_staleness_thresholds below and app.health.service's derivation.
-DEFAULT_STALE_METRIC_AGE_SECONDS = 90
+# Redis key holding the periodic JSON checkpoint of _rule_states (Phase 5) —
+# {rule_id: rule_state_to_dict(...)}. Written by app.worker's
+# rules_maintenance_loop, restored once at worker startup. Best-effort: a hard
+# crash between checkpoints loses up to one interval of armed/cooldown/hold
+# progress (CLAUDE.md §9 — no full state externalisation on a single host).
+RULE_STATE_REDIS_KEY = "rules:state"
 
 _THRESHOLD_EVALUATOR: Evaluator = ThresholdEvaluator()
 
@@ -501,6 +517,19 @@ _rules_by_id: dict[uuid.UUID, Rule] = {}
 # Enabled rules with trigger.type == "schedule" — iterated by schedule_loop.
 _scheduled_rules: list[Rule] = []
 _rule_states: dict[uuid.UUID, RuleState] = {}
+
+
+class _RuleHealthTrack(NamedTuple):
+    evaluatable: bool
+    last_alert_at: datetime | None
+
+
+# Per-rule "can it currently evaluate" tracking for the rule_health realtime
+# event (Phase 5, app.worker's rules_maintenance_loop). Worker-only, in-memory,
+# lost on restart — the first tick after a restart just re-establishes the
+# baseline (no transition, no alert).
+_rule_health_tracks: dict[uuid.UUID, _RuleHealthTrack] = {}
+_RULE_HEALTH_RENOTIFY_AFTER = timedelta(hours=1)
 
 # Deferred (webhook/email) delivery tasks — strong refs so asyncio can't GC a
 # task mid-flight; the semaphore bounds concurrency during an endpoint outage.
@@ -1285,3 +1314,354 @@ async def run_rule_out_of_band(
         )
     except Exception:
         log.exception("out-of-band dispatch failed for rule %s", rule_id)
+
+
+# ---- Rule health (API-side, from the device_metric_health projection) ------
+
+
+def _max_age_for(catalog_metrics: Any, metric: str) -> int:
+    """The staleness bound for one metric, read out of its device-catalog
+    entry's `metrics` JSONB array. Fallback if the metric isn't in the catalog."""
+    for entry in catalog_metrics or []:
+        if isinstance(entry, dict) and entry.get("key") == metric:
+            return derive_max_age(
+                entry.get("publish", "periodic"), entry.get("publish_interval_seconds")
+            )
+    return DEFAULT_STALE_METRIC_AGE_SECONDS
+
+
+def _signal_health_from_row(row: Any, now: datetime) -> RuleSignalHealth:
+    device_id = uuid.UUID(str(row["device_id"]))
+    metric = row["metric"]
+    if row["device_name"] is None or row["device_status"] != "active":
+        return RuleSignalHealth(
+            device_id=device_id,
+            device_name=row["device_name"],
+            metric=metric,
+            state="missing",
+            last_value=None,
+            last_seen_at=None,
+            max_age_seconds=DEFAULT_STALE_METRIC_AGE_SECONDS,
+        )
+    max_age = _max_age_for(row["catalog_metrics"], metric)
+    last_seen_at: datetime | None = row["last_seen_at"]
+    if last_seen_at is None:
+        state: Literal["fresh", "stale", "missing"] = "missing"
+    elif (now - last_seen_at).total_seconds() > max_age:
+        state = "stale"
+    else:
+        state = "fresh"
+    return RuleSignalHealth(
+        device_id=device_id,
+        device_name=row["device_name"],
+        metric=metric,
+        state=state,
+        last_value=row["last_value"],
+        last_seen_at=last_seen_at,
+        max_age_seconds=max_age,
+    )
+
+
+async def compute_rule_health(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    rules: list[Rule],
+    *,
+    now: datetime | None = None,
+) -> dict[uuid.UUID, RuleHealth]:
+    """For each rule, the freshness of every (device, metric) its condition
+    reads — so the UI can show "can't currently evaluate" instead of a rule
+    silently failing its leaves closed. One batched query over the distinct
+    signal set; tenant-scoped by RLS on devices / device_metric_health.
+    """
+    now = now or datetime.now(UTC)
+    signals_by_rule: dict[uuid.UUID, list[SignalKey]] = {
+        rule.id: sorted(referenced_signals(rule.condition)) for rule in rules
+    }
+    distinct = sorted({s for sigs in signals_by_rule.values() for s in sigs})
+    by_signal: dict[SignalKey, RuleSignalHealth] = {}
+    if distinct:
+        result = await session.execute(
+            text(
+                "SELECT sig.device_id, sig.metric, d.name AS device_name, "
+                "       d.status AS device_status, c.metrics AS catalog_metrics, "
+                "       dmh.last_value, dmh.last_seen_at "
+                "FROM unnest(CAST(:device_ids AS uuid[]), CAST(:metrics AS text[])) "
+                "         AS sig(device_id, metric) "
+                "LEFT JOIN devices d ON d.id = sig.device_id AND d.tenant_id = :tenant_id "
+                "LEFT JOIN device_catalog_entries c ON c.id = d.catalog_entry_id "
+                "LEFT JOIN device_metric_health dmh "
+                "       ON dmh.device_id = sig.device_id AND dmh.metric = sig.metric"
+            ),
+            {
+                "device_ids": [s.device_id for s in distinct],
+                "metrics": [s.metric for s in distinct],
+                "tenant_id": str(tenant_id),
+            },
+        )
+        for row in result.mappings():
+            key = SignalKey(str(row["device_id"]), row["metric"])
+            by_signal[key] = _signal_health_from_row(row, now)
+
+    out: dict[uuid.UUID, RuleHealth] = {}
+    for rule in rules:
+        sigs = [
+            by_signal.get(
+                s,
+                RuleSignalHealth(
+                    device_id=uuid.UUID(s.device_id),
+                    device_name=None,
+                    metric=s.metric,
+                    state="missing",
+                    last_value=None,
+                    last_seen_at=None,
+                    max_age_seconds=DEFAULT_STALE_METRIC_AGE_SECONDS,
+                ),
+            )
+            for s in signals_by_rule[rule.id]
+        ]
+        out[rule.id] = RuleHealth(evaluatable=all(s.state == "fresh" for s in sigs), signals=sigs)
+    return out
+
+
+# ---- Simulate / dry-run ---------------------------------------------------
+
+
+def _action_summary(action: dict[str, Any]) -> str:
+    kind = action.get("type")
+    if kind == "actuator_command":
+        value = action.get("value")
+        shown = "ON" if value is True else "OFF" if value is False else value
+        return f"Set {action.get('actuator', '?')} to {shown}"
+    if kind == "notification":
+        channels = action.get("channels") or ["platform"]
+        return f"Send a {'/'.join(channels)} notification: {action.get('message', '')}".strip()
+    if kind == "webhook":
+        return f"POST {action.get('url', '?')}"
+    return f"Run {kind or 'unknown'} action"
+
+
+def _action_previews(rule: Rule) -> list[SimulateActionPreview]:
+    return [
+        SimulateActionPreview(
+            index=i, type=str(action.get("type", "unknown")), summary=_action_summary(action)
+        )
+        for i, action in enumerate(rule.actions)
+    ]
+
+
+async def simulate_rule(
+    session: AsyncSession, tenant_id: uuid.UUID, rule: Rule, req: SimulateRequest
+) -> SimulateResponse:
+    """Evaluate `rule` against current values (or `req.overrides`, or a
+    `req.replay` window over stored telemetry) and report what would happen —
+    WITHOUT dispatching anything or writing a single row. Read-only: no
+    session.begin(), no _record_rule_execution, no publish_event.
+    """
+    now = datetime.now(UTC)
+    health = (await compute_rule_health(session, tenant_id, [rule], now=now))[rule.id]
+
+    if req.replay is not None:
+        replay = await _simulate_replay(session, rule, req.replay, health)
+        return SimulateResponse(
+            mode="replay",
+            evaluated_at=now,
+            would_fire=bool(replay.would_have_fired_at),
+            condition=None,
+            unavailable_signals=[],
+            actions=_action_previews(rule),
+            replay=replay,
+        )
+
+    overrides = {(str(o.device_id), o.metric): o.value for o in req.overrides}
+    snapshot: MetricSnapshot = {}
+    unavailable: list[RuleSignalHealth] = []
+    for sig in health.signals:
+        key = SignalKey(str(sig.device_id), sig.metric)
+        override = overrides.get((str(sig.device_id), sig.metric))
+        if override is not None:
+            snapshot[key] = MetricValue(
+                value=override, timestamp=now, max_age_seconds=sig.max_age_seconds
+            )
+        elif sig.state == "fresh" and sig.last_value is not None and sig.last_seen_at is not None:
+            snapshot[key] = MetricValue(
+                value=sig.last_value,
+                timestamp=sig.last_seen_at,
+                max_age_seconds=sig.max_age_seconds,
+            )
+        else:
+            unavailable.append(sig)
+
+    tree = explain_condition(rule.condition, snapshot, now)
+    return SimulateResponse(
+        mode="live",
+        evaluated_at=now,
+        would_fire=bool(tree["result"]),
+        condition=tree,
+        unavailable_signals=unavailable,
+        actions=_action_previews(rule),
+        replay=None,
+    )
+
+
+async def _simulate_replay(
+    session: AsyncSession,
+    rule: Rule,
+    window: SimulateReplayWindow,
+    health: RuleHealth,
+) -> SimulateReplayResult:
+    if window.to <= window.from_:
+        raise RuleValidationError("replay window 'to' must be after 'from'")
+    span = window.to - window.from_
+    if span > timedelta(days=settings.simulate_replay_max_days):
+        raise RuleValidationError(
+            f"replay window must be {settings.simulate_replay_max_days} days or less"
+        )
+    resolution: Literal["raw", "1m"] = "raw" if span <= timedelta(hours=6) else "1m"
+
+    max_ages = {SignalKey(str(s.device_id), s.metric): s.max_age_seconds for s in health.signals}
+    events: list[tuple[datetime, SignalKey, float]] = []
+    for sig in max_ages:
+        data = await telemetry_service.get_range(
+            session,
+            rule.tenant_id,
+            uuid.UUID(sig.device_id),
+            sig.metric,
+            window.from_,
+            window.to,
+            resolution,
+        )
+        events.extend((point.time, sig, point.value) for point in data.points)
+    events.sort(key=lambda event: event[0])
+    truncated = len(events) > settings.simulate_replay_max_samples
+    events = events[: settings.simulate_replay_max_samples]
+
+    snapshot: MetricSnapshot = {}
+    state = RuleState()
+    fired_at: list[datetime] = []
+    for timestamp, signal, value in events:
+        snapshot[signal] = MetricValue(
+            value=value,
+            timestamp=timestamp,
+            max_age_seconds=max_ages.get(signal, DEFAULT_STALE_METRIC_AGE_SECONDS),
+        )
+        if _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, timestamp, state) is not None:
+            fired_at.append(timestamp)
+
+    return SimulateReplayResult(
+        resolution=resolution,
+        samples=len(events),
+        would_have_fired_at=fired_at,
+        truncated=truncated,
+    )
+
+
+# ---- State durability: periodic Redis checkpoint of _rule_states ----------
+
+
+async def snapshot_rule_states() -> None:
+    """Write the current _rule_states to Redis so armed / cooldown /
+    for_duration / hysteresis-latch progress survives a normal worker restart.
+    Called on a timer by app.worker's rules_maintenance_loop and once more on
+    graceful shutdown. Best-effort — a Redis error is logged, not raised."""
+    payload = {str(rule_id): rule_state_to_dict(state) for rule_id, state in _rule_states.items()}
+    try:
+        await redis_client.set(RULE_STATE_REDIS_KEY, json.dumps(payload))
+    except redis.RedisError:
+        log.warning("rule state checkpoint write failed", exc_info=True)
+
+
+async def restore_rule_states() -> None:
+    """Load the checkpoint into _rule_states at worker startup — call AFTER
+    load_rule_cache so _rules_by_id is populated and states for rules deleted
+    while the worker was down are dropped."""
+    try:
+        raw = await redis_client.get(RULE_STATE_REDIS_KEY)
+    except redis.RedisError:
+        log.warning("rule state checkpoint read failed", exc_info=True)
+        return
+    if not raw:
+        return
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        log.warning("rule state checkpoint is not valid JSON; ignoring")
+        return
+
+    restored = 0
+    for rule_id_str, blob in (data or {}).items():
+        try:
+            rule_id = uuid.UUID(rule_id_str)
+        except ValueError:
+            continue
+        if rule_id not in _rules_by_id:
+            continue
+        _rule_states[rule_id] = rule_state_from_dict(blob)
+        restored += 1
+    log.info("restored %d rule states from checkpoint", restored)
+
+
+# ---- Rule health monitoring: the rule_health realtime event --------------
+
+
+def _rule_evaluatable_now(rule: Rule, now: datetime) -> tuple[bool, list[SignalKey]]:
+    """Worker-side "can this rule evaluate right now" — reads the same
+    _signal_value_cache the hot-path evaluator sees. Returns
+    (all_signals_fresh, the stale/missing ones)."""
+    bad: list[SignalKey] = []
+    for signal in referenced_signals(rule.condition):
+        metric_value = _signal_value_cache.get(signal)
+        if (
+            metric_value is None
+            or (now - metric_value.timestamp).total_seconds() > metric_value.max_age_seconds
+        ):
+            bad.append(signal)
+    return (not bad, sorted(bad))
+
+
+def _bad_signal_phrase(bad: list[SignalKey]) -> str:
+    metrics = sorted({signal.metric for signal in bad})
+    verb = "is" if len(metrics) == 1 else "are"
+    return f"{', '.join(metrics)} {verb} stale or not reporting"
+
+
+async def emit_rule_health_transitions(factory: async_sessionmaker[AsyncSession]) -> None:
+    """One pass over every enabled non-manual rule: when its "can evaluate"
+    state flips, publish a rule_health realtime event; on the flip to
+    un-evaluatable, also write one platform notification (debounced per rule).
+    The first pass after a worker restart only records the baseline — no
+    event, no alert — so a cold _signal_value_cache never cries wolf."""
+    now = datetime.now(UTC)
+    live_ids: set[uuid.UUID] = set()
+    for rule in list(_rules_by_id.values()):
+        if (rule.trigger or {}).get("type") == "manual":
+            continue
+        live_ids.add(rule.id)
+        evaluatable, bad = _rule_evaluatable_now(rule, now)
+        prev = _rule_health_tracks.get(rule.id)
+        if prev is None:
+            _rule_health_tracks[rule.id] = _RuleHealthTrack(evaluatable, None)
+            continue
+        if evaluatable == prev.evaluatable:
+            continue
+
+        await realtime_service.publish_event(
+            rule.tenant_id,
+            {"type": "rule_health", "rule_id": str(rule.id), "evaluatable": evaluatable},
+        )
+        alert_at = prev.last_alert_at
+        if not evaluatable and (
+            prev.last_alert_at is None or now - prev.last_alert_at > _RULE_HEALTH_RENOTIFY_AFTER
+        ):
+            await notifications_service.create_notification(
+                factory,
+                rule.tenant_id,
+                None,
+                rule.id,
+                f'Rule "{rule.name}" can\'t evaluate right now: {_bad_signal_phrase(bad)}.',
+            )
+            alert_at = now
+        _rule_health_tracks[rule.id] = _RuleHealthTrack(evaluatable, alert_at)
+
+    for gone in set(_rule_health_tracks) - live_ids:
+        del _rule_health_tracks[gone]

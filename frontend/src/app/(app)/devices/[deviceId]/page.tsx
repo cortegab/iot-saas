@@ -226,10 +226,18 @@ function ActiveRulesRail({
               key={rule.id}
               className="flex items-center gap-2 border-t border-border py-2 text-sm first:border-t-0"
             >
-              <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-status-online" />
+              <span
+                aria-hidden
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  rule.health.evaluatable ? "bg-status-online" : "bg-status-pending"
+                }`}
+              />
               <Link href={`/rules/${rule.id}`} className="text-ink hover:text-accent">
                 {rule.name}
               </Link>
+              {!rule.health.evaluatable && (
+                <span className="text-xs text-status-pending">can&rsquo;t evaluate</span>
+              )}
             </li>
           ))}
         </ul>

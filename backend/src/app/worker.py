@@ -1,4 +1,4 @@
-"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Six
+"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Seven
 concurrent loops in one process; there is no third process (the API server
 never subscribes to MQTT, the worker never serves HTTP):
 
@@ -45,6 +45,13 @@ never subscribes to MQTT, the worker never serves HTTP):
    cron matches — manual_command_loop does the actual evaluate + dispatch, so
    there's one shared out-of-band run path. Missed ticks on a restart are
    dropped, not caught up.
+7. rules_maintenance_loop — timer-driven (rules_maintenance_interval_seconds).
+   Checkpoints _rule_states to Redis (rules:state) so armed/cooldown/hold
+   progress survives a normal restart — restored once by rule_cache_loop at
+   startup; a hard crash between ticks loses at most one interval of progress.
+   Same tick re-checks every rule's "can it currently evaluate" state and
+   emits a rule_health realtime event (+ one platform notification) on a
+   transition to un-evaluatable.
 """
 
 import asyncio
@@ -284,6 +291,9 @@ async def rule_cache_loop(factory: async_sessionmaker[AsyncSession]) -> None:
     not up to a stale TTL window later.
     """
     await rules_service.load_rule_cache(factory)
+    # Restore the _rule_states checkpoint now that _rules_by_id is populated
+    # (so states for rules deleted while the worker was down are dropped).
+    await rules_service.restore_rule_states()
     while True:
         try:
             async with redis_client.pubsub() as pubsub:
@@ -466,6 +476,28 @@ async def schedule_loop(factory: async_sessionmaker[AsyncSession]) -> None:
         await asyncio.sleep(_seconds_to_next_minute())
 
 
+async def rules_maintenance_loop(factory: async_sessionmaker[AsyncSession]) -> None:
+    """Periodic (rules_maintenance_interval_seconds): checkpoint _rule_states
+    to Redis so armed/cooldown/for_duration progress survives a normal
+    restart, and re-check every rule's "can it currently evaluate" state to
+    emit a rule_health realtime event (+ one platform notification) on a
+    transition. Holds no MQTT client. Each tick is defensively wrapped so a
+    bad rule never kills the loop."""
+    # Give rule_cache_loop's startup load_rule_cache a moment to populate
+    # _rules_by_id and let a few telemetry messages warm _signal_value_cache.
+    await asyncio.sleep(15)
+    while True:
+        try:
+            await rules_service.emit_rule_health_transitions(factory)
+        except Exception:
+            log.exception("rule health transition tick failed")
+        try:
+            await rules_service.snapshot_rule_states()
+        except Exception:
+            log.exception("rule state snapshot tick failed")
+        await asyncio.sleep(settings.rules_maintenance_interval_seconds)
+
+
 async def _ensure_consumer_group(r: redis.Redis) -> None:
     try:
         await r.xgroup_create(
@@ -601,6 +633,7 @@ async def run() -> None:
             manual_command_loop(session_factory, redis_client),
             health_monitor_loop(session_factory),
             schedule_loop(session_factory),
+            rules_maintenance_loop(session_factory),
         )
     finally:
         # Best-effort drain of in-flight webhook/email deliveries on shutdown.
@@ -611,6 +644,11 @@ async def run() -> None:
                 await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=5)
             except TimeoutError:
                 log.warning("deferred-action drain timed out; %d still pending", len(pending))
+        # Final _rule_states checkpoint so a graceful restart loses nothing.
+        try:
+            await asyncio.wait_for(rules_service.snapshot_rule_states(), timeout=2)
+        except TimeoutError:
+            log.warning("final rule state checkpoint timed out")
 
 
 if __name__ == "__main__":

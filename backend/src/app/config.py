@@ -77,6 +77,19 @@ class Settings(BaseSettings):
     smtp_password: SecretStr = SecretStr("")
     smtp_use_tls: bool = True
 
+    # Rule maintenance loop (app/worker.py's rules_maintenance_loop, Phase 5):
+    # how often to checkpoint _rule_states to Redis and re-check every rule's
+    # "can it currently evaluate" state for the rule_health realtime event. A
+    # hard crash between ticks loses at most this much armed/cooldown/hold
+    # progress — best-effort, not full state externalisation (CLAUDE.md §9).
+    rules_maintenance_interval_seconds: int = 30
+
+    # POST /rules/{id}/simulate replay-mode bounds (app/rules/service.py): the
+    # widest history window and the most telemetry points it will walk before
+    # returning truncated results.
+    simulate_replay_max_days: int = 7
+    simulate_replay_max_samples: int = 5000
+
     @property
     def cors_allow_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]

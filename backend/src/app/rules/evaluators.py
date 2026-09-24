@@ -22,9 +22,18 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, NamedTuple, Protocol
+from typing import Any, Literal, NamedTuple, Protocol
+
+SignalState = Literal["fresh", "stale", "missing"]
 
 from app.rules.models import Rule
+
+# The staleness fallback for any (device, metric) with no catalog-derived
+# bound yet (worker startup race, or no matching catalog metric). Lives here —
+# not in rules/service.py — so app.health.service can import it without a
+# circular dependency (health.service <-> rules.service). Kept in sync with
+# MetricValue.max_age_seconds' own literal default below.
+DEFAULT_STALE_METRIC_AGE_SECONDS = 90
 
 _COMPARATORS: dict[str, Callable[[float, float], bool]] = {
     ">": op_module.gt,
@@ -71,10 +80,13 @@ class LeafState:
 
 @dataclass
 class RuleState:
-    """Per-rule, in-process, in-memory only — does not survive a worker
-    restart (this project's already-accepted single-host, no-HA posture).
-    Not reset when the rule cache reloads; only a deleted rule's state goes
-    stale and unreferenced, which is harmless.
+    """Per-rule, in-process, in-memory. Checkpointed to Redis every
+    rules_maintenance_interval_seconds and restored at worker startup
+    (rules/service.py's snapshot_rule_states / restore_rule_states) — so a
+    normal restart no longer resets armed/cooldown/for_duration progress; a
+    hard crash between checkpoints still loses up to one interval. Not reset
+    when the rule cache reloads; only a deleted rule's state goes stale and
+    unreferenced, which is harmless.
     """
 
     condition_since: datetime | None = None
@@ -136,6 +148,18 @@ def referenced_signals(condition: dict[str, Any]) -> set[SignalKey]:
     return out
 
 
+def _signal_state(metric_value: MetricValue | None, now: datetime) -> SignalState:
+    """Whether a snapshot entry is usable for evaluation right now. The one
+    definition of "stale" — shared by _evaluate_leaf (which collapses stale
+    and missing into a False leaf) and explain_condition (which keeps the
+    distinction for the simulate UI)."""
+    if metric_value is None:
+        return "missing"
+    if (now - metric_value.timestamp).total_seconds() > metric_value.max_age_seconds:
+        return "stale"
+    return "fresh"
+
+
 def _evaluate_leaf(
     leaf: dict[str, Any], snapshot: MetricSnapshot, now: datetime, leaf_state: LeafState
 ) -> bool:
@@ -147,10 +171,7 @@ def _evaluate_leaf(
     reporting one metric can't leave a predicate permanently stuck true.
     """
     metric_value = snapshot.get(_leaf_signal(leaf))
-    if (
-        metric_value is None
-        or (now - metric_value.timestamp).total_seconds() > metric_value.max_age_seconds
-    ):
+    if metric_value is None or _signal_state(metric_value, now) != "fresh":
         return False
 
     raw_true = _compare(metric_value.value, leaf["operator"], leaf["threshold"])
@@ -192,6 +213,101 @@ def evaluate_condition(condition: dict[str, Any], snapshot: MetricSnapshot, now:
     automated schedule path uses the full ThresholdEvaluator instead.
     """
     return _evaluate_node(condition, snapshot, now, {}, ())
+
+
+def explain_condition(
+    condition: dict[str, Any], snapshot: MetricSnapshot, now: datetime
+) -> dict[str, Any]:
+    """The same one-shot walk as evaluate_condition, but returns an annotated
+    tree instead of a bare bool — every leaf carries the value it saw, that
+    signal's freshness, and its own result; every group carries its op and
+    combined result. Throwaway leaf states (no hysteresis persistence), same
+    trust tier as the "Run now" path. Pure. Powers POST /rules/{id}/simulate.
+    """
+    if condition["kind"] == "leaf":
+        signal = _leaf_signal(condition)
+        metric_value = snapshot.get(signal)
+        state = _signal_state(metric_value, now)
+        result = state == "fresh" and _compare(
+            metric_value.value,  # type: ignore[union-attr]  # fresh => not None
+            condition["operator"],
+            condition["threshold"],
+        )
+        return {
+            "kind": "leaf",
+            "device_id": condition["device_id"],
+            "metric": condition["metric"],
+            "operator": condition["operator"],
+            "threshold": condition["threshold"],
+            "observed_value": metric_value.value if metric_value is not None else None,
+            "observed_at": metric_value.timestamp if metric_value is not None else None,
+            "signal_state": state,
+            "result": bool(result),
+        }
+
+    children = [explain_condition(child, snapshot, now) for child in condition["predicates"]]
+    results = [child["result"] for child in children]
+    combined = all(results) if condition["op"] == "AND" else any(results)
+    return {
+        "kind": "group",
+        "op": condition["op"],
+        "result": combined,
+        "predicates": children,
+    }
+
+
+def _path_key(path: tuple[int, ...]) -> str:
+    return ".".join(str(i) for i in path)
+
+
+def _leaf_states_to_dict(states: dict[tuple[int, ...], LeafState]) -> dict[str, bool]:
+    return {_path_key(path): st.latched_true for path, st in states.items()}
+
+
+def _leaf_states_from_dict(raw: Any) -> dict[tuple[int, ...], LeafState]:
+    out: dict[tuple[int, ...], LeafState] = {}
+    if not isinstance(raw, dict):
+        return out
+    for key, latched in raw.items():
+        path = tuple(int(i) for i in key.split(".")) if key else ()
+        out[path] = LeafState(latched_true=bool(latched))
+    return out
+
+
+def rule_state_to_dict(state: RuleState) -> dict[str, Any]:
+    """Serialize a RuleState for the Redis checkpoint (rules/service.py's
+    snapshot_rule_states). datetimes -> isoformat; the tuple-of-int leaf-state
+    paths -> dotted strings ("" for the root leaf)."""
+    return {
+        "condition_since": state.condition_since.isoformat() if state.condition_since else None,
+        "armed": state.armed,
+        "last_fired_at": state.last_fired_at.isoformat() if state.last_fired_at else None,
+        "leaf_states": _leaf_states_to_dict(state.leaf_states),
+        "reset_leaf_states": _leaf_states_to_dict(state.reset_leaf_states),
+    }
+
+
+def rule_state_from_dict(raw: Any) -> RuleState:
+    """Inverse of rule_state_to_dict. Anything malformed -> a fresh RuleState
+    (a bad checkpoint entry must never crash the worker's restore)."""
+    if not isinstance(raw, dict):
+        return RuleState()
+
+    def _dt(value: Any) -> datetime | None:
+        if not isinstance(value, str):
+            return None
+        try:
+            return datetime.fromisoformat(value)
+        except ValueError:
+            return None
+
+    return RuleState(
+        condition_since=_dt(raw.get("condition_since")),
+        armed=bool(raw.get("armed", True)),
+        last_fired_at=_dt(raw.get("last_fired_at")),
+        leaf_states=_leaf_states_from_dict(raw.get("leaf_states")),
+        reset_leaf_states=_leaf_states_from_dict(raw.get("reset_leaf_states")),
+    )
 
 
 class ThresholdEvaluator:
