@@ -52,7 +52,12 @@ async def _create_rule(
     client: httpx.AsyncClient, headers: dict[str, str], device_id: str, **overrides: Any
 ) -> dict[str, Any]:
     body = {
-        "condition": {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0},
+        "condition": {
+            "kind": "leaf",
+            "metric": "temperature",
+            "operator": ">",
+            "rhs": {"source": "static", "value": 30.0},
+        },
         "action": {"type": "actuator_command", "actuator": "fan1", "value": True},
         **overrides,
     }
@@ -171,8 +176,18 @@ async def test_and_condition_fires_only_once_both_metrics_satisfied(
             "kind": "group",
             "op": "AND",
             "predicates": [
-                {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0},
-                {"kind": "leaf", "metric": "humidity", "operator": "<", "threshold": 40.0},
+                {
+                    "kind": "leaf",
+                    "metric": "temperature",
+                    "operator": ">",
+                    "rhs": {"source": "static", "value": 30.0},
+                },
+                {
+                    "kind": "leaf",
+                    "metric": "humidity",
+                    "operator": "<",
+                    "rhs": {"source": "static", "value": 40.0},
+                },
             ],
         },
     )
@@ -562,7 +577,7 @@ async def test_cross_device_actuator_command_targets_other_device(
             "device_id": a_id,
             "metric": "temperature",
             "operator": ">",
-            "threshold": 30.0,
+            "rhs": {"source": "static", "value": 30.0},
         },
         "actions": [
             {"type": "actuator_command", "device_id": b_id, "actuator": "fan1", "value": True}
@@ -648,7 +663,7 @@ async def test_actuator_command_to_disabled_target_records_failed_action_no_dang
             "device_id": a_id,
             "metric": "temperature",
             "operator": ">",
-            "threshold": 30.0,
+            "rhs": {"source": "static", "value": 30.0},
         },
         "actions": [
             {"type": "actuator_command", "device_id": b_id, "actuator": "fan1", "value": True}
@@ -848,7 +863,7 @@ async def test_unknown_action_type_records_failed_unknown_action(
                     "device_id": str(device_id),
                     "metric": "temperature",
                     "operator": ">",
-                    "threshold": 30.0,
+                    "rhs": {"source": "static", "value": 30.0},
                 },
                 execution_policy={"strategy": "edge", "for_duration": 0, "cooldown": 0},
                 actions=[{"type": "carrier_pigeon"}],

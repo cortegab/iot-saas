@@ -22,9 +22,12 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-_OPERATOR_PATTERN = r"^(>|>=|<|<=|==|!=)$"
+_OPERATOR_PATTERN = r"^(>|>=|<|<=|==|!=|between|not_between|in|not_in|changed|increased|decreased)$"
+_RANGE_OPERATORS = {"between", "not_between"}
+_SET_OPERATORS = {"in", "not_in"}
+_CHANGE_OPERATORS = {"changed", "increased", "decreased"}
 
 RuleStrategy = Literal["edge", "continuous", "reset_condition"]
 
@@ -97,12 +100,52 @@ class ManualTrigger(BaseModel):
     type: Literal["manual"] = "manual"
 
 
+class DeviceStatusTrigger(BaseModel):
+    type: Literal["device_status"] = "device_status"
+    device_id: uuid.UUID
+    transition: Literal["connected", "disconnected"]
+
+
 TriggerRequest = Annotated[
-    MetricTrigger | ScheduleTrigger | ManualTrigger, Field(discriminator="type")
+    MetricTrigger | ScheduleTrigger | ManualTrigger | DeviceStatusTrigger,
+    Field(discriminator="type"),
 ]
 
 
 # ---- Condition tree ---------------------------------------------------------
+
+
+class StaticRhs(BaseModel):
+    """A fixed number to compare against — the pre-Phase-6 `threshold` shape."""
+
+    source: Literal["static"] = "static"
+    value: float
+
+
+class RangeRhs(BaseModel):
+    """`between`/`not_between`'s two-sided bound."""
+
+    source: Literal["range"] = "range"
+    low: float
+    high: float
+
+
+class SetRhs(BaseModel):
+    """`in`/`not_in`'s membership list."""
+
+    source: Literal["set"] = "set"
+    values: list[float] = Field(min_length=1)
+
+
+class MetricRhs(BaseModel):
+    """Compare against another signal's live value instead of a static number."""
+
+    source: Literal["metric"] = "metric"
+    device_id: uuid.UUID
+    metric: str = Field(min_length=1, max_length=100)
+
+
+RhsSpec = Annotated[StaticRhs | RangeRhs | SetRhs | MetricRhs, Field(discriminator="source")]
 
 
 class ConditionLeaf(BaseModel):
@@ -112,8 +155,25 @@ class ConditionLeaf(BaseModel):
     device_id: uuid.UUID | None = None
     metric: str = Field(min_length=1, max_length=100)
     operator: str = Field(pattern=_OPERATOR_PATTERN)
-    threshold: float
+    # None only for changed/increased/decreased, which compare this signal's
+    # latest reading against its own previous one — there's nothing to supply.
+    rhs: RhsSpec | None = None
     hysteresis: float = Field(default=0.0, ge=0)
+
+    @model_validator(mode="after")
+    def _check_rhs_matches_operator(self) -> "ConditionLeaf":
+        if self.operator in _CHANGE_OPERATORS:
+            if self.rhs is not None:
+                raise ValueError(f"operator {self.operator!r} takes no rhs value")
+        elif self.operator in _RANGE_OPERATORS:
+            if not isinstance(self.rhs, RangeRhs):
+                raise ValueError(f"operator {self.operator!r} requires a range rhs")
+        elif self.operator in _SET_OPERATORS:
+            if not isinstance(self.rhs, SetRhs):
+                raise ValueError(f"operator {self.operator!r} requires a set rhs")
+        elif not isinstance(self.rhs, StaticRhs | MetricRhs):
+            raise ValueError(f"operator {self.operator!r} requires a static or metric rhs")
+        return self
 
 
 class ConditionGroup(BaseModel):
@@ -146,11 +206,19 @@ class RuleCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     trigger: TriggerRequest = Field(default_factory=MetricTrigger)
-    condition: ConditionNode
+    # None only when trigger.type == "device_status" — a pure "notify me when
+    # device X disconnects" rule has no natural leaf to express "always true".
+    condition: ConditionNode | None = None
     execution_policy: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
     actions: list[ActionRequest] = Field(min_length=1)
     editor_graph: dict[str, Any] | None = None
     enabled: bool = True
+
+    @model_validator(mode="after")
+    def _condition_required_unless_device_status(self) -> "RuleCreateRequest":
+        if self.condition is None and self.trigger.type != "device_status":
+            raise ValueError('condition is required unless trigger.type == "device_status"')
+        return self
 
 
 class DeviceRuleCreateRequest(BaseModel):
@@ -221,7 +289,7 @@ class RuleResponse(BaseModel):
     description: str | None
     type: str
     trigger: dict[str, Any]
-    condition: ConditionNode
+    condition: ConditionNode | None
     execution_policy: ExecutionPolicy
     actions: list[dict[str, object]]
     # Every device the rule reads (`input`) or commands (`target`) — the only

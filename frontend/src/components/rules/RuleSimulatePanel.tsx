@@ -11,24 +11,38 @@ import { Input } from "@/components/ui/Input";
 import { ApiRequestError } from "@/lib/api-client";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
-import { leafPredicates } from "./RuleSummary";
+import { leafPredicates, type RhsSpec } from "./RuleSummary";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type SimulateResponse = components["schemas"]["SimulateResponse"];
 
+type SignalState = "fresh" | "stale" | "missing";
 type LeafNode = {
   kind: "leaf";
   device_id: string;
   metric: string;
   operator: string;
-  threshold: number;
+  rhs: RhsSpec | null;
   observed_value: number | null;
   observed_at: string | null;
-  signal_state: "fresh" | "stale" | "missing";
+  signal_state: SignalState;
+  // Only present when rhs.source === "metric".
+  observed_rhs_value?: number | null;
+  rhs_signal_state?: SignalState;
   result: boolean;
 };
 type GroupNode = { kind: "group"; op: "AND" | "OR"; result: boolean; predicates: TreeNode[] };
 type TreeNode = LeafNode | GroupNode;
+
+const CHANGE_OPERATORS = new Set(["changed", "increased", "decreased"]);
+
+function rhsLabel(rhs: RhsSpec | null): string {
+  if (rhs == null) return "";
+  if (rhs.source === "static") return String(rhs.value);
+  if (rhs.source === "range") return `${rhs.low}–${rhs.high}`;
+  if (rhs.source === "set") return rhs.values.join(", ");
+  return `${rhs.metric} (another device)`;
+}
 
 const SECTION_LABEL = "text-xs font-medium uppercase tracking-wide text-ink-muted";
 
@@ -66,12 +80,21 @@ function ConditionTree({ node }: { node: TreeNode }) {
     <div className="flex flex-wrap items-center gap-2 text-sm">
       <Badge tone={tone} variant="dot" label={label} />
       <span className="text-ink">
-        {node.metric} {node.operator} {node.threshold}
+        {node.metric} {node.operator}
+        {!CHANGE_OPERATORS.has(node.operator) && ` ${rhsLabel(node.rhs)}`}
       </span>
       {node.observed_value !== null && (
         <span className="text-xs text-ink-muted">
           currently {node.observed_value}
           {node.observed_at ? ` · ${timeAgo(node.observed_at)}` : ""}
+        </span>
+      )}
+      {node.rhs?.source === "metric" && node.observed_rhs_value != null && (
+        <span className="text-xs text-ink-muted">
+          vs {node.observed_rhs_value}
+          {node.rhs_signal_state && node.rhs_signal_state !== "fresh"
+            ? ` (${node.rhs_signal_state})`
+            : ""}
         </span>
       )}
     </div>
@@ -87,6 +110,14 @@ export function RuleSimulatePanel({ rule }: { rule: RuleResponse }) {
         seen.set(`${leaf.device_id}:${leaf.metric}`, {
           device_id: leaf.device_id,
           metric: leaf.metric,
+        });
+      }
+      // A metric-vs-metric leaf's rhs is also overridable ("what if the
+      // other device read X instead").
+      if (leaf.rhs?.source === "metric") {
+        seen.set(`${leaf.rhs.device_id}:${leaf.rhs.metric}`, {
+          device_id: leaf.rhs.device_id,
+          metric: leaf.rhs.metric,
         });
       }
     }

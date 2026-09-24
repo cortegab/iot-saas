@@ -21,7 +21,7 @@ def _rule(cron: str, timezone: str = "UTC") -> Rule:
             "device_id": str(uuid.uuid4()),
             "metric": "x",
             "operator": ">",
-            "threshold": 1.0,
+            "rhs": {"source": "static", "value": 1.0},
         },
         execution_policy={"strategy": "edge", "for_duration": 0, "cooldown": 0},
         actions=[],

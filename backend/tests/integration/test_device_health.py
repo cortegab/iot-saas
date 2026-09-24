@@ -55,7 +55,9 @@ def mock_mqtt_client() -> AsyncMock:
 
 
 async def test_status_message_updates_tier_a_fields_and_connection_state(
-    client: httpx.AsyncClient, app_session_factory: async_sessionmaker[AsyncSession]
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    mock_mqtt_client: AsyncMock,
 ) -> None:
     owner = await _register(client, "owner-health1@example.com", "AcmeHealth1")
     tenant_id = owner["memberships"][0]["tenant_id"]
@@ -70,7 +72,7 @@ async def test_status_message_updates_tier_a_fields_and_connection_state(
         {"online": True, "rssi": -60, "battery_pct": 88, "uptime_s": 500, "fw_version": "1.0.0"}
     ).encode()
 
-    await worker._handle_status(app_session_factory, parsed, payload)
+    await worker._handle_status(app_session_factory, mock_mqtt_client, parsed, payload)
 
     resp = await client.get(f"/devices/{device_id}", headers=headers)
     assert resp.status_code == 200
@@ -83,7 +85,9 @@ async def test_status_message_updates_tier_a_fields_and_connection_state(
 
 
 async def test_status_offline_is_authoritative_even_with_no_prior_telemetry(
-    client: httpx.AsyncClient, app_session_factory: async_sessionmaker[AsyncSession]
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    mock_mqtt_client: AsyncMock,
 ) -> None:
     """A brand-new device has last_seen_at=None (never_connected under the old
     heuristic alone) — an explicit `online: false` status/LWT message must
@@ -98,24 +102,28 @@ async def test_status_offline_is_authoritative_even_with_no_prior_telemetry(
     parsed = ParsedTopic(
         tenant_slug=device["tenant_slug"], device_slug=device["device"]["slug"], metric="status"
     )
-    await worker._handle_status(app_session_factory, parsed, json.dumps({"online": False}).encode())
+    await worker._handle_status(
+        app_session_factory, mock_mqtt_client, parsed, json.dumps({"online": False}).encode()
+    )
 
     resp = await client.get(f"/devices/{device_id}", headers=headers)
     assert resp.json()["connection_state"] == "offline"
 
 
 async def test_malformed_status_payload_is_dropped_not_raised(
-    app_session_factory: async_sessionmaker[AsyncSession],
+    app_session_factory: async_sessionmaker[AsyncSession], mock_mqtt_client: AsyncMock
 ) -> None:
     parsed = ParsedTopic(tenant_slug="doesnotmatter", device_slug="doesnotmatter", metric="status")
-    await worker._handle_status(app_session_factory, parsed, b"not json")
+    await worker._handle_status(app_session_factory, mock_mqtt_client, parsed, b"not json")
 
 
 async def test_status_for_unknown_device_is_dropped_not_raised(
-    app_session_factory: async_sessionmaker[AsyncSession],
+    app_session_factory: async_sessionmaker[AsyncSession], mock_mqtt_client: AsyncMock
 ) -> None:
     parsed = ParsedTopic(tenant_slug="ghost-tenant", device_slug="ghost-device", metric="status")
-    await worker._handle_status(app_session_factory, parsed, json.dumps({"online": True}).encode())
+    await worker._handle_status(
+        app_session_factory, mock_mqtt_client, parsed, json.dumps({"online": True}).encode()
+    )
 
 
 # ---- Tier B: health_service.record_batch / list_for_device -----------------

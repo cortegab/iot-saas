@@ -20,7 +20,7 @@ _TEMPERATURE_CONDITION = {
     "kind": "leaf",
     "metric": "temperature",
     "operator": ">",
-    "threshold": 30.0,
+    "rhs": {"source": "static", "value": 30.0},
 }
 
 
@@ -82,7 +82,7 @@ async def test_create_rule_returns_rule(client: httpx.AsyncClient) -> None:
     assert "device_id" not in body
     assert body["condition"]["metric"] == "temperature"
     assert body["condition"]["operator"] == ">"
-    assert body["condition"]["threshold"] == 30.0
+    assert body["condition"]["rhs"]["value"] == 30.0
     assert body["condition"]["hysteresis"] == 0.0
     assert body["condition"]["device_id"] == device_id
     assert body["type"] == "threshold"
@@ -107,7 +107,12 @@ async def test_list_rules(client: httpx.AsyncClient) -> None:
         client,
         headers,
         device["device"]["id"],
-        condition={"kind": "leaf", "metric": "humidity", "operator": ">", "threshold": 30.0},
+        condition={
+            "kind": "leaf",
+            "metric": "humidity",
+            "operator": ">",
+            "rhs": {"source": "static", "value": 30.0},
+        },
     )
 
     resp = await client.get(f"/devices/{device['device']['id']}/rules", headers=headers)
@@ -143,7 +148,7 @@ async def test_update_rule(client: httpx.AsyncClient) -> None:
                 "kind": "leaf",
                 "metric": "temperature",
                 "operator": ">",
-                "threshold": 40.0,
+                "rhs": {"source": "static", "value": 40.0},
             },
             "enabled": False,
         },
@@ -151,7 +156,7 @@ async def test_update_rule(client: httpx.AsyncClient) -> None:
     )
     assert resp.status_code == 200
     body = resp.json()
-    assert body["condition"]["threshold"] == 40.0
+    assert body["condition"]["rhs"]["value"] == 40.0
     assert body["enabled"] is False
 
 
@@ -167,8 +172,18 @@ async def test_update_rule_to_multi_predicate_condition(client: httpx.AsyncClien
         "kind": "group",
         "op": "AND",
         "predicates": [
-            {"kind": "leaf", "metric": "temperature", "operator": ">", "threshold": 30.0},
-            {"kind": "leaf", "metric": "humidity", "operator": "<", "threshold": 40.0},
+            {
+                "kind": "leaf",
+                "metric": "temperature",
+                "operator": ">",
+                "rhs": {"source": "static", "value": 30.0},
+            },
+            {
+                "kind": "leaf",
+                "metric": "humidity",
+                "operator": "<",
+                "rhs": {"source": "static", "value": 40.0},
+            },
         ],
     }
     resp = await client.patch(
@@ -285,7 +300,12 @@ async def test_list_all_rules_across_devices(client: httpx.AsyncClient) -> None:
         client,
         headers,
         device_b["device"]["id"],
-        condition={"kind": "leaf", "metric": "humidity", "operator": ">", "threshold": 30.0},
+        condition={
+            "kind": "leaf",
+            "metric": "humidity",
+            "operator": ">",
+            "rhs": {"source": "static", "value": 30.0},
+        },
     )
     assert rule_a.status_code == 201
     assert rule_b.status_code == 201
@@ -358,14 +378,14 @@ async def test_create_canonical_multi_device_rule(client: httpx.AsyncClient) -> 
                     "device_id": a_id,
                     "metric": "temperature",
                     "operator": ">",
-                    "threshold": 80.0,
+                    "rhs": {"source": "static", "value": 80.0},
                 },
                 {
                     "kind": "leaf",
                     "device_id": b_id,
                     "metric": "pressure",
                     "operator": ">",
-                    "threshold": 120.0,
+                    "rhs": {"source": "static", "value": 120.0},
                 },
             ],
         },
@@ -410,7 +430,7 @@ async def test_canonical_rule_rejects_cross_tenant_device(client: httpx.AsyncCli
             "device_id": device_b["device"]["id"],
             "metric": "temperature",
             "operator": ">",
-            "threshold": 1.0,
+            "rhs": {"source": "static", "value": 1.0},
         },
         "actions": [
             {
@@ -529,7 +549,7 @@ async def test_rule_execution_summary_is_a_snapshot_not_a_live_join(
                 "kind": "leaf",
                 "metric": "temperature",
                 "operator": ">",
-                "threshold": 99.0,
+                "rhs": {"source": "static", "value": 99.0},
             },
         },
         headers=headers,

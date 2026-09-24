@@ -6,12 +6,17 @@ conflict; they get the default treatment every other tenant-scoped table gets.
 
 A rule is **independent of a single device** (the multi-device rule engine):
 
-- `condition` is a tree of predicates. Each leaf carries its own `device_id`
-  (leaf: device_id/metric/operator/threshold/hysteresis; group: op
-  ["AND"|"OR"] + child predicates) — see rules/schemas.py's ConditionLeaf/
-  ConditionGroup for the validated shape. Stored as opaque JSONB here; only
-  the Pydantic layer validates it (no CHECK constraint can express a
-  recursive shape). Evaluated by rules/evaluators.py.
+- `condition` is a tree of predicates, or `null` for a condition-less
+  device_status rule (trigger.type == "device_status" only — the trigger
+  event itself is the condition). Each leaf carries its own
+  `device_id`/`metric`/`operator`/`rhs`/`hysteresis` (`rhs` is a static value,
+  a static range/set, another device's metric, or `null` for
+  changed/increased/decreased, which compare a signal to its own previous
+  reading); group: op ["AND"|"OR"] + child predicates — see
+  rules/schemas.py's ConditionLeaf/ConditionGroup/RhsSpec for the validated
+  shape. Stored as opaque JSONB here; only the Pydantic layer validates it (no
+  CHECK constraint can express a recursive shape). Evaluated by
+  rules/evaluators.py.
 - `actions` is a JSONB array — a rule can fire several actions, each possibly
   targeting a different device or an external system.
 - `execution_policy` is JSONB: `{strategy, for_duration, cooldown,
@@ -54,6 +59,13 @@ class RuleOperator(str, enum.Enum):
     LTE = "<="
     EQ = "=="
     NE = "!="
+    BETWEEN = "between"
+    NOT_BETWEEN = "not_between"
+    IN = "in"
+    NOT_IN = "not_in"
+    CHANGED = "changed"
+    INCREASED = "increased"
+    DECREASED = "decreased"
 
 
 class RuleDeviceRole(str, enum.Enum):
@@ -72,7 +84,7 @@ class Rule(Base):
     description: Mapped[str | None] = mapped_column(nullable=True)
     type: Mapped[str] = mapped_column(nullable=False, default=RuleType.THRESHOLD.value)
     trigger: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    condition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    condition: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     execution_policy: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     actions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
     # Node graph the visual builder round-trips — presentation only, the

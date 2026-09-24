@@ -39,12 +39,76 @@ def _leaf(
     metric: str = "temperature",
     device_id: str | None = None,
 ) -> dict[str, Any]:
+    """A leaf with a static rhs (`threshold`) — the pre-Phase-6 shape, still
+    the overwhelmingly common case. See _range_leaf/_set_leaf/_change_leaf/
+    _metric_rhs_leaf below for the newer operator families."""
     return {
         "kind": "leaf",
         "device_id": device_id or _DEVICE_A,
         "metric": metric,
         "operator": operator,
-        "threshold": threshold,
+        "rhs": {"source": "static", "value": threshold},
+        "hysteresis": hysteresis,
+    }
+
+
+def _range_leaf(
+    operator: str,
+    low: float,
+    high: float,
+    metric: str = "temperature",
+    device_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "kind": "leaf",
+        "device_id": device_id or _DEVICE_A,
+        "metric": metric,
+        "operator": operator,
+        "rhs": {"source": "range", "low": low, "high": high},
+        "hysteresis": 0.0,
+    }
+
+
+def _set_leaf(
+    operator: str, values: list[float], metric: str = "temperature", device_id: str | None = None
+) -> dict[str, Any]:
+    return {
+        "kind": "leaf",
+        "device_id": device_id or _DEVICE_A,
+        "metric": metric,
+        "operator": operator,
+        "rhs": {"source": "set", "values": values},
+        "hysteresis": 0.0,
+    }
+
+
+def _change_leaf(
+    operator: str, metric: str = "temperature", device_id: str | None = None
+) -> dict[str, Any]:
+    return {
+        "kind": "leaf",
+        "device_id": device_id or _DEVICE_A,
+        "metric": metric,
+        "operator": operator,
+        "rhs": None,
+        "hysteresis": 0.0,
+    }
+
+
+def _metric_rhs_leaf(
+    operator: str,
+    rhs_device_id: str,
+    rhs_metric: str,
+    hysteresis: float = 0.0,
+    metric: str = "temperature",
+    device_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "kind": "leaf",
+        "device_id": device_id or _DEVICE_A,
+        "metric": metric,
+        "operator": operator,
+        "rhs": {"source": "metric", "device_id": rhs_device_id, "metric": rhs_metric},
         "hysteresis": hysteresis,
     }
 
@@ -76,7 +140,10 @@ def _rule(
 
 
 def _at(
-    value: float, offset_seconds: float = 0, metric: str = "temperature", device_id: str | None = None
+    value: float,
+    offset_seconds: float = 0,
+    metric: str = "temperature",
+    device_id: str | None = None,
 ) -> tuple[MetricSnapshot, datetime]:
     """A single-signal snapshot plus the timestamp to evaluate "now" as."""
     now = _BASE_TIME + timedelta(seconds=offset_seconds)
@@ -361,7 +428,12 @@ def test_and_fires_only_when_both_predicates_true() -> None:
     state = RuleState()
 
     # Only temperature satisfied.
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 0), "humidity": (50.0, 0)}), state) is None
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 0), "humidity": (50.0, 0)}), state
+        )
+        is None
+    )
     # Both satisfied.
     action = _EVALUATOR.evaluate(
         rule, *_multi_at({"temperature": (35.0, 1), "humidity": (35.0, 1)}), state
@@ -379,7 +451,12 @@ def test_or_fires_when_either_predicate_true() -> None:
     state = RuleState()
 
     # Neither satisfied.
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (20.0, 0), "humidity": (50.0, 0)}), state) is None
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (20.0, 0), "humidity": (50.0, 0)}), state
+        )
+        is None
+    )
     # Only humidity satisfied — still fires under OR.
     action = _EVALUATOR.evaluate(
         rule, *_multi_at({"temperature": (20.0, 1), "humidity": (5.0, 1)}), state
@@ -412,9 +489,7 @@ def test_leaf_with_stale_snapshot_entry_is_unmet() -> None:
 def test_leaf_snapshot_entry_exactly_at_staleness_boundary_still_fresh() -> None:
     rule = _rule(_leaf(">", 30.0))
     state = RuleState()
-    snapshot = {
-        SignalKey(_DEVICE_A, "temperature"): MetricValue(value=35.0, timestamp=_BASE_TIME)
-    }
+    snapshot = {SignalKey(_DEVICE_A, "temperature"): MetricValue(value=35.0, timestamp=_BASE_TIME)}
     exactly_90s = _BASE_TIME + timedelta(seconds=90)
     action = _EVALUATOR.evaluate(rule, snapshot, exactly_90s, state)
     assert action is not None
@@ -489,13 +564,33 @@ def test_and_duration_and_cooldown_apply_to_combined_result_not_per_leaf() -> No
     state = RuleState()
 
     # temperature satisfied alone for a while — must not start the hold timer.
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 0), "humidity": (50.0, 0)}), state) is None
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 10), "humidity": (50.0, 10)}), state) is None
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 0), "humidity": (50.0, 0)}), state
+        )
+        is None
+    )
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 10), "humidity": (50.0, 10)}), state
+        )
+        is None
+    )
     assert state.condition_since is None
 
     # Now both true — the 5s hold starts from here, not from t=0.
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 11), "humidity": (35.0, 11)}), state) is None
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 15), "humidity": (35.0, 15)}), state) is None
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 11), "humidity": (35.0, 11)}), state
+        )
+        is None
+    )
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 15), "humidity": (35.0, 15)}), state
+        )
+        is None
+    )
     action = _EVALUATOR.evaluate(
         rule, *_multi_at({"temperature": (35.0, 16), "humidity": (35.0, 16)}), state
     )

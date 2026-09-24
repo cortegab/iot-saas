@@ -120,7 +120,7 @@ async def handle_message(
         return
 
     if parsed.metric == ingestion_service.RESERVED_METRIC_STATUS:
-        await _handle_status(factory, parsed, payload)
+        await _handle_status(factory, client, parsed, payload)
         return
 
     try:
@@ -163,6 +163,7 @@ async def handle_message(
 
 async def _handle_status(
     factory: async_sessionmaker[AsyncSession],
+    client: aiomqtt.Client,
     parsed: ingestion_service.ParsedTopic,
     payload: bytes,
 ) -> None:
@@ -173,6 +174,11 @@ async def _handle_status(
     + one LWT), nowhere near telemetry volume, so this doesn't need
     stream_writer_loop's batching discipline (same reasoning
     commands_service.dispatch_command's synchronous command-row insert uses).
+
+    Also the device_status rule trigger's entry point: unlike the
+    unconditional "device_health" event below (published on every status
+    message), rules only fire on a genuine connectivity flip — see
+    rules_service.note_device_status.
     """
     try:
         data = StatusPayload.model_validate_json(payload)
@@ -219,6 +225,11 @@ async def _handle_status(
         },
     )
     log.info("status %s/%s -> online=%s", parsed.tenant_slug, parsed.device_slug, data.online)
+
+    if rules_service.note_device_status(resolved.device_id, data.online):
+        await rules_service.run_device_status_rules(
+            client, factory, resolved.tenant_id, resolved.device_id, data.online
+        )
 
 
 async def _handle_ack(

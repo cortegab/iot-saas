@@ -28,6 +28,10 @@ SignalState = Literal["fresh", "stale", "missing"]
 
 from app.rules.models import Rule
 
+RANGE_OPERATORS = {"between", "not_between"}
+SET_OPERATORS = {"in", "not_in"}
+CHANGE_OPERATORS = {"changed", "increased", "decreased"}
+
 # The staleness fallback for any (device, metric) with no catalog-derived
 # bound yet (worker startup race, or no matching catalog metric). Lives here —
 # not in rules/service.py — so app.health.service can import it without a
@@ -62,6 +66,11 @@ class MetricValue(NamedTuple):
     # `evaluate()` pure. The literal default below exists only so call sites
     # that don't care about staleness (most tests) need not specify it.
     max_age_seconds: int = 90
+    # The one-prior reading for this signal, for changed/increased/decreased
+    # (rules/service.py's _signal_value_cache shifts current -> previous on
+    # each new value). None until a signal has been seen twice.
+    previous_value: float | None = None
+    previous_timestamp: datetime | None = None
 
 
 MetricSnapshot = dict[SignalKey, MetricValue]
@@ -111,6 +120,45 @@ def _compare(value: float, operator: str, threshold: float) -> bool:
     return _COMPARATORS[operator](value, threshold)
 
 
+def _compare_range(operator: str, value: float, rhs: dict[str, Any]) -> bool:
+    inside = rhs["low"] <= value <= rhs["high"]
+    return inside if operator == "between" else not inside
+
+
+def _compare_set(operator: str, value: float, rhs: dict[str, Any]) -> bool:
+    member = value in rhs["values"]
+    return member if operator == "in" else not member
+
+
+def _compare_change(operator: str, metric_value: MetricValue) -> bool:
+    """changed/increased/decreased compare a signal's latest reading against
+    its own previous one — a signal seen only once (previous_value is None)
+    can't have "changed" yet."""
+    if metric_value.previous_value is None:
+        return False
+    if operator == "changed":
+        return metric_value.value != metric_value.previous_value
+    if operator == "increased":
+        return metric_value.value > metric_value.previous_value
+    return metric_value.value < metric_value.previous_value  # "decreased"
+
+
+def _resolve_rhs_scalar(
+    rhs: dict[str, Any], snapshot: MetricSnapshot, now: datetime
+) -> tuple[float | None, SignalState]:
+    """The right-hand side's value and freshness for the six scalar
+    comparison operators. A `static` rhs is always fresh; a `metric` rhs is
+    looked up in the same snapshot as any other signal and fails closed
+    (None, "stale"/"missing") exactly like a leaf's own missing signal."""
+    if rhs["source"] == "static":
+        return rhs["value"], "fresh"
+    rhs_value = snapshot.get(SignalKey(str(rhs["device_id"]), rhs["metric"]))
+    state = _signal_state(rhs_value, now)
+    if rhs_value is None or state != "fresh":
+        return None, state
+    return rhs_value.value, state
+
+
 def _rearm_condition_met(
     operator: str, value: float, threshold: float, hysteresis: float, condition_true: bool
 ) -> bool:
@@ -134,14 +182,23 @@ def _leaf_signal(leaf: dict[str, Any]) -> SignalKey:
     return SignalKey(str(leaf["device_id"]), leaf["metric"])
 
 
-def referenced_signals(condition: dict[str, Any]) -> set[SignalKey]:
+def referenced_signals(condition: dict[str, Any] | None) -> set[SignalKey]:
     """Every (device_id, metric) referenced anywhere in a condition tree —
     used both to register a rule under every signal it watches
     (rules/service.py's load_rule_cache) and to know which snapshot entries a
-    rule needs when evaluating (evaluate_and_dispatch).
+    rule needs when evaluating (evaluate_and_dispatch). A metric-vs-metric
+    leaf (rhs.source == "metric") also references its rhs signal, so the rule
+    re-evaluates when *either* side updates. None (a condition-less
+    device_status rule) references nothing.
     """
+    if condition is None:
+        return set()
     if condition["kind"] == "leaf":
-        return {_leaf_signal(condition)}
+        signals = {_leaf_signal(condition)}
+        rhs = condition.get("rhs")
+        if rhs is not None and rhs.get("source") == "metric":
+            signals.add(SignalKey(str(rhs["device_id"]), rhs["metric"]))
+        return signals
     out: set[SignalKey] = set()
     for child in condition["predicates"]:
         out |= referenced_signals(child)
@@ -163,28 +220,48 @@ def _signal_state(metric_value: MetricValue | None, now: datetime) -> SignalStat
 def _evaluate_leaf(
     leaf: dict[str, Any], snapshot: MetricSnapshot, now: datetime, leaf_state: LeafState
 ) -> bool:
-    """A single predicate's hysteresis-stabilized contribution to the tree —
-    a Schmitt-trigger latch: goes True on a raw threshold crossing and stays
-    True (even if the raw value dips back below the bare threshold) until it
-    crosses back past its own hysteresis margin. A missing or stale cached
-    value evaluates False without touching the latch — a device that stops
-    reporting one metric can't leave a predicate permanently stuck true.
+    """A single predicate's contribution to the tree. A missing or stale
+    cached value (this leaf's own signal, or a metric-sourced rhs) evaluates
+    False without touching the latch — a device that stops reporting can't
+    leave a predicate permanently stuck true.
+
+    Only the four inequality operators (>,>=,<,<=) get hysteresis-stabilized
+    latching (a Schmitt trigger: goes True on a raw crossing and stays True
+    until it crosses back past its own margin) — `==`/`!=` and every operator
+    added in Phase 6 (between/not_between/in/not_in/changed/increased/
+    decreased) have no natural symmetric margin, so they re-arm immediately
+    (the latch always mirrors the raw comparison — see test coverage for why
+    this is behaviorally identical to running `==`/`!=` through the general
+    latch path today).
     """
     metric_value = snapshot.get(_leaf_signal(leaf))
     if metric_value is None or _signal_state(metric_value, now) != "fresh":
         return False
 
-    raw_true = _compare(metric_value.value, leaf["operator"], leaf["threshold"])
+    operator = leaf["operator"]
 
-    if leaf_state.latched_true:
-        if _rearm_condition_met(
-            leaf["operator"], metric_value.value, leaf["threshold"], leaf["hysteresis"], raw_true
-        ):
-            leaf_state.latched_true = False
-    elif raw_true:
-        leaf_state.latched_true = True
+    if operator in CHANGE_OPERATORS:
+        raw_true = _compare_change(operator, metric_value)
+    elif operator in RANGE_OPERATORS:
+        raw_true = _compare_range(operator, metric_value.value, leaf["rhs"])
+    elif operator in SET_OPERATORS:
+        raw_true = _compare_set(operator, metric_value.value, leaf["rhs"])
+    else:
+        rhs_value, _rhs_state = _resolve_rhs_scalar(leaf["rhs"], snapshot, now)
+        if rhs_value is None:
+            return False
+        raw_true = _compare(metric_value.value, operator, rhs_value)
+        if leaf_state.latched_true:
+            if _rearm_condition_met(
+                operator, metric_value.value, rhs_value, leaf["hysteresis"], raw_true
+            ):
+                leaf_state.latched_true = False
+        elif raw_true:
+            leaf_state.latched_true = True
+        return leaf_state.latched_true
 
-    return leaf_state.latched_true
+    leaf_state.latched_true = raw_true
+    return raw_true
 
 
 def _evaluate_node(
@@ -204,14 +281,19 @@ def _evaluate_node(
     return all(results) if node["op"] == "AND" else any(results)
 
 
-def evaluate_condition(condition: dict[str, Any], snapshot: MetricSnapshot, now: datetime) -> bool:
+def evaluate_condition(
+    condition: dict[str, Any] | None, snapshot: MetricSnapshot, now: datetime
+) -> bool:
     """A one-shot "is this condition tree true right now" check — throwaway
     leaf states, so no hysteresis-latch persistence and none of the
     rule-level for_duration / cooldown / armed gates. Used by the manual
     "Run now" path (rules/service.py), which deliberately bypasses flapping
     protection — the same trust tier as a manual actuator toggle. The
-    automated schedule path uses the full ThresholdEvaluator instead.
+    automated schedule path uses the full ThresholdEvaluator instead. A None
+    condition (a condition-less device_status rule) is always true.
     """
+    if condition is None:
+        return True
     return _evaluate_node(condition, snapshot, now, {}, ())
 
 
@@ -228,22 +310,46 @@ def explain_condition(
         signal = _leaf_signal(condition)
         metric_value = snapshot.get(signal)
         state = _signal_state(metric_value, now)
-        result = state == "fresh" and _compare(
-            metric_value.value,  # type: ignore[union-attr]  # fresh => not None
-            condition["operator"],
-            condition["threshold"],
-        )
-        return {
+        operator = condition["operator"]
+        rhs = condition.get("rhs")
+
+        observed_rhs_value: float | None = None
+        rhs_signal_state: SignalState | None = None
+        result = False
+        if state == "fresh":
+            assert metric_value is not None  # fresh => not None
+            if operator in CHANGE_OPERATORS:
+                result = _compare_change(operator, metric_value)
+            elif operator in RANGE_OPERATORS:
+                assert rhs is not None
+                result = _compare_range(operator, metric_value.value, rhs)
+            elif operator in SET_OPERATORS:
+                assert rhs is not None
+                result = _compare_set(operator, metric_value.value, rhs)
+            else:
+                assert rhs is not None
+                rhs_value, resolved_state = _resolve_rhs_scalar(rhs, snapshot, now)
+                if rhs["source"] == "metric":
+                    observed_rhs_value = rhs_value
+                    rhs_signal_state = resolved_state
+                if rhs_value is not None:
+                    result = _compare(metric_value.value, operator, rhs_value)
+
+        leaf: dict[str, Any] = {
             "kind": "leaf",
             "device_id": condition["device_id"],
             "metric": condition["metric"],
-            "operator": condition["operator"],
-            "threshold": condition["threshold"],
+            "operator": operator,
+            "rhs": rhs,
             "observed_value": metric_value.value if metric_value is not None else None,
             "observed_at": metric_value.timestamp if metric_value is not None else None,
             "signal_state": state,
             "result": bool(result),
         }
+        if rhs is not None and rhs.get("source") == "metric":
+            leaf["observed_rhs_value"] = observed_rhs_value
+            leaf["rhs_signal_state"] = rhs_signal_state
+        return leaf
 
     children = [explain_condition(child, snapshot, now) for child in condition["predicates"]]
     results = [child["result"] for child in children]
@@ -336,7 +442,11 @@ class ThresholdEvaluator:
         for_duration: int = policy.get("for_duration", 0)
         cooldown: int = policy.get("cooldown", 0)
 
-        tree_true = _evaluate_node(rule.condition, snapshot, now, state.leaf_states, ())
+        tree_true = (
+            True
+            if rule.condition is None
+            else _evaluate_node(rule.condition, snapshot, now, state.leaf_states, ())
+        )
 
         if not state.armed:
             if strategy == "continuous":

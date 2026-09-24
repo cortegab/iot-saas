@@ -945,8 +945,8 @@ export interface components {
             metric: string;
             /** Operator */
             operator: string;
-            /** Threshold */
-            threshold: number;
+            /** Rhs */
+            rhs?: (components["schemas"]["StaticRhs"] | components["schemas"]["RangeRhs"] | components["schemas"]["SetRhs"] | components["schemas"]["MetricRhs"]) | null;
             /**
              * Hysteresis
              * @default 0
@@ -1095,6 +1095,24 @@ export interface components {
          * @enum {string}
          */
         DeviceStatus: "active" | "disabled";
+        /** DeviceStatusTrigger */
+        DeviceStatusTrigger: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "device_status";
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /**
+             * Transition
+             * @enum {string}
+             */
+            transition: "connected" | "disconnected";
+        };
         /** DeviceUpdateRequest */
         DeviceUpdateRequest: {
             /** Name */
@@ -1290,6 +1308,24 @@ export interface components {
             /** Last Seen At */
             last_seen_at: string | null;
         };
+        /**
+         * MetricRhs
+         * @description Compare against another signal's live value instead of a static number.
+         */
+        MetricRhs: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "metric";
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Metric */
+            metric: string;
+        };
         /** MetricTrigger */
         MetricTrigger: {
             /**
@@ -1331,6 +1367,21 @@ export interface components {
             /** Read At */
             read_at: string | null;
         };
+        /**
+         * RangeRhs
+         * @description `between`/`not_between`'s two-sided bound.
+         */
+        RangeRhs: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "range";
+            /** Low */
+            low: number;
+            /** High */
+            high: number;
+        };
         /** RefreshRequest */
         RefreshRequest: {
             /** Refresh Token */
@@ -1370,9 +1421,9 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Trigger */
-            trigger?: components["schemas"]["MetricTrigger"] | components["schemas"]["ScheduleTrigger"] | components["schemas"]["ManualTrigger"];
+            trigger?: components["schemas"]["MetricTrigger"] | components["schemas"]["ScheduleTrigger"] | components["schemas"]["ManualTrigger"] | components["schemas"]["DeviceStatusTrigger"];
             /** Condition */
-            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"];
+            condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"];
             /** Actions */
             actions: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[];
@@ -1460,7 +1511,7 @@ export interface components {
                 [key: string]: unknown;
             };
             /** Condition */
-            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"];
+            condition: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"]) | null;
             execution_policy: components["schemas"]["ExecutionPolicy-Output"];
             /** Actions */
             actions: {
@@ -1519,7 +1570,7 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Trigger */
-            trigger?: (components["schemas"]["MetricTrigger"] | components["schemas"]["ScheduleTrigger"] | components["schemas"]["ManualTrigger"]) | null;
+            trigger?: (components["schemas"]["MetricTrigger"] | components["schemas"]["ScheduleTrigger"] | components["schemas"]["ManualTrigger"] | components["schemas"]["DeviceStatusTrigger"]) | null;
             /** Condition */
             condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"] | null;
@@ -1552,6 +1603,19 @@ export interface components {
              * @default UTC
              */
             timezone: string;
+        };
+        /**
+         * SetRhs
+         * @description `in`/`not_in`'s membership list.
+         */
+        SetRhs: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "set";
+            /** Values */
+            values: number[];
         };
         /** SignalOverride */
         SignalOverride: {
@@ -1630,6 +1694,19 @@ export interface components {
             /** Actions */
             actions: components["schemas"]["SimulateActionPreview"][];
             replay: components["schemas"]["SimulateReplayResult"] | null;
+        };
+        /**
+         * StaticRhs
+         * @description A fixed number to compare against — the pre-Phase-6 `threshold` shape.
+         */
+        StaticRhs: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "static";
+            /** Value */
+            value: number;
         };
         /** TelemetryDataPoint */
         TelemetryDataPoint: {
