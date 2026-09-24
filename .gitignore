@@ -26,6 +26,13 @@ next-env.d.ts
 *.tsbuildinfo
 .pnpm-store/
 
+# Playwright E2E (frontend/e2e) — local reports/artifacts and per-developer
+# credentials, not the specs themselves.
+frontend/.env.test
+frontend/e2e/.auth/
+frontend/playwright-report/
+frontend/test-results/
+
 # OS / editor
 .DS_Store
 Thumbs.db
