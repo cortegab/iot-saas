@@ -15,16 +15,23 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from app.rules.evaluators import (
     Firing,
+    LeafState,
     MetricSnapshot,
     MetricValue,
     RuleState,
     SignalKey,
     ThresholdEvaluator,
+    align_state_to_condition,
+    condition_fingerprint,
+    rule_state_from_dict,
+    rule_state_to_dict,
 )
 from app.rules.models import Rule
+from app.rules.schemas import ConditionLeaf
 
 _EVALUATOR = ThresholdEvaluator()
 _BASE_TIME = datetime(2026, 1, 1, tzinfo=UTC)
@@ -665,3 +672,252 @@ def test_reset_condition_holds_disarmed_until_reset_tree_true() -> None:
     assert _EVALUATOR.evaluate(rule, *_at(15.0, 3), state) is None
     assert state.armed is True
     assert _EVALUATOR.evaluate(rule, *_at(35.0, 4), state) is not None
+
+
+# ---- Three-valued evaluation: stale/missing data is unknown, not false -----
+
+
+def _stale_at(
+    value: float, reported_at: float, now_offset: float
+) -> tuple[MetricSnapshot, datetime]:
+    """A snapshot whose only reading was taken at `reported_at`, evaluated at
+    `now_offset` (past the default 90s max age)."""
+    snapshot = {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(
+            value=value, timestamp=_BASE_TIME + timedelta(seconds=reported_at)
+        )
+    }
+    return snapshot, _BASE_TIME + timedelta(seconds=now_offset)
+
+
+def test_stale_gap_inside_hysteresis_band_does_not_refire() -> None:
+    """Regression: a data gap used to read as "condition false", re-arming the
+    rule; a reading that came back still inside the hysteresis band (latched
+    true) then fired again without the value ever re-crossing the threshold.
+    """
+    rule = _rule(_leaf(">", 30.0, hysteresis=2.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(29.5, 1), state) is None  # in band, latched
+
+    assert _EVALUATOR.evaluate(rule, *_stale_at(29.5, 1, 200), state) is None
+    assert state.armed is False  # unknown must not re-arm
+
+    assert _EVALUATOR.evaluate(rule, *_at(29.5, 201), state) is None  # back, still in band
+    assert _EVALUATOR.evaluate(rule, *_at(27.9, 202), state) is None  # genuinely clears
+    assert state.armed is True
+    assert _EVALUATOR.evaluate(rule, *_at(30.5, 203), state) is not None
+
+
+def test_missing_signal_does_not_rearm() -> None:
+    rule = _rule(_leaf(">", 30.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, {}, _BASE_TIME + timedelta(seconds=1), state) is None
+    assert state.armed is False
+
+
+def test_stale_data_clears_the_for_duration_hold() -> None:
+    """Unknown can't count toward a hold either — the timer restarts."""
+    rule = _rule(_leaf(">", 30.0), for_duration=10)
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is None
+    assert _EVALUATOR.evaluate(rule, *_stale_at(35.0, 0, 100), state) is None
+    assert state.condition_since is None
+
+
+def _two_leaf(op: str) -> dict[str, Any]:
+    return {
+        "kind": "group",
+        "op": op,
+        "predicates": [_leaf(">", 30.0, metric="temperature"), _leaf("<", 40.0, metric="humidity")],
+    }
+
+
+def _temp_stale_humidity_fresh(humidity: float) -> tuple[MetricSnapshot, datetime]:
+    now = _BASE_TIME + timedelta(seconds=200)
+    return {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(35.0, _BASE_TIME),
+        SignalKey(_DEVICE_A, "humidity"): MetricValue(humidity, now),
+    }, now
+
+
+def _fire_both(rule: Rule, state: RuleState, humidity: float) -> None:
+    snapshot, now = _multi_at({"temperature": (35.0, 0), "humidity": (humidity, 0)})
+    assert _EVALUATOR.evaluate(rule, snapshot, now, state) is not None
+
+
+def test_and_with_stale_leaf_and_fresh_false_sibling_is_known_false() -> None:
+    rule = _rule(_two_leaf("AND"))
+    state = RuleState()
+    _fire_both(rule, state, humidity=35.0)
+    assert _EVALUATOR.evaluate(rule, *_temp_stale_humidity_fresh(50.0), state) is None
+    assert state.armed is True  # False AND unknown == False -> re-arms
+
+
+def test_and_with_stale_leaf_and_fresh_true_sibling_is_unknown() -> None:
+    rule = _rule(_two_leaf("AND"))
+    state = RuleState()
+    _fire_both(rule, state, humidity=35.0)
+    assert _EVALUATOR.evaluate(rule, *_temp_stale_humidity_fresh(35.0), state) is None
+    assert state.armed is False  # True AND unknown == unknown -> holds
+
+
+def test_or_with_stale_leaf_and_fresh_false_sibling_is_unknown() -> None:
+    rule = _rule(_two_leaf("OR"))
+    state = RuleState()
+    _fire_both(rule, state, humidity=50.0)
+    assert _EVALUATOR.evaluate(rule, *_temp_stale_humidity_fresh(50.0), state) is None
+    assert state.armed is False  # False OR unknown == unknown -> holds
+
+
+def test_or_with_stale_leaf_and_fresh_true_sibling_fires() -> None:
+    rule = _rule(_two_leaf("OR"))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_temp_stale_humidity_fresh(35.0), state) is not None
+
+
+def test_stale_reset_tree_does_not_rearm() -> None:
+    rule = _rule(_leaf(">", 30.0), strategy="reset_condition", reset_condition=_leaf("<", 20.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_stale_at(15.0, 0, 200), state) is None
+    assert state.armed is False
+
+
+# ---- Non-zero hysteresis under the other strategies -------------------------
+
+
+def test_continuous_strategy_keeps_refiring_inside_the_hysteresis_band() -> None:
+    """Under `continuous`, the latched (in-band) condition still counts as
+    true — it refires on cooldown until the value clears the margin."""
+    rule = _rule(_leaf(">", 30.0, hysteresis=2.0), strategy="continuous", cooldown=10)
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(29.0, 5), state) is None  # cooldown
+    assert _EVALUATOR.evaluate(rule, *_at(29.0, 11), state) is not None  # latched -> refires
+    assert _EVALUATOR.evaluate(rule, *_at(27.9, 12), state) is None  # clears the margin
+    assert _EVALUATOR.evaluate(rule, *_at(29.0, 30), state) is None  # below bare threshold
+    assert _EVALUATOR.evaluate(rule, *_at(30.5, 31), state) is not None
+
+
+def test_reset_condition_rearm_ignores_the_main_leaf_hysteresis() -> None:
+    rule = _rule(
+        _leaf(">", 30.0, hysteresis=2.0),
+        strategy="reset_condition",
+        reset_condition=_leaf("<", 20.0),
+    )
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(27.0, 1), state) is None  # main clears its margin...
+    assert state.armed is False  # ...but only the reset tree re-arms
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 2), state) is None
+    assert _EVALUATOR.evaluate(rule, *_at(15.0, 3), state) is None
+    assert state.armed is True
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 4), state) is not None
+
+
+# ---- Condition fingerprint: latch state must not survive a condition edit ---
+
+
+def test_edited_leaf_at_same_path_does_not_inherit_the_old_latch() -> None:
+    """Regression: LeafState is keyed by tree position, so editing a leaf in
+    place used to inherit the old leaf's latch — here a humidity reading that
+    never crossed the new threshold would have fired."""
+    original = _rule(_leaf(">", 30.0, hysteresis=5.0), for_duration=10)
+    edited = _rule(_leaf(">", 60.0, hysteresis=5.0, metric="humidity"), for_duration=10)
+    edited.id = original.id
+
+    def run(align: bool) -> Firing | None:
+        state = RuleState()
+        align_state_to_condition(state, condition_fingerprint(original))
+        _EVALUATOR.evaluate(original, *_at(35.0, 0), state)  # latched, holding
+        if align:
+            align_state_to_condition(state, condition_fingerprint(edited))
+        return _EVALUATOR.evaluate(edited, *_at(58.0, 11, metric="humidity"), state)
+
+    assert run(align=False) is not None  # the bug, reproduced without the fix
+    assert run(align=True) is None
+
+
+def test_align_keeps_episode_state_and_resets_latch_and_hold() -> None:
+    state = RuleState(
+        condition_since=_BASE_TIME,
+        armed=False,
+        last_fired_at=_BASE_TIME,
+        leaf_states={(): LeafState(latched_true=True)},
+        reset_leaf_states={(): LeafState(latched_true=True)},
+        condition_fingerprint="old",
+    )
+    align_state_to_condition(state, "new")
+    assert state.leaf_states == {}
+    assert state.reset_leaf_states == {}
+    assert state.condition_since is None
+    assert state.armed is False
+    assert state.last_fired_at == _BASE_TIME
+    assert state.condition_fingerprint == "new"
+
+
+@pytest.mark.parametrize("existing", [None, "same"])
+def test_align_is_a_no_op_for_matching_or_unset_fingerprint(existing: str | None) -> None:
+    state = RuleState(
+        condition_since=_BASE_TIME,
+        leaf_states={(): LeafState(latched_true=True)},
+        condition_fingerprint=existing,
+    )
+    align_state_to_condition(state, "same")
+    assert state.leaf_states[()].latched_true is True
+    assert state.condition_since == _BASE_TIME
+    assert state.condition_fingerprint == "same"
+
+
+def test_fingerprint_tracks_condition_and_reset_tree_only() -> None:
+    base = _rule(_leaf(">", 30.0))
+    same = _rule(_leaf(">", 30.0), cooldown=99)
+    new_threshold = _rule(_leaf(">", 31.0))
+    new_reset = _rule(
+        _leaf(">", 30.0), strategy="reset_condition", reset_condition=_leaf("<", 20.0)
+    )
+    assert condition_fingerprint(base) == condition_fingerprint(same)
+    assert condition_fingerprint(base) != condition_fingerprint(new_threshold)
+    assert condition_fingerprint(base) != condition_fingerprint(new_reset)
+
+
+def test_fingerprint_survives_the_checkpoint_round_trip() -> None:
+    state = RuleState(condition_fingerprint="abc")
+    assert rule_state_from_dict(rule_state_to_dict(state)).condition_fingerprint == "abc"
+    assert rule_state_from_dict({"armed": True}).condition_fingerprint is None
+
+
+# ---- Schema: hysteresis only where the evaluator latches on it -------------
+
+
+@pytest.mark.parametrize("operator", [">", ">=", "<", "<="])
+def test_schema_accepts_hysteresis_on_inequality_operators(operator: str) -> None:
+    ConditionLeaf.model_validate(
+        {
+            "metric": "t",
+            "operator": operator,
+            "rhs": {"source": "static", "value": 1},
+            "hysteresis": 2,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "operator,rhs",
+    [
+        ("==", {"source": "static", "value": 1}),
+        ("!=", {"source": "static", "value": 1}),
+        ("between", {"source": "range", "low": 1, "high": 2}),
+        ("in", {"source": "set", "values": [1]}),
+        ("changed", None),
+    ],
+)
+def test_schema_rejects_hysteresis_where_it_would_be_ignored(
+    operator: str, rhs: dict[str, Any] | None
+) -> None:
+    body = {"metric": "t", "operator": operator, "rhs": rhs, "hysteresis": 2}
+    with pytest.raises(ValidationError, match="hysteresis only applies"):
+        ConditionLeaf.model_validate(body)
+    ConditionLeaf.model_validate({**body, "hysteresis": 0})

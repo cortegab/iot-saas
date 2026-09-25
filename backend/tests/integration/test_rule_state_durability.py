@@ -72,7 +72,7 @@ async def test_rule_state_checkpoint_round_trip(
     fired_at = datetime.now(UTC) - timedelta(minutes=5)
     since = datetime.now(UTC) - timedelta(seconds=30)
     rules_service._rule_states[rule_id] = RuleState(
-        condition_since=since, armed=False, last_fired_at=fired_at
+        condition_since=since, armed=False, last_fired_at=fired_at, condition_fingerprint="fp1"
     )
     await rules_service.snapshot_rule_states()
 
@@ -90,6 +90,7 @@ async def test_rule_state_checkpoint_round_trip(
     assert restored.armed is False
     assert restored.condition_since == since
     assert restored.last_fired_at == fired_at
+    assert restored.condition_fingerprint == "fp1"
 
 
 async def test_rule_health_transitions_emit_event_and_notification(
