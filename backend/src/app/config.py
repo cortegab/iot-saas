@@ -11,7 +11,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # .env.local is gitignored and, if present, overrides .env — for real
+    # secrets that shouldn't join the tracked .env's dev-placeholder values
+    # (e.g. a real SMTP password; see backend/.env.local.example).
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
 
     # PostgreSQL + TimescaleDB — admin/migration URL (role `iot`, superuser).
     # Read only by alembic/env.py. The running app never holds superuser credentials.

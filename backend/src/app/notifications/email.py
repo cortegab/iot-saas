@@ -4,8 +4,10 @@ One pluggable provider, chosen at deploy time via `settings.email_provider`:
 
 - `console` (default) — logs the rendered message and sends nothing. Local
   dev and the test suite need no SMTP server, and no test flakiness.
-- `smtp` — sends via `aiosmtplib` (STARTTLS submission, the port-587 case).
-  Works with any provider: Gmail, SES-SMTP, Mailgun, a self-hosted relay.
+- `smtp` — sends via `aiosmtplib`. Auto-detects implicit TLS (port 465) vs
+  STARTTLS (port 587, or any other port when `SMTP_USE_TLS=true`) from
+  `SMTP_PORT` — see SmtpEmailProvider.send. Works with any provider: Gmail,
+  SES-SMTP, Mailgun, Hostinger, a self-hosted relay.
 
 A future HTTP-API provider (Resend / SES SendEmail) is a drop-in behind the
 same `EmailProvider` protocol — `httpx` is already a dependency. This module
@@ -68,13 +70,23 @@ class SmtpEmailProvider:
         msg["To"] = ", ".join(message.to)
         msg["Subject"] = message.subject
         msg.set_content(message.body)
+        # aiosmtplib distinguishes implicit TLS (the connection is TLS from
+        # the first byte — port 465's convention) from STARTTLS (a plain
+        # connection upgraded in-band via the STARTTLS command — port 587's
+        # convention). They're different wire protocols, not the same toggle
+        # at two ports: passing start_tls against a 465 server times out
+        # (or is rejected) because the server is already speaking TLS before
+        # the client's opening "EHLO" is even readable. Port 465 is
+        # implicit-TLS on every provider that offers it (Hostinger included).
+        implicit_tls = self._port == 465
         await aiosmtplib.send(
             msg,
             hostname=self._host,
             port=self._port,
             username=self._username or None,
             password=self._password or None,
-            start_tls=self._use_tls,
+            use_tls=implicit_tls,
+            start_tls=self._use_tls and not implicit_tls,
         )
 
 
