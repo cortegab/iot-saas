@@ -37,6 +37,8 @@ from app.rules.evaluators import (
     RuleState,
     SignalKey,
     ThresholdEvaluator,
+    align_state_to_condition,
+    condition_fingerprint,
     evaluate_condition,
     explain_condition,
     referenced_signals,
@@ -570,6 +572,20 @@ _scheduled_rules: list[Rule] = []
 # they watch — checked by run_device_status_rules on a connectivity flip.
 _device_status_rules: dict[uuid.UUID, list[Rule]] = {}
 _rule_states: dict[uuid.UUID, RuleState] = {}
+# condition_fingerprint per cached rule, computed once per cache reload so the
+# hot path never re-hashes a condition tree per reading.
+_rule_fingerprints: dict[uuid.UUID, str] = {}
+
+
+def _state_for(rule: Rule) -> RuleState:
+    state = _rule_states.setdefault(rule.id, RuleState())
+    fingerprint = _rule_fingerprints.get(rule.id)
+    if fingerprint is None:
+        fingerprint = condition_fingerprint(rule)
+        _rule_fingerprints[rule.id] = fingerprint
+    align_state_to_condition(state, fingerprint)
+    return state
+
 
 # A device's last-known connectivity, for detecting a genuine transition
 # (worker.py's _handle_status publishes a "device_health" event on *every*
@@ -676,6 +692,8 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
     _device_status_rules.update(new_device_status)
     _rules_by_id.clear()
     _rules_by_id.update(new_by_id)
+    _rule_fingerprints.clear()
+    _rule_fingerprints.update({rid: condition_fingerprint(r) for rid, r in new_by_id.items()})
     _scheduled_rules[:] = new_scheduled
     log.info(
         "rule cache reloaded: %d active (%d scheduled, %d device_status)",
@@ -740,7 +758,7 @@ async def evaluate_and_dispatch(
     for rule in rules:
         needed = referenced_signals(rule.condition)
         snapshot = _snapshot_for_signals(needed)
-        state = _rule_states.setdefault(rule.id, RuleState())
+        state = _state_for(rule)
         try:
             firing = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, timestamp, state)
         except Exception:
@@ -1388,7 +1406,7 @@ async def run_rule_out_of_band(
     if trigger_source == "manual":
         fired = evaluate_condition(rule.condition, snapshot, now)
     else:
-        state = _rule_states.setdefault(rule.id, RuleState())
+        state = _state_for(rule)
         fired = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, now, state) is not None
     if not fired:
         return

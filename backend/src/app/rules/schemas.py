@@ -28,6 +28,8 @@ _OPERATOR_PATTERN = r"^(>|>=|<|<=|==|!=|between|not_between|in|not_in|changed|in
 _RANGE_OPERATORS = {"between", "not_between"}
 _SET_OPERATORS = {"in", "not_in"}
 _CHANGE_OPERATORS = {"changed", "increased", "decreased"}
+# The only operators evaluators._evaluate_leaf latches with a hysteresis margin.
+_HYSTERESIS_OPERATORS = {">", ">=", "<", "<="}
 
 RuleStrategy = Literal["edge", "continuous", "reset_condition"]
 
@@ -173,6 +175,11 @@ class ConditionLeaf(BaseModel):
                 raise ValueError(f"operator {self.operator!r} requires a set rhs")
         elif not isinstance(self.rhs, StaticRhs | MetricRhs):
             raise ValueError(f"operator {self.operator!r} requires a static or metric rhs")
+        if self.hysteresis > 0 and self.operator not in _HYSTERESIS_OPERATORS:
+            raise ValueError(
+                f"hysteresis only applies to >, >=, <, <= — operator {self.operator!r} "
+                "has no margin to latch on; set hysteresis to 0 (use for_duration to debounce)"
+            )
         return self
 
 

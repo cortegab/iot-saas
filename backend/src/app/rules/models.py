@@ -20,9 +20,11 @@ A rule is **independent of a single device** (the multi-device rule engine):
 - `actions` is a JSONB array — a rule can fire several actions, each possibly
   targeting a different device or an external system.
 - `execution_policy` is JSONB: `{strategy, for_duration, cooldown,
-  hysteresis, reset_condition}`. `strategy` is "edge" | "continuous" |
-  "reset_condition" — how a fired rule re-arms.
-- `trigger` is JSONB: `{type: "metric" | ...}` — metric-arrival only for now.
+  reset_condition}`. `strategy` is "edge" | "continuous" |
+  "reset_condition" — how a fired rule re-arms. Hysteresis is NOT here — it
+  is per-leaf, and only >, >=, <, <= use it.
+- `trigger` is JSONB: `{type: "metric" | "schedule" | "manual" |
+  "device_status", ...}`.
 
 A rule has **no single device**. `rule_devices` records every (rule, device,
 role) pair — `role` is "input" (a condition leaf reads it) or "target" (an

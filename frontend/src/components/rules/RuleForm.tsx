@@ -130,6 +130,8 @@ const VALUE_TYPE_WORD: Record<CatalogActuator["value_type"], string> = {
 // Safe, non-zero starting points (a hardware-safety requirement).
 const DEFAULT_FOR_DURATION = 10;
 const DEFAULT_HYSTERESIS = 1;
+// Mirrors backend schemas._HYSTERESIS_OPERATORS — the API rejects hysteresis on any other operator.
+const HYSTERESIS_OPERATORS = new Set([">", ">=", "<", "<="]);
 const DEFAULT_COOLDOWN = 60;
 
 function newUid(): string {
@@ -226,7 +228,7 @@ function buildCondition(predicates: LeafDraft[], combinator: Combinator): Condit
         metric: p.metric,
         operator: p.operator,
         rhs: buildRhs(p),
-        hysteresis: p.hysteresis,
+        hysteresis: HYSTERESIS_OPERATORS.has(p.operator) ? p.hysteresis : 0,
       }) as ConditionLeaf,
   );
   if (leaves.length === 1) return leaves[0];
@@ -485,7 +487,7 @@ function PredicateRow({
         </div>
       )}
 
-      {arity === "one" && (
+      {HYSTERESIS_OPERATORS.has(predicate.operator) && (
         <div>
           <Button
             type="button"
@@ -499,7 +501,7 @@ function PredicateRow({
             <div className="mt-1 max-w-xs">
               <Field
                 label="Hysteresis"
-                hint="How far this reading must fall back past the threshold before the rule can fire again."
+                hint="How far this reading must fall back past the threshold before the condition counts as cleared and the rule can fire again."
               >
                 <Input
                   compact

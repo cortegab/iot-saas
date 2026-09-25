@@ -15,8 +15,16 @@ own `device_id`, so a tree can span several devices; the snapshot is keyed by
 boolean contribution (a Schmitt-trigger latch); `execution_policy`'s
 `for_duration` / `cooldown` then gate the *combined* tree result, and
 `strategy` decides how a fired rule re-arms.
+
+Tree evaluation is three-valued: a leaf whose signal is stale or missing is
+*unknown* (None), not false, and AND/OR combine with Kleene logic. Only a
+known-true tree can fire and only a known-false tree can re-arm — a data gap
+must never count as "the condition cleared", or a reading that returns
+inside a hysteresis band would refire without ever re-crossing the threshold.
 """
 
+import hashlib
+import json
 import operator as op_module
 import uuid
 from collections.abc import Callable
@@ -78,10 +86,11 @@ MetricSnapshot = dict[SignalKey, MetricValue]
 
 @dataclass
 class LeafState:
-    """Per-leaf, in-process, in-memory only. Keyed by the leaf's position in
-    the condition tree — see RuleState.leaf_states. Not reset on rule edit,
-    the same tolerance RuleState itself already has (below): only a changed
-    tree shape leaves a stale, unreferenced entry behind, which is harmless.
+    """Per-leaf, in-process, in-memory only. Keyed by the leaf's *position*
+    in the condition tree (see RuleState.leaf_states), not its content — so
+    an edit that changes a leaf in place would inherit the old latch. The
+    caller must drop leaf states when the condition changes; rules/service.py
+    does that via RuleState.condition_fingerprint.
     """
 
     latched_true: bool = False
@@ -93,9 +102,11 @@ class RuleState:
     rules_maintenance_interval_seconds and restored at worker startup
     (rules/service.py's snapshot_rule_states / restore_rule_states) — so a
     normal restart no longer resets armed/cooldown/for_duration progress; a
-    hard crash between checkpoints still loses up to one interval. Not reset
-    when the rule cache reloads; only a deleted rule's state goes stale and
-    unreferenced, which is harmless.
+    hard crash between checkpoints still loses up to one interval.
+
+    `condition_fingerprint` identifies the condition (+ reset tree) the latch
+    and hold-timer fields were built against; rules/service.py resets those
+    fields when it no longer matches the live rule.
     """
 
     condition_since: datetime | None = None
@@ -104,6 +115,7 @@ class RuleState:
     leaf_states: dict[tuple[int, ...], LeafState] = field(default_factory=dict)
     # Only used when strategy == "reset_condition".
     reset_leaf_states: dict[tuple[int, ...], LeafState] = field(default_factory=dict)
+    condition_fingerprint: str | None = None
 
 
 class Firing(NamedTuple):
@@ -219,11 +231,11 @@ def _signal_state(metric_value: MetricValue | None, now: datetime) -> SignalStat
 
 def _evaluate_leaf(
     leaf: dict[str, Any], snapshot: MetricSnapshot, now: datetime, leaf_state: LeafState
-) -> bool:
-    """A single predicate's contribution to the tree. A missing or stale
-    cached value (this leaf's own signal, or a metric-sourced rhs) evaluates
-    False without touching the latch — a device that stops reporting can't
-    leave a predicate permanently stuck true.
+) -> bool | None:
+    """A single predicate's contribution to the tree: True, False, or None
+    (unknown). A missing or stale cached value (this leaf's own signal, or a
+    metric-sourced rhs) is unknown and leaves the latch untouched — it can
+    neither fire the rule nor count as the condition having cleared.
 
     Only the four inequality operators (>,>=,<,<=) get hysteresis-stabilized
     latching (a Schmitt trigger: goes True on a raw crossing and stays True
@@ -236,7 +248,7 @@ def _evaluate_leaf(
     """
     metric_value = snapshot.get(_leaf_signal(leaf))
     if metric_value is None or _signal_state(metric_value, now) != "fresh":
-        return False
+        return None
 
     operator = leaf["operator"]
 
@@ -249,7 +261,7 @@ def _evaluate_leaf(
     else:
         rhs_value, _rhs_state = _resolve_rhs_scalar(leaf["rhs"], snapshot, now)
         if rhs_value is None:
-            return False
+            return None
         raw_true = _compare(metric_value.value, operator, rhs_value)
         if leaf_state.latched_true:
             if _rearm_condition_met(
@@ -270,7 +282,9 @@ def _evaluate_node(
     now: datetime,
     leaf_states: dict[tuple[int, ...], LeafState],
     path: tuple[int, ...],
-) -> bool:
+) -> bool | None:
+    """Kleene three-valued AND/OR. Every child is evaluated (no short-circuit)
+    so every leaf's latch sees every reading."""
     if node["kind"] == "leaf":
         return _evaluate_leaf(node, snapshot, now, leaf_states.setdefault(path, LeafState()))
 
@@ -278,7 +292,12 @@ def _evaluate_node(
         _evaluate_node(child, snapshot, now, leaf_states, path + (i,))
         for i, child in enumerate(node["predicates"])
     ]
-    return all(results) if node["op"] == "AND" else any(results)
+    dominant: bool = node["op"] == "OR"  # True dominates OR; False dominates AND
+    if dominant in results:
+        return dominant
+    if None in results:
+        return None
+    return not dominant
 
 
 def evaluate_condition(
@@ -294,7 +313,7 @@ def evaluate_condition(
     """
     if condition is None:
         return True
-    return _evaluate_node(condition, snapshot, now, {}, ())
+    return _evaluate_node(condition, snapshot, now, {}, ()) is True
 
 
 def explain_condition(
@@ -390,6 +409,7 @@ def rule_state_to_dict(state: RuleState) -> dict[str, Any]:
         "last_fired_at": state.last_fired_at.isoformat() if state.last_fired_at else None,
         "leaf_states": _leaf_states_to_dict(state.leaf_states),
         "reset_leaf_states": _leaf_states_to_dict(state.reset_leaf_states),
+        "condition_fingerprint": state.condition_fingerprint,
     }
 
 
@@ -413,7 +433,31 @@ def rule_state_from_dict(raw: Any) -> RuleState:
         last_fired_at=_dt(raw.get("last_fired_at")),
         leaf_states=_leaf_states_from_dict(raw.get("leaf_states")),
         reset_leaf_states=_leaf_states_from_dict(raw.get("reset_leaf_states")),
+        condition_fingerprint=(
+            fp if isinstance(fp := raw.get("condition_fingerprint"), str) else None
+        ),
     )
+
+
+def condition_fingerprint(rule: Rule) -> str:
+    """A stable identity for everything leaf latches are keyed against: the
+    condition tree plus the reset tree."""
+    reset = (rule.execution_policy or {}).get("reset_condition")
+    blob = json.dumps([rule.condition, reset], sort_keys=True, default=str)
+    return hashlib.sha1(blob.encode(), usedforsecurity=False).hexdigest()
+
+
+def align_state_to_condition(state: RuleState, fingerprint: str) -> None:
+    """Drop latch and hold-timer progress built against a different condition.
+    `armed` / `last_fired_at` are kept — cooldown and "already fired this
+    episode" still describe the physical world after an edit. A state with no
+    fingerprint yet (brand new, or a pre-fingerprint checkpoint) adopts this one.
+    """
+    if state.condition_fingerprint is not None and state.condition_fingerprint != fingerprint:
+        state.leaf_states.clear()
+        state.reset_leaf_states.clear()
+        state.condition_since = None
+    state.condition_fingerprint = fingerprint
 
 
 class ThresholdEvaluator:
@@ -427,11 +471,14 @@ class ThresholdEvaluator:
     dithering, so rule-level `armed` is pure edge-detection.
 
     `strategy` decides re-arm:
-      - "edge" (default): re-arm once the combined tree goes false again.
+      - "edge" (default): re-arm once the combined tree is known false again.
       - "continuous": re-arm every evaluation (fire repeatedly, subject to
         `cooldown`).
       - "reset_condition": stay disarmed until `policy["reset_condition"]`
         evaluates true (independent of the tree going false).
+
+    An unknown tree (stale/missing data) clears the hold timer but never
+    re-arms — see the module docstring.
     """
 
     def evaluate(
@@ -442,7 +489,7 @@ class ThresholdEvaluator:
         for_duration: int = policy.get("for_duration", 0)
         cooldown: int = policy.get("cooldown", 0)
 
-        tree_true = (
+        tree = (
             True
             if rule.condition is None
             else _evaluate_node(rule.condition, snapshot, now, state.leaf_states, ())
@@ -454,14 +501,14 @@ class ThresholdEvaluator:
             elif strategy == "reset_condition":
                 reset = policy.get("reset_condition")
                 if reset is not None:
-                    if _evaluate_node(reset, snapshot, now, state.reset_leaf_states, ()):
+                    if _evaluate_node(reset, snapshot, now, state.reset_leaf_states, ()) is True:
                         state.armed = True
-                elif not tree_true:
+                elif tree is False:
                     state.armed = True
-            elif not tree_true:  # "edge"
+            elif tree is False:  # "edge"
                 state.armed = True
 
-        if not tree_true:
+        if tree is not True:
             state.condition_since = None
             return None
 
