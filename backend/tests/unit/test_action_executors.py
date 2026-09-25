@@ -106,7 +106,11 @@ async def test_email_provider_error_retried_then_failed(monkeypatch: pytest.Monk
     assert "smtp down" in result.detail["error"]
 
 
-def test_default_email_provider_is_console() -> None:
+def test_default_email_provider_is_console(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The *code* default is console — isolated from whatever backend/.env(.local)
+    happens to hold on this machine (a real EMAIL_PROVIDER=smtp for local dev,
+    say), via _env_file=None bypassing env-file loading entirely."""
+    monkeypatch.setattr(email_module, "settings", Settings(_env_file=None))
     email_module._provider = None
     assert isinstance(email_module.get_email_provider(), email_module.ConsoleEmailProvider)
     email_module._provider = None
@@ -115,6 +119,32 @@ def test_default_email_provider_is_console() -> None:
 def test_smtp_provider_requires_host() -> None:
     with pytest.raises(RuntimeError):
         email_module.SmtpEmailProvider(Settings(smtp_host=""))
+
+
+async def test_smtp_provider_uses_implicit_tls_on_port_465(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Port 465 is implicit TLS from the first byte (Hostinger's published
+    settings, among others) — passing start_tls against it is wrong (the
+    server is already speaking TLS before a plaintext STARTTLS negotiation
+    could happen)."""
+    send = AsyncMock()
+    monkeypatch.setattr(email_module.aiosmtplib, "send", send)
+    provider = email_module.SmtpEmailProvider(
+        Settings(smtp_host="smtp.hostinger.com", smtp_port=465, smtp_use_tls=True)
+    )
+    await provider.send(email_module.EmailMessage(to=["a@x.com"], subject="s", body="b"))
+    assert send.call_args.kwargs["use_tls"] is True
+    assert send.call_args.kwargs["start_tls"] is False
+
+
+async def test_smtp_provider_uses_starttls_on_port_587(monkeypatch: pytest.MonkeyPatch) -> None:
+    send = AsyncMock()
+    monkeypatch.setattr(email_module.aiosmtplib, "send", send)
+    provider = email_module.SmtpEmailProvider(
+        Settings(smtp_host="smtp.example.com", smtp_port=587, smtp_use_tls=True)
+    )
+    await provider.send(email_module.EmailMessage(to=["a@x.com"], subject="s", body="b"))
+    assert send.call_args.kwargs["use_tls"] is False
+    assert send.call_args.kwargs["start_tls"] is True
 
 
 def test_settings_email_provider_env_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -10,6 +10,11 @@ infra/emqx/emqx.prod.conf
 infra/nginx/conf.d/*.conf
 !infra/nginx/conf.d/*.conf.template
 
+# Local override for a real secret that shouldn't join backend/.env's
+# committed dev placeholders (e.g. a real SMTP password) — see
+# backend/.env.local.example and config.py's Settings.model_config.
+backend/.env.local
+
 # Python
 .venv/
 __pycache__/
