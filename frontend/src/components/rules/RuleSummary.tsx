@@ -17,7 +17,95 @@ export type RhsSpec = NonNullable<ConditionLeaf["rhs"]>;
  * but RuleForm's live preview (no id/device_id/created_at yet) can too.
  * `trigger` is needed to render a condition-less device_status rule's
  * sentence (the only case `condition` is null). */
-export type RuleSummaryData = Pick<RuleResponse, "condition" | "for_duration" | "action" | "trigger">;
+export type RuleSummaryData = Pick<RuleResponse, "condition" | "for_duration" | "action" | "trigger"> & {
+  clear_actions?: RuleResponse["clear_actions"];
+  clear_for_duration?: number;
+};
+
+/** The word for the direction a latched inequality releases in — the
+ * complement of its own operator (a `>` rule releases at `<=`). */
+const RELEASE_WORDS: Record<string, string> = {
+  ">": "falls to or below",
+  ">=": "drops below",
+  "<": "reaches or exceeds",
+  "<=": "goes above",
+};
+
+/** Where a single-inequality rule's condition actually clears: the threshold
+ * moved back by the hysteresis margin (mirrors evaluators._rearm_condition_met).
+ * Null when there's no single static-threshold inequality to point at. */
+export function releasePoint(
+  condition: ConditionNode | null,
+): { metric: string; words: string; value: number } | null {
+  if (condition?.kind !== "leaf" || condition.rhs?.source !== "static") return null;
+  const words = RELEASE_WORDS[condition.operator];
+  if (!words) return null;
+  const hysteresis = condition.hysteresis ?? 0;
+  const below = condition.operator === ">" || condition.operator === ">=";
+  const value = below ? condition.rhs.value - hysteresis : condition.rhs.value + hysteresis;
+  return { metric: condition.metric, words, value: Number(value.toFixed(6)) };
+}
+
+function ActionText({ action, placeholder }: { action: RuleAction | null; placeholder?: string }) {
+  if (action?.type === "actuator_command") {
+    return (
+      <>
+        turn <Value placeholder={placeholder}>{action.actuator}</Value>{" "}
+        <Value placeholder={placeholder}>
+          {typeof action.value === "boolean" ? (action.value ? "ON" : "OFF") : String(action.value)}
+        </Value>
+      </>
+    );
+  }
+  if (action?.type === "notification") {
+    return (
+      <>
+        send a notification: &ldquo;<Value placeholder={placeholder}>{action.message}</Value>&rdquo;
+      </>
+    );
+  }
+  if (action?.type === "webhook") {
+    return (
+      <>
+        call the webhook at <Value placeholder={placeholder}>{action.url}</Value>
+      </>
+    );
+  }
+  return <>do nothing (unrecognized action)</>;
+}
+
+function ClearText({ rule, placeholder }: { rule: RuleSummaryData; placeholder?: string }) {
+  const actions = (rule.clear_actions ?? []).map((a) => parseAction(a));
+  if (actions.length === 0) return null;
+  const release = releasePoint(rule.condition);
+  const delay = rule.clear_for_duration ?? 0;
+  return (
+    <>
+      ; when{" "}
+      {release ? (
+        <>
+          <Value placeholder={placeholder}>{release.metric}</Value> {release.words}{" "}
+          <Value placeholder={placeholder}>{release.value}</Value>
+        </>
+      ) : (
+        "that's no longer true"
+      )}
+      {delay > 0 && (
+        <>
+          {" "}
+          for <strong>{delay}s</strong>
+        </>
+      )}
+      ,{" "}
+      {actions.map((action, i) => (
+        <Fragment key={i}>
+          {i > 0 && " and "}
+          <ActionText action={action} placeholder={placeholder} />
+        </Fragment>
+      ))}
+    </>
+  );
+}
 
 const OPERATOR_WORDS: Record<string, string> = {
   ">": "goes above",
@@ -201,26 +289,8 @@ export function RuleSummary({
           for <strong>{rule.for_duration}s</strong>
         </>
       )}
-      ,{" "}
-      {action?.type === "actuator_command" ? (
-        <>
-          turn <Value placeholder={placeholder}>{action.actuator}</Value>{" "}
-          <Value placeholder={placeholder}>
-            {typeof action.value === "boolean" ? (action.value ? "ON" : "OFF") : String(action.value)}
-          </Value>
-        </>
-      ) : action?.type === "notification" ? (
-        <>
-          send a notification: &ldquo;<Value placeholder={placeholder}>{action.message}</Value>&rdquo;
-        </>
-      ) : action?.type === "webhook" ? (
-        <>
-          call the webhook at <Value placeholder={placeholder}>{action.url}</Value>
-        </>
-      ) : (
-        "do nothing (unrecognized action)"
-      )}
-      .
+      , <ActionText action={action} placeholder={placeholder} />
+      <ClearText rule={rule} placeholder={placeholder} />.
     </p>
   );
 }

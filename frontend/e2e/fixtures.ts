@@ -83,7 +83,7 @@ export const test = base.extend<{ ruleUnderTest: RuleFixture }>({
           device_id: device.id,
           metric: FIXTURE_METRIC,
           operator: "==",
-          threshold: 1,
+          rhs: { source: "static", value: 1 },
         },
         actions: [
           { type: "notification", message: "E2E fixture firing", channels: ["platform"] },

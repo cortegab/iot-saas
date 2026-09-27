@@ -27,6 +27,7 @@ from app.rules.evaluators import (
     ThresholdEvaluator,
     align_state_to_condition,
     condition_fingerprint,
+    has_pending_timer,
     rule_state_from_dict,
     rule_state_to_dict,
 )
@@ -127,6 +128,8 @@ def _rule(
     strategy: str = "edge",
     reset_condition: dict[str, Any] | None = None,
     actions: list[dict[str, Any]] | None = None,
+    clear_actions: list[dict[str, Any]] | None = None,
+    clear_for_duration: int = 0,
 ) -> Rule:
     return Rule(
         id=uuid.uuid4(),
@@ -140,8 +143,10 @@ def _rule(
             "for_duration": for_duration,
             "cooldown": cooldown,
             "reset_condition": reset_condition,
+            "clear_for_duration": clear_for_duration,
         },
         actions=actions or [{"type": "actuator_command", "actuator": "fan1", "value": True}],
+        clear_actions=clear_actions or [],
         enabled=True,
     )
 
@@ -921,3 +926,248 @@ def test_schema_rejects_hysteresis_where_it_would_be_ignored(
     with pytest.raises(ValidationError, match="hysteresis only applies"):
         ConditionLeaf.model_validate(body)
     ConditionLeaf.model_validate({**body, "hysteresis": 0})
+
+
+# ---- On-clear actions -------------------------------------------------------
+
+_LED_OFF = [{"type": "actuator_command", "actuator": "led", "value": False}]
+_FAN_OFF = [{"type": "actuator_command", "actuator": "fan1", "value": False}]
+
+
+def _edge(
+    rule: Rule, snapshot_now: tuple[MetricSnapshot, datetime], state: RuleState
+) -> str | None:
+    firing = _EVALUATOR.evaluate(rule, *snapshot_now, state)
+    return None if firing is None else firing.edge
+
+
+def _switch_rule(**kwargs: Any) -> Rule:
+    return _rule(_leaf("==", 1.0, metric="switch"), clear_actions=_LED_OFF, **kwargs)
+
+
+def _sw(value: float, offset: float) -> tuple[MetricSnapshot, datetime]:
+    return _at(value, offset, metric="switch")
+
+
+def test_switch_press_fires_and_release_clears_once() -> None:
+    rule = _switch_rule()
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert state.active is True
+    assert _edge(rule, _sw(1, 1), state) is None
+    assert _edge(rule, _sw(0, 2), state) == "clear"
+    assert state.active is False
+    assert _edge(rule, _sw(0, 3), state) is None  # never a second clear
+    assert _edge(rule, _sw(1, 4), state) == "fire"  # next press is a new episode
+
+
+def test_firing_carries_edge() -> None:
+    rule = _switch_rule()
+    state = RuleState()
+    firing = _EVALUATOR.evaluate(rule, *_sw(1, 0), state)
+    assert firing == Firing(rule_id=rule.id, edge="fire")
+
+
+def test_no_clear_without_a_prior_fire() -> None:
+    rule = _switch_rule(for_duration=10)
+    state = RuleState()
+    assert _edge(rule, _sw(0, 0), state) is None
+    assert _edge(rule, _sw(1, 1), state) is None  # holding, not fired yet
+    assert _edge(rule, _sw(0, 2), state) is None  # released before the hold -> nothing to clear
+    assert state.active is False
+
+
+def test_rule_without_clear_actions_never_opens_an_episode() -> None:
+    rule = _rule(_leaf("==", 1.0, metric="switch"))
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert state.active is False
+    assert _edge(rule, _sw(0, 1), state) is None
+
+
+def test_removing_clear_actions_mid_episode_closes_it_silently() -> None:
+    state = RuleState()
+    assert _edge(_switch_rule(), _sw(1, 0), state) == "fire"
+    without = _rule(_leaf("==", 1.0, metric="switch"))
+    assert _edge(without, _sw(0, 1), state) is None
+    assert state.active is False
+
+
+def test_stale_signal_holds_last_state_and_never_clears() -> None:
+    rule = _switch_rule()
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    stale = {SignalKey(_DEVICE_A, "switch"): MetricValue(1.0, _BASE_TIME)}
+    assert _EVALUATOR.evaluate(rule, stale, _BASE_TIME + timedelta(seconds=500), state) is None
+    assert state.active is True  # LED stays on while we can't see the switch
+    assert _edge(rule, _sw(0, 501), state) == "clear"  # a real release still clears
+
+
+def test_clear_for_duration_holds_before_clearing() -> None:
+    rule = _switch_rule(clear_for_duration=10)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(0, 1), state) is None
+    assert state.clear_since == _BASE_TIME + timedelta(seconds=1)
+    assert _edge(rule, _sw(0, 10.9), state) is None
+    assert _edge(rule, _sw(0, 11), state) == "clear"
+
+
+def test_true_reading_cancels_a_pending_clear() -> None:
+    rule = _switch_rule(clear_for_duration=10, cooldown=60)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(0, 1), state) is None  # clear timer starts
+    assert _edge(rule, _sw(1, 3), state) is None  # pressed again (cooldown blocks a refire)
+    assert state.clear_since is None
+    assert state.active is True
+    assert _edge(rule, _sw(0, 4), state) is None  # timer restarts from here
+    assert _edge(rule, _sw(0, 13.9), state) is None
+    assert _edge(rule, _sw(0, 14), state) == "clear"
+
+
+def test_stale_resets_a_pending_clear_timer() -> None:
+    rule = _switch_rule(clear_for_duration=10)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(0, 1), state) is None
+    stale = {SignalKey(_DEVICE_A, "switch"): MetricValue(0.0, _BASE_TIME + timedelta(seconds=1))}
+    assert _EVALUATOR.evaluate(rule, stale, _BASE_TIME + timedelta(seconds=200), state) is None
+    assert state.clear_since is None
+    assert _edge(rule, _sw(0, 201), state) is None  # restarts, doesn't resume
+    assert _edge(rule, _sw(0, 211), state) == "clear"
+
+
+def test_cooldown_never_blocks_a_clear() -> None:
+    rule = _switch_rule(cooldown=60)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(0, 1), state) == "clear"
+
+
+def test_thermostat_band_fan_on_above_30_off_at_28() -> None:
+    rule = _rule(_leaf(">", 30.0, hysteresis=2.0), clear_actions=_FAN_OFF)
+    state = RuleState()
+    assert _edge(rule, _at(31.0, 0), state) == "fire"
+    assert _edge(rule, _at(29.5, 1), state) is None  # inside the band, fan stays on
+    assert _edge(rule, _at(27.9, 2), state) == "clear"  # past threshold - hysteresis
+    assert _edge(rule, _at(29.5, 3), state) is None
+    assert _edge(rule, _at(30.5, 4), state) == "fire"
+
+
+def test_heater_band_on_below_10_off_above_12() -> None:
+    heater_off = [{"type": "actuator_command", "actuator": "heater", "value": False}]
+    rule = _rule(_leaf("<", 10.0, hysteresis=2.0), clear_actions=heater_off)
+    state = RuleState()
+    assert _edge(rule, _at(9.0, 0), state) == "fire"
+    assert _edge(rule, _at(11.0, 1), state) is None
+    assert _edge(rule, _at(12.1, 2), state) == "clear"
+
+
+def test_zero_hysteresis_noisy_boundary_toggles_every_reading() -> None:
+    """Why RuleForm warns: with no hysteresis, no clear delay and no
+    cooldown, a sensor dithering around the threshold cycles the relay on
+    every reading. Cooldown bounds it (fires are gated, clears need a fire)."""
+    rule = _rule(_leaf(">", 30.0), clear_actions=_FAN_OFF)
+    state = RuleState()
+    edges = [_edge(rule, _at(v, i), state) for i, v in enumerate([30.1, 29.9, 30.1, 29.9])]
+    assert edges == ["fire", "clear", "fire", "clear"]
+
+    bounded = _rule(_leaf(">", 30.0), clear_actions=_FAN_OFF, cooldown=60)
+    state = RuleState()
+    edges = [_edge(bounded, _at(v, i), state) for i, v in enumerate([30.1, 29.9, 30.1, 29.9])]
+    assert edges == ["fire", "clear", None, None]
+
+
+def test_continuous_refires_then_clears_once() -> None:
+    rule = _switch_rule(strategy="continuous", cooldown=5)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(1, 6), state) == "fire"
+    assert _edge(rule, _sw(0, 7), state) == "clear"
+    assert _edge(rule, _sw(0, 8), state) is None
+
+
+def test_reset_condition_clears_on_condition_false_even_while_disarmed() -> None:
+    rule = _rule(
+        _leaf(">", 30.0),
+        strategy="reset_condition",
+        reset_condition=_leaf("<", 20.0),
+        clear_actions=_FAN_OFF,
+    )
+    state = RuleState()
+    assert _edge(rule, _at(35.0, 0), state) == "fire"
+    assert _edge(rule, _at(25.0, 1), state) == "clear"
+    assert state.armed is False  # re-arming is still the reset tree's job
+
+
+def test_and_clears_when_any_leaf_releases_even_with_a_stale_sibling() -> None:
+    rule = _rule(_two_leaf("AND"), clear_actions=_FAN_OFF)
+    state = RuleState()
+    _fire_both(rule, state, humidity=35.0)
+    assert _edge(rule, _temp_stale_humidity_fresh(50.0), state) == "clear"  # known false
+
+
+def test_or_holds_while_a_stale_leaf_could_still_be_true() -> None:
+    rule = _rule(_two_leaf("OR"), clear_actions=_FAN_OFF)
+    state = RuleState()
+    _fire_both(rule, state, humidity=50.0)
+    assert _edge(rule, _temp_stale_humidity_fresh(50.0), state) is None
+    assert state.active is True
+
+
+def test_condition_edit_keeps_the_episode_but_resets_the_clear_timer() -> None:
+    state = RuleState(active=True, clear_since=_BASE_TIME, condition_fingerprint="old")
+    align_state_to_condition(state, "new")
+    assert state.active is True
+    assert state.clear_since is None
+
+
+def test_clear_state_survives_the_checkpoint_round_trip() -> None:
+    state = RuleState(active=True, clear_since=_BASE_TIME)
+    restored = rule_state_from_dict(rule_state_to_dict(state))
+    assert restored.active is True
+    assert restored.clear_since == _BASE_TIME
+    legacy = rule_state_from_dict({"armed": True})
+    assert legacy.active is False
+    assert legacy.clear_since is None
+
+
+# ---- has_pending_timer: what pending_timer_loop re-evaluates ---------------
+
+
+def test_pending_timer_for_a_clear_delay() -> None:
+    rule = _switch_rule(clear_for_duration=10)
+    state = RuleState()
+    _EVALUATOR.evaluate(rule, *_sw(1, 0), state)
+    assert has_pending_timer(rule, state) is False
+    _EVALUATOR.evaluate(rule, *_sw(0, 1), state)
+    assert has_pending_timer(rule, state) is True
+    _EVALUATOR.evaluate(rule, *_sw(0, 11), state)
+    assert has_pending_timer(rule, state) is False
+
+
+def test_no_pending_timer_for_an_immediate_clear() -> None:
+    rule = _switch_rule()
+    state = RuleState(active=True, clear_since=_BASE_TIME)
+    assert has_pending_timer(rule, state) is False
+
+
+def test_pending_timer_for_a_for_duration_hold_until_it_fires() -> None:
+    rule = _rule(_leaf(">", 30.0), for_duration=10)
+    state = RuleState()
+    _EVALUATOR.evaluate(rule, *_at(35.0, 0), state)
+    assert has_pending_timer(rule, state) is True
+    # The clock alone completes the hold — no new reading needed.
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is None
+    assert _EVALUATOR.evaluate(rule, _at(35.0, 0)[0], _BASE_TIME + timedelta(seconds=10), state)
+    assert has_pending_timer(rule, state) is False
+
+
+def test_continuous_refire_stays_reading_driven() -> None:
+    rule = _rule(_leaf(">", 30.0), for_duration=5, strategy="continuous", cooldown=10)
+    state = RuleState()
+    _EVALUATOR.evaluate(rule, *_at(35.0, 0), state)
+    _EVALUATOR.evaluate(rule, *_at(35.0, 5), state)  # fires
+    _EVALUATOR.evaluate(rule, *_at(35.0, 6), state)  # re-armed, cooldown pending
+    assert has_pending_timer(rule, state) is False

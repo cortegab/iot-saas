@@ -42,7 +42,8 @@ function ActionBadges({ actions }: { actions: ActionExecutionResponse[] }) {
   );
 }
 
-/** Read-only execution history for one rule — every time it fired and what
+/** Read-only execution history for one rule — every time it fired (or, for a
+ * rule with clear actions, cleared — badged "Cleared") and what
  * happened to each configured action (actuator dispatched/failed, webhook
  * posted with its status code, notification sent). useRealtime's
  * rule_execution messages revalidate this key the moment a new firing lands;
@@ -81,6 +82,7 @@ export function RuleExecutionHistory({ ruleId }: { ruleId: string }) {
           <span className="text-ink-muted" title={new Date(e.fired_at).toLocaleString()}>
             {timeAgo(e.fired_at)}
           </span>
+          {e.edge === "clear" && <Badge tone="unknown" label="Cleared" />}
           {TRIGGER_SOURCE_LABELS[e.trigger_source] && (
             <Badge tone="unknown" label={TRIGGER_SOURCE_LABELS[e.trigger_source]} />
           )}

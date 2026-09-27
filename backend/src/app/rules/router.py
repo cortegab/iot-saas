@@ -63,6 +63,7 @@ def _to_response(
         ),
         execution_policy=policy,
         actions=actions,
+        clear_actions=list(rule.clear_actions or []),
         devices=[
             RuleDeviceRef(
                 device_id=row.device_id,
@@ -135,6 +136,7 @@ async def create_rule(
             else None,
             execution_policy=body.execution_policy.model_dump(mode="json"),
             actions=[a.model_dump(mode="json") for a in body.actions],
+            clear_actions=[a.model_dump(mode="json") for a in body.clear_actions],
             editor_graph=body.editor_graph,
             enabled=body.enabled,
         )
@@ -256,6 +258,7 @@ async def list_rule_executions(
             metric=row.metric,
             value=row.value,
             trigger_source=row.trigger_source,
+            edge=row.edge,  # type: ignore[arg-type]
             fired_at=row.fired_at,
             summary=row.summary,
             created_at=row.created_at,
@@ -309,6 +312,11 @@ async def update_rule(
             for_duration=body.for_duration,
             cooldown=body.cooldown,
             action=body.action.model_dump(mode="json") if body.action is not None else None,
+            clear_actions=(
+                [a.model_dump(mode="json") for a in body.clear_actions]
+                if body.clear_actions is not None
+                else None
+            ),
         )
     except service.RuleValidationError as exc:
         raise HTTPException(

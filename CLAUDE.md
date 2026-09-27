@@ -260,6 +260,12 @@ policies are not optional tuning:
 on noisy sensor data will cycle a relay continuously and destroy hardware. Do not add a rule path
 that bypasses them.
 
+The schema above is the original flat shape; the live one is the multi-device tree in
+`docs/rule-engine-multi-device.md` (per-leaf `hysteresis`, `execution_policy`, `actions[]`). A
+rule may also carry **`clear_actions`**, which run once when a fired rule's condition becomes
+*known*-false again (after `execution_policy.clear_for_duration`), e.g. to turn an actuator back
+off. Stale or missing data is *unknown*, never false: it neither fires, re-arms, nor clears.
+
 ### The evaluator interface
 
 Every rule type implements the same protocol. This is the extension point for custom logic and

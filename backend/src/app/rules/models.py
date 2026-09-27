@@ -18,7 +18,8 @@ A rule is **independent of a single device** (the multi-device rule engine):
   CHECK constraint can express a recursive shape). Evaluated by
   rules/evaluators.py.
 - `actions` is a JSONB array — a rule can fire several actions, each possibly
-  targeting a different device or an external system.
+  targeting a different device or an external system. `clear_actions` (same
+  shape) fire once when a fired rule's condition is known-false again.
 - `execution_policy` is JSONB: `{strategy, for_duration, cooldown,
   reset_condition}`. `strategy` is "edge" | "continuous" |
   "reset_condition" — how a fired rule re-arms. Hysteresis is NOT here — it
@@ -89,6 +90,11 @@ class Rule(Base):
     condition: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     execution_policy: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     actions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    # Fired once when a fired rule's condition is known-false again — metric
+    # triggers only (enforced in rules/service.py). Same shape as `actions`.
+    clear_actions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, default=list, server_default="[]"
+    )
     # Node graph the visual builder round-trips — presentation only, the
     # engine never reads it.
     editor_graph: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
@@ -152,6 +158,8 @@ class RuleExecution(Base):
     value: Mapped[float | None] = mapped_column(Float, nullable=True)
     # "metric" | "schedule" | "manual" — which path fired the rule.
     trigger_source: Mapped[str] = mapped_column(String, nullable=False, server_default="metric")
+    # "fire" (rule.actions ran) | "clear" (rule.clear_actions ran).
+    edge: Mapped[str] = mapped_column(String, nullable=False, server_default="fire")
     fired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     summary: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

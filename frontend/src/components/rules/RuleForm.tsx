@@ -29,6 +29,7 @@ import { ApiRequestError } from "@/lib/api-client";
 import { wireId } from "@/lib/wire-id";
 import {
   RuleSummary,
+  releasePoint,
   type ConditionLeaf,
   type ConditionNode,
   type RhsSpec,
@@ -693,6 +694,39 @@ function RuleFormInner({
     existingAction?.body ? JSON.stringify(existingAction.body, null, 2) : "{}",
   );
 
+  // On-clear: the form represents one "command on clear" (same device +
+  // actuator as the action) and one clear notification. Anything else in an
+  // existing rule's clear_actions (API-authored) is passed through untouched.
+  const existingClear = (existing?.clear_actions ?? []) as Record<string, unknown>[];
+  const existingClearCommand = existingClear.find(
+    (a) =>
+      a.type === "actuator_command" &&
+      a.actuator === existingAction?.actuator &&
+      a.device_id === existingAction?.device_id,
+  );
+  const existingClearNotify = existingClear.find((a) => a.type === "notification");
+  const preservedClear = existingClear.filter(
+    (a) => a !== existingClearCommand && a !== existingClearNotify,
+  );
+  const [clearCommand, setClearCommand] = useState(existingClearCommand != null);
+  // null = "the opposite of the action's on/off value", tracked live.
+  const [clearBool, setClearBool] = useState<boolean | null>(
+    typeof existingClearCommand?.value === "boolean" ? existingClearCommand.value : null,
+  );
+  const [clearNum, setClearNum] = useState(
+    typeof existingClearCommand?.value === "number" ? existingClearCommand.value : 0,
+  );
+  const [clearText, setClearText] = useState(
+    typeof existingClearCommand?.value === "string" ? existingClearCommand.value : "",
+  );
+  const [clearNotify, setClearNotify] = useState(existingClearNotify != null);
+  const [clearMessage, setClearMessage] = useState(
+    typeof existingClearNotify?.message === "string" ? existingClearNotify.message : "",
+  );
+  const [clearDelay, setClearDelay] = useState(
+    existing?.execution_policy.clear_for_duration ?? 0,
+  );
+
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -731,6 +765,31 @@ function RuleFormInner({
     return { type: "webhook", url: webhookUrl.trim(), body };
   }
 
+  const canClearCommand = actionType === "actuator_command";
+  const effectiveClearBool = clearBool ?? !boolValue;
+
+  function buildClearActions(): Record<string, unknown>[] {
+    if (triggerType !== "metric") return [];
+    const out: Record<string, unknown>[] = [];
+    if (clearCommand && canClearCommand && actuator.trim() && actionDeviceId) {
+      out.push({
+        type: "actuator_command",
+        device_id: actionDeviceId,
+        actuator: actuator.trim(),
+        value:
+          effectiveKind === "boolean"
+            ? effectiveClearBool
+            : effectiveKind === "number"
+              ? clearNum
+              : clearText,
+      });
+    }
+    if (clearNotify && clearMessage.trim()) {
+      out.push({ type: "notification", message: clearMessage.trim(), channels: ["platform"] });
+    }
+    return [...out, ...preservedClear];
+  }
+
   function buildTrigger(): Record<string, unknown> {
     if (triggerType === "schedule")
       return { type: "schedule", cron: cron.trim(), timezone: timezone.trim() || "UTC" };
@@ -754,6 +813,15 @@ function RuleFormInner({
     () => Object.fromEntries(deviceList.map((d) => [d.id, d.name])),
     [deviceList],
   );
+  const clearActions = buildClearActions();
+  const release = releasePoint(previewCondition);
+  const clearCommandActive = clearActions.some((a) => a.type === "actuator_command");
+  // A clear is never held back by cooldown, so an analog reading dithering at
+  // a zero-hysteresis threshold would toggle the actuator on every reading.
+  const flappingRisk =
+    clearCommandActive &&
+    clearDelay === 0 &&
+    predicates.some((p) => HYSTERESIS_OPERATORS.has(p.operator) && !(p.hysteresis > 0));
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -787,6 +855,10 @@ function RuleFormInner({
       );
       return;
     }
+    if (triggerType === "metric" && clearNotify && !clearMessage.trim()) {
+      setError("The clear notification needs a message.");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -794,8 +866,14 @@ function RuleFormInner({
         name: name.trim() || undefined,
         trigger: buildTrigger(),
         condition: buildCondition(predicates, combinator),
-        execution_policy: { strategy: "edge", for_duration: forDuration, cooldown },
+        execution_policy: {
+          strategy: "edge",
+          for_duration: forDuration,
+          cooldown,
+          clear_for_duration: triggerType === "metric" ? clearDelay : 0,
+        },
         actions: [finalAction],
+        clear_actions: buildClearActions(),
         enabled,
       };
       const saved = existing
@@ -1113,6 +1191,123 @@ function RuleFormInner({
         )}
       </SectionCard>
 
+      {triggerType === "metric" && (
+        <SectionCard title="When the condition clears">
+          <p className="text-sm text-ink-muted">
+            {release ? (
+              <>
+                Clears when <strong>{release.metric}</strong> {release.words}{" "}
+                <strong>{release.value}</strong>
+                {predicates[0]?.hysteresis > 0 && " (the threshold minus its hysteresis)"}.
+              </>
+            ) : (
+              "Clears once the whole condition is no longer true."
+            )}{" "}
+            Runs once per firing. If a reading goes stale nothing is sent — the last state holds.
+          </p>
+
+          <label
+            className={cn(
+              "flex items-center gap-2 text-sm",
+              canClearCommand ? "text-ink" : "text-ink-muted",
+            )}
+          >
+            <input
+              type="checkbox"
+              className="accent-accent"
+              checked={clearCommand && canClearCommand}
+              disabled={!canClearCommand}
+              onChange={(e) => setClearCommand(e.target.checked)}
+            />
+            {canClearCommand
+              ? `Send ${actuator.trim() || "the actuator"} a value when it clears`
+              : "Send a device command when it clears (needs a device-command action)"}
+          </label>
+          {clearCommand && canClearCommand && (
+            <Field
+              label="Value on clear"
+              hint={
+                effectiveKind === "boolean" && clearBool === null
+                  ? "Defaults to the opposite of the action's value."
+                  : undefined
+              }
+            >
+              {effectiveKind === "boolean" && (
+                <SegmentedControl
+                  ariaLabel="Value on clear"
+                  variant="solid"
+                  value={effectiveClearBool ? "on" : "off"}
+                  onChange={(v) => setClearBool(v === "on")}
+                  options={[
+                    { value: "off", label: boolLabels.off },
+                    { value: "on", label: boolLabels.on },
+                  ]}
+                />
+              )}
+              {effectiveKind === "number" && (
+                <Input
+                  compact
+                  type="number"
+                  step="any"
+                  value={clearNum}
+                  onChange={(e) => setClearNum(Number(e.target.value))}
+                />
+              )}
+              {effectiveKind === "text" && (
+                <Input compact value={clearText} onChange={(e) => setClearText(e.target.value)} />
+              )}
+            </Field>
+          )}
+
+          <label className="flex items-center gap-2 text-sm text-ink">
+            <input
+              type="checkbox"
+              className="accent-accent"
+              checked={clearNotify}
+              onChange={(e) => setClearNotify(e.target.checked)}
+            />
+            Send a notification when it clears
+          </label>
+          {clearNotify && (
+            <Field label="Clear message">
+              <Input
+                compact
+                value={clearMessage}
+                onChange={(e) => setClearMessage(e.target.value)}
+                placeholder="e.g. Temperature back to normal"
+              />
+            </Field>
+          )}
+
+          {(clearCommand || clearNotify) && (
+            <div className="max-w-xs">
+              <NumberSafetyField
+                label="Clear delay (s)"
+                hint="The condition must stay cleared this long first — e.g. keep a light on 10s after release."
+                value={clearDelay}
+                onChange={setClearDelay}
+                min={0}
+              />
+            </div>
+          )}
+
+          {preservedClear.length > 0 && (
+            <p className="text-sm text-ink-muted">
+              Also keeps {preservedClear.length} clear action
+              {preservedClear.length === 1 ? "" : "s"} set through the API.
+            </p>
+          )}
+
+          {flappingRisk && (
+            <Callout tone="warning">
+              With no hysteresis and no clear delay, a reading hovering at the threshold switches{" "}
+              {actuator.trim() || "the actuator"} on and off with every reading. Set a hysteresis on
+              the condition (Advanced) or a clear delay.
+            </Callout>
+          )}
+        </SectionCard>
+      )}
+
       <Card padding="md">
         <label className="flex items-center gap-2 text-sm text-ink">
           <input
@@ -1134,6 +1329,8 @@ function RuleFormInner({
               for_duration: forDuration,
               action: previewAction,
               trigger: buildTrigger(),
+              clear_actions: clearActions,
+              clear_for_duration: clearDelay,
             }}
             placeholder="…"
             className="text-[15px] leading-relaxed"

@@ -86,6 +86,10 @@ class Settings(BaseSettings):
     # hard crash between ticks loses at most this much armed/cooldown/hold
     # progress — best-effort, not full state externalisation (CLAUDE.md §9).
     rules_maintenance_interval_seconds: int = 30
+    # app/worker.py's pending_timer_loop: how often to re-evaluate rules whose
+    # for_duration hold or clear delay is waiting on the clock, not a reading.
+    # Also the worst-case lateness of such a timer.
+    rules_pending_timer_interval_seconds: float = 1.0
 
     # POST /rules/{id}/simulate replay-mode bounds (app/rules/service.py): the
     # widest history window and the most telemetry points it will walk before
