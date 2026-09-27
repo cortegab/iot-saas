@@ -8,6 +8,7 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuthContext } from "@/lib/auth-context";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ConnectionBadge } from "@/components/ui/ConnectionBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Input } from "@/components/ui/Input";
@@ -366,41 +367,70 @@ function DeviceTopics({ device }: { device: DeviceResponse }) {
   );
 }
 
-// On-demand onboarding code, catalog-driven — unlike devices/new/page.tsx's
-// FirmwareSketch, the credential is never available here (shown exactly once,
-// at creation/rotation, never retrievable afterward), so buildSketch is
-// called with credential: null and emits a placeholder instead.
-function OnboardingCode({ device }: { device: DeviceResponse }) {
+// On-demand onboarding code, catalog-driven. The credential is stored hashed
+// (CLAUDE.md §9.12) and can't be read back, so generating code rotates it and
+// embeds the fresh one — reusing a credential already rotated on this page.
+function OnboardingCode({
+  device,
+  credential,
+  onRotate,
+}: {
+  device: DeviceResponse;
+  credential: DeviceCreateResponse["credential"] | null;
+  onRotate: () => Promise<DeviceCreateResponse["credential"] | null>;
+}) {
   const { memberships, currentTenantId } = useAuthContext();
+  const { confirm, dialog } = useConfirm();
   const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(
     open ? `/catalog/${device.catalog_entry_id}` : null,
   );
   const tenantSlug = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_slug;
 
-  if (!open) {
+  async function generate() {
+    if (!credential) {
+      const ok = await confirm(
+        "Generating code rotates this device's credential so it can be embedded. The firmware currently on the device will be disconnected until you flash the new sketch.",
+        { title: "Rotate credential?", confirmLabel: "Rotate and generate", danger: true },
+      );
+      if (!ok) return;
+      setBusy(true);
+      const rotated = await onRotate();
+      setBusy(false);
+      if (!rotated) return;
+    }
+    setOpen(true);
+  }
+
+  if (!open || !credential) {
     return (
-      <Button type="button" variant="ghost" onClick={() => setOpen(true)}>
-        Generate onboarding code
-      </Button>
+      <>
+        <Button type="button" variant="ghost" disabled={busy} onClick={() => void generate()}>
+          {busy ? "Rotating…" : "Generate onboarding code"}
+        </Button>
+        {dialog}
+      </>
     );
   }
 
   const sketch = buildSketch({
     tenantSlug: tenantSlug ?? "",
     deviceSlug: device.slug,
+    deviceName: device.name,
     host: typeof window !== "undefined" ? window.location.hostname : "YOUR_SERVER_HOST",
     tls: typeof window !== "undefined" && window.location.protocol === "https:",
     metrics: catalogEntry?.metrics ?? [],
     actuators: catalogEntry?.actuators ?? [],
-    credential: null,
+    credential,
   });
 
   return (
     <div className="flex flex-col gap-2">
       <p className="text-xs text-ink-muted">
-        Credentials aren&apos;t included — paste them in after rotating a credential above.
+        Includes this device&apos;s new credential — flash it before the old firmware&apos;s
+        credential is needed again. It won&apos;t be shown after you leave this page.
       </p>
       <pre className="max-h-80 overflow-auto rounded-md border border-border bg-surface-raised p-3 text-xs text-ink">
         <code>{sketch}</code>
@@ -528,14 +558,16 @@ export default function DeviceDetailPage() {
     }
   }
 
-  async function rotateCredential() {
+  async function rotateCredential(): Promise<DeviceCreateResponse["credential"] | null> {
     setBusy(true);
     setActionError(null);
     try {
       const result = await api.post<DeviceCreateResponse>(`/devices/${deviceId}/rotate-credential`);
       setRotated(result.credential);
+      return result.credential;
     } catch (err) {
       setActionError(err instanceof ApiRequestError ? err.message : "Couldn't rotate credential.");
+      return null;
     } finally {
       setBusy(false);
     }
@@ -658,7 +690,7 @@ export default function DeviceDetailPage() {
           </FieldRow>
 
           <FieldRow label="Onboarding code">
-            <OnboardingCode device={device} />
+            <OnboardingCode device={device} credential={rotated} onRotate={rotateCredential} />
           </FieldRow>
         </Card>
       </TabPanel>

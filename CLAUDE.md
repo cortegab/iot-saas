@@ -205,6 +205,11 @@ The platform stamps its own receive time for staleness math and never trusts thi
 **Device auth:** per-device tokens / API keys, **stored hashed** (argon2id), never in plaintext.
 MQTT credentials map 1:1 to a device; EMQX ACLs restrict each device to its own topic subtree.
 
+**BLE Wi-Fi provisioning** (device-side, before MQTT): generated sketches with no stored Wi-Fi
+expose a GATT service for a provisioning app — UUIDs, payloads, and the encrypted-link requirement
+are in `docs/ble-provisioning.md`. It is part of this shared contract: keep it in sync across
+variants, and never change the UUIDs without planning for boards already flashed.
+
 Commits touching ingestion, rules, commands, or the telemetry schema are tagged `[core]` so they can
 be cross-checked against the other deployment variant.
 

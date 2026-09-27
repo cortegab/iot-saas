@@ -161,6 +161,9 @@ async def rotate_credential(
     secret = _generate_credential_secret()
     device.token_hash = auth_service.hash_secret(secret)
     await session.flush()
+    # A rotation usually precedes flashing freshly generated firmware —
+    # re-publish the retained config so it's waiting on that first connect.
+    catalog_service.request_config_publish(session, device.catalog_entry_id)
     return device, secret
 
 

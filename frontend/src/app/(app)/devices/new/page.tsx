@@ -30,6 +30,7 @@ function FirmwareSketch({ created }: { created: DeviceCreateResponse }) {
   const sketch = buildSketch({
     tenantSlug: created.tenant_slug,
     deviceSlug: created.device.slug,
+    deviceName: created.device.name,
     host: typeof window !== "undefined" ? window.location.hostname : "YOUR_SERVER_HOST",
     tls: typeof window !== "undefined" && window.location.protocol === "https:",
     metrics: catalogEntry?.metrics ?? [],
