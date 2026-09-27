@@ -116,10 +116,18 @@ class RuleState:
     # Only used when strategy == "reset_condition".
     reset_leaf_states: dict[tuple[int, ...], LeafState] = field(default_factory=dict)
     condition_fingerprint: str | None = None
+    # On-clear episode: True from a firing of a rule with clear_actions until
+    # its clear fires. `clear_since` is the clear_for_duration hold timer.
+    active: bool = False
+    clear_since: datetime | None = None
+
+
+Edge = Literal["fire", "clear"]
 
 
 class Firing(NamedTuple):
     rule_id: uuid.UUID
+    edge: Edge = "fire"
 
 
 class Evaluator(Protocol):
@@ -410,6 +418,8 @@ def rule_state_to_dict(state: RuleState) -> dict[str, Any]:
         "leaf_states": _leaf_states_to_dict(state.leaf_states),
         "reset_leaf_states": _leaf_states_to_dict(state.reset_leaf_states),
         "condition_fingerprint": state.condition_fingerprint,
+        "active": state.active,
+        "clear_since": state.clear_since.isoformat() if state.clear_since else None,
     }
 
 
@@ -436,6 +446,8 @@ def rule_state_from_dict(raw: Any) -> RuleState:
         condition_fingerprint=(
             fp if isinstance(fp := raw.get("condition_fingerprint"), str) else None
         ),
+        active=bool(raw.get("active", False)),
+        clear_since=_dt(raw.get("clear_since")),
     )
 
 
@@ -457,7 +469,25 @@ def align_state_to_condition(state: RuleState, fingerprint: str) -> None:
         state.leaf_states.clear()
         state.reset_leaf_states.clear()
         state.condition_since = None
+        state.clear_since = None
     state.condition_fingerprint = fingerprint
+
+
+def has_pending_timer(rule: Rule, state: RuleState) -> bool:
+    """Whether a timer is running that no new reading may arrive to complete —
+    an on_change switch sends one "released" reading, so its clear delay (or
+    a for_duration hold) must be finished by a periodic re-evaluation instead.
+    Only the first firing of a hold counts, so `continuous` refires stay
+    reading-driven exactly as before."""
+    policy = rule.execution_policy or {}
+    if state.clear_since is not None and policy.get("clear_for_duration", 0) > 0:
+        return True
+    return (
+        state.condition_since is not None
+        and state.armed
+        and policy.get("for_duration", 0) > 0
+        and (state.last_fired_at is None or state.last_fired_at < state.condition_since)
+    )
 
 
 class ThresholdEvaluator:
@@ -479,6 +509,14 @@ class ThresholdEvaluator:
 
     An unknown tree (stale/missing data) clears the hold timer but never
     re-arms — see the module docstring.
+
+    On-clear: a firing of a rule with `clear_actions` opens an episode
+    (`state.active`). The first known-false evaluation afterwards starts the
+    `clear_for_duration` timer; once it has held, one `Firing(edge="clear")`
+    closes the episode. Unknown resets that timer and never clears (hold last
+    state); a true reading cancels it. Cooldown never gates a clear — a relay
+    must not be left on — and a clear can only follow a fire, so the toggle
+    rate stays bounded by for_duration / cooldown / hysteresis (§9.7).
     """
 
     def evaluate(
@@ -488,6 +526,8 @@ class ThresholdEvaluator:
         strategy: str = policy.get("strategy", "edge")
         for_duration: int = policy.get("for_duration", 0)
         cooldown: int = policy.get("cooldown", 0)
+        clear_for_duration: int = policy.get("clear_for_duration", 0)
+        has_clear = bool(rule.clear_actions)
 
         tree = (
             True
@@ -510,8 +550,9 @@ class ThresholdEvaluator:
 
         if tree is not True:
             state.condition_since = None
-            return None
+            return self._maybe_clear(rule, tree, now, state, has_clear, clear_for_duration)
 
+        state.clear_since = None
         if state.condition_since is None:
             state.condition_since = now
         held_for = (now - state.condition_since).total_seconds()
@@ -528,4 +569,29 @@ class ThresholdEvaluator:
 
         state.armed = False
         state.last_fired_at = now
+        state.active = has_clear
         return Firing(rule_id=rule.id)
+
+    @staticmethod
+    def _maybe_clear(
+        rule: Rule,
+        tree: bool | None,
+        now: datetime,
+        state: RuleState,
+        has_clear: bool,
+        clear_for_duration: int,
+    ) -> Firing | None:
+        if tree is None or not state.active:
+            state.clear_since = None
+            return None
+        if not has_clear:  # clear_actions removed mid-episode
+            state.active = False
+            state.clear_since = None
+            return None
+        if state.clear_since is None:
+            state.clear_since = now
+        if (now - state.clear_since).total_seconds() < clear_for_duration:
+            return None
+        state.active = False
+        state.clear_since = None
+        return Firing(rule_id=rule.id, edge="clear")

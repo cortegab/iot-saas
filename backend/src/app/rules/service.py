@@ -31,6 +31,7 @@ from app.rules import executors
 from app.rules.evaluators import (
     CHANGE_OPERATORS,
     DEFAULT_STALE_METRIC_AGE_SECONDS,
+    Edge,
     Evaluator,
     MetricSnapshot,
     MetricValue,
@@ -41,6 +42,7 @@ from app.rules.evaluators import (
     condition_fingerprint,
     evaluate_condition,
     explain_condition,
+    has_pending_timer,
     referenced_signals,
     rule_state_from_dict,
     rule_state_to_dict,
@@ -105,6 +107,7 @@ _DEFAULT_POLICY: dict[str, Any] = {
     "for_duration": 0,
     "cooldown": 0,
     "reset_condition": None,
+    "clear_for_duration": 0,
 }
 
 
@@ -173,7 +176,9 @@ def _auto_name(condition: dict[str, Any] | None) -> str:
     return summary[:200]
 
 
-def _default_message(rule: Rule, snapshot: MetricSnapshot) -> str:
+def _default_message(rule: Rule, snapshot: MetricSnapshot, edge: Edge = "fire") -> str:
+    if edge == "clear" and rule.condition is not None:
+        return f"Cleared: {_condition_summary(rule.condition, snapshot)}."
     if rule.condition is not None:
         return f"{_condition_summary(rule.condition, snapshot)}."
     trigger = rule.trigger or {}
@@ -210,6 +215,7 @@ def _rule_device_map(
     condition: dict[str, Any] | None,
     actions: list[dict[str, Any]],
     trigger: dict[str, Any] | None = None,
+    clear_actions: list[dict[str, Any]] | None = None,
 ) -> dict[uuid.UUID, set[str]]:
     """device_id -> {roles} the rule references, for the rule_devices table.
     A device_status trigger's device counts as an input too — the rule
@@ -225,7 +231,7 @@ def _rule_device_map(
             out.setdefault(uuid.UUID(str(rhs["device_id"])), set()).add(RuleDeviceRole.INPUT.value)
     if trigger and trigger.get("type") == "device_status" and trigger.get("device_id"):
         out.setdefault(uuid.UUID(str(trigger["device_id"])), set()).add(RuleDeviceRole.INPUT.value)
-    for action in actions:
+    for action in [*actions, *(clear_actions or [])]:
         if action.get("type") == "actuator_command" and action.get("device_id"):
             out.setdefault(uuid.UUID(str(action["device_id"])), set()).add(
                 RuleDeviceRole.TARGET.value
@@ -294,6 +300,13 @@ def _validate_trigger(trigger: dict[str, Any]) -> None:
         raise RuleValidationError(f"invalid timezone: {trigger.get('timezone')!r}") from exc
 
 
+def _validate_clear_actions(trigger: dict[str, Any], clear_actions: list[dict[str, Any]]) -> None:
+    """A clear needs a condition that can go from true to known-false — a
+    schedule/manual run or a device_status event has no such transition."""
+    if clear_actions and (trigger or {}).get("type", "metric") != "metric":
+        raise RuleValidationError('clear actions are only supported for trigger.type "metric"')
+
+
 async def _persist_rule(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -304,12 +317,14 @@ async def _persist_rule(
     condition: dict[str, Any] | None,
     execution_policy: dict[str, Any],
     actions: list[dict[str, Any]],
+    clear_actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
     enabled: bool,
 ) -> Rule:
     _assert_leaves_have_device(condition)
     _validate_trigger(trigger)
-    device_map = _rule_device_map(condition, actions, trigger)
+    _validate_clear_actions(trigger, clear_actions)
+    device_map = _rule_device_map(condition, actions, trigger, clear_actions)
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
 
     rule = Rule(
@@ -321,6 +336,7 @@ async def _persist_rule(
         condition=condition,
         execution_policy=execution_policy,
         actions=actions,
+        clear_actions=clear_actions,
         editor_graph=editor_graph,
         enabled=enabled,
     )
@@ -341,6 +357,7 @@ async def create_rule_canonical(
     condition: dict[str, Any] | None,
     execution_policy: dict[str, Any],
     actions: list[dict[str, Any]],
+    clear_actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
     enabled: bool,
 ) -> Rule:
@@ -353,6 +370,7 @@ async def create_rule_canonical(
         condition=condition,
         execution_policy=execution_policy,
         actions=actions,
+        clear_actions=clear_actions,
         editor_graph=editor_graph,
         enabled=enabled,
     )
@@ -397,6 +415,7 @@ async def create_device_rule(
         condition=stamped,
         execution_policy=policy,
         actions=stamped_actions,
+        clear_actions=[],
         editor_graph=None,
         enabled=enabled,
     )
@@ -483,6 +502,7 @@ async def update_rule(
     for_duration: int | None,
     cooldown: int | None,
     action: dict[str, Any] | None,
+    clear_actions: list[dict[str, Any]] | None = None,
 ) -> Rule:
     rule = await get_rule(session, tenant_id, rule_id)
     # Fallback device for a legacy (device-less) leaf in an incoming
@@ -525,12 +545,15 @@ async def update_rule(
         rule.actions = actions
     elif action is not None:
         rule.actions = [action]
+    if clear_actions is not None:
+        rule.clear_actions = clear_actions
 
     if rule.condition is None and (rule.trigger or {}).get("type") != "device_status":
         raise RuleValidationError('condition is required unless trigger.type == "device_status"')
 
     _assert_leaves_have_device(rule.condition)
-    device_map = _rule_device_map(rule.condition, rule.actions, rule.trigger)
+    _validate_clear_actions(rule.trigger, rule.clear_actions)
+    device_map = _rule_device_map(rule.condition, rule.actions, rule.trigger, rule.clear_actions)
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
     await session.flush()
     await _sync_rule_devices(session, tenant_id, rule.id, device_map)
@@ -672,6 +695,7 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
             condition=row["condition"],
             execution_policy=row["execution_policy"],
             actions=row["actions"],
+            clear_actions=row["clear_actions"] or [],
             editor_graph=row["editor_graph"],
             enabled=row["enabled"],
         )
@@ -779,6 +803,7 @@ async def evaluate_and_dispatch(
                 timestamp,
                 snapshot,
                 rule,
+                edge=firing.edge,
             )
         except Exception:
             log.exception("dispatch failed for rule %s", rule.id)
@@ -855,8 +880,10 @@ async def _dispatch_actions(
     rule: Rule,
     *,
     trigger_source: str = "metric",
+    edge: Edge = "fire",
 ) -> None:
-    """Dispatch every configured action.
+    """Dispatch every configured action — `rule.actions` on a firing,
+    `rule.clear_actions` on a clear.
 
     Actuator commands run INLINE, in today's order (the MQTT publish inside
     dispatch_command happens before any bookkeeping — CLAUDE.md §9 constraint
@@ -868,8 +895,9 @@ async def _dispatch_actions(
     trigger_device_id = device_id
     outcomes: list[_ActionOutcome] = []
     deferred: list[_DeferredAction] = []
+    actions = rule.actions if edge == "fire" else (rule.clear_actions or [])
 
-    for action_index, action in enumerate(rule.actions):
+    for action_index, action in enumerate(actions):
         action_type = action.get("type")
         try:
             if action_type == "actuator_command":
@@ -947,34 +975,42 @@ async def _dispatch_actions(
     # A platform notification row is written for every firing regardless of the
     # rule's configured actions — this is what answers "did anything cross a
     # threshold". A `notification`-type action supplies its own message and may
-    # add the "email" channel; otherwise one message is auto-generated.
+    # add the "email" channel; otherwise one message is auto-generated. A
+    # clear only notifies when its clear_actions ask for it — an automatic
+    # "LED turned off" row on every release would just be noise (the clear
+    # is still recorded in rule_executions).
     notif_index, notif = next(
-        ((i, a) for i, a in enumerate(rule.actions) if a.get("type") == "notification"),
+        ((i, a) for i, a in enumerate(actions) if a.get("type") == "notification"),
         (None, None),
     )
-    message = notif["message"] if notif is not None else _default_message(rule, snapshot)
-    try:
-        await notifications_service.create_notification(
-            factory, tenant_id, trigger_device_id, rule.id, message
-        )
-        outcomes.append(
-            _ActionOutcome("notification", notif_index, "success", {"message": message}, None)
-        )
-    except Exception as exc:
-        log.exception("notification write failed for rule %s", rule.id)
-        outcomes.append(
-            _ActionOutcome(
-                "notification",
-                notif_index,
-                "failed",
-                {"message": message, "error": str(exc)[:_DETAIL_STRING_MAX]},
-                None,
+    if edge == "fire" or notif is not None:
+        message = notif["message"] if notif is not None else _default_message(rule, snapshot, edge)
+        try:
+            await notifications_service.create_notification(
+                factory, tenant_id, trigger_device_id, rule.id, message
             )
-        )
-    if notif is not None and "email" in (notif.get("channels") or ["platform"]):
-        deferred.append(
-            _DeferredAction("email", notif_index, {"message": message, "rule_name": rule.name})
-        )
+            outcomes.append(
+                _ActionOutcome("notification", notif_index, "success", {"message": message}, None)
+            )
+        except Exception as exc:
+            log.exception("notification write failed for rule %s", rule.id)
+            outcomes.append(
+                _ActionOutcome(
+                    "notification",
+                    notif_index,
+                    "failed",
+                    {"message": message, "error": str(exc)[:_DETAIL_STRING_MAX]},
+                    None,
+                )
+            )
+        if notif is not None and "email" in (notif.get("channels") or ["platform"]):
+            deferred.append(
+                _DeferredAction(
+                    "email",
+                    notif_index,
+                    {"message": message, "rule_name": rule.name, "edge": edge},
+                )
+            )
 
     # When the executor is saturated (a webhook/email outage backing everything
     # up), record the deferred actions as failed inline rather than piling up
@@ -1009,6 +1045,7 @@ async def _dispatch_actions(
             snapshot,
             outcomes,
             trigger_source,
+            edge,
         )
     except Exception:
         log.exception("execution history write failed for rule %s", rule.id)
@@ -1035,11 +1072,12 @@ async def _record_rule_execution(
     snapshot: MetricSnapshot,
     outcomes: list[_ActionOutcome],
     trigger_source: str,
+    edge: Edge = "fire",
 ) -> uuid.UUID:
     """Writes the rule_executions row + the inline action_executions rows in
     one transaction. Returns the execution id so _dispatch_actions can FK the
     deferred (webhook/email) action rows to it."""
-    summary = _default_message(rule, snapshot)
+    summary = _default_message(rule, snapshot, edge)
     execution_id = uuid.uuid4()
     async with factory() as session, session.begin():
         await set_tenant_context(session, tenant_id)
@@ -1052,6 +1090,7 @@ async def _record_rule_execution(
                 metric=metric,
                 value=value,
                 trigger_source=trigger_source,
+                edge=edge,
                 fired_at=fired_at,
                 summary=summary,
             )
@@ -1163,9 +1202,10 @@ async def _run_deferred_action(
                         {"reason": "no_recipients"},
                     )
                     return
+                label = "cleared" if descriptor.config.get("edge") == "clear" else "alert"
                 config: dict[str, Any] = {
                     "to": recipients,
-                    "subject": f"[{rule_name}] alert",
+                    "subject": f"[{rule_name}] {label}",
                     "body": descriptor.config["message"],
                 }
             else:  # webhook
@@ -1202,6 +1242,7 @@ class RuleExecutionRow(NamedTuple):
     metric: str | None
     value: float | None
     trigger_source: str
+    edge: str
     fired_at: datetime
     summary: str
     created_at: datetime
@@ -1263,6 +1304,7 @@ async def list_rule_executions(
             metric=e.metric,
             value=e.value,
             trigger_source=e.trigger_source,
+            edge=e.edge,
             fired_at=e.fired_at,
             summary=e.summary,
             created_at=e.created_at,
@@ -1403,13 +1445,15 @@ async def run_rule_out_of_band(
     now = datetime.now(UTC)
     snapshot = _snapshot_for_signals(referenced_signals(rule.condition))
 
+    edge: Edge = "fire"
     if trigger_source == "manual":
-        fired = evaluate_condition(rule.condition, snapshot, now)
+        if not evaluate_condition(rule.condition, snapshot, now):
+            return
     else:
-        state = _state_for(rule)
-        fired = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, now, state) is not None
-    if not fired:
-        return
+        firing = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, now, _state_for(rule))
+        if firing is None:
+            return
+        edge = firing.edge
 
     ctx = await _resolve_rule_context(factory, rule, device_id=device_id)
     if ctx is None:
@@ -1430,9 +1474,25 @@ async def run_rule_out_of_band(
             snapshot,
             rule,
             trigger_source=trigger_source,
+            edge=edge,
         )
     except Exception:
         log.exception("out-of-band dispatch failed for rule %s", rule_id)
+
+
+def pending_timer_rules() -> list[Rule]:
+    """Metric-triggered rules with a for_duration hold or clear delay that
+    only a periodic re-evaluation can complete (see
+    evaluators.has_pending_timer) — polled by app.worker's pending_timer_loop,
+    which re-runs each through run_rule_out_of_band. In-memory only."""
+    out: list[Rule] = []
+    for rule in _rules_by_id.values():
+        if (rule.trigger or {}).get("type", "metric") != "metric":
+            continue
+        state = _rule_states.get(rule.id)
+        if state is not None and has_pending_timer(rule, state):
+            out.append(rule)
+    return out
 
 
 async def run_device_status_rules(
@@ -1584,12 +1644,12 @@ def _action_summary(action: dict[str, Any]) -> str:
     return f"Run {kind or 'unknown'} action"
 
 
-def _action_previews(rule: Rule) -> list[SimulateActionPreview]:
+def _action_previews(actions: list[dict[str, Any]]) -> list[SimulateActionPreview]:
     return [
         SimulateActionPreview(
             index=i, type=str(action.get("type", "unknown")), summary=_action_summary(action)
         )
-        for i, action in enumerate(rule.actions)
+        for i, action in enumerate(actions)
     ]
 
 
@@ -1612,7 +1672,8 @@ async def simulate_rule(
             would_fire=bool(replay.would_have_fired_at),
             condition=None,
             unavailable_signals=[],
-            actions=_action_previews(rule),
+            actions=_action_previews(rule.actions),
+            clear_actions=_action_previews(rule.clear_actions or []),
             replay=replay,
         )
 
@@ -1644,7 +1705,8 @@ async def simulate_rule(
         would_fire=True if tree is None else bool(tree["result"]),
         condition=tree,
         unavailable_signals=unavailable,
-        actions=_action_previews(rule),
+        actions=_action_previews(rule.actions),
+        clear_actions=_action_previews(rule.clear_actions or []),
         replay=None,
     )
 
@@ -1684,19 +1746,22 @@ async def _simulate_replay(
     snapshot: MetricSnapshot = {}
     state = RuleState()
     fired_at: list[datetime] = []
+    cleared_at: list[datetime] = []
     for timestamp, signal, value in events:
         snapshot[signal] = MetricValue(
             value=value,
             timestamp=timestamp,
             max_age_seconds=max_ages.get(signal, DEFAULT_STALE_METRIC_AGE_SECONDS),
         )
-        if _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, timestamp, state) is not None:
-            fired_at.append(timestamp)
+        firing = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, timestamp, state)
+        if firing is not None:
+            (cleared_at if firing.edge == "clear" else fired_at).append(timestamp)
 
     return SimulateReplayResult(
         resolution=resolution,
         samples=len(events),
         would_have_fired_at=fired_at,
+        would_have_cleared_at=cleared_at,
         truncated=truncated,
     )
 

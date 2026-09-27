@@ -16,6 +16,7 @@ from typing import Any
 from unittest.mock import AsyncMock
 
 import httpx
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,7 +58,9 @@ def _basic_auth_header(username: str, password: str) -> dict[str, str]:
 
 
 async def _tenant_slug(admin_session: AsyncSession, tenant_id: str) -> str:
-    result = await admin_session.execute(select(Tenant.slug).where(Tenant.id == uuid.UUID(tenant_id)))
+    result = await admin_session.execute(
+        select(Tenant.slug).where(Tenant.id == uuid.UUID(tenant_id))
+    )
     return result.scalar_one()
 
 
@@ -130,7 +133,9 @@ async def test_ingest_malformed_body_rejected(client: httpx.AsyncClient) -> None
 
 
 async def test_emqx_authenticate_requires_shared_secret(client: httpx.AsyncClient) -> None:
-    resp = await client.post("/ingestion/emqx/authenticate", json={"username": "x", "password": "y"})
+    resp = await client.post(
+        "/ingestion/emqx/authenticate", json={"username": "x", "password": "y"}
+    )
     assert resp.status_code == 401
 
 
@@ -177,7 +182,9 @@ async def test_emqx_authenticate_unknown_username_denied(client: httpx.AsyncClie
     assert resp.json()["result"] == "deny"
 
 
-async def test_emqx_authenticate_worker_system_credential_allowed(client: httpx.AsyncClient) -> None:
+async def test_emqx_authenticate_worker_system_credential_allowed(
+    client: httpx.AsyncClient,
+) -> None:
     resp = await client.post(
         "/ingestion/emqx/authenticate",
         json={
@@ -269,3 +276,29 @@ async def test_emqx_authorize_worker_subscribe_only(client: httpx.AsyncClient) -
     )
     assert denied.status_code == 200
     assert denied.json()["result"] == "deny"
+
+
+@pytest.mark.parametrize(
+    "topic,expected",
+    [
+        ("acme/sensor-1/cmd/fan1", "allow"),
+        ("acme/sensor-1/state/fan1", "allow"),
+        # Regression: the retained telemetry profile (app/worker.py's
+        # _handle_config_publish) was denied, so no device ever received it.
+        ("acme/sensor-1/config", "allow"),
+        ("acme/sensor-1/temperature", "deny"),
+        ("acme/sensor-1/status", "deny"),
+        ("acme//config", "deny"),
+        ("acme/sensor-1/config/extra", "deny"),
+    ],
+)
+async def test_emqx_authorize_worker_publish_topics(
+    client: httpx.AsyncClient, topic: str, expected: str
+) -> None:
+    resp = await client.post(
+        "/ingestion/emqx/authorize",
+        json={"username": settings.mqtt_worker_username, "topic": topic, "action": "publish"},
+        headers=EMQX_HEADERS,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["result"] == expected

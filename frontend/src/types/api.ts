@@ -1170,6 +1170,11 @@ export interface components {
             cooldown: number;
             /** Reset Condition */
             reset_condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
+            /**
+             * Clear For Duration
+             * @default 0
+             */
+            clear_for_duration: number;
         };
         /** ExecutionPolicy */
         "ExecutionPolicy-Output": {
@@ -1191,6 +1196,11 @@ export interface components {
             cooldown: number;
             /** Reset Condition */
             reset_condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"]) | null;
+            /**
+             * Clear For Duration
+             * @default 0
+             */
+            clear_for_duration: number;
         };
         /**
          * FailedActionResponse
@@ -1427,6 +1437,8 @@ export interface components {
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"];
             /** Actions */
             actions: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[];
+            /** Clear Actions */
+            clear_actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[];
             /** Editor Graph */
             editor_graph?: {
                 [key: string]: unknown;
@@ -1472,6 +1484,11 @@ export interface components {
             /** Trigger Source */
             trigger_source: string;
             /**
+             * Edge
+             * @enum {string}
+             */
+            edge: "fire" | "clear";
+            /**
              * Fired At
              * Format: date-time
              */
@@ -1515,6 +1532,10 @@ export interface components {
             execution_policy: components["schemas"]["ExecutionPolicy-Output"];
             /** Actions */
             actions: {
+                [key: string]: unknown;
+            }[];
+            /** Clear Actions */
+            clear_actions: {
                 [key: string]: unknown;
             }[];
             /** Devices */
@@ -1576,6 +1597,8 @@ export interface components {
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"] | null;
             /** Actions */
             actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[] | null;
+            /** Clear Actions */
+            clear_actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[] | null;
             /** Editor Graph */
             editor_graph?: {
                 [key: string]: unknown;
@@ -1649,6 +1672,8 @@ export interface components {
             samples: number;
             /** Would Have Fired At */
             would_have_fired_at: string[];
+            /** Would Have Cleared At */
+            would_have_cleared_at?: string[];
             /** Truncated */
             truncated: boolean;
         };
@@ -1693,6 +1718,8 @@ export interface components {
             unavailable_signals: components["schemas"]["RuleSignalHealth"][];
             /** Actions */
             actions: components["schemas"]["SimulateActionPreview"][];
+            /** Clear Actions */
+            clear_actions?: components["schemas"]["SimulateActionPreview"][];
             replay: components["schemas"]["SimulateReplayResult"] | null;
         };
         /**

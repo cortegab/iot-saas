@@ -11,7 +11,8 @@ A rule is a *canonical definition* the engine executes directly:
 - `execution_policy` — `strategy` ("edge" | "continuous" | "reset_condition")
   plus `for_duration` / `cooldown`, and an optional `reset_condition` tree.
 - `actions` — a list; each action may target a different device or an
-  external system.
+  external system. `clear_actions` (same shape) run once when a fired rule's
+  condition is known-false again, after `execution_policy.clear_for_duration`.
 
 `POST /devices/{device_id}/rules` is a backward-compatible wrapper: its body
 omits per-leaf/per-action `device_id` (the path device is implied) and still
@@ -202,6 +203,8 @@ class ExecutionPolicy(BaseModel):
     # Only meaningful when strategy == "reset_condition": the rule cannot
     # fire again until this tree evaluates true.
     reset_condition: ConditionNode | None = None
+    # Seconds the condition must stay known-false before clear_actions fire.
+    clear_for_duration: int = Field(default=0, ge=0)
 
 
 # ---- Requests -------------------------------------------------------------
@@ -218,6 +221,9 @@ class RuleCreateRequest(BaseModel):
     condition: ConditionNode | None = None
     execution_policy: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
     actions: list[ActionRequest] = Field(min_length=1)
+    # Fired once when the condition is known-false again after a firing.
+    # metric triggers only (rules/service.py enforces it).
+    clear_actions: list[ActionRequest] = Field(default_factory=list)
     editor_graph: dict[str, Any] | None = None
     enabled: bool = True
 
@@ -251,6 +257,8 @@ class RuleUpdateRequest(BaseModel):
     condition: ConditionNode | None = None
     execution_policy: ExecutionPolicy | None = None
     actions: list[ActionRequest] | None = Field(default=None, min_length=1)
+    # [] clears them; None leaves them unchanged.
+    clear_actions: list[ActionRequest] | None = None
     editor_graph: dict[str, Any] | None = None
     enabled: bool | None = None
     # Legacy single-device fields (still honoured for existing clients).
@@ -299,6 +307,7 @@ class RuleResponse(BaseModel):
     condition: ConditionNode | None
     execution_policy: ExecutionPolicy
     actions: list[dict[str, object]]
+    clear_actions: list[dict[str, object]]
     # Every device the rule reads (`input`) or commands (`target`) — the only
     # device relationship a rule has.
     devices: list[RuleDeviceRef]
@@ -341,7 +350,9 @@ class RuleExecutionResponse(BaseModel):
     # Null for schedule/manual fires — there's no triggering signal.
     metric: str | None
     value: float | None
-    trigger_source: str  # "metric" | "schedule" | "manual"
+    trigger_source: str  # "metric" | "schedule" | "manual" | "device_status"
+    # "fire" = rule.actions ran; "clear" = rule.clear_actions ran.
+    edge: Literal["fire", "clear"]
     fired_at: datetime
     # Snapshotted condition summary at fire time — still reads sensibly after
     # the rule's condition later changes or the rule itself is deleted.
@@ -398,6 +409,8 @@ class SimulateReplayResult(BaseModel):
     resolution: Literal["raw", "1m"]
     samples: int
     would_have_fired_at: list[datetime]
+    # When clear_actions would have run (empty for a rule without them).
+    would_have_cleared_at: list[datetime] = Field(default_factory=list)
     # True when the window hit simulate_replay_max_samples and the walk stopped early.
     truncated: bool
 
@@ -413,4 +426,5 @@ class SimulateResponse(BaseModel):
     # evaluation time — why `would_fire` may be False.
     unavailable_signals: list[RuleSignalHealth]
     actions: list[SimulateActionPreview]
+    clear_actions: list[SimulateActionPreview] = Field(default_factory=list)
     replay: SimulateReplayResult | None

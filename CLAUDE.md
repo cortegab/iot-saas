@@ -205,6 +205,11 @@ The platform stamps its own receive time for staleness math and never trusts thi
 **Device auth:** per-device tokens / API keys, **stored hashed** (argon2id), never in plaintext.
 MQTT credentials map 1:1 to a device; EMQX ACLs restrict each device to its own topic subtree.
 
+**BLE Wi-Fi provisioning** (device-side, before MQTT): generated sketches with no stored Wi-Fi
+expose a GATT service for a provisioning app — UUIDs, payloads, and the encrypted-link requirement
+are in `docs/ble-provisioning.md`. It is part of this shared contract: keep it in sync across
+variants, and never change the UUIDs without planning for boards already flashed.
+
 Commits touching ingestion, rules, commands, or the telemetry schema are tagged `[core]` so they can
 be cross-checked against the other deployment variant.
 
@@ -259,6 +264,12 @@ policies are not optional tuning:
 **`for_duration`, `hysteresis`, and `cooldown` exist to stop actuators flapping.** A naive threshold
 on noisy sensor data will cycle a relay continuously and destroy hardware. Do not add a rule path
 that bypasses them.
+
+The schema above is the original flat shape; the live one is the multi-device tree in
+`docs/rule-engine-multi-device.md` (per-leaf `hysteresis`, `execution_policy`, `actions[]`). A
+rule may also carry **`clear_actions`**, which run once when a fired rule's condition becomes
+*known*-false again (after `execution_policy.clear_for_duration`), e.g. to turn an actuator back
+off. Stale or missing data is *unknown*, never false: it neither fires, re-arms, nor clears.
 
 ### The evaluator interface
 

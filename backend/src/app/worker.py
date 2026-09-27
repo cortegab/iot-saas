@@ -1,4 +1,4 @@
-"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Seven
+"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Eight
 concurrent loops in one process; there is no third process (the API server
 never subscribes to MQTT, the worker never serves HTTP):
 
@@ -52,6 +52,9 @@ never subscribes to MQTT, the worker never serves HTTP):
    Same tick re-checks every rule's "can it currently evaluate" state and
    emits a rule_health realtime event (+ one platform notification) on a
    transition to un-evaluatable.
+8. pending_timer_loop — timer-driven (rules_pending_timer_interval_seconds).
+   Re-runs rules whose for_duration hold or on-clear delay is waiting on the
+   clock rather than a new reading, via the same out-of-band path.
 """
 
 import asyncio
@@ -399,8 +402,8 @@ async def _handle_config_publish(
 async def _handle_rule_trigger(
     client: aiomqtt.Client, factory: async_sessionmaker[AsyncSession], raw: str
 ) -> None:
-    """One out-of-band rule run — a manual "Run now" (`POST /rules/{id}/run`)
-    or a schedule_loop tick. Malformed requests are dropped, never raised
+    """One out-of-band rule run — a manual "Run now" (`POST /rules/{id}/run`),
+    a schedule_loop tick, or a pending_timer_loop re-evaluation. Malformed requests are dropped, never raised
     (CLAUDE.md constraint 11, same as _handle_manual_command)."""
     try:
         data = json.loads(raw)
@@ -507,6 +510,32 @@ async def rules_maintenance_loop(factory: async_sessionmaker[AsyncSession]) -> N
         except Exception:
             log.exception("rule state snapshot tick failed")
         await asyncio.sleep(settings.rules_maintenance_interval_seconds)
+
+
+async def pending_timer_loop(factory: async_sessionmaker[AsyncSession]) -> None:
+    """Timer-driven (rules_pending_timer_interval_seconds): finish for_duration
+    holds and clear delays that no new reading will arrive to complete — an
+    on_change switch publishes one "released" reading and then goes quiet.
+    Pure in-memory scan; each due rule is re-run through the shared
+    out-of-band path (RULES_MANUAL_CHANNEL -> manual_command_loop), exactly
+    like schedule_loop, so there's still only one MQTT client for it."""
+    while True:
+        await asyncio.sleep(settings.rules_pending_timer_interval_seconds)
+        try:
+            for rule in rules_service.pending_timer_rules():
+                await redis_client.publish(
+                    rules_service.RULES_MANUAL_CHANNEL,
+                    json.dumps(
+                        {
+                            "tenant_id": str(rule.tenant_id),
+                            "rule_id": str(rule.id),
+                            "trigger_source": "metric",
+                        }
+                    ),
+                )
+        except redis.RedisError as exc:
+            log.warning("pending timer loop error (%s); retrying in %ss", exc, RECONNECT_SECONDS)
+            await asyncio.sleep(RECONNECT_SECONDS)
 
 
 async def _ensure_consumer_group(r: redis.Redis) -> None:
@@ -645,6 +674,7 @@ async def run() -> None:
             health_monitor_loop(session_factory),
             schedule_loop(session_factory),
             rules_maintenance_loop(session_factory),
+            pending_timer_loop(session_factory),
         )
     finally:
         # Best-effort drain of in-flight webhook/email deliveries on shutdown.

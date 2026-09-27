@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { ApiRequestError } from "@/lib/api-client";
+import { cn } from "@/lib/cn";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 import { leafPredicates, type RhsSpec } from "./RuleSummary";
@@ -278,6 +279,10 @@ export function RuleSimulatePanel({ rule }: { rule: RuleResponse }) {
                 Would have fired {result.replay.would_have_fired_at.length}{" "}
                 {result.replay.would_have_fired_at.length === 1 ? "time" : "times"} across{" "}
                 {result.replay.samples} readings ({result.replay.resolution}).
+                {(result.replay.would_have_cleared_at?.length ?? 0) > 0 &&
+                  ` Would have cleared ${result.replay.would_have_cleared_at?.length} ${
+                    result.replay.would_have_cleared_at?.length === 1 ? "time" : "times"
+                  }.`}
                 {result.replay.truncated && " History was truncated at the sample cap."}
               </p>
               {result.replay.would_have_fired_at.length > 0 && (
@@ -305,6 +310,20 @@ export function RuleSimulatePanel({ rule }: { rule: RuleResponse }) {
               </li>
             ))}
           </ul>
+
+          {(result.clear_actions?.length ?? 0) > 0 && (
+            <>
+              <div className={cn(SECTION_LABEL, "mt-4")}>When it clears</div>
+              <ul className="mt-2 flex flex-col gap-1.5 text-sm">
+                {result.clear_actions?.map((a) => (
+                  <li key={a.index} className="flex items-center gap-2">
+                    <Badge tone="unknown" variant="dot" label="on clear" />
+                    <span className="text-ink">{a.summary}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </Card>
       )}
     </div>

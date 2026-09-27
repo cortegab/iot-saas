@@ -2,14 +2,17 @@
 against the real FastAPI app and iot_test Postgres.
 """
 
+import json
 import uuid
 from typing import Any
+from unittest.mock import AsyncMock
 
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.service import verify_secret
+from app.catalog import service as catalog_service
 from app.devices.models import Device
 
 
@@ -150,6 +153,31 @@ async def test_rotate_credential_invalidates_old_one(
         assert verify_secret(old_password, row.token_hash) is False
 
 
+async def test_rotate_credential_republishes_retained_config(
+    client: httpx.AsyncClient, _mock_redis_publish: AsyncMock
+) -> None:
+    """Rotation precedes flashing new firmware, so the retained config must
+    be (re)published for that device's first connect."""
+    owner = await _register(client, "owner-rot2@example.com", "AcmeRot2")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    catalog_entry_id = await _catalog_entry_id(client, headers)
+    created = await client.post(
+        "/devices", json={"name": "Sensor", "catalog_entry_id": catalog_entry_id}, headers=headers
+    )
+    device_id = created.json()["device"]["id"]
+
+    _mock_redis_publish.reset_mock()
+    rotated = await client.post(f"/devices/{device_id}/rotate-credential", headers=headers)
+    assert rotated.status_code == 200
+    requests = [
+        json.loads(c.args[1])
+        for c in _mock_redis_publish.call_args_list
+        if c.args[0] == catalog_service.CONFIG_PUBLISH_CHANNEL
+    ]
+    assert requests == [{"catalog_entry_id": catalog_entry_id}]
+
+
 async def test_viewer_cannot_create_device(client: httpx.AsyncClient) -> None:
     owner = await _register(client, "owner6@example.com", "Acme6")
     tenant_id = owner["memberships"][0]["tenant_id"]
@@ -214,7 +242,9 @@ async def test_create_device_requires_catalog_entry_id(client: httpx.AsyncClient
     assert resp.status_code == 422
 
 
-async def test_create_device_with_foreign_tenants_catalog_entry_404(client: httpx.AsyncClient) -> None:
+async def test_create_device_with_foreign_tenants_catalog_entry_404(
+    client: httpx.AsyncClient,
+) -> None:
     owner_a = await _register(client, "ownerA@example.com", "AcmeA")
     headers_a = _auth_headers(owner_a, owner_a["memberships"][0]["tenant_id"])
     foreign_catalog_entry_id = await _catalog_entry_id(client, headers_a)

@@ -92,3 +92,35 @@ the retained `state/fan1`.
 Execution history, rule health / simulate, email delivery, scheduled/manual triggers, richer
 operators (BETWEEN / CHANGED / metric-vs-metric), the async retry dispatcher, and the visual
 node builder — all later phases in `PLAN.md`.
+
+## Later addition: on-clear actions
+
+A rule can undo what it did. `clear_actions` (same shape as `actions`) run **once** when a
+fired rule's condition is known to be false again — e.g. a switch on device A turns an LED on
+device B on, and releasing the switch turns it off. Before this, that took a second,
+independent rule (`switch == 0 → LED off`), which could drift out of sync with the first.
+
+- **When it clears.** An inequality clears at its hysteresis release point, not the bare
+  threshold: `temperature > 30`, hysteresis 2 → the fan turns on above 30 and off at 28 or
+  below (a thermostat band from one rule). `==` / `!=` and the Phase 6 operators clear as soon
+  as they're false. An AND clears when any leaf releases; an OR when all of them have.
+- **`execution_policy.clear_for_duration`** (default 0): how long the condition must stay
+  cleared first — staircase-light behaviour ("off 10s after release"), and a debounce for a
+  bouncy switch (a boolean `==` leaf has no hysteresis). The worker's `pending_timer_loop`
+  (1s) completes this delay even when no further reading arrives, and likewise completes a
+  `for_duration` hold for an `on_change` metric.
+- **Stale or offline data holds the last state.** A signal that stops reporting never
+  triggers a clear — "unknown" is not "released". The rule's can't-evaluate badge and
+  notification (Phase 5) report the outage instead. As with every command, a device that is
+  offline when the clear fires catches up from the retained `state/{actuator}` topic on
+  reconnect.
+- **Cooldown never delays a clear** (a relay must not be left on), and a clear only ever
+  follows a firing, so relay cycling stays bounded by `for_duration`, `cooldown`, and
+  hysteresis. The rule form warns when an actuator clear has neither hysteresis nor a delay.
+- **Metric triggers only.** Schedule, manual, and `device_status` rules reject `clear_actions`;
+  "Run now" never clears.
+- **Audit.** Each clear is a `rule_executions` row with `edge = 'clear'` ("Cleared" in the
+  Activity tab). It only writes a platform notification if its clear actions include one.
+
+The device contract (CLAUDE.md §4) is unchanged — a clear is an ordinary command on the same
+`cmd` / `state` topics.

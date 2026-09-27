@@ -156,18 +156,30 @@ The value should appear on the live chart within a second.
 
 ### 3. Or flash an ESP32
 
-Register the device in the dashboard and use the sketch shown there (also available on demand from a
-device's Settings page) — it's generated for that specific device's tenant/slug, declared metrics, and
-actuators, so it's already correct rather than a hand-adapted example.
+Register the device in the dashboard and use the sketch shown there. It's generated for that
+specific device's tenant/slug, declared metrics, and actuators, with its credential already filled
+in. It's also available on demand from a device's Settings page; generating it there **rotates the
+device's credential**, so reflash with the new sketch.
 
-The generated sketch automatically targets whichever transport this dashboard itself is running on:
-plaintext MQTT on port 1883 in local dev, or `WiFiClientSecure` on port 8883 with the Let's Encrypt
-certificate chain validated for real (not skipped with `setInsecure()`) in production. It also parses
-actuator commands as JSON and logs each step over Serial — Wi-Fi/MQTT connect, publishes, and any
-command received — so you can confirm a rule firing on the platform actually reaches the device.
+What the generated sketch does:
 
-It needs the `PubSubClient` and `ArduinoJson` libraries installed via the Arduino Library Manager
-(`WiFiClientSecure` ships with the ESP32 board core, no separate install needed).
+- **Wi-Fi over Bluetooth.** With no Wi-Fi stored, the board advertises a BLE provisioning service
+  and waits for an SSID and password (`docs/ble-provisioning.md`). Until the app exists, use
+  `tools/ble-provision-mock/provision.py`, or fill in the sketch's `DEV_WIFI_*` constants.
+- **Publishes per the device template's profile.** An `on_change` metric (with a deadband and a
+  heartbeat) sends a switch press within about 20 ms. The sketch also follows the platform's
+  retained `config` topic, so changing the profile in the dashboard takes effect without a reflash.
+- **Reports its own liveness.** It publishes a retained `status` message with a Last-Will of
+  `online:false`, which is what drives the dashboard's online/offline state (including for
+  actuator-only devices).
+- **Acts on commands and desired state.** Actuator commands are applied and acknowledged. The
+  retained desired state is applied on every reconnect, so the board converges.
+- **Picks the transport automatically:** plaintext MQTT on 1883 in local dev, or `WiFiClientSecure`
+  on 8883 in production, with the Let's Encrypt chain validated for real.
+
+It needs the `PubSubClient` and `ArduinoJson` libraries (Arduino Library Manager). Select **Tools →
+Partition Scheme → "Huge APP (3MB No OTA/1MB SPIFFS)"**, because BLE plus Wi-Fi don't fit the
+default partition.
 
 ---
 
