@@ -2,7 +2,7 @@
 
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuthContext } from "@/lib/auth-context";
@@ -16,7 +16,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Metric } from "@/components/ui/Metric";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Readout } from "@/components/ui/Readout";
-import { Tabs, TabPanel } from "@/components/ui/Tabs";
+import { Tabs, TabPanel, type TabItem } from "@/components/ui/Tabs";
 import { DeviceTrendChart } from "@/components/chart/DeviceTrendChart";
 import type { ChartThreshold } from "@/components/chart/TrendChart";
 import { RuleList } from "@/components/rules/RuleList";
@@ -27,6 +27,7 @@ import { buildSketch } from "@/lib/firmware-sketch";
 import { ApiRequestError } from "@/lib/api-client";
 import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
+import { getDeviceActuators } from "@/lib/device-actuators";
 import type { components } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
@@ -421,14 +422,6 @@ function OnboardingCode({ device }: { device: DeviceResponse }) {
   );
 }
 
-const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "metrics", label: "Metrics" },
-  { id: "actuators", label: "Actuators" },
-  { id: "rules", label: "Rules" },
-  { id: "settings", label: "Settings" },
-];
-
 export default function DeviceDetailPage() {
   const params = useParams<{ deviceId: string }>();
   const deviceId = params.deviceId;
@@ -455,6 +448,46 @@ export default function DeviceDetailPage() {
     () => new Map((catalogEntry?.metrics ?? []).map((m) => [wireId(m), m] as const)),
     [catalogEntry],
   );
+
+  // Structural (catalog-declared) emptiness, not "no data yet" — a device
+  // whose template has no metrics/actuators will never have anything under
+  // those tabs, so they're disabled rather than left clickable forever onto
+  // the same EmptyState. Left enabled while catalogEntry is still loading to
+  // avoid a disabled-then-enabled flash.
+  const hasCatalogMetrics = (catalogEntry?.metrics.length ?? 0) > 0;
+  const deviceActuators = useMemo(
+    () => getDeviceActuators(catalogEntry, rules, deviceId),
+    [catalogEntry, rules, deviceId],
+  );
+  const metricsDisabled = catalogEntry != null && !hasCatalogMetrics;
+  const actuatorsDisabled = catalogEntry != null && deviceActuators.length === 0;
+
+  const tabs: TabItem[] = [
+    { id: "overview", label: "Overview" },
+    {
+      id: "metrics",
+      label: "Metrics",
+      disabled: metricsDisabled,
+      disabledReason: "This device's template doesn't declare any metrics.",
+    },
+    {
+      id: "actuators",
+      label: "Actuators",
+      disabled: actuatorsDisabled,
+      disabledReason: "This device's template doesn't declare any actuators, and no rule commands one yet.",
+    },
+    { id: "rules", label: "Rules" },
+    { id: "settings", label: "Settings" },
+  ];
+
+  // A disabled tab should never be the active one — covers a stale
+  // bookmark/shared link (?tab=metrics or ?tab=actuators) pointing at a
+  // device that structurally has neither.
+  useEffect(() => {
+    if ((tab === "metrics" && metricsDisabled) || (tab === "actuators" && actuatorsDisabled)) {
+      setTab("overview");
+    }
+  }, [tab, metricsDisabled, actuatorsDisabled]);
 
   const thresholdsByMetric = useMemo(() => {
     const map: Record<string, ChartThreshold[]> = {};
@@ -549,7 +582,7 @@ export default function DeviceDetailPage() {
         actions={<ConnectionBadge state={device.connection_state} />}
       />
 
-      <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={tabs} active={tab} onChange={setTab} />
 
       <TabPanel id="overview" active={tab}>
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">

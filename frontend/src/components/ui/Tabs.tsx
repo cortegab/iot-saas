@@ -3,6 +3,9 @@
 export interface TabItem {
   id: string;
   label: string;
+  disabled?: boolean;
+  /** Shown as a native title tooltip on hover when `disabled`. */
+  disabledReason?: string;
 }
 
 /** Controlled tab strip — the caller owns active-tab state (often mirrored
@@ -20,6 +23,23 @@ export function Tabs({
   return (
     <div role="tablist" aria-label="Sections" className="flex gap-1 border-b border-border">
       {tabs.map((tab) => {
+        if (tab.disabled) {
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              disabled
+              aria-selected={false}
+              aria-disabled="true"
+              title={tab.disabledReason}
+              id={`tab-${tab.id}`}
+              className="-mb-px cursor-not-allowed border-b-2 border-transparent px-3 py-2 text-sm font-medium text-ink-muted/50"
+            >
+              {tab.label}
+            </button>
+          );
+        }
         const selected = tab.id === active;
         return (
           <button
