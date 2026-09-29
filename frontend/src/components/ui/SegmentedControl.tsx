@@ -34,8 +34,7 @@ const VARIANT = {
   },
 } as const;
 
-/** A row of mutually exclusive buttons — the app's one segmented control,
- * factored out of the two copies that lived in `RuleForm`. */
+/** A row of mutually exclusive buttons — the app's one segmented control. */
 export function SegmentedControl<T extends string>({
   options,
   value,

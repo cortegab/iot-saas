@@ -5,10 +5,11 @@ test("a clear notification is configured in the form, summarised, and persisted"
   ruleUnderTest,
 }) => {
   await page.goto(`/rules/${ruleUnderTest.id}`);
+  await page.getByRole("group", { name: "Editor view" }).getByRole("button", { name: "Form" }).click();
 
-  await expect(page.getByRole("heading", { name: "When the condition clears" })).toBeVisible();
-  // The fixture's action is a notification, so "command on clear" is unavailable.
-  await expect(page.getByLabel(/Send a device command when it clears/)).toBeDisabled();
+  await expect(page.getByText("When the condition clears")).toBeVisible();
+  // The fixture's only action is a notification — there's no actuator to turn back.
+  await expect(page.getByLabel("Turn it back when the condition clears")).toHaveCount(0);
 
   await page.getByLabel("Send a notification when it clears").check();
   await page.getByLabel("Clear message").fill("E2E fixture cleared");

@@ -28,6 +28,7 @@ from app.rules.evaluators import (
     align_state_to_condition,
     condition_fingerprint,
     has_pending_timer,
+    reset_latch,
     rule_state_from_dict,
     rule_state_to_dict,
 )
@@ -1171,3 +1172,90 @@ def test_continuous_refire_stays_reading_driven() -> None:
     _EVALUATOR.evaluate(rule, *_at(35.0, 5), state)  # fires
     _EVALUATOR.evaluate(rule, *_at(35.0, 6), state)  # re-armed, cooldown pending
     assert has_pending_timer(rule, state) is False
+
+
+# ---- Latch: fire once, hold until reset ---------------------------------------
+
+
+def test_latch_does_not_rearm_when_condition_goes_false() -> None:
+    rule = _rule(_leaf(">", 30.0), strategy="latch")
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(10.0, 1), state) is None  # false — edge would re-arm
+    assert state.armed is False
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 2), state) is None  # still latched
+
+
+def test_reset_latch_rearms_and_restarts_the_hold() -> None:
+    rule = _rule(_leaf(">", 30.0), strategy="latch", for_duration=10)
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is None  # hold starts
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 10), state) is not None  # held -> fires
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 20), state) is None  # latched
+
+    assert reset_latch(state) is True
+    assert state.armed is True
+    # Still true after reset: re-latches only after a fresh full hold.
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 21), state) is None
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 31), state) is not None
+
+
+def test_reset_latch_on_an_armed_rule_reports_not_latched() -> None:
+    assert reset_latch(RuleState()) is False
+
+
+def test_latch_with_reset_condition_rearms_when_reset_tree_true() -> None:
+    rule = _rule(_leaf(">", 30.0), strategy="latch", reset_condition=_leaf("<", 20.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(25.0, 1), state) is None
+    assert state.armed is False  # false but above the reset threshold
+    assert _EVALUATOR.evaluate(rule, *_at(15.0, 2), state) is None
+    assert state.armed is True
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 3), state) is not None
+
+
+# ---- Discrete events (schedule tick / device_status flip) -------------------
+
+
+def _event_rule(condition: dict[str, Any] | None, cooldown: int = 0, for_duration: int = 0) -> Rule:
+    rule = _rule(_leaf(">", 30.0), cooldown=cooldown, for_duration=for_duration)
+    rule.condition = condition
+    rule.trigger = {"type": "schedule", "cron": "0 8 * * *", "timezone": "UTC"}
+    return rule
+
+
+def test_condition_less_event_rule_fires_on_every_event() -> None:
+    rule = _event_rule(None)
+    state = RuleState()
+    for offset in (0, 86_400, 172_800):
+        assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME + timedelta(seconds=offset), state)
+
+
+def test_event_rule_with_condition_that_stays_true_fires_every_event() -> None:
+    rule = _event_rule(_leaf("<", 40.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate_event(rule, *_at(20.0, 0), state) is not None
+    assert _EVALUATOR.evaluate_event(rule, *_at(20.0, 60), state) is not None
+
+
+def test_event_rule_skips_when_condition_false_or_unknown() -> None:
+    rule = _event_rule(_leaf("<", 40.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate_event(rule, *_at(50.0, 0), state) is None
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME, state) is None  # no data
+
+
+def test_event_rule_respects_cooldown() -> None:
+    rule = _event_rule(None, cooldown=120)
+    state = RuleState()
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME, state) is not None
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME + timedelta(seconds=60), state) is None
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME + timedelta(seconds=120), state)
+
+
+def test_event_rule_ignores_for_duration() -> None:
+    # A stored for_duration (the old form default was 10s) must not swallow
+    # the first event of a schedule/device_status rule.
+    rule = _event_rule(None, for_duration=10)
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME, RuleState()) is not None

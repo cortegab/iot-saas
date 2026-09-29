@@ -161,6 +161,33 @@ def redis_kv(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
     return store
 
 
+@pytest.fixture(autouse=True)
+def redis_sets(monkeypatch: pytest.MonkeyPatch) -> dict[str, set[str]]:
+    """In-memory stand-in for redis_client.sadd/srem/smembers — the latched-
+    rules set (rules.service.RULES_LATCHED_REDIS_KEY), read on every rule
+    response. Same event-loop reason as redis_kv above."""
+    sets: dict[str, set[str]] = {}
+
+    async def _sadd(key: str, *members: str) -> int:
+        before = len(sets.setdefault(key, set()))
+        sets[key].update(members)
+        return len(sets[key]) - before
+
+    async def _srem(key: str, *members: str) -> int:
+        current = sets.get(key, set())
+        removed = len(current & set(members))
+        current.difference_update(members)
+        return removed
+
+    async def _smembers(key: str) -> set[str]:
+        return set(sets.get(key, set()))
+
+    monkeypatch.setattr("app.redis.redis_client.sadd", _sadd)
+    monkeypatch.setattr("app.redis.redis_client.srem", _srem)
+    monkeypatch.setattr("app.redis.redis_client.smembers", _smembers)
+    return sets
+
+
 @dataclass
 class DeferredActions:
     """Collects the webhook/email delivery coroutines app.rules.service would

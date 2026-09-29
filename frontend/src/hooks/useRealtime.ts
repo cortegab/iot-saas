@@ -132,7 +132,7 @@ export function useRealtime(): RealtimeStatus {
         void mutate("/notifications");
       } else if (message.type === "rule_execution" && message.rule_id) {
         void mutate(`/rules/${message.rule_id}/executions`);
-      } else if (message.type === "rule_health" && message.rule_id) {
+      } else if ((message.type === "rule_health" || message.type === "rule_latched") && message.rule_id) {
         void mutate("/rules");
         void mutate(`/rules/${message.rule_id}`);
       }

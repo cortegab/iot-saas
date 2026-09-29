@@ -403,8 +403,10 @@ async def _handle_rule_trigger(
     client: aiomqtt.Client, factory: async_sessionmaker[AsyncSession], raw: str
 ) -> None:
     """One out-of-band rule run — a manual "Run now" (`POST /rules/{id}/run`),
-    a schedule_loop tick, or a pending_timer_loop re-evaluation. Malformed requests are dropped, never raised
-    (CLAUDE.md constraint 11, same as _handle_manual_command)."""
+    a schedule_loop tick, or a pending_timer_loop re-evaluation — or a latch
+    reset (`POST /rules/{id}/reset`, trigger_source "reset"). Malformed
+    requests are dropped, never raised (CLAUDE.md constraint 11, same as
+    _handle_manual_command)."""
     try:
         data = json.loads(raw)
         tenant_id = uuid.UUID(data["tenant_id"])
@@ -414,6 +416,9 @@ async def _handle_rule_trigger(
         log.warning("dropping malformed rule-trigger request: %s", exc)
         return
 
+    if trigger_source == "reset":
+        await rules_service.reset_rule_latch(tenant_id, rule_id)
+        return
     await rules_service.run_rule_out_of_band(client, factory, tenant_id, rule_id, trigger_source)
 
 

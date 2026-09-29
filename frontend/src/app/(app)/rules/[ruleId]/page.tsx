@@ -10,7 +10,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Callout } from "@/components/ui/Callout";
 import { Tabs, TabPanel } from "@/components/ui/Tabs";
 import { RuleExecutionHistory } from "@/components/rules/RuleExecutionHistory";
-import { RuleForm } from "@/components/rules/RuleForm";
+import { RuleEditor } from "@/components/rules/editor/RuleEditor";
+import { ResetLatchButton } from "@/components/rules/ResetLatchButton";
 import { RuleSimulatePanel } from "@/components/rules/RuleSimulatePanel";
 import { RunNowButton } from "@/components/rules/RunNowButton";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -86,10 +87,20 @@ export default function EditRulePage() {
         <Callout tone="warning">This rule can&rsquo;t evaluate right now — {unhealthySummary(rule)}.</Callout>
       )}
 
+      {rule.latched && (
+        <Callout tone="warning">
+          <span className="flex flex-wrap items-center justify-between gap-3">
+            <span>Latched — this rule fired and won&rsquo;t fire again until it&rsquo;s reset.</span>
+            {isAdmin && <ResetLatchButton ruleId={params.ruleId} />}
+          </span>
+        </Callout>
+      )}
+
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
       <TabPanel id="edit" active={tab}>
-        <RuleForm
+        <RuleEditor
+          key={rule.id}
           deviceId={seedDevice}
           existing={rule}
           onSaved={onSaved}

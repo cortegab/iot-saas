@@ -213,3 +213,34 @@ async def test_cross_tenant_device_id_rejected(client: httpx.AsyncClient) -> Non
         headers=headers_b,
     )
     assert resp.status_code == 422
+
+
+async def test_condition_less_rule_fires_on_every_matching_transition(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    # Each connectivity event is its own episode: a condition-less rule has no
+    # tree that could go false, so it must not wait for one before re-arming.
+    owner = await _register(client, "owner-ds6@example.com", "AcmeDS6")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    device_id = device["device"]["id"]
+
+    resp = await client.post(
+        "/rules",
+        json=_device_status_rule_body(device_id, "disconnected", condition=None),
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    await rules_service.load_rule_cache(app_session_factory)
+
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=True)  # baseline
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=False)  # fire 1
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=True)
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=False)  # fire 2
+
+    executions = (await admin_session.execute(select(RuleExecution))).scalars().all()
+    assert len(executions) == 2

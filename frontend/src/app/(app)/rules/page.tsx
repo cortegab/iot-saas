@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { mutate as revalidate } from "swr";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
@@ -16,9 +16,11 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { Table, type TableColumn } from "@/components/ui/Table";
 import { TableNameCell } from "@/components/ui/TableNameCell";
+import { LadderOverview } from "@/components/rules/ladder/LadderOverview";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
 
@@ -48,6 +50,8 @@ function DeviceLine({ devices }: { devices: { id: string; name: string }[] }) {
 export default function RulesPage() {
   const api = useApi();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const view = searchParams.get("view") === "ladder" ? "ladder" : "list";
   // refreshInterval: rule health is time-based (a signal crosses its staleness
   // bound with no user action), and the rule_health realtime event only fires
   // for tenants with a live worker — this is the belt-and-suspenders.
@@ -138,6 +142,7 @@ export default function RulesPage() {
           {r.enabled && !r.health.evaluatable && (
             <Badge tone="pending" variant="dot" label="Can't evaluate" />
           )}
+          {r.latched && <Badge tone="pending" variant="dot" label="Latched" />}
         </div>
       ),
     },
@@ -202,6 +207,16 @@ export default function RulesPage() {
               </option>
             ))}
           </Select>
+          <SegmentedControl
+            ariaLabel="Rules view"
+            className="ml-auto"
+            value={view}
+            onChange={(next) => router.replace(next === "ladder" ? "/rules?view=ladder" : "/rules")}
+            options={[
+              { value: "list", label: "List" },
+              { value: "ladder", label: "Ladder" },
+            ]}
+          />
         </div>
       )}
 
@@ -232,7 +247,12 @@ export default function RulesPage() {
         <EmptyState title="No matching rules" description="Try a different search term." />
       )}
 
-      {filtered.length > 0 && <Table columns={columns} rows={filtered} rowKey={(r) => r.id} />}
+      {filtered.length > 0 &&
+        (view === "ladder" ? (
+          <LadderOverview rules={filtered} />
+        ) : (
+          <Table columns={columns} rows={filtered} rowKey={(r) => r.id} />
+        ))}
 
       {dialog}
     </div>
