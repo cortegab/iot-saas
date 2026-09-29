@@ -67,7 +67,12 @@ async def ingest(
     device_id, record = await _authenticate_device_basic(authorization, session)
     payload = TelemetryPayload(value=body.value, timestamp=body.timestamp)
     await ingestion_service.record_telemetry_direct(
-        redis_client, record.tenant_id, device_id, body.metric, payload
+        redis_client,
+        record.tenant_id,
+        device_id,
+        body.metric,
+        payload,
+        ingestion_service.reading_time(payload),
     )
     return {"status": "accepted"}
 

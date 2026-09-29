@@ -26,10 +26,11 @@ export function mergeLatest(metric: string, value: number, iso: string) {
   return (current: TelemetryLatestResponse[] | undefined): TelemetryLatestResponse[] | undefined => {
     if (!current) return current;
     const existing = current.find((r) => r.metric === metric);
-    if (existing && !isNewer(iso, existing.time)) return current;
-    const next = current.filter((r) => r.metric !== metric);
-    next.push({ metric, value, time: iso });
-    return next;
+    if (!existing) return [...current, { metric, value, time: iso }];
+    if (!isNewer(iso, existing.time)) return current;
+    // Replace in place — the device page treats index 0 as the primary
+    // readout, so moving the updated metric to the end would swap it.
+    return current.map((r) => (r.metric === metric ? { metric, value, time: iso } : r));
   };
 }
 
@@ -41,12 +42,22 @@ export function markOnline(iso: string) {
   };
 }
 
-export function appendPoint(iso: string, value: number) {
+/** `windowMs`, when given, drops points that have slid out of the chart's
+ * trailing window — the periodic refetch can't be relied on for that, since
+ * SWR discards a refetch whenever a live frame mutates the key mid-flight
+ * (routine for a device publishing every second). */
+export function appendPoint(iso: string, value: number, windowMs?: number) {
   return (current: TelemetryDataResponse | undefined): TelemetryDataResponse | undefined => {
     if (!current) return current;
     const last = current.points[current.points.length - 1];
     if (last && !isNewer(iso, last.time)) return current;
-    return { ...current, points: [...current.points, { time: iso, value }] };
+    let points = [...current.points, { time: iso, value }];
+    if (windowMs != null) {
+      const cutoff = Date.now() - windowMs;
+      const firstInWindow = points.findIndex((p) => new Date(p.time).getTime() >= cutoff);
+      if (firstInWindow > 0) points = points.slice(firstInWindow);
+    }
+    return { ...current, points };
   };
 }
 

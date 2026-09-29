@@ -57,21 +57,17 @@ export function useRealtime(): RealtimeStatus {
       return cacheRef.current.get(key)?.data != null;
     }
 
-    /** The `/devices/{id}/data?...` key whose window is on screen: same
-     * device+metric, the largest `from` (the chart re-anchors `from` to "now"
-     * every 15s, so older keys linger in the cache but aren't displayed). */
-    function liveChartKey(prefix: string): string | null {
-      let best: string | null = null;
-      let bestFrom = "";
+    /** Every cached TrendChart key for this device+metric — one per range
+     * shown anywhere (device page, dashboard widgets). Keys are stable per
+     * window (TrendChart.tsx), so each is either on screen or a cheap no-op. */
+    function chartKeys(prefix: string): { key: string; windowMs: number | undefined }[] {
+      const found: { key: string; windowMs: number | undefined }[] = [];
       for (const key of cacheRef.current.keys()) {
         if (typeof key !== "string" || !key.startsWith(prefix) || !hasData(key)) continue;
-        const from = new URLSearchParams(key.split("?")[1] ?? "").get("from") ?? "";
-        if (from > bestFrom) {
-          bestFrom = from;
-          best = key;
-        }
+        const windowMs = Number(new URLSearchParams(key.split("?")[1] ?? "").get("window"));
+        found.push({ key, windowMs: windowMs > 0 ? windowMs : undefined });
       }
-      return best;
+      return found;
     }
 
     function onMessage(message: RealtimeMessage) {
@@ -99,11 +95,11 @@ export function useRealtime(): RealtimeStatus {
           void mutate<DeviceResponse>(deviceKey, markOnline(iso), { revalidate: false });
         }
 
-        const chartKey = liveChartKey(
-          `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}`,
-        );
-        if (chartKey) {
-          void mutate<TelemetryDataResponse>(chartKey, appendPoint(iso, value), {
+        // Trailing "&" so metric "temp" doesn't also match "temp2".
+        for (const { key, windowMs } of chartKeys(
+          `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}&`,
+        )) {
+          void mutate<TelemetryDataResponse>(key, appendPoint(iso, value, windowMs), {
             revalidate: false,
           });
         }
