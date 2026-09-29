@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { RuleForm } from "@/components/rules/RuleForm";
+import { RuleEditor } from "@/components/rules/editor/RuleEditor";
 import { upsertRuleInCache } from "@/lib/rule-cache";
 import type { components } from "@/types/api";
 
@@ -19,7 +19,7 @@ export default function NewRulePage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHeader title="Add rule" back={{ href: "/rules", label: "Rules" }} />
-      <RuleForm onSaved={onSaved} onCancel={() => router.push("/rules")} />
+      <RuleEditor onSaved={onSaved} onCancel={() => router.push("/rules")} />
     </div>
   );
 }

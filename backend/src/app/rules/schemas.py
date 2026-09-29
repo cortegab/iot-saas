@@ -2,14 +2,18 @@
 
 A rule is a *canonical definition* the engine executes directly:
 
-- `trigger` — a discriminated union on `type` (metric-arrival only for now).
+- `trigger` — a discriminated union on `type`: metric (on reading), schedule,
+  manual, device_status.
 - `condition` — a recursive discriminated union on `kind`: a tree of
   predicates (`ConditionLeaf`, each carrying its own `device_id`) combined
   with AND/OR (`ConditionGroup`). A single predicate is a bare leaf, not a
   group-of-one. Per-leaf hysteresis stabilises that leaf's boolean; the
-  combined tree result is gated by `execution_policy`.
-- `execution_policy` — `strategy` ("edge" | "continuous" | "reset_condition")
-  plus `for_duration` / `cooldown`, and an optional `reset_condition` tree.
+  combined tree result is gated by `execution_policy`. Required for metric
+  triggers only — a schedule/manual/device_status rule without one always
+  runs its actions when triggered.
+- `execution_policy` — `strategy` ("edge" | "continuous" | "reset_condition"
+  | "latch") plus `for_duration` / `cooldown`, and an optional
+  `reset_condition` tree.
 - `actions` — a list; each action may target a different device or an
   external system. `clear_actions` (same shape) run once when a fired rule's
   condition is known-false again, after `execution_policy.clear_for_duration`.
@@ -32,7 +36,10 @@ _CHANGE_OPERATORS = {"changed", "increased", "decreased"}
 # The only operators evaluators._evaluate_leaf latches with a hysteresis margin.
 _HYSTERESIS_OPERATORS = {">", ">=", "<", "<="}
 
-RuleStrategy = Literal["edge", "continuous", "reset_condition"]
+# "latch": fire once, then stay latched until a manual reset (POST
+# /rules/{id}/reset) or, if set, `reset_condition` evaluates true. Unlike
+# "reset_condition", the tree going false never re-arms it.
+RuleStrategy = Literal["edge", "continuous", "reset_condition", "latch"]
 
 
 # ---- Actions -------------------------------------------------------------
@@ -79,8 +86,23 @@ class WebhookAction(BaseModel):
     timeout_s: float | None = Field(default=None, ge=1, le=30)
 
 
+# Bare `str` with a shape check — the repo has no `pydantic[email]` dependency
+# (see tenants/schemas.py's notification_emails).
+EmailAddress = Annotated[str, Field(pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$", max_length=254)]
+
+
+class EmailAction(BaseModel):
+    type: Literal["email"] = "email"
+    # Empty = the tenant's alert list (notification_emails, or if unset the
+    # owner/admin members) — the same fallback a notification's email channel uses.
+    to: list[EmailAddress] = Field(default_factory=list, max_length=20)
+    subject: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=5000)
+
+
 ActionRequest = Annotated[
-    ActuatorCommandAction | NotificationAction | WebhookAction, Field(discriminator="type")
+    ActuatorCommandAction | NotificationAction | WebhookAction | EmailAction,
+    Field(discriminator="type"),
 ]
 
 
@@ -200,8 +222,9 @@ class ExecutionPolicy(BaseModel):
     strategy: RuleStrategy = "edge"
     for_duration: int = Field(default=0, ge=0)
     cooldown: int = Field(default=0, ge=0)
-    # Only meaningful when strategy == "reset_condition": the rule cannot
-    # fire again until this tree evaluates true.
+    # Meaningful when strategy is "reset_condition" or "latch": the rule
+    # cannot fire again until this tree evaluates true ("latch" also accepts
+    # a manual reset, and without a tree waits for one).
     reset_condition: ConditionNode | None = None
     # Seconds the condition must stay known-false before clear_actions fire.
     clear_for_duration: int = Field(default=0, ge=0)
@@ -216,8 +239,9 @@ class RuleCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
     trigger: TriggerRequest = Field(default_factory=MetricTrigger)
-    # None only when trigger.type == "device_status" — a pure "notify me when
-    # device X disconnects" rule has no natural leaf to express "always true".
+    # Required for metric triggers. Optional otherwise — "every morning at 8,
+    # turn the pump on" or "notify me when device X disconnects" has no
+    # natural leaf to express "always true".
     condition: ConditionNode | None = None
     execution_policy: ExecutionPolicy = Field(default_factory=ExecutionPolicy)
     actions: list[ActionRequest] = Field(min_length=1)
@@ -228,9 +252,9 @@ class RuleCreateRequest(BaseModel):
     enabled: bool = True
 
     @model_validator(mode="after")
-    def _condition_required_unless_device_status(self) -> "RuleCreateRequest":
-        if self.condition is None and self.trigger.type != "device_status":
-            raise ValueError('condition is required unless trigger.type == "device_status"')
+    def _condition_required_for_metric_trigger(self) -> "RuleCreateRequest":
+        if self.condition is None and self.trigger.type == "metric":
+            raise ValueError('condition is required when trigger.type == "metric"')
         return self
 
 
@@ -315,6 +339,8 @@ class RuleResponse(BaseModel):
     created_at: datetime
     # Computed per request: can this rule currently evaluate (all inputs fresh)?
     health: RuleHealth
+    # strategy "latch" only: fired and waiting for POST /rules/{id}/reset.
+    latched: bool = False
     # Back-compat: the first action / the policy's timing, so existing
     # single-action clients keep reading the fields they always have.
     action: dict[str, object]

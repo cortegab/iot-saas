@@ -46,7 +46,10 @@ _condition_adapter: TypeAdapter[ConditionNode] = TypeAdapter(ConditionNode)
 
 
 def _to_response(
-    rule: Rule, device_rows: list[service.RuleDeviceRow], health: RuleHealth
+    rule: Rule,
+    device_rows: list[service.RuleDeviceRow],
+    health: RuleHealth,
+    latched: set[uuid.UUID],
 ) -> RuleResponse:
     policy = ExecutionPolicy.model_validate(rule.execution_policy)
     actions: list[dict[str, object]] = list(rule.actions)
@@ -75,6 +78,8 @@ def _to_response(
         enabled=rule.enabled,
         created_at=rule.created_at,
         health=health,
+        # A stale set entry (strategy since changed) must not show a latch.
+        latched=policy.strategy == "latch" and rule.id in latched,
         action=actions[0] if actions else {},
         for_duration=policy.for_duration,
         cooldown=policy.cooldown,
@@ -89,15 +94,20 @@ async def _responses(
 ) -> list[RuleResponse]:
     by_rule = await service.list_rule_device_rows(session, tenant_id, [r.id for r in rules])
     health = await service.compute_rule_health(session, tenant_id, rules)
+    latched = await service.latched_rule_ids()
     return [
-        _to_response(r, by_rule.get(r.id, []), health.get(r.id, _NO_SIGNALS_HEALTH)) for r in rules
+        _to_response(r, by_rule.get(r.id, []), health.get(r.id, _NO_SIGNALS_HEALTH), latched)
+        for r in rules
     ]
 
 
 async def _response(session: AsyncSession, tenant_id: uuid.UUID, rule: Rule) -> RuleResponse:
     by_rule = await service.list_rule_device_rows(session, tenant_id, [rule.id])
     health = await service.compute_rule_health(session, tenant_id, [rule])
-    return _to_response(rule, by_rule.get(rule.id, []), health.get(rule.id, _NO_SIGNALS_HEALTH))
+    latched = await service.latched_rule_ids()
+    return _to_response(
+        rule, by_rule.get(rule.id, []), health.get(rule.id, _NO_SIGNALS_HEALTH), latched
+    )
 
 
 @router.get("/devices/{device_id}/rules", response_model=list[RuleResponse])
@@ -224,6 +234,18 @@ async def run_rule(
     evaluates the condition against the live signal cache and fires only if
     it's currently met."""
     await service.request_manual_run(session, ctx.tenant_id, rule.id)
+
+
+@router.post("/rules/{rule_id}/reset", status_code=status.HTTP_202_ACCEPTED)
+async def reset_rule(
+    rule: Rule = Depends(get_rule_or_404),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+) -> None:
+    """Re-arm a latched rule (strategy "latch") — publishes a reset request;
+    app.worker re-arms the rule's in-memory state and clears `latched`."""
+    if (rule.execution_policy or {}).get("strategy") != "latch":
+        raise HTTPException(status_code=422, detail='only a "latch" rule can be reset')
+    await service.request_latch_reset(ctx.tenant_id, rule.id)
 
 
 @router.post("/rules/{rule_id}/simulate", response_model=SimulateResponse)

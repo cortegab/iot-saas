@@ -32,7 +32,6 @@ from app.rules.evaluators import (
     CHANGE_OPERATORS,
     DEFAULT_STALE_METRIC_AGE_SECONDS,
     Edge,
-    Evaluator,
     MetricSnapshot,
     MetricValue,
     RuleState,
@@ -44,6 +43,7 @@ from app.rules.evaluators import (
     explain_condition,
     has_pending_timer,
     referenced_signals,
+    reset_latch,
     rule_state_from_dict,
     rule_state_to_dict,
 )
@@ -74,6 +74,9 @@ RULES_INVALIDATE_CHANNEL = "rules:invalidate"
 # trigger_source}. Published by request_manual_run (POST /rules/{id}/run) and
 # by app.worker's schedule_loop; consumed by app.worker's manual_command_loop.
 RULES_MANUAL_CHANNEL = "rules:manual"
+# Redis set of rule ids currently latched (strategy "latch", fired, not yet
+# reset). Written by the worker, read by the API for RuleResponse.latched.
+RULES_LATCHED_REDIS_KEY = "rules:latched"
 
 # Redis key holding the periodic JSON checkpoint of _rule_states (Phase 5) —
 # {rule_id: rule_state_to_dict(...)}. Written by app.worker's
@@ -82,7 +85,7 @@ RULES_MANUAL_CHANNEL = "rules:manual"
 # progress (CLAUDE.md §9 — no full state externalisation on a single host).
 RULE_STATE_REDIS_KEY = "rules:state"
 
-_THRESHOLD_EVALUATOR: Evaluator = ThresholdEvaluator()
+_THRESHOLD_EVALUATOR = ThresholdEvaluator()
 
 # Mirrors frontend/src/components/rules/RuleSummary.tsx's OPERATOR_WORDS —
 # keep the two in sync if either wording changes.
@@ -168,9 +171,16 @@ def _plain_summary(condition: dict[str, Any]) -> str:
     return joiner.join(_plain_summary(child) for child in condition["predicates"])
 
 
-def _auto_name(condition: dict[str, Any] | None) -> str:
+_TRIGGER_RULE_NAMES = {
+    "schedule": "Scheduled rule",
+    "manual": "Manual rule",
+    "device_status": "Device status rule",
+}
+
+
+def _auto_name(condition: dict[str, Any] | None, trigger: dict[str, Any] | None = None) -> str:
     if condition is None:
-        return "Device status rule"
+        return _TRIGGER_RULE_NAMES.get((trigger or {}).get("type", ""), "Rule")
     summary = _plain_summary(condition)
     summary = summary[0].upper() + summary[1:] if summary else "Rule"
     return summary[:200]
@@ -307,6 +317,22 @@ def _validate_clear_actions(trigger: dict[str, Any], clear_actions: list[dict[st
         raise RuleValidationError('clear actions are only supported for trigger.type "metric"')
 
 
+def _validate_latch(
+    trigger: dict[str, Any], policy: dict[str, Any], clear_actions: list[dict[str, Any]]
+) -> None:
+    """A latch holds after firing until reset — it only means something for a
+    stream of readings (an event trigger fires per event, see
+    evaluators.ThresholdEvaluator.evaluate_event), and it never "clears"."""
+    if (policy or {}).get("strategy") != "latch":
+        return
+    if (trigger or {}).get("type", "metric") != "metric":
+        raise RuleValidationError('strategy "latch" is only supported for trigger.type "metric"')
+    if clear_actions:
+        raise RuleValidationError(
+            'strategy "latch" cannot have clear actions — it holds until reset'
+        )
+
+
 async def _persist_rule(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -324,6 +350,7 @@ async def _persist_rule(
     _assert_leaves_have_device(condition)
     _validate_trigger(trigger)
     _validate_clear_actions(trigger, clear_actions)
+    _validate_latch(trigger, execution_policy, clear_actions)
     device_map = _rule_device_map(condition, actions, trigger, clear_actions)
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
 
@@ -364,7 +391,7 @@ async def create_rule_canonical(
     return await _persist_rule(
         session,
         tenant_id,
-        name=name or _auto_name(condition),
+        name=name or _auto_name(condition, trigger),
         description=description,
         trigger=trigger,
         condition=condition,
@@ -548,11 +575,12 @@ async def update_rule(
     if clear_actions is not None:
         rule.clear_actions = clear_actions
 
-    if rule.condition is None and (rule.trigger or {}).get("type") != "device_status":
-        raise RuleValidationError('condition is required unless trigger.type == "device_status"')
+    if rule.condition is None and (rule.trigger or {}).get("type", "metric") == "metric":
+        raise RuleValidationError('condition is required when trigger.type == "metric"')
 
     _assert_leaves_have_device(rule.condition)
     _validate_clear_actions(rule.trigger, rule.clear_actions)
+    _validate_latch(rule.trigger, rule.execution_policy, rule.clear_actions)
     device_map = _rule_device_map(rule.condition, rule.actions, rule.trigger, rule.clear_actions)
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
     await session.flush()
@@ -812,15 +840,19 @@ async def evaluate_and_dispatch(
 async def _resolve_target(
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
-    trigger_device_id: uuid.UUID,
-    trigger_tenant_slug: str,
-    trigger_device_slug: str,
+    trigger_device_id: uuid.UUID | None,
+    trigger_tenant_slug: str | None,
+    trigger_device_slug: str | None,
     action_device_id: str | None,
 ) -> tuple[uuid.UUID, str, str] | None:
     """(device_id, tenant_slug, device_slug) for an actuator action's target.
-    None (skip the action) if the target isn't a live device in this tenant.
+    None (skip the action) if the target isn't a live device in this tenant,
+    or the action names no device and the run has no triggering one.
     """
     if not action_device_id or str(action_device_id) == str(trigger_device_id):
+        if trigger_device_id is None or trigger_tenant_slug is None or trigger_device_slug is None:
+            log.warning("dropping actuator action with no target device")
+            return None
         return trigger_device_id, trigger_tenant_slug, trigger_device_slug
     async with factory() as session:
         result = await session.execute(
@@ -870,9 +902,9 @@ async def _dispatch_actions(
     client: aiomqtt.Client,
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
-    device_id: uuid.UUID,
-    tenant_slug: str,
-    device_slug: str,
+    device_id: uuid.UUID | None,
+    tenant_slug: str | None,
+    device_slug: str | None,
     metric: str | None,
     value: float | None,
     timestamp: datetime,
@@ -950,6 +982,8 @@ async def _dispatch_actions(
                 )
             elif action_type == "webhook":
                 deferred.append(_DeferredAction("webhook", action_index, dict(action)))
+            elif action_type == "email":
+                deferred.append(_DeferredAction("email", action_index, dict(action)))
             elif action_type != "notification":
                 log.warning("unknown action type %r for rule %s", action_type, rule.id)
                 outcomes.append(
@@ -1049,6 +1083,15 @@ async def _dispatch_actions(
         )
     except Exception:
         log.exception("execution history write failed for rule %s", rule.id)
+
+    # After the actuator commands are out — never between arrival and dispatch.
+    # Only an evaluator firing latches; a manual "Run now" never touches state.
+    if (
+        edge == "fire"
+        and trigger_source == "metric"
+        and (rule.execution_policy or {}).get("strategy") == "latch"
+    ):
+        await _set_latched(tenant_id, rule.id, True)
 
     # Spawn the deferred deliveries only after the parent rule_executions row
     # has committed — each task INSERTs an action_executions row FK'd to it.
@@ -1190,7 +1233,10 @@ async def _run_deferred_action(
         async with _DEFERRED_SEMAPHORE:
             ctx = executors.ActionContext(tenant_id=tenant_id, rule_id=rule_id, rule_name=rule_name)
             if descriptor.kind == "email":
-                recipients = await _resolve_email_recipients(factory, tenant_id)
+                # An explicit email action carries its own `to` (empty = the
+                # tenant's alert list); a notification's email channel never does.
+                explicit_to = [str(a) for a in descriptor.config.get("to") or []]
+                recipients = explicit_to or await _resolve_email_recipients(factory, tenant_id)
                 if not recipients:
                     await _write_deferred_result(
                         factory,
@@ -1202,12 +1248,19 @@ async def _run_deferred_action(
                         {"reason": "no_recipients"},
                     )
                     return
-                label = "cleared" if descriptor.config.get("edge") == "clear" else "alert"
-                config: dict[str, Any] = {
-                    "to": recipients,
-                    "subject": f"[{rule_name}] {label}",
-                    "body": descriptor.config["message"],
-                }
+                if descriptor.config.get("type") == "email":
+                    config: dict[str, Any] = {
+                        "to": recipients,
+                        "subject": descriptor.config["subject"],
+                        "body": descriptor.config["body"],
+                    }
+                else:
+                    label = "cleared" if descriptor.config.get("edge") == "clear" else "alert"
+                    config = {
+                        "to": recipients,
+                        "subject": f"[{rule_name}] {label}",
+                        "body": descriptor.config["message"],
+                    }
             else:  # webhook
                 config = descriptor.config
             result = await executors.execute_with_retry(descriptor.kind, config, ctx)
@@ -1366,6 +1419,58 @@ async def request_manual_run(
     )
 
 
+async def request_latch_reset(tenant_id: uuid.UUID, rule_id: uuid.UUID) -> None:
+    """Publish a reset request for app.worker — the rule's RuleState (and so
+    its armed flag) lives only in the worker process. Rides the manual-run
+    channel with trigger_source "reset"; see reset_rule_latch."""
+    await redis_client.publish(
+        RULES_MANUAL_CHANNEL,
+        json.dumps(
+            {"tenant_id": str(tenant_id), "rule_id": str(rule_id), "trigger_source": "reset"}
+        ),
+    )
+
+
+async def latched_rule_ids() -> set[uuid.UUID]:
+    """Rules currently latched (API side — RuleResponse.latched). A Redis
+    outage reads as "none latched" rather than failing the rules list."""
+    try:
+        members = await redis_client.smembers(RULES_LATCHED_REDIS_KEY)
+    except redis.RedisError:
+        log.warning("could not read latched rules from Redis", exc_info=True)
+        return set()
+    # decode_responses=True (app/redis.py), so members are already str.
+    return {uuid.UUID(str(m)) for m in members}
+
+
+async def _set_latched(tenant_id: uuid.UUID, rule_id: uuid.UUID, latched: bool) -> None:
+    try:
+        if latched:
+            await redis_client.sadd(RULES_LATCHED_REDIS_KEY, str(rule_id))
+        else:
+            await redis_client.srem(RULES_LATCHED_REDIS_KEY, str(rule_id))
+    except redis.RedisError:
+        log.warning("could not record latch state for rule %s", rule_id, exc_info=True)
+    await realtime_service.publish_event(
+        tenant_id, {"type": "rule_latched", "rule_id": str(rule_id), "latched": latched}
+    )
+
+
+async def reset_rule_latch(tenant_id: uuid.UUID, rule_id: uuid.UUID) -> None:
+    """Worker side of POST /rules/{id}/reset: re-arm the in-memory state and
+    clear the latched flag. A non-latch rule is ignored (the API rejects it
+    first; this guards a stale request racing an edit)."""
+    rule = _rules_by_id.get(rule_id)
+    if rule is None or rule.tenant_id != tenant_id:
+        log.warning("latch reset for unknown/mismatched rule %s", rule_id)
+        return
+    if (rule.execution_policy or {}).get("strategy") != "latch":
+        log.warning("latch reset for non-latch rule %s ignored", rule_id)
+        return
+    reset_latch(_state_for(rule))
+    await _set_latched(tenant_id, rule_id, False)
+
+
 def schedule_due(rule: Rule, now: datetime) -> bool:
     """Whether `rule`'s cron matches `now` (a UTC datetime the caller has
     truncated to the minute). Evaluated in the rule's own timezone. Returns
@@ -1380,26 +1485,32 @@ def schedule_due(rule: Rule, now: datetime) -> bool:
         return False
 
 
+_NO_TRIGGER_DEVICE: tuple[None, None, None] = (None, None, None)
+
+
 async def _resolve_rule_context(
     factory: async_sessionmaker[AsyncSession], rule: Rule, *, device_id: uuid.UUID | None = None
-) -> tuple[uuid.UUID, str, str] | None:
+) -> tuple[uuid.UUID, str, str] | tuple[None, None, None] | None:
     """The device to dispatch actuator actions against and record as the
     execution's triggering device, as (device_id, tenant_slug, device_slug).
-    Defaults to the rule's primary input condition leaf's device; an explicit
-    `device_id` overrides that (device_status: the device whose connectivity
-    changed, which a condition-less — or condition-unrelated — rule has no
-    leaf to derive it from). None if that device is gone or disabled."""
+    Defaults to the rule's primary input condition leaf's device, then to the
+    first actuator action's target; an explicit `device_id` overrides both
+    (device_status: the device whose connectivity changed, which a
+    condition-less — or condition-unrelated — rule has no leaf to derive it
+    from). A condition-less schedule/manual rule with no actuator action
+    (e.g. "email me every morning") has no device at all —
+    `_NO_TRIGGER_DEVICE`. None if the derived device is gone or disabled."""
     if device_id is None:
-        device_id = next(
-            (
-                leaf.get("device_id")
-                for leaf in _condition_leaves(rule.condition)
-                if leaf.get("device_id")
-            ),
-            None,
-        )
-    if device_id is None:
-        return None
+        candidates = [leaf.get("device_id") for leaf in _condition_leaves(rule.condition)]
+        candidates += [
+            action.get("device_id")
+            for action in rule.actions
+            if action.get("type") == "actuator_command"
+        ]
+        derived = next((c for c in candidates if c), None)
+        if derived is None:
+            return _NO_TRIGGER_DEVICE
+        device_id = uuid.UUID(str(derived))
     async with factory() as session:
         result = await session.execute(
             text(
@@ -1429,9 +1540,12 @@ async def run_rule_out_of_band(
 
     - `manual` bypasses for_duration / cooldown / armed (evaluate_condition) —
       a "test it now" action, same trust tier as a manual actuator toggle.
-    - `schedule` and `device_status` keep the full ThresholdEvaluator
-      (flapping protection must not be bypassable on an automated path —
-      CLAUDE.md §9 constraint 7).
+    - `schedule` and `device_status` are discrete events —
+      ThresholdEvaluator.evaluate_event: fire iff the condition holds now,
+      keeping cooldown and leaf hysteresis (flapping protection must not be
+      bypassable on an automated path — CLAUDE.md §9 constraint 7).
+    - `metric` (pending_timer_loop completing a hold or clear delay) keeps
+      the full ThresholdEvaluator.evaluate.
 
     `device_id`, when given, is the device to dispatch against and record —
     passed straight to `_resolve_rule_context` (device_status: the device
@@ -1450,7 +1564,11 @@ async def run_rule_out_of_band(
         if not evaluate_condition(rule.condition, snapshot, now):
             return
     else:
-        firing = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, now, _state_for(rule))
+        state = _state_for(rule)
+        if trigger_source in ("schedule", "device_status"):
+            firing = _THRESHOLD_EVALUATOR.evaluate_event(rule, snapshot, now, state)
+        else:
+            firing = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, now, state)
         if firing is None:
             return
         edge = firing.edge
@@ -1641,6 +1759,10 @@ def _action_summary(action: dict[str, Any]) -> str:
         return f"Send a {'/'.join(channels)} notification: {action.get('message', '')}".strip()
     if kind == "webhook":
         return f"POST {action.get('url', '?')}"
+    if kind == "email":
+        to = action.get("to") or []
+        recipients = ", ".join(str(a) for a in to) if to else "the tenant alert list"
+        return f"Email {recipients}: {action.get('subject', '')}".strip()
     return f"Run {kind or 'unknown'} action"
 
 

@@ -490,6 +490,17 @@ def has_pending_timer(rule: Rule, state: RuleState) -> bool:
     )
 
 
+def reset_latch(state: RuleState) -> bool:
+    """Re-arm a latched rule (POST /rules/{id}/reset). Returns whether it was
+    latched. The hold timer restarts, so a condition that is still true
+    re-latches only after a full `for_duration` — like a PLC set coil
+    re-energising on the next scan, but still debounced."""
+    was_latched = not state.armed
+    state.armed = True
+    state.condition_since = None
+    return was_latched
+
+
 class ThresholdEvaluator:
     """The only Evaluator implemented this phase (CLAUDE.md §5's `type:
     "threshold"`). `state` is mutated in place — that mutation *is* the pure
@@ -506,6 +517,8 @@ class ThresholdEvaluator:
         `cooldown`).
       - "reset_condition": stay disarmed until `policy["reset_condition"]`
         evaluates true (independent of the tree going false).
+      - "latch": like "reset_condition", but with no reset tree it waits for
+        a manual reset (`reset_latch`) instead of falling back to edge.
 
     An unknown tree (stale/missing data) clears the hold timer but never
     re-arms — see the module docstring.
@@ -545,6 +558,15 @@ class ThresholdEvaluator:
                         state.armed = True
                 elif tree is False:
                     state.armed = True
+            elif strategy == "latch":
+                # Never re-armed by the tree going false — only by the optional
+                # reset tree here, or by reset_latch (POST /rules/{id}/reset).
+                reset = policy.get("reset_condition")
+                if (
+                    reset is not None
+                    and _evaluate_node(reset, snapshot, now, state.reset_leaf_states, ()) is True
+                ):
+                    state.armed = True
             elif tree is False:  # "edge"
                 state.armed = True
 
@@ -570,6 +592,37 @@ class ThresholdEvaluator:
         state.armed = False
         state.last_fired_at = now
         state.active = has_clear
+        return Firing(rule_id=rule.id)
+
+    def evaluate_event(
+        self, rule: Rule, snapshot: MetricSnapshot, now: datetime, state: RuleState
+    ) -> Firing | None:
+        """A discrete event — a schedule tick or a device_status flip: fire iff
+        the tree is true right now and cooldown has passed.
+
+        Each event is its own episode, so there is no armed gate: through
+        `evaluate`, a condition-less rule (tree always True) or one whose
+        condition stays true between events never saw the tree go false, and
+        fired once, ever. `for_duration` does not apply either — an event has
+        no duration to hold across (the next tick may be a day away). Cooldown
+        still applies (CLAUDE.md §9.7), leaf hysteresis still latches across
+        events, and event rules carry no clear_actions (service validation),
+        so there is nothing to clear.
+        """
+        tree = (
+            True
+            if rule.condition is None
+            else _evaluate_node(rule.condition, snapshot, now, state.leaf_states, ())
+        )
+        if tree is not True:
+            return None
+        cooldown: int = rule.execution_policy.get("cooldown", 0)
+        if (
+            state.last_fired_at is not None
+            and (now - state.last_fired_at).total_seconds() < cooldown
+        ):
+            return None
+        state.last_fired_at = now
         return Firing(rule_id=rule.id)
 
     @staticmethod

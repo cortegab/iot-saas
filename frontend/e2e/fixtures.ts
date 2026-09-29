@@ -1,6 +1,6 @@
 import { test as base, expect, type APIRequestContext } from "@playwright/test";
 
-const API_URL = process.env.E2E_API_URL ?? "http://localhost:8000";
+export const API_URL = process.env.E2E_API_URL ?? "http://localhost:8000";
 
 // Never published by any real device, so device_metric_health has no row for
 // it — compute_rule_health (backend/src/app/rules/service.py) deterministically
@@ -29,7 +29,7 @@ function credentials() {
   return { email, password };
 }
 
-async function login(request: APIRequestContext) {
+export async function login(request: APIRequestContext) {
   const { email, password } = credentials();
   const res = await request.post(`${API_URL}/auth/login`, { data: { email, password } });
   if (!res.ok()) {

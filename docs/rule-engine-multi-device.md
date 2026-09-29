@@ -124,3 +124,30 @@ independent rule (`switch == 0 → LED off`), which could drift out of sync with
 
 The device contract (CLAUDE.md §4) is unchanged — a clear is an ordinary command on the same
 `cmd` / `state` topics.
+
+## Later addition: simplified model — latch, event triggers, email action
+
+The rule editors present every rule as **WHEN → IF → THEN** (see the Form / Ladder editors).
+Engine changes behind that vocabulary:
+
+- **Event triggers fire on every event.** `schedule` and `device_status` rules are evaluated
+  by `ThresholdEvaluator.evaluate_event`: fire iff the condition holds now (or there is none),
+  subject to `cooldown`; leaf hysteresis still latches across events. Previously they went
+  through the edge gate, so a condition-less rule — or one whose condition stayed true between
+  ticks — fired once and never re-armed. `for_duration` does not apply to event triggers (an
+  event has no duration to hold across) and is ignored for them.
+- **`condition` is optional for schedule / manual / device_status** — "every morning at 8, turn
+  the pump on". Required only for metric (on-reading) triggers. With no condition and no
+  actuator action, the run has no triggering device (`rule_executions.device_id` is null).
+- **`execution_policy.strategy = "latch"`** (metric triggers only, no `clear_actions`): fire
+  once, then stay latched until `POST /rules/{id}/reset` (admin) or, if set, `reset_condition`
+  evaluates true. The tree going false never re-arms it. A reset while the condition is still
+  true re-latches only after a fresh `for_duration` hold. The worker keeps the latched set in
+  Redis (`rules:latched`) for `RuleResponse.latched`, and publishes a realtime `rule_latched`
+  event on each change.
+- **`email` action** `{type, to[], subject, body}` — `to` empty falls back to the tenant alert
+  list (same as a notification's email channel, which stays supported). Delivered by the
+  deferred executor with retry, like webhooks.
+
+No migration: strategy and actions are JSONB, and `action_executions.action_type` already
+allowed `email`.

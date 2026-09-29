@@ -489,6 +489,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rules/{rule_id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Rule
+         * @description Re-arm a latched rule (strategy "latch") — publishes a reset request;
+         *     app.worker re-arms the rule's in-memory state and clears `latched`.
+         */
+        post: operations["reset_rule_rules__rule_id__reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rules/{rule_id}/simulate": {
         parameters: {
             query?: never;
@@ -1081,9 +1102,9 @@ export interface components {
              */
             cooldown: number;
             /** Action */
-            action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"]) | null;
+            action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"]) | null;
             /** Actions */
-            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[] | null;
+            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[] | null;
             /**
              * Enabled
              * @default true
@@ -1118,6 +1139,20 @@ export interface components {
             /** Name */
             name?: string | null;
             status?: components["schemas"]["DeviceStatus"] | null;
+        };
+        /** EmailAction */
+        EmailAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "email";
+            /** To */
+            to?: string[];
+            /** Subject */
+            subject: string;
+            /** Body */
+            body: string;
         };
         /** EmqxAuthenticateRequest */
         EmqxAuthenticateRequest: {
@@ -1157,7 +1192,7 @@ export interface components {
              * @default edge
              * @enum {string}
              */
-            strategy: "edge" | "continuous" | "reset_condition";
+            strategy: "edge" | "continuous" | "reset_condition" | "latch";
             /**
              * For Duration
              * @default 0
@@ -1183,7 +1218,7 @@ export interface components {
              * @default edge
              * @enum {string}
              */
-            strategy: "edge" | "continuous" | "reset_condition";
+            strategy: "edge" | "continuous" | "reset_condition" | "latch";
             /**
              * For Duration
              * @default 0
@@ -1436,9 +1471,9 @@ export interface components {
             condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"];
             /** Actions */
-            actions: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[];
+            actions: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[];
             /** Clear Actions */
-            clear_actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[];
+            clear_actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[];
             /** Editor Graph */
             editor_graph?: {
                 [key: string]: unknown;
@@ -1548,6 +1583,11 @@ export interface components {
              */
             created_at: string;
             health: components["schemas"]["RuleHealth"];
+            /**
+             * Latched
+             * @default false
+             */
+            latched: boolean;
             /** Action */
             action: {
                 [key: string]: unknown;
@@ -1596,9 +1636,9 @@ export interface components {
             condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"] | null;
             /** Actions */
-            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[] | null;
+            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[] | null;
             /** Clear Actions */
-            clear_actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[] | null;
+            clear_actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[] | null;
             /** Editor Graph */
             editor_graph?: {
                 [key: string]: unknown;
@@ -1610,7 +1650,7 @@ export interface components {
             /** Cooldown */
             cooldown?: number | null;
             /** Action */
-            action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"]) | null;
+            action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"]) | null;
         };
         /** ScheduleTrigger */
         ScheduleTrigger: {
@@ -3319,6 +3359,40 @@ export interface operations {
         };
     };
     run_rule_rules__rule_id__run_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_rule_rules__rule_id__reset_post: {
         parameters: {
             query?: never;
             header: {
