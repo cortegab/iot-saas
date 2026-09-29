@@ -8,6 +8,7 @@ this module as the "normalization, fork point."
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -123,16 +124,31 @@ async def resolve_device_for_topic(
     return record
 
 
+def reading_time(payload: TelemetryPayload) -> datetime:
+    """The device's own timestamp when it sent one, else server receive time
+    (sub-second). Computed once per reading, at arrival."""
+    if payload.timestamp:
+        return datetime.fromtimestamp(payload.timestamp, tz=UTC)
+    return datetime.now(UTC)
+
+
 async def record_telemetry_direct(
     r: redis.Redis,
     tenant_id: uuid.UUID,
     device_id: uuid.UUID,
     metric: str,
     payload: TelemetryPayload,
+    received_at: datetime,
 ) -> None:
     """Push a normalized telemetry entry onto the Redis stream. Used once the
     caller already knows exactly which device this is (topic resolved via the
     cache, or Basic-auth credentials already verified) — no lookup here.
+
+    `received_at` (from reading_time) is the one timestamp this reading
+    carries everywhere — the stored row and the live WS frame — so the
+    frontend's live cache and REST reads agree on ordering. (Previously the
+    frame floored to whole seconds and the writer re-stamped at flush time,
+    so the UI dropped live frames as "older" than the stored row.)
     """
     await r.xadd(
         TELEMETRY_STREAM,
@@ -141,7 +157,7 @@ async def record_telemetry_direct(
             "device_id": str(device_id),
             "metric": metric,
             "value": str(payload.value),
-            "timestamp": str(payload.timestamp or ""),
+            "timestamp": str(received_at.timestamp()),
         },
     )
     # Live-updates side channel (Phase 4) — separate from the stream above,
@@ -155,6 +171,6 @@ async def record_telemetry_direct(
             "device_id": str(device_id),
             "metric": metric,
             "value": payload.value,
-            "time": payload.timestamp or int(time.time()),
+            "time": received_at.timestamp(),
         },
     )

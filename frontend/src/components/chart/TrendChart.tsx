@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
-import { useApiSWR } from "@/hooks/useApiSWR";
+import useSWR from "swr";
+import { useApi } from "@/hooks/useApi";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -91,29 +92,37 @@ export function TrendChart({
   const resolution = resolutionFor(rangeMs);
   const colors = useThemeColors();
 
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    // Anchors "now" for the query key itself; the actual live-refresh cadence
-    // is SWR's refreshInterval below, not this timer re-rendering.
-    const id = setInterval(() => setNow(Date.now()), 15_000);
-    return () => clearInterval(id);
-  }, []);
-
-  const from = new Date(now - rangeMs).toISOString();
-  const queryKey = `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}&from=${encodeURIComponent(from)}&resolution=${resolution}`;
+  // A stable cache key per (device, metric, window) — not a URL. `from` is
+  // computed at fetch time instead of being baked into the key: a key that
+  // re-anchored to "now" every few seconds minted a fresh cache entry each
+  // time, froze the chart on the previous snapshot while it loaded, and left
+  // useRealtime guessing which of the lingering keys was on screen (it guessed
+  // wrong on every range but 10m). useRealtime matches this exact shape — the
+  // `metric=…&window=…` prefix — to append live frames, so keep them in sync.
+  const encodedMetric = encodeURIComponent(metric);
+  const queryKey = `/devices/${deviceId}/data?metric=${encodedMetric}&window=${rangeMs}&resolution=${resolution}`;
 
   // The reconciling backstop — useRealtime appends each live telemetry frame
   // straight onto this key's `points` (revalidate:false), so the tip moves
   // in real time; this periodic refetch just resnaps to the authoritative
   // series (and, on wider ranges, the bucket averages).
   //
-  // keepPreviousData: `from` re-anchors to "now" every 15s (below), minting a
-  // fresh key each time — without this the chart would blank to a loading
-  // skeleton / "no data" on every re-anchor while that key's first fetch runs.
-  const { data, error, isLoading } = useApiSWR<TelemetryDataResponse>(queryKey, {
-    refreshInterval: rangeMs <= 6 * HOUR ? 20_000 : 60_000,
-    keepPreviousData: true,
-  });
+  // keepPreviousData: switching range or metric changes the key — without this
+  // the chart would blank to a loading skeleton while the new key's first fetch runs.
+  const api = useApi();
+  const { data, error, isLoading } = useSWR<TelemetryDataResponse>(
+    queryKey,
+    () => {
+      const from = new Date(Date.now() - rangeMs).toISOString();
+      return api.get<TelemetryDataResponse>(
+        `/devices/${deviceId}/data?metric=${encodedMetric}&from=${encodeURIComponent(from)}&resolution=${resolution}`,
+      );
+    },
+    {
+      refreshInterval: rangeMs <= 6 * HOUR ? 20_000 : 60_000,
+      keepPreviousData: true,
+    },
+  );
 
   const containerRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);

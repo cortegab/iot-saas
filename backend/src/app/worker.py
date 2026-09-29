@@ -139,9 +139,7 @@ async def handle_message(
         log.warning("dropping telemetry for unknown/inactive device on %s", topic)
         return
 
-    timestamp = (
-        datetime.fromtimestamp(data.timestamp, tz=UTC) if data.timestamp else datetime.now(UTC)
-    )
+    timestamp = ingestion_service.reading_time(data)
 
     # Hot path — in-memory, before the storage-path queue hop below
     # (CLAUDE.md §9 constraint 1).
@@ -157,9 +155,9 @@ async def handle_message(
         timestamp,
     )
 
-    # Storage path (Phase 2, unchanged in behavior).
+    # Storage path — carries the same timestamp the hot path just used.
     await ingestion_service.record_telemetry_direct(
-        r, resolved.tenant_id, resolved.device_id, parsed.metric, data
+        r, resolved.tenant_id, resolved.device_id, parsed.metric, data, timestamp
     )
     log.info("telemetry %s -> value=%s", topic, data.value)
 
@@ -555,7 +553,10 @@ async def _ensure_consumer_group(r: redis.Redis) -> None:
 
 def _row_from_stream_entry(fields: dict[str, str]) -> _TelemetryRow | None:
     try:
-        ts = int(fields["timestamp"]) if fields.get("timestamp") else None
+        # Float epoch seconds (sub-second receive time). Entries queued by an
+        # older worker may be int strings or empty — float() and the now()
+        # fallback cover both.
+        ts = float(fields["timestamp"]) if fields.get("timestamp") else None
         time_value = datetime.fromtimestamp(ts, tz=UTC) if ts else datetime.now(UTC)
         return (
             time_value,
