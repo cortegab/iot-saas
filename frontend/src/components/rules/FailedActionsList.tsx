@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
-import { Table, type TableColumn } from "@/components/ui/Table";
+import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
+import { DataTable, type DataColumn } from "@/components/list/DataTable";
 import { ApiRequestError } from "@/lib/api-client";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
@@ -14,15 +14,15 @@ import type { components } from "@/types/api";
 type FailedActionResponse = components["schemas"]["FailedActionResponse"];
 
 const ACTION_TYPE_LABELS: Record<string, string> = {
-  actuator_command: "Actuator",
+  actuator_command: "Actuator command",
   webhook: "Webhook",
-  notification: "Notification",
+  notification: "In-app notification",
   email: "Email",
   unknown: "Unknown",
 };
 
 function detailSummary(detail: FailedActionResponse["detail"]): string {
-  if (!detail) return "—";
+  if (!detail) return "No details";
   const d = detail as Record<string, unknown>;
   if (typeof d.error === "string") return d.error;
   if (typeof d.reason === "string") return String(d.reason).replace(/_/g, " ");
@@ -31,67 +31,80 @@ function detailSummary(detail: FailedActionResponse["detail"]): string {
 }
 
 /** Tenant-wide "what delivery is broken right now" feed — webhooks/emails that
- * exhausted their retries, unresolvable actuator targets, etc. Modelled on
- * RuleExecutionHistory; refreshed live by useRealtime's rule_execution
- * messages. */
+ * exhausted their retries, unresolvable actuator targets, etc. Refreshed live
+ * by useRealtime's rule_execution messages. */
 export function FailedActionsList() {
-  const { data, error, isLoading, mutate } = useApiSWR<FailedActionResponse[]>(
-    "/rules/failed-actions",
-  );
+  const { data, error, isLoading, mutate } = useApiSWR<FailedActionResponse[]>("/rules/failed-actions");
 
-  if (isLoading) return <LoadingSkeleton rows={4} rowClassName="h-10" />;
   if (error) {
     return (
       <ErrorState
-        message={error instanceof ApiRequestError ? error.message : "Couldn't load failed actions."}
+        title="Couldn't load failed deliveries"
+        message={error instanceof ApiRequestError ? error.message : "The API didn't respond."}
         onRetry={() => void mutate()}
       />
     );
   }
-  if (!data || data.length === 0) {
+  if (isLoading || !data) return <TableSkeleton rows={4} columns={4} />;
+  if (data.length === 0) {
     return (
       <EmptyState
+        icon={<CheckCircle2 aria-hidden size={26} />}
         title="Nothing failed"
-        description="Actions that fail to deliver (a webhook that times out, an email that bounces) show up here."
+        description="Webhook, email and actuator deliveries that fail show up here with the reason."
       />
     );
   }
 
-  const columns: TableColumn<FailedActionResponse>[] = [
+  const columns: DataColumn<FailedActionResponse>[] = [
     {
+      id: "when",
       header: "When",
-      render: (a) => (
-        <span className="text-ink-muted" title={new Date(a.created_at).toLocaleString()}>
+      cell: (a) => (
+        <span className="whitespace-nowrap text-ink-muted" title={new Date(a.created_at).toLocaleString()}>
           {timeAgo(a.created_at)}
         </span>
       ),
     },
     {
+      id: "rule",
       header: "Rule",
-      render: (a) =>
-        a.rule_id ? (
-          <Link href={`/rules/${a.rule_id}`} className="text-accent hover:underline">
-            {a.rule_name ?? "rule"}
-          </Link>
-        ) : (
-          <span className="text-ink-muted">{a.rule_name ?? "(deleted)"}</span>
-        ),
-    },
-    {
-      header: "Action",
-      render: (a) => (
-        <Badge tone="error" label={ACTION_TYPE_LABELS[a.action_type] ?? a.action_type} />
+      cell: (a) => (
+        <div className="flex min-w-0 flex-col">
+          {a.rule_id ? (
+            <Link href={`/rules/${a.rule_id}`} className="font-medium text-ink hover:text-accent hover:underline">
+              {a.rule_name ?? "Rule"}
+            </Link>
+          ) : (
+            <span className="text-ink-muted">{a.rule_name ?? "Deleted rule"}</span>
+          )}
+          {a.summary && <span className="block max-w-[44ch] truncate text-xs text-ink-muted">{a.summary}</span>}
+        </div>
       ),
     },
     {
-      header: "Detail",
-      render: (a) => (
-        <span className="text-ink-muted" title={a.detail ? JSON.stringify(a.detail) : undefined}>
+      id: "action",
+      header: "Action",
+      hideOnPhone: true,
+      cell: (a) => ACTION_TYPE_LABELS[a.action_type] ?? a.action_type,
+    },
+    {
+      id: "error",
+      header: "Error",
+      cell: (a) => (
+        <span className="text-xs text-status-error" title={a.detail ? JSON.stringify(a.detail) : undefined}>
           {detailSummary(a.detail)}
         </span>
       ),
     },
   ];
 
-  return <Table columns={columns} rows={data} rowKey={(a) => a.id} />;
+  return (
+    <div className="flex flex-col gap-2">
+      <DataTable label="Failed deliveries" columns={columns} rows={data} rowKey={(a) => a.id} />
+      <p className="px-0.5 text-xs text-ink-muted">
+        {data.length} failed {data.length === 1 ? "delivery" : "deliveries"}
+      </p>
+    </div>
+  );
 }

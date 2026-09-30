@@ -1,5 +1,9 @@
 import { Fragment } from "react";
 import { cn } from "@/lib/cn";
+import { cronHuman } from "@/lib/schedule";
+import { tzCity } from "@/lib/timezones";
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 import type { components } from "@/types/api";
 
 type ActuatorCommandAction = components["schemas"]["ActuatorCommandAction"];
@@ -230,11 +234,12 @@ function TriggerText({
   deviceNameById?: Record<string, string>;
 }) {
   if (trigger.type === "schedule") {
-    const tz = typeof trigger.timezone === "string" && trigger.timezone !== "UTC" ? ` ${trigger.timezone}` : " UTC";
+    const zone = typeof trigger.timezone === "string" ? trigger.timezone : "UTC";
+    // DESIGN.md §9.5: one plain wording for schedules everywhere.
     return (
       <>
-        On schedule <Value placeholder={placeholder}>{String(trigger.cron ?? "")}</Value>
-        {tz}
+        <Value placeholder={placeholder}>{capitalize(cronHuman(String(trigger.cron ?? "")))}</Value> (
+        {tzCity(zone)})
       </>
     );
   }
