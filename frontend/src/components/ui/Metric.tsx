@@ -21,7 +21,7 @@ export function Metric({ label, value, hint, accent = false, className }: Metric
   return (
     <div
       className={cn(
-        "rounded-xl border border-border border-t-panel-edge bg-surface p-3",
+        "rounded-xl border border-border shadow-card bg-surface p-3",
         className,
       )}
     >

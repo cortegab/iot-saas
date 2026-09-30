@@ -38,7 +38,7 @@ export interface ComboboxProps {
   renderValue?: (value: string) => string;
 }
 
-const PANEL_CLASS = "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-lg";
+const PANEL_CLASS = "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-pop shadow-pop";
 
 /** A select-only combobox with an inline filter (ARIA 1.2 "select-only
  * combobox" pattern). Borrows `DropdownMenu`'s portal + fixed-from-trigger-rect

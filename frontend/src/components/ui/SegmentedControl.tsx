@@ -25,7 +25,7 @@ const BUTTON_BASE =
 
 const VARIANT = {
   subtle: {
-    active: "border border-border bg-surface-raised text-ink shadow-sm",
+    active: "border border-border bg-surface text-ink shadow-card",
     inactive: "text-ink-muted hover:text-ink",
   },
   solid: {
