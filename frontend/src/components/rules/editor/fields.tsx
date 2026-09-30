@@ -242,7 +242,7 @@ export function WhenFields({
                 <Button
                   key={p.cron}
                   type="button"
-                  variant="ghost"
+                  variant="link"
                   className="h-6 px-2 text-xs"
                   onClick={() => onChange({ ...when, cron: p.cron })}
                 >
@@ -413,7 +413,7 @@ export function ContactFields({
         <div className="flex flex-col gap-2">
           <Button
             type="button"
-            variant="ghost"
+            variant="link"
             className="self-start text-xs"
             onClick={() => onChange({ rhsKind: contact.rhsKind === "metric" ? "static" : "metric" })}
           >

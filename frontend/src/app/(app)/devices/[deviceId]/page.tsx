@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuthContext } from "@/lib/auth-context";
+import { SecretReveal } from "@/components/ui/SecretReveal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -408,7 +409,7 @@ function OnboardingCode({
   if (!open || !credential) {
     return (
       <>
-        <Button type="button" variant="ghost" disabled={busy} onClick={() => void generate()}>
+        <Button type="button" variant="link" disabled={busy} onClick={() => void generate()}>
           {busy ? "Rotating…" : "Generate onboarding code"}
         </Button>
         {dialog}
@@ -439,7 +440,7 @@ function OnboardingCode({
       <div className="flex gap-3">
         <Button
           type="button"
-          variant="ghost"
+          variant="link"
           onClick={() => void navigator.clipboard.writeText(sketch).then(() => setCopied(true))}
         >
           {copied ? "Copied" : "Copy sketch"}
@@ -683,7 +684,7 @@ export default function DeviceDetailPage() {
                 <span className="text-sm text-ink">{device.name}</span>
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="link"
                   onClick={() => {
                     setName(device.name);
                     setRenaming(true);
@@ -698,7 +699,7 @@ export default function DeviceDetailPage() {
           <FieldRow label="Status">
             <div className="flex items-center gap-3">
               <span className="text-sm capitalize text-ink">{device.status}</span>
-              <Button type="button" variant="ghost" disabled={busy} onClick={() => void toggleStatus()}>
+              <Button type="button" variant="link" disabled={busy} onClick={() => void toggleStatus()}>
                 {device.status === "active" ? "Disable" : "Enable"}
               </Button>
             </div>
@@ -706,13 +707,15 @@ export default function DeviceDetailPage() {
 
           <FieldRow label="Credential">
             {rotated ? (
-              <div className="rounded-xl border border-status-pending/40 bg-status-pending-surface p-3 text-sm">
-                <p className="font-medium text-ink">Copy this now — it will not be shown again.</p>
-                <p className="mt-1 font-mono text-ink">{rotated.username}</p>
-                <p className="font-mono text-ink">{rotated.password}</p>
-              </div>
+              <SecretReveal
+                fields={[
+                  { label: "username", value: rotated.username },
+                  { label: "password", value: rotated.password, secret: true },
+                ]}
+                copyLabel="Copy credential"
+              />
             ) : (
-              <Button type="button" variant="ghost" disabled={busy} onClick={() => void rotateCredential()}>
+              <Button type="button" variant="link" disabled={busy} onClick={() => void rotateCredential()}>
                 Rotate credential
               </Button>
             )}

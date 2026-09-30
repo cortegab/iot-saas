@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
+import { ToastProvider } from "@/components/ui/Toast";
 
 /* Type system (docs/design/DESIGN.md §3): Geist for display, UI and readouts;
  * Geist Mono for keys, topics, payloads and times in chips. Exposed as CSS vars
@@ -39,7 +40,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             won't hoist an inline script, and a <script> child of <html> is
             invalid — <body> is the correct spot in the App Router. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <ToastProvider>{children}</ToastProvider>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -66,7 +66,7 @@ function ContactCard({
   return (
     <div className="flex flex-col gap-2 rounded-lg border border-border bg-surface p-3">
       <ContactFields contact={contact} catalog={catalog} onChange={onChange} />
-      <Button type="button" variant="ghost" className="self-end text-xs" onClick={onRemove}>
+      <Button type="button" variant="link" className="self-end text-xs" onClick={onRemove}>
         <Trash2 size={13} aria-hidden /> Remove condition
       </Button>
     </div>
@@ -135,7 +135,7 @@ function ConditionNodeEditor({
         {depth > 0 && (
           <Button
             type="button"
-            variant="ghost"
+            variant="link"
             className="ml-auto text-xs"
             onClick={() => setCondition(removeNode(draft.condition, group.id))}
           >
@@ -156,10 +156,10 @@ function ConditionNodeEditor({
         </Fragment>
       ))}
       <div className="flex flex-wrap gap-1.5">
-        <Button type="button" variant="ghost" onClick={addContact}>
+        <Button type="button" variant="link" onClick={addContact}>
           <Plus size={14} aria-hidden /> Condition
         </Button>
-        <Button type="button" variant="ghost" onClick={addGroup}>
+        <Button type="button" variant="link" onClick={addGroup}>
           <Plus size={14} aria-hidden /> {OP_WORDS[group.op === "AND" ? "OR" : "AND"]} group
         </Button>
       </div>
@@ -181,7 +181,7 @@ function ConditionSection({ draft, catalog, update }: { draft: RuleDraft; catalo
         </p>
         <Button
           type="button"
-          variant="ghost"
+          variant="link"
           className="self-start"
           onClick={() => update({ ...draft, condition: emptyContact(device) })}
         >
@@ -200,7 +200,7 @@ function ConditionSection({ draft, catalog, update }: { draft: RuleDraft; catalo
             <Button
               key={op}
               type="button"
-              variant="ghost"
+              variant="link"
               onClick={() =>
                 update({ ...draft, condition: insertBeside(root, root.id, emptyContact(device), op) })
               }
@@ -240,7 +240,7 @@ function ThenSection({ draft, catalog, update }: { draft: RuleDraft; catalog: Ru
               </span>
               <Button
                 type="button"
-                variant="ghost"
+                variant="link"
                 className="text-xs"
                 disabled={draft.actions.length === 1 && draft.preserved.actions.length === 0}
                 onClick={() => setActions(draft.actions.filter((_, j) => j !== i))}
