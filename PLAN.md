@@ -323,6 +323,7 @@ data — in under 10 minutes. This is the product's north star from the original
 - **Rule editor UI** — threshold builder with plain-language preview
 - Manual actuator control (buttons/toggles) with live state feedback
 - **Onboarding flow:** copy-paste ESP32 firmware with credentials pre-filled
+- UI design and patterns: `docs/design/DESIGN.md` (supersedes the UI bullets here)
 
 ### Manual installation
 
