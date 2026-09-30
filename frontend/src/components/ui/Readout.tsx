@@ -25,8 +25,9 @@ function pct(value: number, min: number, max: number): number {
 /**
  * The signature metric display: a large tabular value with a linear gauge that
  * places it between its min and max, with the rule threshold notched on the
- * track. This is the "instrument readout" the Control Room identity is built
- * around — used for the device hero metric, readings tiles, and value widgets.
+ * track (DESIGN.md §5 "Readout / Metric": Geist, tabular-nums, unit in muted,
+ * stale values dim) — used for the device hero metric, readings tiles, and
+ * value widgets.
  */
 export function Readout({
   label,

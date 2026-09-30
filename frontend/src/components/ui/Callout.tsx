@@ -6,8 +6,8 @@ export type CalloutTone = "info" | "warning";
 
 export interface CalloutProps {
   children: ReactNode;
-  /** `info` (default) — ambient help, brass tint. `warning` — a caution the
-   * author should read, pending-amber tint. */
+  /** `info` (default) — ambient help, accent-muted tint. `warning` — a caution
+   * the author should read, pending-surface tint. */
   tone?: CalloutTone;
   /** Leading icon. Default on. */
   icon?: boolean;

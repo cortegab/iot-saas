@@ -71,7 +71,7 @@ export function ConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-label={title ?? confirmLabel}
-        className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface p-4 shadow-lg"
+        className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-pop p-4 shadow-pop"
       >
         {title && <p className="text-sm font-medium text-ink">{title}</p>}
         <p className={cn("text-sm text-ink-muted", title && "mt-1")}>{message}</p>
@@ -91,7 +91,7 @@ export function ConfirmDialog({
             className={cn(
               "rounded-md border px-3 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
               danger
-                ? "border-status-error bg-status-error text-white hover:bg-status-error/90"
+                ? "border-status-error bg-status-error text-on-accent hover:bg-status-error/90"
                 : "border-accent bg-accent text-on-accent hover:bg-accent-strong hover:border-accent-strong",
             )}
           >

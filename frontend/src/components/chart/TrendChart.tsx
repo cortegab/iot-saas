@@ -46,10 +46,17 @@ export interface ChartThreshold {
 
 /** Reads a CSS custom property's resolved value so canvas drawing (which
  * cannot resolve var(...) itself) stays in sync with the active theme —
- * dark is the default, `.light` on <html> is the full peer theme
+ * light is the default, `.dark` on <html> is the full peer theme
  * (globals.css) — without hard-coding either palette here. */
 function useThemeColors() {
-  const [colors, setColors] = useState({ ink: "", inkMuted: "", border: "", chart: "", threshold: "" });
+  const [colors, setColors] = useState({
+    ink: "",
+    inkMuted: "",
+    border: "",
+    chart: "",
+    threshold: "",
+    mono: "",
+  });
 
   useEffect(() => {
     const read = () => {
@@ -62,6 +69,8 @@ function useThemeColors() {
         // colour, so a breached level stays legible against the trace.
         chart: style.getPropertyValue("--color-chart").trim(),
         threshold: style.getPropertyValue("--color-status-offline").trim(),
+        // next/font's generated family list for Geist Mono.
+        mono: style.getPropertyValue("--ff-mono").trim(),
       });
     };
     read();
@@ -146,7 +155,7 @@ export function TrendChart({
     const drawThresholds: uPlot.Hooks.Defs["draw"] = (u) => {
       const { ctx } = u;
       ctx.save();
-      ctx.font = '11px "IBM Plex Mono", ui-monospace, monospace';
+      ctx.font = `11px ${colors.mono ? `${colors.mono}, ` : ""}ui-monospace, monospace`;
       for (const t of thresholds) {
         const y = u.valToPos(t.value, "y", true);
         if (y < u.bbox.top || y > u.bbox.top + u.bbox.height) continue;
@@ -271,7 +280,7 @@ export function TrendChart({
         className={
           points.length === 0
             ? "hidden"
-            : `min-w-0 overflow-hidden rounded-xl border border-border border-t-panel-edge bg-surface p-2 ${
+            : `min-w-0 overflow-hidden rounded-xl border border-border shadow-card bg-surface p-2 ${
                 fillHeight ? "min-h-0 flex-1" : ""
               }`
         }

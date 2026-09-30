@@ -1,13 +1,12 @@
 /*
- * Landing page (iodriven.tech). Renders in the app's "Control Room" theme —
- * every colour here is an alias onto a `globals.css` token, so the page follows
- * the `.light` toggle / OS preference like the rest of the app and the hand-off
- * to /login is seamless. The `.mkt` scope is kept only to isolate this page's
- * marketing-scale *layout* (hero sizing, section rhythm, the instrument panel),
- * not a separate palette.
+ * Landing page (iodriven.tech). Uses the app's tokens (docs/design/DESIGN.md §3,
+ * §10) — every colour here is an alias onto a `globals.css` token, so the page
+ * follows the `.dark` toggle / OS preference like the rest of the app and the
+ * hand-off to /login is seamless. The `.mkt` scope only isolates this page's
+ * marketing-scale *layout*, not a separate palette.
  *
- * The app's two accent roles are honoured: `--signal` (= --color-accent, brass)
- * is UI chrome only; the live trace uses `--color-chart` (instrument orange).
+ * The app's two accent roles are honoured: `--signal` (= --color-accent) is UI
+ * chrome only; the live trace uses `--color-chart` (data only).
  */
 
 .mkt {
@@ -15,14 +14,14 @@
   --panel: var(--color-surface);
   --panel-2: var(--color-surface-raised);
   --line: var(--color-border);
-  --line-soft: var(--color-panel-edge); /* instrument graticule — softer than the border */
+  --line-soft: var(--color-border-soft); /* instrument graticule — softer than the border */
   --ink: var(--color-ink);
   --ink-dim: var(--color-ink-muted);
   --signal: var(--color-accent); /* chrome: links, buttons, eyebrow //, .seg, card h3, hot-path */
   --armed: var(--color-status-online); /* relay ON, re-arm line, status dot, payload */
   --breach: var(--color-status-offline); /* threshold line, breach value/head */
 
-  --font-display: var(--ff-display), "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--ff-sans), ui-sans-serif, system-ui, sans-serif;
   --font-body: var(--ff-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--ff-mono), ui-monospace, "SFMono-Regular", monospace;
 
@@ -262,7 +261,7 @@
 }
 .mkt-scope .trace {
   fill: none;
-  stroke: var(--color-chart); /* live data — instrument orange, not the brass chrome accent */
+  stroke: var(--color-chart); /* live data — the data colour, never the chrome accent */
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
