@@ -30,6 +30,29 @@ export interface PageHeaderProps {
   monoTitle?: boolean;
 }
 
+/** A breadcrumb trail on its own (for pages whose H1 lives elsewhere, e.g. a
+ * full-page editor). */
+export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
+  return (
+    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-[13px] text-ink-muted">
+      {crumbs.map((crumb, i) => (
+        <span key={i} className="flex items-center gap-1.5">
+          {i > 0 && <ChevronRight aria-hidden size={13} className="opacity-60" />}
+          {crumb.href ? (
+            <Link href={crumb.href} className="hover:text-accent">
+              {crumb.label}
+            </Link>
+          ) : (
+            <span aria-current="page" className="text-ink">
+              {crumb.label}
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}
+
 /** DESIGN.md §4 page header: breadcrumbs, an overline and status pill where
  * relevant, an H1, a one-line description, a meta row, and actions on the
  * right. */
@@ -49,24 +72,7 @@ export function PageHeader({
   const desc = description ?? subtitle;
   return (
     <header className="flex flex-col gap-2">
-      {crumbs && crumbs.length > 0 && (
-        <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-[13px] text-ink-muted">
-          {crumbs.map((crumb, i) => (
-            <span key={i} className="flex items-center gap-1.5">
-              {i > 0 && <ChevronRight aria-hidden size={13} className="opacity-60" />}
-              {crumb.href ? (
-                <Link href={crumb.href} className="hover:text-accent">
-                  {crumb.label}
-                </Link>
-              ) : (
-                <span aria-current="page" className="text-ink">
-                  {crumb.label}
-                </span>
-              )}
-            </span>
-          ))}
-        </nav>
-      )}
+      {crumbs && crumbs.length > 0 && <Breadcrumbs crumbs={crumbs} />}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           {(eyebrow || status) && (
