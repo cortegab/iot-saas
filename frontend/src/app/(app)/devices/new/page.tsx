@@ -105,7 +105,9 @@ export default function NewDevicePage() {
   const searchParams = useSearchParams();
   const prefillCatalogEntryId = searchParams.get("catalog_entry_id");
   const prefillName = searchParams.get("name");
-  const { data: catalogEntries } = useApiSWR<CatalogEntryResponse[]>("/catalog");
+  const { data: allEntries } = useApiSWR<CatalogEntryResponse[]>("/catalog");
+  // Disabled templates can't be picked for new devices (DESIGN.md §8).
+  const catalogEntries = allEntries?.filter((e) => e.status === "active");
   const [name, setName] = useState(prefillName ?? "");
   const [catalogEntryId, setCatalogEntryId] = useState(prefillCatalogEntryId ?? "");
   const [error, setError] = useState<string | null>(null);

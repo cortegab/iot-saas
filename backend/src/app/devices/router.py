@@ -96,6 +96,11 @@ async def create_device(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Catalog entry not found"
         ) from exc
+    except catalog_service.CatalogEntryDisabledError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This device template is disabled. Enable it or pick another template.",
+        ) from exc
     tenant_slug = await tenants_service.get_tenant_slug(session, ctx.tenant_id)
     return DeviceCreateResponse(
         device=_to_response(device),
