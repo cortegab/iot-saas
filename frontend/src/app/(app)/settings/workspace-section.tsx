@@ -162,16 +162,18 @@ function AccountSection() {
   );
 }
 
-export default function OrganizationSettingsPage() {
+export default function WorkspaceSection() {
   return (
     <div className="flex flex-col gap-6">
       <Section title="Workspace">
         <OrganizationSection />
       </Section>
 
-      <Section title="Your account">
-        <AccountSection />
-      </Section>
+      <div id="profile" className="scroll-mt-6">
+        <Section title="Your account">
+          <AccountSection />
+        </Section>
+      </div>
     </div>
   );
 }
