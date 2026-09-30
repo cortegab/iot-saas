@@ -22,6 +22,7 @@ from app.realtime.router import router as realtime_router
 from app.rules.router import router as rules_router
 from app.telemetry.router import router as telemetry_router
 from app.tenants.router import router as tenants_router
+from app.zones.router import router as zones_router
 
 configure_logging()
 
@@ -49,6 +50,7 @@ app.include_router(commands_router)
 app.include_router(dashboards_router)
 app.include_router(realtime_router)
 app.include_router(notifications_router)
+app.include_router(zones_router)
 
 
 @app.get("/")

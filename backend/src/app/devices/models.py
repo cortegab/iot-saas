@@ -44,6 +44,11 @@ class Device(Base):
     catalog_entry_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("device_catalog_entries.id"), nullable=False
     )
+    # Where it's installed (app.zones) — optional, set from the device's own
+    # settings. RESTRICT: a zone with devices can't be deleted.
+    zone_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("zones.id", ondelete="RESTRICT"), nullable=True
+    )
     name: Mapped[str] = mapped_column(nullable=False)
     slug: Mapped[str] = mapped_column(nullable=False)
     token_hash: Mapped[str] = mapped_column(nullable=False)
