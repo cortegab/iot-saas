@@ -6,8 +6,9 @@ import Link from "next/link";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { SecretReveal } from "@/components/ui/SecretReveal";
 import { Badge } from "@/components/ui/Badge";
-import { Button, buttonClassName } from "@/components/ui/Button";
+import { buttonClassName } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ConnectionBadge } from "@/components/ui/ConnectionBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -151,29 +152,15 @@ export default function DevicesPage() {
       />
 
       {revealed && (
-        <div className="rounded-xl border border-status-pending/40 bg-status-pending-surface p-4">
-          <p className="text-sm font-medium text-ink">
-            New credential for {revealed.deviceName} — copy it now, it will not be shown again.
-          </p>
-          <p className="mt-1 font-mono text-sm text-ink">{revealed.credential.username}</p>
-          <p className="font-mono text-sm text-ink">{revealed.credential.password}</p>
-          <div className="mt-2 flex gap-3">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() =>
-                void navigator.clipboard.writeText(
-                  `username: ${revealed.credential.username}\npassword: ${revealed.credential.password}`,
-                )
-              }
-            >
-              Copy
-            </Button>
-            <button type="button" onClick={() => setRevealed(null)} className="text-sm text-ink-muted">
-              Dismiss
-            </button>
-          </div>
-        </div>
+        <SecretReveal
+          title={`New credential for ${revealed.deviceName}`}
+          fields={[
+            { label: "username", value: revealed.credential.username },
+            { label: "password", value: revealed.credential.password, secret: true },
+          ]}
+          copyLabel="Copy credential"
+          onDismiss={() => setRevealed(null)}
+        />
       )}
 
       {devices && devices.length > 0 && (
@@ -230,7 +217,7 @@ export default function DevicesPage() {
           title="No devices yet"
           description="Register your first device to start seeing live data."
           action={
-            <Link href="/devices/new" className={buttonClassName({ variant: "ghost" })}>
+            <Link href="/devices/new" className={buttonClassName({ variant: "link" })}>
               Add your first device →
             </Link>
           }

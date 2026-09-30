@@ -182,13 +182,13 @@ export function RuleSimulatePanel({ rule }: { rule: RuleResponse }) {
           {signals.length > 0 && (
             <Button
               type="button"
-              variant="ghost"
+              variant="link"
               onClick={() => setShowOverrides((v) => !v)}
             >
               What if…
             </Button>
           )}
-          <Button type="button" variant="ghost" onClick={() => setShowReplay((v) => !v)}>
+          <Button type="button" variant="link" onClick={() => setShowReplay((v) => !v)}>
             Replay history
           </Button>
         </div>

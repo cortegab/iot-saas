@@ -101,7 +101,7 @@ export default function NotificationsPage() {
         title="Notifications"
         actions={
           unreadCount > 0 && (
-            <Button type="button" variant="ghost" onClick={() => void markAllRead()}>
+            <Button type="button" variant="link" onClick={() => void markAllRead()}>
               Mark all as read
             </Button>
           )

@@ -6,22 +6,27 @@ export interface TableNameCellProps {
   name: ReactNode;
   /** Muted second line — a count summary, a timestamp, an owning entity. */
   sublabel?: ReactNode;
-  /** Rendered inline right after the name, inside the link (e.g. a "Legacy"
-   * badge). */
+  /** Rendered inline right after the name (e.g. a "Legacy" tag). */
   trailing?: ReactNode;
 }
 
-/** The standard first cell of a records table: a bold accent-hover link to the
- * record, with an optional muted descriptive line beneath it. Keeps every list
- * (`/devices`, `/dashboards`, `/devices/templates`, …) on the same row shape. */
+/** The standard first cell of a records table (DESIGN.md §6): the record name
+ * as a link, with an optional muted secondary line beneath it. */
 export function TableNameCell({ href, name, sublabel, trailing }: TableNameCellProps) {
   return (
-    <div className="flex flex-col">
-      <Link href={href} className="font-medium text-ink hover:text-accent">
-        {name}
+    <div className="flex min-w-0 flex-col">
+      <span className="flex items-center gap-2">
+        <Link
+          href={href}
+          className="font-medium text-ink underline-offset-[3px] hover:text-accent hover:underline"
+        >
+          {name}
+        </Link>
         {trailing}
-      </Link>
-      {sublabel != null && <span className="mt-0.5 text-xs text-ink-muted">{sublabel}</span>}
+      </span>
+      {sublabel != null && (
+        <span className="block max-w-[44ch] truncate text-xs text-ink-muted">{sublabel}</span>
+      )}
     </div>
   );
 }

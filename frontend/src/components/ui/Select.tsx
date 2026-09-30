@@ -1,18 +1,13 @@
 import { forwardRef, type SelectHTMLAttributes } from "react";
 import { cn } from "@/lib/cn";
-
-const BASE =
-  "rounded-md border border-border bg-surface-raised text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:opacity-60";
-
-const SIZE_CLASSES = {
-  default: "px-3 py-2",
-  compact: "px-3 py-1.5 text-sm",
-};
+import { CONTROL_BASE, CONTROL_SIZE } from "@/components/ui/Input";
 
 export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
   compact?: boolean;
 }
 
+/** Native select in the shared control recipe; `.ui-select` (globals.css)
+ * swaps the OS arrow for the design's chevron. */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
   { compact = false, className, children, ...props },
   ref,
@@ -20,7 +15,12 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
   return (
     <select
       ref={ref}
-      className={cn(BASE, compact ? SIZE_CLASSES.compact : SIZE_CLASSES.default, className)}
+      className={cn(
+        CONTROL_BASE,
+        compact ? CONTROL_SIZE.compact : CONTROL_SIZE.default,
+        "ui-select pr-8",
+        className,
+      )}
       {...props}
     >
       {children}

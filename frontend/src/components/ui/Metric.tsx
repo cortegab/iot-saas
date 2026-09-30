@@ -6,29 +6,21 @@ export interface MetricProps {
   value: ReactNode;
   /** Small note under the value — a unit, a timestamp, a delta. */
   hint?: ReactNode;
-  /** Render the value in the chart/instrument color instead of ink (use for a
-   * screen's primary reading). */
+  /** Render the value in the data colour instead of ink (a screen's primary
+   * reading). */
   accent?: boolean;
   className?: string;
 }
 
-/**
- * A compact metric tile — the panel-card version of the readings/value display
- * repeated ad hoc as `<Card padding="sm"><dt/><dd/>`. Drop several into a
- * `grid` or `flex-wrap` container.
- */
+/** A compact metric tile (DESIGN.md §5 Readout / Metric): Geist, tabular
+ * figures, muted label. Drop several into a `grid` or `flex-wrap`. */
 export function Metric({ label, value, hint, accent = false, className }: MetricProps) {
   return (
-    <div
-      className={cn(
-        "rounded-xl border border-border shadow-card bg-surface p-3",
-        className,
-      )}
-    >
-      <p className="font-mono text-xs uppercase tracking-wide text-ink-muted">{label}</p>
+    <div className={cn("min-w-0 rounded-xl border border-border bg-surface p-3.5 shadow-card", className)}>
+      <p className="text-xs text-ink-muted">{label}</p>
       <p
         className={cn(
-          "mt-1 font-mono text-lg font-semibold tabular-nums",
+          "mt-1 text-xl font-semibold tabular-nums tracking-[-0.02em]",
           accent ? "text-chart" : "text-ink",
         )}
       >

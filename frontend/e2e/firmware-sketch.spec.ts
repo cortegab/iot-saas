@@ -48,8 +48,11 @@ test("generating onboarding code rotates the credential and embeds it", async ({
   await expect(sketch).toContainText("setBufferSize(1024)");
   await expect(sketch).toContainText('TOPIC_STATUS, 1, true');
 
-  // The Credential row shows the same freshly rotated secret the sketch embeds.
+  // The Credential row shows the same freshly rotated secret the sketch embeds
+  // (masked until "Show" is pressed).
   const password = (await sketch.innerText()).match(/MQTT_PASSWORD = "([^"]+)"/)?.[1];
   expect(password).toBeTruthy();
-  await expect(page.getByText(password!, { exact: true })).toBeVisible();
+  const reveal = page.getByRole("region", { name: "One-time secret" });
+  await reveal.getByRole("button", { name: "Show" }).click();
+  await expect(reveal.getByText(password!, { exact: true })).toBeVisible();
 });

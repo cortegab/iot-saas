@@ -10,10 +10,14 @@ export interface DropdownMenuItem {
   onClick: () => void;
   danger?: boolean;
   disabled?: boolean;
+  /** Leading icon (lucide, size 15). */
+  icon?: ReactNode;
+  /** Small second line, e.g. why an item is disabled. */
+  hint?: string;
 }
 
 const DEFAULT_TRIGGER_CLASSNAME =
-  "rounded-md p-1.5 text-ink-muted hover:bg-surface-raised hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "inline-grid h-[30px] w-[30px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink";
 
 const FOCUSABLE_SELECTOR = 'button:not(:disabled), [href], [tabindex]:not([tabindex="-1"])';
 
@@ -35,7 +39,7 @@ export function DropdownMenu({
   label = "Actions",
   trigger,
   triggerClassName = DEFAULT_TRIGGER_CLASSNAME,
-  panelClassName = "w-48 p-1",
+  panelClassName = "min-w-[200px] p-1",
   align = "end",
 }: {
   groups?: DropdownMenuItem[][];
@@ -108,7 +112,6 @@ export function DropdownMenu({
     }
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   return (
@@ -132,14 +135,14 @@ export function DropdownMenu({
               type="button"
               aria-label="Close menu"
               onClick={close}
-              className="fixed inset-0 z-40 cursor-default"
+              className="fixed inset-0 z-[84] cursor-default"
             />
             <div
               ref={panelRef}
               role={children ? undefined : "menu"}
               tabIndex={-1}
               style={align === "start" ? { top: coords.top, left: coords.left } : { top: coords.top, right: coords.right }}
-              className={cn("fixed z-50 rounded-xl border border-border bg-pop shadow-pop", panelClassName)}
+              className={cn("fixed z-[85] rounded-xl border border-border bg-pop shadow-pop", panelClassName)}
             >
               {children ??
                 groups?.map((items, gi) => (
@@ -155,13 +158,23 @@ export function DropdownMenu({
                           item.onClick();
                         }}
                         className={cn(
-                          "flex w-full items-center rounded-md px-3 py-1.5 text-left text-sm transition-colors duration-150 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+                          "flex w-full flex-wrap items-center gap-[9px] rounded-md px-2.5 py-[7px] text-left text-sm transition-colors duration-150 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50",
                           item.danger
-                            ? "text-status-error hover:bg-status-error-surface"
-                            : "text-ink hover:bg-surface-raised",
+                            ? "text-status-error hover:bg-status-error-surface focus-visible:bg-status-error-surface"
+                            : "text-ink hover:bg-surface-raised focus-visible:bg-surface-raised",
                         )}
                       >
+                        {item.icon && (
+                          <span aria-hidden className={cn("grid", item.danger ? "text-status-error" : "text-ink-muted")}>
+                            {item.icon}
+                          </span>
+                        )}
                         {item.label}
+                        {item.hint && (
+                          <small className={cn("-mt-0.5 basis-full text-[11px] text-ink-muted", item.icon && "pl-6")}>
+                            {item.hint}
+                          </small>
+                        )}
                       </button>
                     ))}
                   </div>
