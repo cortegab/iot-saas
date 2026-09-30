@@ -73,6 +73,20 @@ class CatalogEntryUpdateRequest(BaseModel):
     status: CatalogEntryStatus | None = None
 
 
+class KeyUsageResponse(BaseModel):
+    rules: int
+    widgets: int
+
+
+class CatalogUsageResponse(BaseModel):
+    """Per-key usage across the devices built from an entry — drives the
+    editor's rename/remove warnings and key locks."""
+
+    devices: int
+    metrics: dict[str, KeyUsageResponse]
+    actuators: dict[str, KeyUsageResponse]
+
+
 class CatalogEntryResponse(BaseModel):
     id: uuid.UUID
     name: str

@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import uuid
+from collections import Counter
 from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, NamedTuple
@@ -511,6 +512,48 @@ async def list_all_rules(session: AsyncSession, tenant_id: uuid.UUID) -> list[Ru
         select(Rule).where(Rule.tenant_id == tenant_id).order_by(Rule.name)
     )
     return list(result.scalars().all())
+
+
+async def count_key_usage(
+    session: AsyncSession, tenant_id: uuid.UUID, device_ids: list[uuid.UUID]
+) -> tuple[Counter[str], Counter[str]]:
+    """How many rules read each metric key / command each actuator key on
+    any of `device_ids` — for the catalog editor's rename and delete
+    warnings. Each rule counts at most once per key. Read-only, API side.
+    """
+    metric_rules: Counter[str] = Counter()
+    actuator_rules: Counter[str] = Counter()
+    if not device_ids:
+        return metric_rules, actuator_rules
+    wanted = {str(d) for d in device_ids}
+    result = await session.execute(
+        select(Rule).where(
+            Rule.tenant_id == tenant_id,
+            Rule.id.in_(select(RuleDevice.rule_id).where(RuleDevice.device_id.in_(device_ids))),
+        )
+    )
+    for rule in result.scalars().unique().all():
+        metrics: set[str] = set()
+        for leaf in _condition_leaves(rule.condition):
+            if str(leaf.get("device_id")) in wanted and leaf.get("metric"):
+                metrics.add(str(leaf["metric"]))
+            rhs = leaf.get("rhs") or {}
+            if (
+                rhs.get("source") == "metric"
+                and str(rhs.get("device_id")) in wanted
+                and rhs.get("metric")
+            ):
+                metrics.add(str(rhs["metric"]))
+        actuators: set[str] = set()
+        for action in [*rule.actions, *(rule.clear_actions or [])]:
+            if action.get("type") != "actuator_command" or not action.get("actuator"):
+                continue
+            # An action without its own device_id targets the rule's device.
+            if action.get("device_id") is None or str(action["device_id"]) in wanted:
+                actuators.add(str(action["actuator"]))
+        metric_rules.update(metrics)
+        actuator_rules.update(actuators)
+    return metric_rules, actuator_rules
 
 
 async def update_rule(

@@ -6,6 +6,7 @@ Every function takes tenant_id explicitly — RLS enforces the tenant boundary
 """
 
 import json
+import re
 import uuid
 from typing import Any, NamedTuple
 
@@ -78,6 +79,26 @@ class ReservedMetricKeyError(Exception):
     """
 
 
+class InvalidKeyError(Exception):
+    """Raised when an author-supplied `key` isn't a safe MQTT topic segment —
+    `/` would split the topic and `+`/`#` are MQTT wildcards (CLAUDE.md §4).
+    """
+
+
+class CatalogEntryDisabledError(Exception):
+    """Raised when a device is created against a disabled catalog entry —
+    disabled templates can't be picked for new devices (DESIGN.md §8)."""
+
+
+# A key is one MQTT topic segment: letters, digits, `-` (the kebab-case
+# convention auto-derived keys use) or `_`, up to 64 characters. That rules
+# out `/` (splits the topic), `+`/`#` (wildcards), whitespace and a leading
+# `$` (broker-reserved). Case is kept as authored — it must match topics on
+# already-flashed devices (CLAUDE.md §4). Keys already stored on an entry are
+# grandfathered so older templates stay editable.
+KEY_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+
+
 def _normalize_keyed_items(
     items: list[dict[str, Any]], *, fallback_prefix: str
 ) -> list[dict[str, Any]]:
@@ -104,7 +125,7 @@ def _normalize_keyed_items(
         item = dict(raw_item)
         key = item.get("key")
         if not key:
-            base = slugify(item.get("name") or "", fallback=f"{fallback_prefix}-{i + 1}")
+            base = slugify(item.get("name") or "", fallback=f"{fallback_prefix}-{i + 1}")[:60]
             candidate = base
             suffix = 1
             while candidate.lower() in used:
@@ -116,17 +137,37 @@ def _normalize_keyed_items(
     return normalized
 
 
-def _normalize_metrics(metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _keys_of(items: list[dict[str, Any]]) -> frozenset[str]:
+    return frozenset(k for k in (i.get("key") for i in items) if isinstance(k, str) and k)
+
+
+def _check_key_formats(items: list[dict[str, Any]], existing_keys: frozenset[str]) -> None:
+    for item in items:
+        key = item.get("key")
+        if isinstance(key, str) and key not in existing_keys and not KEY_PATTERN.match(key):
+            raise InvalidKeyError(key)
+
+
+def _normalize_metrics(
+    metrics: list[dict[str, Any]], existing_keys: frozenset[str] = frozenset()
+) -> list[dict[str, Any]]:
     normalized = _normalize_keyed_items(metrics, fallback_prefix="metric")
     for item in normalized:
         key = item.get("key")
         if isinstance(key, str) and key.strip().lower() in RESERVED_METRIC_KEYS:
             raise ReservedMetricKeyError(key)
+    _check_key_formats(normalized, existing_keys)
     return normalized
 
 
-def _normalize_actuators(actuators: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    return _normalize_keyed_items(actuators, fallback_prefix="actuator")
+def _normalize_actuators(
+    actuators: list[dict[str, Any]], existing_keys: frozenset[str] = frozenset()
+) -> list[dict[str, Any]]:
+    # Actuator keys live under .../cmd|state|ack/{key} (4 segments), so they
+    # can't collide with the reserved 3-segment status/config topics.
+    normalized = _normalize_keyed_items(actuators, fallback_prefix="actuator")
+    _check_key_formats(normalized, existing_keys)
+    return normalized
 
 
 def _publish_invalidation(session: AsyncSession) -> None:
@@ -201,14 +242,61 @@ async def update_catalog_entry(
     if name is not None:
         entry.name = name
     if metrics is not None:
-        entry.metrics = _normalize_metrics(metrics)
+        entry.metrics = _normalize_metrics(metrics, _keys_of(entry.metrics))
         _publish_invalidation(session)
         request_config_publish(session, entry.id)
     if actuators is not None:
-        entry.actuators = _normalize_actuators(actuators)
+        entry.actuators = _normalize_actuators(actuators, _keys_of(entry.actuators))
     if entry_status is not None:
         entry.status = entry_status
     return entry
+
+
+class KeyUsage(NamedTuple):
+    rules: int
+    widgets: int
+
+
+class CatalogUsage(NamedTuple):
+    devices: int
+    metrics: dict[str, KeyUsage]
+    actuators: dict[str, KeyUsage]
+
+
+async def get_catalog_usage(
+    session: AsyncSession, tenant_id: uuid.UUID, entry: DeviceCatalogEntry
+) -> CatalogUsage:
+    """Per-key usage across the devices built from this entry: how many rules
+    read each metric / command each actuator, and how many dashboard widgets
+    show them (DESIGN.md §7 rename warnings, §13). Read-only; never on the
+    hot path.
+    """
+    # Local imports: devices.service imports this module (create_device).
+    from app.dashboards import service as dashboards_service
+    from app.devices import service as devices_service
+    from app.rules import service as rules_service
+
+    device_ids = await devices_service.list_device_ids_for_catalog_entry(
+        session, tenant_id, entry.id
+    )
+    rule_metrics, rule_actuators = await rules_service.count_key_usage(
+        session, tenant_id, device_ids
+    )
+    widget_metrics, actuator_widgets = await dashboards_service.count_widget_usage(
+        session, tenant_id, device_ids
+    )
+    metric_keys = [k for k in (m.get("key") for m in entry.metrics) if isinstance(k, str)]
+    actuator_keys = [k for k in (a.get("key") for a in entry.actuators) if isinstance(k, str)]
+    return CatalogUsage(
+        devices=len(device_ids),
+        metrics={
+            k: KeyUsage(rules=rule_metrics[k], widgets=widget_metrics[k]) for k in metric_keys
+        },
+        # An actuator-control widget shows every actuator of its device.
+        actuators={
+            k: KeyUsage(rules=rule_actuators[k], widgets=actuator_widgets) for k in actuator_keys
+        },
+    )
 
 
 class CatalogConfigDeviceRow(NamedTuple):
