@@ -29,6 +29,7 @@ from app.health.schemas import MetricHealthResponse
 from app.tenants import service as tenants_service
 from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import TenantRole
+from app.zones import service as zones_service
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -54,6 +55,7 @@ def _to_response(
         id=device.id,
         name=device.name,
         catalog_entry_id=device.catalog_entry_id,
+        zone_id=device.zone_id,
         slug=device.slug,
         status=device.status,
         last_seen_at=device.last_seen_at,
@@ -90,8 +92,10 @@ async def create_device(
 ) -> DeviceCreateResponse:
     try:
         device, secret = await service.create_device(
-            session, ctx.tenant_id, body.name, body.catalog_entry_id
+            session, ctx.tenant_id, body.name, body.catalog_entry_id, zone_id=body.zone_id
         )
+    except zones_service.ZoneNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found") from exc
     except catalog_service.CatalogEntryNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Catalog entry not found"
@@ -126,7 +130,18 @@ async def update_device(
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
     session: AsyncSession = Depends(get_session),
 ) -> DeviceResponse:
-    updated = await service.update_device(session, ctx.tenant_id, device.id, body.name, body.status)
+    try:
+        updated = await service.update_device(
+            session,
+            ctx.tenant_id,
+            device.id,
+            body.name,
+            body.status,
+            zone_id=body.zone_id,
+            zone_set="zone_id" in body.model_fields_set,
+        )
+    except zones_service.ZoneNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found") from exc
     return _to_response(updated)
 
 

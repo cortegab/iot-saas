@@ -8,6 +8,7 @@ import {
   Cpu,
   LayoutDashboard,
   ListChecks,
+  MapPin,
   Moon,
   Plus,
   Search,
@@ -67,6 +68,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       { label: "Add device", href: "/devices/new", icon: Cpu, requires: "devices.write" },
       { label: "New rule", href: "/rules/new", icon: ListChecks, requires: "rules.write" },
       { label: "New device template", href: "/templates/new", icon: Boxes, requires: "templates.write" },
+      { label: "New zone", href: "/zones?edit=new", icon: MapPin, requires: "zones.write" },
       { label: "Invite member", href: "/members", icon: UserRound, requires: "members.manage" },
       { label: "New API key", href: "/keys", icon: Plus, requires: "keys.manage" },
     ];
@@ -118,6 +120,16 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         hint: `${db.layout.length} widget${db.layout.length === 1 ? "" : "s"}`,
         icon: LayoutDashboard,
         run: go(`/dashboards/${db.id}`),
+      });
+    }
+    for (const z of data.zones) {
+      out.push({
+        id: `zone:${z.id}`,
+        group: "Zones",
+        label: z.name,
+        hint: `${z.device_count} device${z.device_count === 1 ? "" : "s"}`,
+        icon: MapPin,
+        run: go(`/zones?edit=${z.id}`),
       });
     }
     for (const m of data.members) {

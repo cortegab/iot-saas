@@ -53,6 +53,7 @@ ALL_TABLES = (
     "device_metric_health",
     "rule_executions",
     "action_executions",
+    "zones",
 )
 
 

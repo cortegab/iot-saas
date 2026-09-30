@@ -34,6 +34,7 @@ type DeviceResponse = components["schemas"]["DeviceResponse"];
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
+type ZoneResponse = components["schemas"]["ZoneResponse"];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -50,8 +51,10 @@ export default function DevicesPage() {
   const { data: devices, error, isLoading, mutate } = useApiSWR<DeviceResponse[]>("/devices");
   const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
+  const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
 
-  const list = useListState({ status: "all", template: "all" }, { key: "name", dir: "asc" });
+  const list = useListState({ status: "all", template: "all", zone: "all" }, { key: "name", dir: "asc" });
+  const zoneName = useMemo(() => new Map((zones ?? []).map((z) => [z.id, z.name])), [zones]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
   // `?edit=<id>` docks the device editor beside the list (DESIGN.md §7).
@@ -92,15 +95,18 @@ export default function DevicesPage() {
       (d) =>
         (list.filters.status === "all" || deviceStatusKey(d) === list.filters.status) &&
         (list.filters.template === "all" || d.catalog_entry_id === list.filters.template) &&
-        matchesQuery(list.q, d.name, d.slug, templateName.get(d.catalog_entry_id)),
+        (list.filters.zone === "all" ||
+          (list.filters.zone === "none" ? d.zone_id == null : d.zone_id === list.filters.zone)) &&
+        matchesQuery(list.q, d.name, d.slug, templateName.get(d.catalog_entry_id), d.zone_id ? zoneName.get(d.zone_id) : null),
     );
     return sortRows(rows, list.sort, (d, key) => {
       if (key === "template") return templateName.get(d.catalog_entry_id) ?? "";
+      if (key === "zone") return d.zone_id ? (zoneName.get(d.zone_id) ?? "") : null;
       if (key === "status") return DEVICE_STATUS[deviceStatusKey(d)].order;
       if (key === "seen") return ageMinutes(d.last_seen_at);
       return d.name;
     });
-  }, [devices, list.filters, list.q, list.sort, templateName]);
+  }, [devices, list.filters, list.q, list.sort, templateName, zoneName]);
 
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
 
@@ -206,6 +212,13 @@ export default function DevicesPage() {
       hideOnPhone: true,
       cell: (d) => templateName.get(d.catalog_entry_id) ?? <span className="text-ink-muted">—</span>,
     },
+    {
+      id: "zone",
+      header: "Zone",
+      sortable: true,
+      hideOnPhone: true,
+      cell: (d) => (d.zone_id ? zoneName.get(d.zone_id) : null) ?? <span className="text-ink-muted">—</span>,
+    },
     { id: "status", header: "Status", sortable: true, cell: (d) => <DeviceStatusPill device={d} /> },
     {
       id: "seen",
@@ -248,6 +261,13 @@ export default function DevicesPage() {
       id: "status",
       label: `Status: ${DEVICE_STATUS[list.filters.status as DeviceStatusKey]?.label ?? list.filters.status}`,
       onRemove: () => list.setFilter("status", "all"),
+    });
+  }
+  if (list.filters.zone !== "all") {
+    chips.push({
+      id: "zone",
+      label: `Zone: ${list.filters.zone === "none" ? "No zone" : (zoneName.get(list.filters.zone) ?? "unknown")}`,
+      onRemove: () => list.setFilter("zone", "all"),
     });
   }
   if (list.filters.template !== "all") {
@@ -350,6 +370,20 @@ export default function DevicesPage() {
                   {t.name}
                 </option>
               ))}
+            </Select>
+            <Select
+              aria-label="Filter by zone"
+              value={list.filters.zone}
+              onChange={(e) => list.setFilter("zone", e.target.value)}
+              className="w-auto min-w-[150px]"
+            >
+              <option value="all">All zones</option>
+              {(zones ?? []).map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.name}
+                </option>
+              ))}
+              <option value="none">No zone</option>
             </Select>
           </ListToolbar>
 
