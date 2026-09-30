@@ -37,13 +37,17 @@ export function Field({ label, optional, hint, error, warning, children, classNa
     });
   }
 
+  // The <label> holds only the label text and the control, so the control's
+  // accessible name is the label; the message line is its description.
   return (
-    <label className={cn("flex min-w-0 flex-col gap-[5px]", className)}>
-      <span className="text-xs font-medium text-ink-muted">
-        {label}
-        {optional && <span className="font-normal opacity-75"> · optional</span>}
-      </span>
-      {control}
+    <div className={cn("flex min-w-0 flex-col gap-[5px]", className)}>
+      <label className="flex min-w-0 flex-col gap-[5px]">
+        <span className="text-xs font-medium text-ink-muted">
+          {label}
+          {optional && <span className="font-normal opacity-75"> · optional</span>}
+        </span>
+        {control}
+      </label>
       {message != null && message !== false && (
         <span
           id={msgId}
@@ -59,6 +63,6 @@ export function Field({ label, optional, hint, error, warning, children, classNa
           <span className="min-w-0">{message}</span>
         </span>
       )}
-    </label>
+    </div>
   );
 }
