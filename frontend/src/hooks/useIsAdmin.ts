@@ -1,12 +1,10 @@
 "use client";
 
-import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 
-/** Admin/owner gate for mutating UI (rule builder, actuator control) — the
- * backend's require_role(ADMIN) is the actual enforcement; this only avoids
- * showing a viewer a control that would 403. */
+/** Admin/owner gate for mutating UI. Prefer `usePermissions().can(action)`
+ * for new code — it says *what* is being allowed. The backend's
+ * require_role(ADMIN) is the actual enforcement. */
 export function useIsAdmin(): boolean {
-  const { memberships, currentTenantId } = useAuth();
-  const role = memberships.find((m) => m.tenant_id === currentTenantId)?.role;
-  return role === "owner" || role === "admin";
+  return usePermissions().can("devices.write");
 }

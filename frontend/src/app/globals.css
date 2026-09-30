@@ -150,6 +150,11 @@
   --radius-xl: 0.75rem; /* 12px — cards, tables, panels */
   --radius-2xl: 1rem; /* 16px — large surfaces, dialogs */
 
+  /* DESIGN.md §4/§9.2: sidebar becomes a drawer below 1100px; the rule
+     workbench preview stacks below 1200px. */
+  --breakpoint-shell: 1100px;
+  --breakpoint-wb: 1200px;
+
   --spacing-control: 2.25rem; /* 36px — h-control */
   --spacing-cell: 0.75rem; /* 12px — p-cell */
 
