@@ -5,6 +5,7 @@ import {
   KeyRound,
   LayoutDashboard,
   ListChecks,
+  MapPin,
   Settings,
   Users,
   type LucideIcon,
@@ -46,8 +47,10 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Configure",
-    // Zones joins this group with its backend (DESIGN.md §13).
-    items: [{ href: "/templates", label: "Device templates", icon: Boxes, count: "templates" }],
+    items: [
+      { href: "/templates", label: "Device templates", icon: Boxes, count: "templates" },
+      { href: "/zones", label: "Zones", icon: MapPin, count: "zones" },
+    ],
   },
   {
     label: "Admin",

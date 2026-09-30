@@ -18,17 +18,21 @@ class DeviceCreateRequest(BaseModel):
     # auto-created "Legacy / Uncategorized" entry client-side when the user
     # hasn't defined any real catalog entries yet.
     catalog_entry_id: uuid.UUID
+    zone_id: uuid.UUID | None = None
 
 
 class DeviceUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     status: DeviceStatus | None = None
+    # Explicit null clears the zone; omitted leaves it unchanged.
+    zone_id: uuid.UUID | None = None
 
 
 class DeviceResponse(BaseModel):
     id: uuid.UUID
     name: str
     catalog_entry_id: uuid.UUID
+    zone_id: uuid.UUID | None = None
     slug: str
     status: str
     last_seen_at: datetime | None
