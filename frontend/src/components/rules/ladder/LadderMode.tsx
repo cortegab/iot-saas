@@ -120,7 +120,7 @@ function NodeInspector({
         </Button>
         <Button
           type="button"
-          variant="ghost"
+          variant="link"
           className="ml-auto text-xs"
           onClick={() => {
             setCondition(removeNode(draft.condition, id));
@@ -193,7 +193,7 @@ function Inspector({
       <div className="flex border-t border-border pt-3">
         <Button
           type="button"
-          variant="ghost"
+          variant="link"
           className="ml-auto text-xs"
           disabled={!canRemove}
           onClick={() => {
@@ -258,10 +258,10 @@ export function LadderMode({ draft, catalog, update }: { draft: RuleDraft; catal
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className={SECTION_LABEL}>Rung</h2>
-            <Button type="button" variant="ghost" className="ml-auto text-xs" onClick={() => setSelection({ kind: "when" })}>
+            <Button type="button" variant="link" className="ml-auto text-xs" onClick={() => setSelection({ kind: "when" })}>
               When…
             </Button>
-            <Button type="button" variant="ghost" className="text-xs" onClick={() => setSelection({ kind: "timing" })}>
+            <Button type="button" variant="link" className="text-xs" onClick={() => setSelection({ kind: "timing" })}>
               Behaviour & timing…
             </Button>
           </div>

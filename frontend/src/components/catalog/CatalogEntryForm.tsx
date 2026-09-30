@@ -275,7 +275,7 @@ function MetricRow({
         </div>
 
         <div className="flex justify-end">
-          <Button type="button" variant="destructive" onClick={onRemove}>
+          <Button type="button" variant="link-danger" onClick={onRemove}>
             Remove
           </Button>
         </div>
@@ -360,7 +360,7 @@ function ActuatorRow({
         )}
 
         <div className="flex justify-end">
-          <Button type="button" variant="destructive" onClick={onRemove}>
+          <Button type="button" variant="link-danger" onClick={onRemove}>
             Remove
           </Button>
         </div>
@@ -483,7 +483,7 @@ export function CatalogEntryForm({
           ))}
           <Button
             type="button"
-            variant="ghost"
+            variant="link"
             className="self-start"
             onClick={() => setMetrics([...metrics, newMetric()])}
           >
@@ -511,7 +511,7 @@ export function CatalogEntryForm({
           ))}
           <Button
             type="button"
-            variant="ghost"
+            variant="link"
             className="self-start"
             onClick={() => setActuators([...actuators, newActuator()])}
           >

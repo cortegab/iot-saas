@@ -27,7 +27,7 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
 
   await page.goto("/rules/new");
-  await page.getByRole("group", { name: "Editor view" }).getByRole("button", { name: "Ladder" }).click();
+  await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
   await page.getByLabel("Rule name").fill(name);
 
   // A — the starting contact.
@@ -55,8 +55,8 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   await expect(page.getByRole("button", { name: /^Action / })).toHaveCount(1);
 
   // The same tree in the form: an AND root with a nested OR group.
-  await page.getByRole("group", { name: "Editor view" }).getByRole("button", { name: "Form" }).click();
-  await expect(page.getByRole("group", { name: "Combine with" })).toHaveCount(2);
+  await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Form" }).click();
+  await expect(page.getByRole("radiogroup", { name: "Combine with" })).toHaveCount(2);
   await expect(page.getByText(/ and \(.+ or .+\) and /)).toBeVisible();
 
   await page.getByRole("button", { name: "Create rule" }).click();

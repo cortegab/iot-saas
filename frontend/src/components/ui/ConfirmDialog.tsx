@@ -1,34 +1,35 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { buttonClassName } from "@/components/ui/Button";
-import { cn } from "@/lib/cn";
 
 export interface ConfirmDialogProps {
   open: boolean;
+  /** States the action ("Delete bay1-climate?"). */
   title?: string;
-  message: string;
+  /** States the consequence, with real numbers where there are any. */
+  message: ReactNode;
+  /** Optional itemised consequence (affected rules, devices…). */
+  details?: ReactNode;
+  /** Repeats the verb ("Delete device"). */
   confirmLabel?: string;
   cancelLabel?: string;
-  /** Filled red confirm button for destructive actions (the default — nearly
-   * every caller is a delete/revoke). Set `false` for a neutral confirm. */
+  /** Filled red confirm button (the default — nearly every caller is a
+   * delete/revoke). Set `false` for a neutral confirm. */
   danger?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-/** Themed replacement for `window.confirm()` — every destructive action in
- * the app (device/rule/dashboard delete, API key revoke, actuator command)
- * routes through this instead of the native dialog, which can't be themed
- * and breaks visual continuity in this app's dark-first design. Reuses the
- * same portal + backdrop-catcher + focus-trap shape `DropdownMenu` already
- * solved, simplified for exactly two focusable elements (Cancel/Confirm)
- * instead of an arbitrary-length item list. */
+/** DESIGN.md §5 ConfirmDialog — every destructive action and guard routes
+ * through this instead of `window.confirm()`. Focus is trapped between its
+ * buttons, starts on Cancel (the safe choice) and returns to the trigger. */
 export function ConfirmDialog({
   open,
   title,
   message,
+  details,
   confirmLabel = "Delete",
   cancelLabel = "Cancel",
   danger = true,
@@ -37,10 +38,12 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const titleId = useId();
+  const bodyId = useId();
 
   useEffect(() => {
     if (!open) return;
-    // Cancel is the safer default focus target for a destructive prompt.
+    const returnTo = document.activeElement as HTMLElement | null;
     cancelRef.current?.focus();
 
     function onKeyDown(e: KeyboardEvent) {
@@ -54,76 +57,77 @@ export function ConfirmDialog({
       next?.focus();
     }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      returnTo?.focus?.();
+    };
   }, [open, onCancel]);
 
   if (!open) return null;
 
   return createPortal(
-    <>
-      <button
-        type="button"
-        aria-label="Dismiss"
-        onClick={onCancel}
-        className="fixed inset-0 z-40 cursor-default bg-canvas/60"
-      />
+    <div className="fixed inset-0 z-[80] grid place-items-center bg-scrim p-4 motion-safe:animate-[fade_.12s]">
+      <button type="button" aria-label="Dismiss" tabIndex={-1} onClick={onCancel} className="absolute inset-0 cursor-default" />
       <div
         role="alertdialog"
         aria-modal="true"
-        aria-label={title ?? confirmLabel}
-        className="fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border bg-pop p-4 shadow-pop"
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : confirmLabel}
+        aria-describedby={bodyId}
+        className="relative flex max-h-[calc(100vh-32px)] w-full max-w-[460px] flex-col gap-3 overflow-auto rounded-2xl border border-border bg-pop p-5 shadow-pop"
       >
-        {title && <p className="text-sm font-medium text-ink">{title}</p>}
-        <p className={cn("text-sm text-ink-muted", title && "mt-1")}>{message}</p>
-        <div className="mt-4 flex justify-end gap-3">
-          <button
-            ref={cancelRef}
-            type="button"
-            onClick={onCancel}
-            className={buttonClassName({ variant: "secondary", size: "md" })}
-          >
+        {title && (
+          <h2 id={titleId} className="text-[17px] font-semibold text-ink">
+            {title}
+          </h2>
+        )}
+        <div id={bodyId} className="flex flex-col gap-2.5 text-sm text-ink-muted [&_strong]:text-ink">
+          {typeof message === "string" ? <p>{message}</p> : message}
+          {details && (
+            <div className="rounded-md bg-surface-raised px-3 py-2 text-xs text-ink [&_ul]:grid [&_ul]:gap-[3px]">
+              {details}
+            </div>
+          )}
+        </div>
+        <div className="mt-1.5 flex flex-wrap justify-end gap-2">
+          <button ref={cancelRef} type="button" onClick={onCancel} className={buttonClassName({ variant: "secondary" })}>
             {cancelLabel}
           </button>
           <button
             ref={confirmRef}
             type="button"
             onClick={onConfirm}
-            className={cn(
-              "rounded-md border px-3 py-2 text-sm font-medium transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-              danger
-                ? "border-status-error bg-status-error text-on-accent hover:bg-status-error/90"
-                : "border-accent bg-accent text-on-accent hover:bg-accent-strong hover:border-accent-strong",
-            )}
+            className={buttonClassName({ variant: danger ? "danger" : "primary" })}
           >
             {confirmLabel}
           </button>
         </div>
       </div>
-    </>,
+    </div>,
     document.body,
   );
 }
 
 interface ConfirmOptions {
   title?: string;
+  details?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
 }
 
 interface ConfirmState extends ConfirmOptions {
-  message: string;
+  message: ReactNode;
   resolve: (confirmed: boolean) => void;
 }
 
-/** Pairs with `ConfirmDialog` to preserve the call-site shape
- * `window.confirm()` had: `if (!(await confirm("Delete X?"))) return;`.
- * Render `{dialog}` once anywhere in the component's JSX output — it no-ops
- * until `confirm()` is called. */
+/** Pairs with `ConfirmDialog` to keep the `window.confirm()` call shape:
+ * `if (!(await confirm("Delete X?"))) return;`. Render `{dialog}` once in the
+ * component's JSX — it no-ops until `confirm()` is called. */
 export function useConfirm() {
   const [state, setState] = useState<ConfirmState | null>(null);
 
-  function confirm(message: string, options?: ConfirmOptions): Promise<boolean> {
+  function confirm(message: ReactNode, options?: ConfirmOptions): Promise<boolean> {
     return new Promise((resolve) => setState({ message, resolve, ...options }));
   }
 
@@ -132,6 +136,7 @@ export function useConfirm() {
       open={state !== null}
       title={state?.title}
       message={state?.message ?? ""}
+      details={state?.details}
       confirmLabel={state?.confirmLabel}
       cancelLabel={state?.cancelLabel}
       danger={state?.danger}

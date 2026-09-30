@@ -180,6 +180,42 @@ body {
   outline-offset: 2px;
 }
 
+/* Native select with the design's chevron (components/ui/Select.tsx). */
+.ui-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.4'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+/* Overlay motion (DESIGN.md §12: < 200 ms, opacity/transform only). */
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes panein {
+  from {
+    opacity: 0;
+    transform: translateX(14px);
+  }
+}
+@keyframes toastin {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Unknown / no-data cells in replay strips (MiniStrip): hatched, not coloured. */
+.hatch {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--color-border) 0 2px,
+    transparent 2px 4px
+  );
+}
+
 /* Tabular figures wherever digits stack in a column. */
 .app-shell :is(table, dl) {
   font-variant-numeric: tabular-nums;
