@@ -29,7 +29,7 @@ export function Table<T>({
   onRowClick?: (row: T) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border border-t-panel-edge bg-surface">
+    <div className="overflow-x-auto rounded-xl border border-border shadow-card bg-surface">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-border bg-surface-raised font-mono text-xs uppercase tracking-wide text-ink-muted">
           <tr>

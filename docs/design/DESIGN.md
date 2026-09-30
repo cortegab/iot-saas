@@ -59,7 +59,7 @@ font in a component.** If you need a value that has no token, add the token here
 
 - **Light is the default.** It follows `prefers-color-scheme`, and the user can override it with the
   theme toggle; the override is persisted.
-- Dark is a full peer, not an afterthought.
+- Dark is a full peer, not an afterthought. It is applied by the `.dark` class on `<html>`.
 - This inverts the current "dark first" setup. Update the no-flash script in `app/layout.tsx` and the
   `@custom-variant dark` selector to match.
 
@@ -104,9 +104,9 @@ font in a component.** If you need a value that has no token, add the token here
 
 | Token | Value |
 |---|---|
-| `--radius-sm` / `--radius` / `--radius-lg` | 8 / 12 / 16 px (controls / cards / large surfaces) |
-| `--h-control` | 36 px: every button, input, select and segmented control. Minimum touch target is 36 px. |
-| `--pad-cell` | 12 px table cell padding |
+| Radius (Tailwind scale) | `rounded-md` 8 px (controls) · `rounded-xl` 12 px (cards, tables, panels) · `rounded-2xl` 16 px (large surfaces, dialogs). `rounded-sm` 6 px and `rounded-lg` 10 px are for small inner parts only. |
+| `--h-control` | 36 px: every button, input, select and segmented control (`h-control` utility). Minimum touch target is 36 px. |
+| `--pad-cell` | 12 px table cell padding (`p-cell` utility) |
 | `--fs-base` / `--fs-sm` / `--fs-xs` | 14.5 / 14 / 12.5 px |
 | `--shadow-card` | `0 1px 2px rgba(30,30,60,.05)` light; `none` dark |
 | `--shadow-pop` | `0 24px 48px -16px rgba(30,30,60,.22), 0 2px 6px rgba(30,30,60,.08)` light; `0 24px 48px -16px rgba(0,0,0,.7), 0 2px 6px rgba(0,0,0,.4)` dark |
@@ -517,3 +517,4 @@ Each step is a separate PR and leaves the app fully working.
 |---|---|
 | 2026-09-30 | Initial directives from demo G: tokens (indigo/Geist, light-first), shell, list and editor standards, catalogs, the rule editor rework (recipes, workbench, sentence chips, versions, schedule picker, time zone select, status switch), public pages, the backend work list. |
 | 2026-09-30 | Implementation scope: every G feature gets a real backend. Workspace settings carry a **time zone only**; the °C/°F unit option is dropped because display-only conversion makes rule thresholds ambiguous. **Member invites** (7-day email link, accept page) and **forgot password** are in scope. **API keys authenticate** as `Authorization: Bearer`, with an expiry (Viewer or Admin only). The landing page has no public demo tenant, so G's "Open the demo" becomes "Sign in" / "Talk to us". The contact form emails the team and stores nothing. |
+| 2026-09-30 | §3: radius tokens expressed on the Tailwind scale the code already uses (`md` controls 8 px, `xl` cards 12 px, `2xl` large 16 px), so no component needs renaming. The theme class becomes `.dark` (light is the unclassed default). |

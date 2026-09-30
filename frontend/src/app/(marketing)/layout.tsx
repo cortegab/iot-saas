@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import "./marketing.css";
 
-/* The landing page renders in the app's Control Room theme — fonts come from
- * the root layout (`--ff-*` on <html>), colours from `globals.css` tokens.
+/* The landing page uses the app's design tokens (docs/design/DESIGN.md) — fonts
+ * come from the root layout (`--ff-*` on <html>), colours from `globals.css`.
  * `marketing.css` only carries this page's marketing-scale layout, scoped to
  * `.mkt` so it can't leak into the authenticated app. */
 
