@@ -215,6 +215,23 @@ export interface paths {
         patch: operations["update_catalog_entry_catalog__entry_id__patch"];
         trace?: never;
     };
+    "/catalog/{entry_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Catalog Usage */
+        get: operations["get_catalog_usage_catalog__entry_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices": {
         parameters: {
             query?: never;
@@ -884,6 +901,23 @@ export interface components {
             /** Publish Deadband */
             publish_deadband?: number | null;
         };
+        /**
+         * CatalogUsageResponse
+         * @description Per-key usage across the devices built from an entry — drives the
+         *     editor's rename/remove warnings and key locks.
+         */
+        CatalogUsageResponse: {
+            /** Devices */
+            devices: number;
+            /** Metrics */
+            metrics: {
+                [key: string]: components["schemas"]["KeyUsageResponse"];
+            };
+            /** Actuators */
+            actuators: {
+                [key: string]: components["schemas"]["KeyUsageResponse"];
+            };
+        };
         /** ChangeRoleRequest */
         ChangeRoleRequest: {
             role: components["schemas"]["TenantRole"];
@@ -1290,6 +1324,13 @@ export interface components {
             value: number;
             /** Timestamp */
             timestamp?: number | null;
+        };
+        /** KeyUsageResponse */
+        KeyUsageResponse: {
+            /** Rules */
+            rules: number;
+            /** Widgets */
+            widgets: number;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -2583,6 +2624,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CatalogEntryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_catalog_usage_catalog__entry_id__usage_get: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-Tenant-Id": string;
+                authorization?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogUsageResponse"];
                 };
             };
             /** @description Validation Error */

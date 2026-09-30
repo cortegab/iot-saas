@@ -188,6 +188,15 @@ export function EditorFrame({
     return () => document.removeEventListener("keydown", onKey);
   }, [save]);
 
+  // A full-page save bar sits at the viewport bottom; lift toasts above it.
+  useEffect(() => {
+    if (mode !== "page" || readOnly) return;
+    document.documentElement.dataset.savebar = "1";
+    return () => {
+      delete document.documentElement.dataset.savebar;
+    };
+  }, [mode, readOnly]);
+
   // Esc closes a docked editor while focus is inside it (the Sheet handles the drawer).
   useEffect(() => {
     if (mode !== "dock" || !onClose) return;
@@ -368,7 +377,8 @@ export function EditorFrame({
     <div
       ref={bodyRef}
       className={cn(
-        "flex flex-col gap-7",
+        // @container: editor bodies lay out by their own width (dock vs page).
+        "@container flex flex-col gap-7",
         mode === "page" ? "max-w-[980px] py-6 [grid-area:body] wb:pt-2" : "min-h-0 flex-1 overflow-auto px-5 pb-8 pt-5",
       )}
     >

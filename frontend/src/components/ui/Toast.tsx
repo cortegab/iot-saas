@@ -65,7 +65,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <div
         aria-live="polite"
         aria-relevant="additions"
-        className="pointer-events-none fixed bottom-[calc(16px+env(safe-area-inset-bottom,0px))] right-4 z-[90] flex w-[min(380px,calc(100vw-32px))] flex-col gap-2"
+        className="pointer-events-none fixed bottom-[calc(16px+env(safe-area-inset-bottom,0px))] right-4 z-[90] flex w-[min(380px,calc(100vw-32px))] flex-col gap-2 [[data-savebar]_&]:bottom-[calc(76px+env(safe-area-inset-bottom,0px))]"
       >
         {items.map((t) => (
           <ToastCard key={t.id} item={t} onDismiss={() => dismiss(t.id)} />

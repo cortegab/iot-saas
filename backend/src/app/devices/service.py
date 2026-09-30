@@ -80,7 +80,10 @@ async def create_device(
     doesn't belong to this tenant — same existence+ownership check the
     catalog module's own routes use, reused here rather than duplicated.
     """
-    await catalog_service.get_catalog_entry(session, tenant_id, catalog_entry_id)
+    entry = await catalog_service.get_catalog_entry(session, tenant_id, catalog_entry_id)
+    # Disabled templates can't be picked for new devices (DESIGN.md §8).
+    if entry.status == "disabled":
+        raise catalog_service.CatalogEntryDisabledError
 
     slug = await _unique_slug(session, tenant_id, name)
     secret = _generate_credential_secret()
@@ -117,6 +120,17 @@ async def count_devices_by_catalog_entry(
         .group_by(Device.catalog_entry_id)
     )
     return {catalog_entry_id: count for catalog_entry_id, count in result.all()}
+
+
+async def list_device_ids_for_catalog_entry(
+    session: AsyncSession, tenant_id: uuid.UUID, catalog_entry_id: uuid.UUID
+) -> list[uuid.UUID]:
+    result = await session.execute(
+        select(Device.id).where(
+            Device.tenant_id == tenant_id, Device.catalog_entry_id == catalog_entry_id
+        )
+    )
+    return list(result.scalars().all())
 
 
 async def get_device(session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID) -> Device:
