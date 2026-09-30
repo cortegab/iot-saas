@@ -1,260 +1,322 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
+import { AlertTriangle, ListChecks, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { Badge } from "@/components/ui/Badge";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Badge, Tag } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
-import { EmptyState } from "@/components/ui/EmptyState";
+import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Input } from "@/components/ui/Input";
-import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
+import { KpiStrip } from "@/components/ui/KpiStrip";
+import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
-import { Table, type TableColumn } from "@/components/ui/Table";
-import { TableNameCell } from "@/components/ui/TableNameCell";
+import { useToast } from "@/components/ui/Toast";
+import { DataTable, NameCell, type DataColumn } from "@/components/list/DataTable";
+import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/ListToolbar";
+import { FirstUse, NoResults } from "@/components/list/ListStates";
+import { TableFooter } from "@/components/list/TableFooter";
+import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { LadderOverview } from "@/components/rules/ladder/LadderOverview";
+import { RulesTabs } from "@/components/rules/RulesTabs";
 import { ApiRequestError } from "@/lib/api-client";
+import { actionsText, ruleStateKey, sharedActuators, triggerText, type RuleStateKey } from "@/lib/rule-text";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 
+const STATE: Record<RuleStateKey, { label: string; tone: "online" | "pending" | "unknown"; shape: "solid" | "square" }> = {
+  armed: { label: "Armed", tone: "online", shape: "solid" },
+  latched: { label: "Latched", tone: "pending", shape: "square" },
+  disabled: { label: "Disabled", tone: "unknown", shape: "square" },
+};
+
 /** Unique devices a rule touches, in a stable order. */
 function ruleDevices(rule: RuleResponse): { id: string; name: string }[] {
   const seen = new Map<string, string>();
-  for (const d of rule.devices) {
-    if (!seen.has(d.device_id)) seen.set(d.device_id, d.device_name ?? "Unnamed device");
-  }
+  for (const d of rule.devices) if (!seen.has(d.device_id)) seen.set(d.device_id, d.device_name ?? "Unnamed device");
   return Array.from(seen, ([id, name]) => ({ id, name }));
 }
 
-function DeviceLine({ devices }: { devices: { id: string; name: string }[] }) {
-  if (devices.length === 0) return <span className="text-xs text-ink-muted">no devices</span>;
-  const shown = devices.slice(0, 3);
-  const extra = devices.length - shown.length;
-  return (
-    <span className="text-xs text-ink-muted">
-      {shown.map((d) => d.name).join(" · ")}
-      {extra > 0 && ` +${extra}`}
-    </span>
-  );
+function devicesLine(rule: RuleResponse): string {
+  const ds = ruleDevices(rule);
+  if (ds.length === 0) return "no devices";
+  const shown = ds.slice(0, 3).map((d) => d.name).join(" · ");
+  return ds.length > 3 ? `${shown} +${ds.length - 3}` : shown;
 }
 
 export default function RulesPage() {
   const api = useApi();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const view = searchParams.get("view") === "ladder" ? "ladder" : "list";
+  const toast = useToast();
+  const { can } = usePermissions();
+  const canWrite = can("rules.write");
+  const { confirm, dialog } = useConfirm();
   // refreshInterval: rule health is time-based (a signal crosses its staleness
   // bound with no user action), and the rule_health realtime event only fires
   // for tenants with a live worker — this is the belt-and-suspenders.
-  const {
-    data: rules,
-    error,
-    isLoading,
-    mutate,
-  } = useApiSWR<RuleResponse[]>("/rules", { refreshInterval: 30_000 });
-  const isAdmin = useIsAdmin();
-  const { confirm, dialog } = useConfirm();
-  const [filter, setFilter] = useState("");
-  const [deviceFilter, setDeviceFilter] = useState("all");
-  const [actionError, setActionError] = useState<string | null>(null);
+  const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>("/rules", { refreshInterval: 30_000 });
+
+  const list = useListState({ state: "all", device: "all", view: "list" }, { key: "name", dir: "asc" });
+
+  const shared = useMemo(() => sharedActuators(rules ?? []), [rules]);
 
   const deviceOptions = useMemo(() => {
     const map = new Map<string, string>();
+    for (const r of rules ?? []) for (const d of ruleDevices(r)) map.set(d.id, d.name);
+    return Array.from(map, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [rules]);
+
+  const counts = useMemo(() => {
+    const c = { armed: 0, latched: 0, disabled: 0, stale: 0 };
     for (const r of rules ?? []) {
-      for (const d of ruleDevices(r)) map.set(d.id, d.name);
+      c[ruleStateKey(r)] += 1;
+      if (r.enabled && !r.health.evaluatable) c.stale += 1;
     }
-    return Array.from(map, ([value, label]) => ({ value, label })).sort((a, b) =>
-      a.label.localeCompare(b.label),
-    );
+    return c;
   }, [rules]);
 
   const filtered = useMemo(() => {
-    if (!rules) return [];
-    const q = filter.trim().toLowerCase();
-    return rules.filter((r) => {
-      const devices = ruleDevices(r);
-      if (deviceFilter !== "all" && !devices.some((d) => d.id === deviceFilter)) return false;
-      if (!q) return true;
-      return (
-        r.name.toLowerCase().includes(q) ||
-        devices.some((d) => d.name.toLowerCase().includes(q))
-      );
+    const rows = (rules ?? []).filter((r) => {
+      const st = list.filters.state;
+      if (st === "stale" ? !(r.enabled && !r.health.evaluatable) : st !== "all" && ruleStateKey(r) !== st) return false;
+      if (list.filters.device !== "all" && !ruleDevices(r).some((d) => d.id === list.filters.device)) return false;
+      return matchesQuery(list.q, r.name, devicesLine(r), triggerText(r), actionsText(r.actions));
     });
-  }, [rules, filter, deviceFilter]);
+    return sortRows(rows, list.sort, (r, key) => {
+      if (key === "state") return ["armed", "latched", "disabled"].indexOf(ruleStateKey(r));
+      if (key === "trigger") return triggerText(r);
+      return r.name;
+    });
+  }, [rules, list.filters, list.q, list.sort]);
 
-  // A rule's device pages cache their rules under a different SWR key
-  // (`/devices/{id}/rules`) — revalidate each so none is left stale.
-  function onChanged(rule: RuleResponse) {
+  const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
+
+  // A rule's device pages cache their rules under `/devices/{id}/rules`.
+  function afterChange(rule: RuleResponse) {
     void mutate();
     for (const d of rule.devices) void revalidate(`/devices/${d.device_id}/rules`);
   }
 
-  async function toggleEnabled(rule: RuleResponse) {
-    setActionError(null);
+  async function setEnabled(rule: RuleResponse, enabled: boolean, undoable = true) {
     try {
-      await api.patch(`/rules/${rule.id}`, { enabled: !rule.enabled });
-      onChanged(rule);
+      await api.patch(`/rules/${rule.id}`, { enabled });
+      afterChange(rule);
+      toast({
+        title: `${rule.name} ${enabled ? "enabled" : "disabled"}`,
+        detail: enabled ? "Fires when its trigger and conditions are met." : "Keeps its settings and history, but won't fire.",
+        action: undoable ? { label: "Undo", onClick: () => void setEnabled(rule, !enabled, false) } : undefined,
+      });
     } catch (err) {
-      setActionError(err instanceof ApiRequestError ? err.message : "Couldn't update this rule.");
+      toast({ tone: "error", title: "Couldn't update the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
   async function remove(rule: RuleResponse) {
-    if (!(await confirm("Delete this rule? This cannot be undone."))) return;
-    setActionError(null);
+    const ok = await confirm(
+      "It stops evaluating immediately. Actuators keep their current state. This can't be undone; to pause it instead, disable it.",
+      { title: `Delete ${rule.name}?`, confirmLabel: "Delete rule" },
+    );
+    if (!ok) return;
     try {
       await api.delete(`/rules/${rule.id}`);
-      onChanged(rule);
+      afterChange(rule);
+      toast({ title: `${rule.name} deleted` });
     } catch (err) {
-      setActionError(err instanceof ApiRequestError ? err.message : "Couldn't delete this rule.");
+      toast({ tone: "error", title: "Couldn't delete the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
-  const columns: TableColumn<RuleResponse>[] = [
+  const columns: DataColumn<RuleResponse>[] = [
     {
+      id: "name",
       header: "Rule",
-      render: (r) => (
-        <TableNameCell
-          href={`/rules/${r.id}`}
-          name={r.name}
-          sublabel={<DeviceLine devices={ruleDevices(r)} />}
-        />
+      sortable: true,
+      cell: (r) => (
+        <div className="flex min-w-0 flex-col gap-1">
+          <NameCell
+            name={
+              <Link href={`/rules/${r.id}`} className="hover:underline hover:underline-offset-[3px]">
+                {r.name}
+              </Link>
+            }
+            sub={devicesLine(r)}
+          />
+          {shared.has(r.id) && (
+            <span className="flex flex-wrap gap-1.5">
+              {shared.get(r.id)!.map((a) => (
+                <Tag key={a} tone="warn" size="sm">
+                  <AlertTriangle aria-hidden size={11} />
+                  shares {a}
+                </Tag>
+              ))}
+            </span>
+          )}
+        </div>
       ),
     },
     {
-      header: "Status",
-      render: (r) => (
-        <div className="flex items-center gap-2">
-          <Badge
-            tone={r.enabled ? "online" : "unknown"}
-            variant="dot"
-            label={r.enabled ? "Enabled" : "Disabled"}
-          />
-          {r.enabled && !r.health.evaluatable && (
-            <Badge tone="pending" variant="dot" label="Can't evaluate" />
-          )}
-          {r.latched && <Badge tone="pending" variant="dot" label="Latched" />}
-        </div>
-      ),
+      id: "trigger",
+      header: "When",
+      sortable: true,
+      hideOnPhone: true,
+      cell: (r) => <code className="font-mono text-xs text-ink">{triggerText(r)}</code>,
+    },
+    { id: "action", header: "Then", hideOnPhone: true, cell: (r) => <span className="text-ink">{actionsText(r.actions)}</span> },
+    {
+      id: "state",
+      header: "State",
+      sortable: true,
+      cell: (r) => {
+        const s = STATE[ruleStateKey(r)];
+        return (
+          <span className="flex flex-wrap items-center gap-1.5">
+            <Badge tone={s.tone} shape={s.shape} label={s.label} />
+            {r.enabled && !r.health.evaluatable && <Tag tone="warn">Can&apos;t evaluate</Tag>}
+          </span>
+        );
+      },
     },
   ];
-  if (isAdmin) {
-    columns.push({
-      header: "",
-      className: "w-10 text-right",
-      render: (r) => {
-        const items: DropdownMenuItem[][] = [
-          [{ label: "Edit", onClick: () => router.push(`/rules/${r.id}`) }],
-          [
-            { label: r.enabled ? "Disable" : "Enable", onClick: () => void toggleEnabled(r) },
-            { label: "Delete", danger: true, onClick: () => void remove(r) },
-          ],
-        ];
-        return <DropdownMenu groups={items} label={`Actions for ${r.name}`} />;
-      },
-    });
+
+  const rowMenu = (r: RuleResponse): DropdownMenuItem[][] => {
+    const groups: DropdownMenuItem[][] = [
+      [{ label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => router.push(`/rules/${r.id}`) }],
+    ];
+    if (canWrite) {
+      groups.push(
+        [{ label: r.enabled ? "Disable" : "Enable", icon: <Power size={15} />, onClick: () => void setEnabled(r, !r.enabled) }],
+        [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(r) }],
+      );
+    }
+    return groups;
+  };
+
+  const chips: FilterChip[] = [];
+  if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
+  if (list.filters.state !== "all") {
+    const label = list.filters.state === "stale" ? "Can't evaluate" : STATE[list.filters.state as RuleStateKey]?.label;
+    chips.push({ id: "state", label: `State: ${label}`, onRemove: () => list.setFilter("state", "all") });
+  }
+  if (list.filters.device !== "all") {
+    const name = deviceOptions.find((d) => d.value === list.filters.device)?.label ?? "unknown";
+    chips.push({ id: "device", label: `Device: ${name}`, onRemove: () => list.setFilter("device", "all") });
   }
 
+  const total = rules?.length ?? 0;
+  const newAction = canWrite ? (
+    <Link href="/rules/new" className={buttonClassName()}>
+      <Plus aria-hidden size={15} />
+      New rule
+    </Link>
+  ) : null;
+
   return (
-    <div className="flex flex-col gap-4">
+    <>
       <PageHeader
         title="Rules"
-        actions={
-          <div className="flex items-center gap-2">
-            <Link href="/rules/failed-actions" className="text-sm text-ink-muted hover:text-ink">
-              Failed actions
-            </Link>
-            {isAdmin && (
-              <Link href="/rules/new" className={buttonClassName()}>
-                Create Rule
-              </Link>
-            )}
-          </div>
-        }
+        description="Evaluated in memory the moment a reading arrives. Breach to actuator command is typically under 500 ms."
+        actions={newAction}
       />
+      <RulesTabs active="rules" />
 
-      {actionError && <ErrorState message={actionError} />}
-
-      {rules && rules.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            compact
-            className="bg-surface"
-            type="search"
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by name or device…"
-          />
-          <Select
-            compact
-            className="bg-surface"
-            value={deviceFilter}
-            onChange={(e) => setDeviceFilter(e.target.value)}
-          >
-            <option value="all">All devices</option>
-            {deviceOptions.map((d) => (
-              <option key={d.value} value={d.value}>
-                {d.label}
-              </option>
-            ))}
-          </Select>
-          <SegmentedControl
-            ariaLabel="Rules view"
-            className="ml-auto"
-            value={view}
-            onChange={(next) => router.replace(next === "ladder" ? "/rules?view=ladder" : "/rules")}
-            options={[
-              { value: "list", label: "List" },
-              { value: "ladder", label: "Ladder" },
-            ]}
-          />
-        </div>
-      )}
-
-      {isLoading && <LoadingSkeleton rows={4} rowClassName="h-20" />}
-
-      {error && (
+      {error ? (
         <ErrorState
-          message={error instanceof ApiRequestError ? error.message : "Couldn't load rules."}
+          title="Couldn't load rules"
+          message={`${error instanceof ApiRequestError ? error.message : "The API didn't respond."} Rules keep running; only this page is affected.`}
           onRetry={() => void mutate()}
         />
-      )}
-
-      {rules && rules.length === 0 && (
-        <EmptyState
+      ) : isLoading || !rules ? (
+        <TableSkeleton rows={5} columns={4} />
+      ) : total === 0 ? (
+        <FirstUse
+          icon={<ListChecks aria-hidden size={26} />}
           title="No rules yet"
-          description="Rules watch metrics and fire an action when a condition is met."
-          action={
-            isAdmin ? (
-              <Link href="/rules/new" className={buttonClassName({ variant: "link" })}>
-                Add a rule →
-              </Link>
-            ) : undefined
-          }
+          description="Rules watch live readings and switch actuators or notify people within two seconds."
+          action={newAction ?? undefined}
+          readOnlyNote="Ask an admin to create the first rule."
         />
+      ) : (
+        <>
+          <KpiStrip
+            ariaLabel="Filter by state"
+            active={list.filters.state === "all" ? null : list.filters.state}
+            onSelect={(id) => list.setFilter("state", list.filters.state === id ? "all" : id)}
+            items={[
+              { id: "armed", label: "Armed", value: counts.armed, sub: "ready to fire", tone: "online" },
+              { id: "latched", label: "Latched", value: counts.latched, sub: "waiting for a reset", tone: "pending", shape: "square" },
+              { id: "stale", label: "Can't evaluate", value: counts.stale, sub: "an input isn't reporting", tone: "offline" },
+              { id: "disabled", label: "Disabled", value: counts.disabled, sub: "won't fire", tone: "unknown", shape: "square" },
+            ]}
+          />
+
+          <ListToolbar query={list.q} onQuery={list.setQuery} placeholder="Search rules, devices or actions">
+            <Select
+              aria-label="Filter by device"
+              value={list.filters.device}
+              onChange={(e) => list.setFilter("device", e.target.value)}
+              className="w-auto min-w-[170px]"
+            >
+              <option value="all">All devices</option>
+              {deviceOptions.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </Select>
+            <SegmentedControl
+              ariaLabel="Rules view"
+              value={list.filters.view === "ladder" ? "ladder" : "list"}
+              onChange={(v) => list.setFilter("view", v)}
+              options={[
+                { value: "list", label: "List" },
+                { value: "ladder", label: "Ladder" },
+              ]}
+            />
+          </ListToolbar>
+
+          <FilterChips chips={chips} onClearAll={list.clearAll} />
+
+          {filtered.length === 0 ? (
+            <NoResults noun="rules" hidden={total} onClear={list.clearAll} />
+          ) : list.filters.view === "ladder" ? (
+            <LadderOverview rules={filtered} />
+          ) : (
+            <div className="flex flex-col gap-2">
+              <DataTable
+                label="Rules"
+                columns={columns}
+                rows={pageRows}
+                rowKey={(r) => r.id}
+                sort={list.sort}
+                onSort={list.toggleSort}
+                onRowClick={(r) => router.push(`/rules/${r.id}`)}
+                rowMenu={rowMenu}
+                rowMenuLabel={(r) => `Actions for ${r.name}`}
+                rowClassName={(r) => (r.enabled ? undefined : "[&>td]:opacity-60")}
+              />
+              <TableFooter
+                shown={filtered.length}
+                total={total}
+                noun={["rule", "rules"]}
+                page={page}
+                pageCount={pageCount}
+                pageSize={list.pageSize}
+                onPage={list.setPage}
+                onPageSize={list.setPageSize}
+              />
+            </div>
+          )}
+        </>
       )}
-
-      {rules && rules.length > 0 && filtered.length === 0 && (
-        <EmptyState title="No matching rules" description="Try a different search term." />
-      )}
-
-      {filtered.length > 0 &&
-        (view === "ladder" ? (
-          <LadderOverview rules={filtered} />
-        ) : (
-          <Table columns={columns} rows={filtered} rowKey={(r) => r.id} />
-        ))}
-
       {dialog}
-    </div>
+    </>
   );
 }
