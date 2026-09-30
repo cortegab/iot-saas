@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { MoreVertical } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -80,6 +80,29 @@ export function DropdownMenu({
     triggerRef.current?.focus();
   }
 
+  // Keep the panel inside the viewport: flip above the trigger when there's no
+  // room below (e.g. the account menu at the foot of the sidebar), and clamp
+  // horizontally.
+  useLayoutEffect(() => {
+    if (!open || !panelRef.current || !triggerRef.current) return;
+    const panel = panelRef.current.getBoundingClientRect();
+    const rect = triggerRef.current.getBoundingClientRect();
+    const margin = 8;
+    let top = rect.bottom + 4;
+    if (top + panel.height > window.innerHeight - margin) {
+      top = Math.max(margin, rect.top - panel.height - 4);
+    }
+    setCoords((c) => {
+      const next = { ...c, top };
+      if (align === "start") {
+        next.left = Math.max(margin, Math.min(c.left, window.innerWidth - panel.width - margin));
+      } else {
+        next.right = Math.max(margin, Math.min(c.right, window.innerWidth - panel.width - margin));
+      }
+      return next.top === c.top && next.left === c.left && next.right === c.right ? c : next;
+    });
+  }, [open, align]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -142,6 +165,14 @@ export function DropdownMenu({
               role={children ? undefined : "menu"}
               tabIndex={-1}
               style={align === "start" ? { top: coords.top, left: coords.left } : { top: coords.top, right: coords.right }}
+              // Custom panels close when any of their menu items is chosen.
+              onClick={
+                children
+                  ? (e) => {
+                      if ((e.target as HTMLElement).closest('[role^="menuitem"]')) close();
+                    }
+                  : undefined
+              }
               className={cn("fixed z-[85] rounded-xl border border-border bg-pop shadow-pop", panelClassName)}
             >
               {children ??

@@ -24,7 +24,7 @@ export default function NewCatalogEntryPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={duplicateId ? `Duplicate "${source?.name}"` : "Create template"}
-        back={{ href: "/devices/templates", label: "Device Templates" }}
+        back={{ href: "/templates", label: "Device Templates" }}
       />
       <CatalogEntryForm mode="create" initial={source} />
     </div>

@@ -15,23 +15,64 @@ export interface ApiClientContext {
 export class ApiRequestError extends Error {
   status: number;
   body?: unknown;
+  /** FastAPI 422 validation errors keyed by dotted field path (without the
+   * leading "body"), e.g. `{"metrics.0.key": "String should match pattern…"}`. */
+  fieldErrors: Record<string, string>;
 
-  constructor(status: number, message: string, body?: unknown) {
+  constructor(status: number, message: string, body?: unknown, fieldErrors: Record<string, string> = {}) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
     this.body = body;
+    this.fieldErrors = fieldErrors;
   }
 }
 
 type JsonBody = Record<string, unknown> | undefined;
 
-function extractDetail(body: unknown): string | undefined {
-  if (body && typeof body === "object" && "detail" in body) {
-    const detail = (body as { detail?: unknown }).detail;
-    if (typeof detail === "string") return detail;
+interface ValidationIssue {
+  loc?: (string | number)[];
+  msg?: string;
+}
+
+function isValidationList(detail: unknown): detail is ValidationIssue[] {
+  return Array.isArray(detail) && detail.every((d) => d && typeof d === "object" && "msg" in d);
+}
+
+/** Dotted path of a 422 `loc`, minus the leading "body"/"query". */
+function locPath(loc: (string | number)[] | undefined): string {
+  const parts = (loc ?? []).filter((p, i) => !(i === 0 && (p === "body" || p === "query" || p === "path")));
+  return parts.join(".");
+}
+
+/** A readable message from FastAPI's `detail` — a string, or the 422 list,
+ * which used to be dropped (users saw "Unprocessable Entity"). */
+export function extractDetail(body: unknown): string | undefined {
+  if (!body || typeof body !== "object" || !("detail" in body)) return undefined;
+  const detail = (body as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (isValidationList(detail)) {
+    return detail
+      .map((d) => {
+        const path = locPath(d.loc);
+        const msg = (d.msg ?? "").replace(/^Value error, /, "");
+        return path ? `${path}: ${msg}` : msg;
+      })
+      .join("; ");
   }
   return undefined;
+}
+
+export function extractFieldErrors(body: unknown): Record<string, string> {
+  if (!body || typeof body !== "object" || !("detail" in body)) return {};
+  const detail = (body as { detail?: unknown }).detail;
+  if (!isValidationList(detail)) return {};
+  const out: Record<string, string> = {};
+  for (const d of detail) {
+    const path = locPath(d.loc);
+    if (path && !(path in out)) out[path] = (d.msg ?? "").replace(/^Value error, /, "");
+  }
+  return out;
 }
 
 async function request<T>(
@@ -58,7 +99,12 @@ async function request<T>(
   const data: unknown = text ? JSON.parse(text) : undefined;
 
   if (!res.ok) {
-    throw new ApiRequestError(res.status, extractDetail(data) ?? res.statusText ?? "Request failed", data);
+    throw new ApiRequestError(
+      res.status,
+      extractDetail(data) ?? res.statusText ?? "Request failed",
+      data,
+      extractFieldErrors(data),
+    );
   }
 
   return data as T;
