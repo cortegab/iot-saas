@@ -314,6 +314,7 @@ iot-saas/
 │  └─ src/types/api.ts       # GENERATED from OpenAPI — never edit by hand
 ├─ infra/                    # docker-compose.yml, nginx/, emqx/, backups/
 └─ docs/                     # firmware quickstart, API reference
+   └─ design/                # DESIGN.md (frontend design directives) + redesign/ reference demos
 ```
 
 **Module discipline.** FastAPI won't enforce structure, so this is the rule: every module under
@@ -366,6 +367,14 @@ files on the frontend and for MQTT topic segments.
 **Frontend types are generated.** Run the OpenAPI codegen after any schema change; treat
 `frontend/src/types/api.ts` as a build artifact. A hand-edited API type is a bug waiting to happen —
 this codegen step is what replaces the type safety a single-language stack would have given you.
+
+**Frontend design** — `docs/design/DESIGN.md` is binding for the frontend's look, layout,
+components, interaction and wording; demo G (`docs/design/redesign/demo-g-full-site.html`) is the
+visual reference where it is silent. Precedence: §9 constraints > DESIGN.md > demo G > everything
+else (code comments such as the old "Control Room" notes, demos A–F, `PLAN.md` UI bullets, older
+notes). Design skills/plugins (`frontend-design`, `ui-ux-pro-max`) may help with technique, but
+their palettes, fonts and styles are **not** applied here — DESIGN.md's tokens and patterns win. To
+deviate, change DESIGN.md first (with a changelog entry), then the code.
 
 **Testing** — `pytest` unit tests for the rule evaluators (the highest-risk logic: thresholds,
 hysteresis, duration, cooldown) and for payload normalization. Integration test for the ingestion →
@@ -501,3 +510,5 @@ These are not style preferences. Breaking one of these breaks a requirement.
     ingestion.
 12. **Device tokens and API keys are stored hashed.** No plaintext credentials, ever.
 13. **The restore runbook must stay tested.** A backup that has never been restored is not a backup.
+14. **Frontend UI follows `docs/design/DESIGN.md`.** No one-off styles, palettes or component
+    variants; one pattern per job.

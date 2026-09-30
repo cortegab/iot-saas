@@ -1,0 +1,519 @@
+# DESIGN.md — frontend design directives
+
+The single source of truth for how the iot-saas frontend looks, is laid out, behaves and is worded.
+It turns the approved **demo G** (`docs/design/redesign/demo-g-full-site.html`) into rules for the
+real Next.js app. Read it before building or changing any page or component.
+
+---
+
+## 1. Purpose, status and precedence
+
+**Precedence, highest first:**
+
+1. **`CLAUDE.md` §9 constraints always win.** These cover safety, the 2 s hot path, generated API
+   types, RLS and hashed credentials. Nothing here overrides them. For example, flapping controls
+   can never be hidden.
+2. **This file** is authoritative for frontend look, layout, components, interaction and wording.
+3. **Demo G** is the visual reference where this file is silent. When you settle a gap by looking at
+   the demo, write the answer back into this file.
+4. **Everything else is subordinate**, and gets updated to match this file, never the reverse:
+   - code comments (for example the "Control Room" comments in `globals.css`)
+   - demos A–F
+   - UI bullets in `PLAN.md`
+   - suggestions from the `frontend-design` / `ui-ux-pro-max` skills
+   - older notes
+
+**Status:**
+- Demo G is a prototype. Its **behaviour, layout and wording are binding**. Its vanilla-JS code is
+  not: build it with the app's React primitives.
+- Demos A–F are kept for history only.
+- **Rule semantics are defined elsewhere.** `docs/rule-engine-multi-device.md` and CLAUDE.md §5 own
+  the condition tree, latch, `clear_actions` and "stale = unknown". This file owns only how the
+  rule editor presents them.
+
+**Changing a directive:** edit this file first and add a changelog entry (§15), then change the code.
+One-off styles, palettes or component variants are not allowed (CLAUDE.md §9.14).
+
+---
+
+## 2. Principles
+
+| Principle | What it means in practice |
+|---|---|
+| **One pattern per job** | Every list is the same list and every editor is the same editor. If two screens solve the same problem differently, one of them is wrong. |
+| **Show consequences before saving** | Editors state what saving will do: a consequence line, "Would send", a replay, blocked-delete reasons. |
+| **Plain language over syntax** | No cron, regex or JSON as the default input. Syntax is an explicit "Custom" escape hatch for experts. |
+| **Safety is visible, never bypassable** | Hold time, hysteresis and cooldown are always shown, and their errors appear while you type. |
+| **Every state is designed** | Each view has designed loading, empty, no-results, error, stale-data and read-only states. None is a blank area or an endless skeleton. |
+| **Keyboard- and phone-usable** | Every flow works with a keyboard alone, and at 390 px wide with no horizontal scroll. |
+
+---
+
+## 3. Tokens
+
+Tokens live in `frontend/src/app/globals.css`, exposed to Tailwind v4 via `@theme`. The **names are
+unchanged** from the current file; only the values change. **Never hard-code a colour, radius or
+font in a component.** If you need a value that has no token, add the token here first.
+
+### Theme
+
+- **Light is the default.** It follows `prefers-color-scheme`, and the user can override it with the
+  theme toggle; the override is persisted.
+- Dark is a full peer, not an afterthought.
+- This inverts the current "dark first" setup. Update the no-flash script in `app/layout.tsx` and the
+  `@custom-variant dark` selector to match.
+
+### Colour
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| `--color-canvas` | `#f7f7f8` | `#0f1014` | page background |
+| `--color-surface` | `#ffffff` | `#16171c` | cards, tables, panels |
+| `--color-surface-raised` | `#f2f2f5` | `#1e2027` | secondary buttons, hover, summary boxes |
+| `--color-border` | `#e3e3e8` | `#2a2c34` | all 1 px borders |
+| `--color-border-soft` | `#eeeef2` | `#222329` | row dividers |
+| `--color-ink` | `#15161a` | `#ececf1` | text |
+| `--color-ink-muted` | `#62646f` | `#9a9ca8` | labels, hints, meta |
+| `--color-accent` | `#4f46e5` | `#818cf8` | primary buttons, links, focus, active nav/tab, selected state |
+| `--color-accent-strong` | `#4338ca` | `#a5b4fc` | hover/pressed, accent text on muted fill |
+| `--color-accent-muted` | `#eef0ff` | `#1f2040` | selected fill, info callouts, sentence box |
+| `--color-on-accent` | `#ffffff` | `#0f1014` | text on accent fill |
+| `--color-chart` | `#0e7490` | `#22d3ee` | **data only**: trend lines, readouts, sparklines, replay strips |
+| `--color-chart-grid` | `rgba(20,20,40,.07)` | `rgba(255,255,255,.07)` | chart gridlines |
+| `--color-status-online` | `#15803d` | `#4ade80` | online, armed, checks passed |
+| `--color-status-offline` | `#dc2626` | `#f87171` | offline, alert count badge |
+| `--color-status-pending` | `#b45309` | `#fbbf24` | pending, never connected, latched, warnings |
+| `--color-status-unknown` | `#6b7280` | `#9ca3af` | unknown, disabled, stale |
+| `--color-status-error` | `#dc2626` | `#f87171` | validation errors, danger buttons |
+| `--color-status-error-surface` | `#fef2f2` | `#2a1517` | error callout fill |
+| `--color-status-pending-surface` | `#fffbeb` | `#2a2211` | warning callout / `tag--warn` fill |
+| `--color-pop` | `#ffffff` | `#1a1b21` | popovers, menus, dialogs |
+| `--color-scrim` | `rgba(17,17,30,.3)` | `rgba(0,0,0,.58)` | behind drawers and dialogs |
+| `--color-sidebar` | `#fbfbfc` | `#121318` | sidebar |
+| `--color-row-hover` | `#f8f8fb` | `#1a1b21` | table row hover |
+| `--color-input` | `#ffffff` | `#121318` | input fill |
+
+**Two accent roles, kept apart:**
+- `--color-accent` (indigo) is for UI chrome only.
+- `--color-chart` (cyan) is for data only, and is never used as a button or background.
+
+**Status is never shown by colour alone.** Always pair it with a dot or shape and a word.
+`--color-panel-edge` (the Control Room card highlight) is retired.
+
+### Shape, type and elevation
+
+| Token | Value |
+|---|---|
+| `--radius-sm` / `--radius` / `--radius-lg` | 8 / 12 / 16 px (controls / cards / large surfaces) |
+| `--h-control` | 36 px: every button, input, select and segmented control. Minimum touch target is 36 px. |
+| `--pad-cell` | 12 px table cell padding |
+| `--fs-base` / `--fs-sm` / `--fs-xs` | 14.5 / 14 / 12.5 px |
+| `--shadow-card` | `0 1px 2px rgba(30,30,60,.05)` light; `none` dark |
+| `--shadow-pop` | `0 24px 48px -16px rgba(30,30,60,.22), 0 2px 6px rgba(30,30,60,.08)` light; `0 24px 48px -16px rgba(0,0,0,.7), 0 2px 6px rgba(0,0,0,.4)` dark |
+| Fonts | **Geist** (display, sans, readouts) and **Geist Mono** (keys, topics, payloads, times in chips), loaded via `next/font`. Replaces Chivo / IBM Plex. |
+
+- Page titles are 28–30 px, weight 600, letter-spacing −0.015em.
+- Section headings are 15–16 px, weight 600.
+- Numbers use `tabular-nums`.
+
+### Status vocabulary
+
+| Entity | States (word + tone + dot) |
+|---|---|
+| Device | Online (online) · Offline (offline) · Never connected (pending) · Disabled (unknown) |
+| Rule | Armed (online) · Fired (accent) · Latched (pending, square dot) · Disabled (unknown) |
+| Data freshness | Live · Stale (unknown, `.is-stale` 60 % opacity) · No data |
+
+---
+
+## 4. App shell
+
+- **Sidebar** is 256 px wide and sticky. From top to bottom:
+  - The workspace switcher (logo tile, name, "role · N devices").
+  - The **⌘K search / command palette** trigger. The palette is both navigation and actions:
+    "New rule", "Go to device…".
+  - Grouped nav:
+
+    | Group | Items |
+    |---|---|
+    | **Monitor** | Dashboards, Devices, Notifications |
+    | **Automate** | Rules |
+    | **Configure** | Device templates, Zones |
+    | **Admin** | Members, API keys, Workspace settings |
+
+    Each item has an icon, a label and a right-aligned count. Notifications uses a red alert count
+    badge instead.
+  - The **footer**: user avatar and name, a live-connection indicator ("Live updates on"), and the
+    theme toggle.
+- The logo links to Dashboards, which is the first nav item.
+- **Page header**: breadcrumbs, an overline and status pill where relevant, an H1, a one-line
+  description, a meta row, and actions on the right. The primary action is rightmost.
+- **Content column**: max 1120 px, and 1520 px for wide views (list with docked editor, dashboards).
+  Padding is 36 px top, 40 px sides and 110 px bottom so the save bar never covers content.
+- **Below 1100 px** the sidebar becomes a drawer behind a menu button, and docked editors become
+  drawers.
+
+---
+
+## 5. Components
+
+Build every screen from these. **Existing** means the file is in `frontend/src/components/ui/` and
+gets restyled to the tokens. **NEW** means it has to be created.
+
+| Component | Status | Directives |
+|---|---|---|
+| Button | existing | Variants: `primary` · `secondary` · `ghost` · `danger` (filled, NEW variant) · size `sm`. One primary per view. Labels are verbs ("Save rule", "Add device"). |
+| Field | existing | Label above, control, one message line below. That line holds the hint, or the error/warning replacing it (`aria-describedby`). Errors show on blur or submit; **safety errors show while typing**. Optional fields say "optional" in the label. |
+| Input / Select / Textarea | existing | 36 px, `--color-input` fill, mono for keys/topics. Affix (suffix unit such as `s`, `°C`) inside the control. |
+| Combobox | existing | For long lists with search (units, devices). |
+| SegmentedControl | existing | Mutually exclusive modes (Form / Ladder, schedule repeat mode). `role="radiogroup"` or pressed buttons. |
+| **Switch** | NEW | Binary *state* such as rule Enabled/Disabled. The switch sits beside a state word with a hint line below. Use Switch for "is it on", and a checkbox only for picking items in a list. |
+| Tabs | existing | Underline style. **Never show a horizontal scrollbar**: overflowing tabs wrap or collapse into a menu. |
+| Badge / Tag | existing | Pills with a status dot. `tag--warn` (pending surface) for conflicts ("shares fan1"). `tag--sm` for qualifiers ("expert"). |
+| Callout | existing | `info` (accent-muted), `warning` (pending surface), `error` (error surface). Dismissible for tips only. |
+| **Toast** | NEW | Bottom-right, stacked. Title plus a detail line; save toasts carry the **change summary** ("2 changes: Schedule: … → …"). |
+| ConfirmDialog | existing | For destructive actions and guards. Title states the action; the body states the consequence with real numbers; the danger button repeats the verb. |
+| **Sheet / Drawer** | NEW | Right-side editor on narrow screens; mobile nav. Scrim + focus trap + Esc. |
+| **CopyField / SecretReveal** | NEW | One component for every one-time secret (device token, API key). It replaces the four copies in the devices and tokens pages. Shown once, with a copy button and a "won't be shown again" warning. |
+| EmptyState / ErrorState / LoadingSkeleton | existing | Every list and panel has all three. Empty explains why and offers the primary action. Error and empty never render together. |
+| Table | existing | See §6. |
+| **KPI strip** | NEW | 3–4 figures in one bordered strip above a list (e.g. online / offline / never connected). |
+| **Mini strip / sparkline** | NEW | 48-cell 24 h strip (true / unknown-hatched / fired) for rules. Sparkline for readings. Uses `--color-chart`, with accent for fire marks. |
+| Readout / Metric | existing | Live values in Geist, tabular-nums, unit in muted. Stale values dim. |
+
+---
+
+## 6. List pages: the catalog standard
+
+**Every catalog list uses the same anatomy, in this order:**
+
+1. Page header (§4) with the primary "New …" action.
+2. KPI strip, only where the counts drive action (Devices, Rules).
+3. **Toolbar**:
+   - search
+   - filter menus
+   - **active-filter chips** with a "Clear" action
+   - result count ("12 of 15")
+4. **Table**:
+   - Sortable columns (the header shows the sort direction).
+   - A name cell with a secondary line.
+   - Status pill, right-aligned numbers, and a row actions menu (⋯).
+   - Bulk-select checkbox column where bulk actions exist.
+   - Hover highlight; clicking a row opens the record.
+5. **Table footer**: pagination and page size.
+6. States: loading skeleton rows · empty (first-use) · no results (with "Clear filters") · error with a retry.
+
+| List | Columns |
+|---|---|
+| Devices | Device · Template · Zone · Status · Last seen |
+| Device templates | Template · Metrics · Actuators · Devices · Status |
+| Zones | **Zone · Devices · Status** (no Rules column) |
+| Rules | Rule (+ 24 h mini strip, "fired N× in 24 h", "shares X" tag) · Trigger · Action · State |
+| Dashboards | Dashboard · Widgets · Updated |
+| Members / API keys | Name · Role/Scope · Last active · actions |
+
+Below 640 px, tables collapse to stacked cards with the same fields.
+
+---
+
+## 7. Editors: one editing model
+
+Every create/edit flow, whether catalog record, rule or settings, uses **the same editor chrome** in
+three presentations.
+
+| Presentation | When |
+|---|---|
+| **Docked panel** beside the list | Default for quick edits from a list, ≥ 1100 px |
+| **Drawer** (Sheet) | Same editor, narrow screens |
+| **Full page** | Complex records (rules, device templates) or on request ("Expand"); deep-linkable |
+
+**Shared chrome (all three presentations):**
+- A title ("Edit rule", "New device template") and a record menu (⋯: Duplicate, Delete).
+- A **section rail** in page mode. It lists the sections and shows a per-section error badge. Clicking
+  a section scrolls to it. "Expand all" is available.
+- A **consequence line** under the title that says what saving does ("Saving applies within a
+  second. It watches 1 device and can switch 1 actuator").
+- A **sticky save bar** that shows "Unsaved changes" or "All changes saved", with **Discard** and
+  **Save**. Save is disabled while there are no changes, and focuses the first error when invalid.
+- An **unsaved-changes guard** on close, navigate and reload.
+- **Post-save toast** with the change summary. The editor stays on the record after saving; it
+  doesn't redirect somewhere else.
+- **Delete blocked** with an explanation and links when the record is in use ("3 devices use this
+  template"). A delete that is allowed confirms with the real consequence.
+- **Rename warnings** when a key is referenced ("`temperature` is used by 3 rules and 2 widgets").
+- Read-only mode for roles without edit rights shows a banner, disabled controls and no save bar.
+- **Deep links:** every record and every editor state has a URL (list, list + docked editor, full
+  page, section).
+
+---
+
+## 8. Catalog-specific rules
+
+- **Device templates**
+  - Key slug generated live from the name, with a lock icon once the key is used.
+  - Reserved keys (`status`, `config`) and duplicates are rejected inline (CLAUDE.md §4).
+  - Min ≤ max; units come from the unit Combobox. The data type `bool` gives flag metrics.
+  - Disabled templates can't be picked for new devices.
+- **Devices**
+  - Zone is set and changed **only in the device's own settings**.
+  - The one-time credential uses SecretReveal.
+  - The connect / firmware-sketch flow is part of the device page.
+- **Zones** (see §13 for the backend work)
+  - The editor has **name and notes only**: no zone type, and no adding or moving devices from the
+    zone editor.
+  - The list shows Zone / Devices / Status.
+  - Delete is blocked while devices are assigned.
+  - The Devices list can filter by zone.
+- **Dashboards** are per user. They are edited **in place on the grid**: add, remove and resize
+  widgets. No side panel.
+- **Members:** role changes happen inline, with a confirmation that states the new permissions.
+  Nobody can grant a role above their own.
+- **Workspace settings** are saved like a record, with the save bar and change toast. The time zone
+  uses the shared time zone select (§9).
+
+---
+
+## 9. Rule editor
+
+The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
+`docs/rule-engine-multi-device.md`; it doesn't redefine it.
+
+### 9.1 Creating: recipes
+
+- "New rule" opens **recipe cards for a chosen device** (device select at the top). Recipes are
+  generated from what that device can do:
+  - Turn on a fan when it's too hot
+  - Alert when a door stays open
+  - Warn when humidity drops
+  - Stop the pump when the tank is low (latches)
+  - Tell me when this device goes offline
+  - Switch something on a schedule
+- **Start blank** is always offered.
+- Each card shows an icon, a title, one line on what it does, and tags: *switches hardware* ·
+  *latches* · *email*.
+- Starting from a device page preselects that device.
+- Recipes are built in the frontend as an ordinary draft. There is no recipe entity in the backend.
+
+### 9.2 Layout: workbench
+
+- **Page mode** is a two-column workbench: the form on the left, and a **sticky preview** 340 px wide
+  on the right. Below 1200 px the preview stacks under the form.
+- **Ladder view** uses a single full-width column, with the preview cards shown as a grid below it.
+- **Tabs:** **Logic · Activity**. There is no Simulate tab; simulating is part of the preview.
+- **Form / Ladder** is a segmented control; Ladder is tagged "expert". The choice is remembered per
+  user.
+- **New rules show numbered steps:** **1 When · 2 Then · 3 Safety · 4 Name.**
+- A dismissible "Three steps to a rule" tip appears on first use.
+
+### 9.3 Editable sentence
+
+- The rule is summarised as one sentence at the top, e.g. "When **temperature on bay1-climate is
+  above 27 °C** for **10 s**, **turn fan1 on**…".
+- **Every phrase is a chip.** Clicking one opens an in-place popover with Apply / Cancel:
+  - Readings: operator and value.
+  - Actuators: On / Off.
+  - Everything else: "Open full condition".
+- Chips are keyboard-focusable. Esc closes the popover and returns focus to the chip.
+
+### 9.4 Preview cards (live as you edit)
+
+1. **Last 24 hours:** a replay strip plus "Would have fired 2× at 09:45, 10:45", or a warning when
+   it would fire too often ("noisy"). For schedule rules: "Fires on its schedule".
+2. **Would send:** the exact MQTT topic and payload (`{tenant}/{device}/cmd/{actuator}`
+   `{ value, ttl }`), the revert/clear command, or the email recipients. Includes a **Dry run with
+   live readings** button, which reports what would happen now and **sends nothing**.
+3. **Checks:** conditions complete, actions complete, hold ≥ 5 s, minimum interval ≥ 30 s, and
+   hysteresis > 0 when the rule switches hardware. Failures show as errors in the form **while
+   typing**, not on save.
+4. **Other rules on these actuators:** lists other enabled rules on the same device and actuator.
+   A conflict (a different value or revert) gets a warning explaining that the last command wins.
+5. **Try other values** (collapsed): type values per contact and see the outcome. Focus stays in
+   the input while the preview updates.
+
+Replay and dry run read stored telemetry and rollups through the API. They are never on the hot
+path (CLAUDE.md §9.1).
+
+### 9.5 Trigger: schedule picker
+
+**Never ask for cron by default.** The schedule is a segmented control:
+
+| Mode | Controls | Stored cron |
+|---|---|---|
+| **Every day** | hour : minute | `M H * * *` |
+| **Certain days** | Mo Tu We Th Fr Sa Su toggle buttons + *Weekdays* / *Weekends* shortcuts; hour : minute | `M H * * d,d` (`1-5` for weekdays) |
+| **Repeatedly** | every N **minutes** (1–59) or **hours** (1–23) | `*/N * * * *` · `0 */N * * *` |
+| **Monthly** | day 1st–28th; hour : minute | `M H D * *` |
+| **Custom** | cron text field (mono, with a hint) | as typed |
+
+- **Time** is entered with two **24-hour selects** (hour 00–23, minute in 5-minute steps; an
+  existing off-step minute is kept). Don't use the native time input, because it follows the OS
+  locale (e.g. "10:00 p. m.").
+- At least one day stays selected. Days 29–31 aren't offered, because short months would skip them.
+- A **summary line** under the picker reads e.g. "Runs **weekdays at 22:00** (Mexico City, GMT-6).
+  Next: Today 22:00 · Tomorrow 22:00 · Fri 2 Oct 22:00". The next three runs are computed in the
+  **rule's time zone**.
+- **Cron remains the stored format**, so the backend doesn't change:
+  - A stored cron that can't be shown in the simple controls opens in **Custom**.
+  - Custom validates each field (numbers, `*`, ranges, lists, steps) with a plain error message.
+  - Leaving Custom keeps the time where possible.
+- The same plain wording is used everywhere a schedule is shown: the sentence, the Rules list, the
+  version history. For example "every day at 22:00", "Tue, Thu at 07:30", "every 15 min", "on the
+  1st of each month at 09:00", "weekdays at 08:00 and 20:00".
+
+### 9.6 Time zone select (shared component)
+
+- **Value:** an IANA name.
+- **Label:** "**City (GMT±h)**", e.g. "Mexico City (GMT-6)", "Oslo (GMT+2)". The offset is computed
+  for today, so daylight saving is correct.
+- **Grouped** as Americas · Europe & Africa · Asia & Pacific · Other (UTC), each sorted by offset and
+  then city.
+- **Where it's used:** rule schedules and Workspace settings. It is one component and one list;
+  never hand-roll another.
+- A stored zone that isn't in the list is still shown as the selected option.
+
+### 9.7 Safety, behaviour and general
+
+- **Behaviour:** Re-arm vs Latch until reset, as two illustrated radio cards.
+- **Hold time, minimum interval and clear delay** are always visible. They are never collapsed
+  behind "advanced" (CLAUDE.md §9.7).
+- **General:**
+  - Rule name, with an auto-generated placeholder ("Left blank, a name is generated").
+  - **Status** on **its own full-width row** below the name: a Switch with **Enabled / Disabled**
+    (the same words as the header badge) and a hint that changes with it ("Fires when its trigger
+    and conditions are met." / "Keeps its settings and history, but won't fire.").
+
+### 9.8 Activity, versions and latch
+
+- **Activity tab:** recent firings, then **Versions**.
+  - Each version shows who, when and the change lines.
+  - **Restore** loads that version into the draft; nothing is saved until you save.
+- **Save** records a version, and the toast summarises it: "N changes: …".
+  - The diff covers name, trigger, conditions, actions, behaviour, hold / interval / clear delay,
+    **schedule, time zone and status**.
+- **Reset latch** is a confirmation that lists the current readings and says whether the rule would
+  fire again immediately.
+
+### 9.9 Rules list extras
+
+- Each row shows a 24 h mini strip and "fired N× in 24 h" (or "quiet in 24 h"; schedule rules show
+  their schedule).
+- A **"shares fan1"** warning tag appears when another enabled rule drives the same actuator.
+
+---
+
+## 10. Public pages
+
+- **Login:** a branded background (network canvas), never an empty page. A centred card with the
+  form, and clear error and loading states.
+- **Landing** (`(marketing)`, same tokens and fonts as the app):
+  - A text-only hero over the network canvas.
+  - The **control-loop card** lives in the Onboarding section.
+  - A **Deployment** section: Cloud (shared) · Dedicated cloud · On-premise, plus an edge-connector
+    note (CLAUDE.md §3).
+  - An **in-page contact form**.
+  - Contract terms and data retention are answered in the **FAQ**.
+  - **No plan tiers.**
+
+---
+
+## 11. Content and wording
+
+- Sentence case everywhere. Buttons use verbs ("Save rule", "Reset latch", "Add action").
+- **Units always shown.** Time is **24-hour**. Recent times are relative ("Today 22:00", "Fired 1 h
+  ago"), older ones absolute ("Fri 2 Oct 22:00").
+- **Names in the UI:**
+
+  | Concept | UI name |
+  |---|---|
+  | Device catalog entry | **Device template** (backend: device type) |
+  | Rule re-arm | "Re-arm" / "Latch until reset" |
+  | Cooldown | **Minimum interval** |
+  | `for_duration` | **Hold time** |
+
+- **Status words** come from the §3 vocabulary only. Use the same word in pills, switches, toasts
+  and history.
+- **Error messages** say what to do: "Enter a number", not "Invalid". **Warnings** explain the risk:
+  "This rule switches hardware. Add some hysteresis so noisy readings don't cycle the relay."
+- No jargon without explanation. For example, the Ladder view keeps its PLC terms but is marked
+  "expert".
+
+---
+
+## 12. Accessibility and responsive
+
+- **Focus:**
+  - The focus ring is visible everywhere (2 px accent outline, 2 px offset).
+  - Focus is trapped in dialogs and drawers, and returns to the trigger on close.
+  - After a re-render, focus stays on the control the user was using.
+- **ARIA roles:**
+  - radiogroups: segmented controls, trigger options, schedule modes
+  - `switch`: Status
+  - `aria-pressed`: day toggles
+  - `aria-describedby` from every control to its message line
+  - `aria-invalid` on errors
+- **Hit targets:** at least 36 px, and 36 px minimum on touch for segmented and toggle buttons.
+- **Phone:**
+  - At 390 px nothing scrolls horizontally.
+  - Tables become cards, the workbench preview stacks, and editors open full-screen.
+  - Demo controls or floating buttons never cover content.
+- **Motion:** honour `prefers-reduced-motion`. Keep transitions under 200 ms and only on
+  colour/opacity/transform.
+- **Contrast:** meet WCAG AA in both themes.
+
+---
+
+## 13. Functionality G proposes that needs backend work
+
+G is not frontend-only. These need API, schema or migration work, each respecting CLAUDE.md §9:
+
+| Feature | Backend need |
+|---|---|
+| Zones | New `zones` table with `tenant_id` + RLS policy in the same migration; nullable `devices.zone_id` FK; CRUD + device count; block delete while assigned. |
+| Rule versions + Restore | Versions table (rule snapshot, author, time, change lines) with `tenant_id` + RLS; list endpoint. Restore = client loads the snapshot into the draft, then a normal save. |
+| 24 h replay, mini strips, "fired N×" | Firing history endpoint; replay evaluates the rule over **rollups** (continuous aggregates), outside the worker, never on the hot path. |
+| Dry run | Endpoint that evaluates the draft against the latest cached readings and returns the outcome. **Sends nothing.** |
+| Conflicts ("shares fan1") | Query over enabled rules by device + actuator (can be computed client-side from the rules list). |
+| Blocked delete / rename warnings | Usage counts: templates→devices, keys→rules/widgets, zones→devices. |
+| Recipes, schedule picker, time zone labels, status switch | **No backend change.** Cron + IANA tz and `enabled` are already stored. |
+| CRUD fixes | The P0/P1 items in `docs/design/redesign/redesign-report.html`: key freeze, owner-role escalation, disabled templates usable, key format validation, orphaning renames, dropped 422 details. |
+
+Regenerate `frontend/src/types/api.ts` after every schema change (CLAUDE.md §9.8).
+
+---
+
+## 14. Implementation order
+
+Each step is a separate PR and leaves the app fully working.
+
+1. **Tokens and fonts.** Replace the values in `globals.css` and switch to Geist via `next/font`.
+   Make light the default. **Rewrite the Control Room comments** in `app/globals.css`,
+   `app/layout.tsx`, `app/(marketing)/layout.tsx`, `components/ui/Readout.tsx` and
+   `components/ui/Callout.tsx`.
+2. **New primitives:** Switch, Toast, Sheet/Drawer, CopyField/SecretReveal, KPI strip, mini strip,
+   the `danger` Button variant, and the TimezoneSelect and SchedulePicker components.
+3. **Shell:** grouped sidebar, workspace switcher, ⌘K palette, page header, content width, mobile
+   drawer.
+4. **List-page standard** (§6), applied to Devices first, then the other catalogs.
+5. **Editor chrome** (§7): docked / drawer / page, rail, consequence line, save bar, guard, toasts.
+6. **Catalogs** (§8), including the Zones backend (§13).
+7. **Rule editor** (§9): recipes → workbench → sentence chips → schedule + time zone → versions.
+8. **Public pages** (§10).
+
+---
+
+## 15. Reference and changelog
+
+**Reference demos** (open locally in a browser; no build needed):
+- `docs/design/redesign/demo-g-full-site.html`: **the reference**.
+  - Use the **Demo controls** button (top right) to switch role and theme and to open any route.
+  - Hash routes deep-link to pages and editors.
+- `docs/design/redesign/redesign-report.html`: the audit, the CRUD matrix, the P0–P2 issues, and
+  each version's rationale.
+- Demos A–F: history only.
+
+**Changelog**
+
+| Date | Change |
+|---|---|
+| 2026-09-30 | Initial directives from demo G: tokens (indigo/Geist, light-first), shell, list and editor standards, catalogs, the rule editor rework (recipes, workbench, sentence chips, versions, schedule picker, time zone select, status switch), public pages, the backend work list. |
+| 2026-09-30 | Implementation scope: every G feature gets a real backend. Workspace settings carry a **time zone only**; the °C/°F unit option is dropped because display-only conversion makes rule thresholds ambiguous. **Member invites** (7-day email link, accept page) and **forgot password** are in scope. **API keys authenticate** as `Authorization: Bearer`, with an expiry (Viewer or Admin only). The landing page has no public demo tenant, so G's "Open the demo" becomes "Sign in" / "Talk to us". The contact form emails the team and stores nothing. |
