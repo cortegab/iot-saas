@@ -7,6 +7,8 @@ credentials and API keys both use the same split public-id/secret pattern as
 refresh tokens here (CLAUDE.md constraint 12).
 """
 
+import hashlib
+import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -16,7 +18,7 @@ from argon2 import exceptions as argon2_exceptions
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.auth.models import RefreshToken, User
+from app.auth.models import PasswordResetToken, RefreshToken, User
 from app.config import settings
 from app.tenants import service as tenants_service
 from app.tenants.models import Tenant
@@ -87,13 +89,11 @@ def decode_access_token(token: str) -> uuid.UUID:
         raise InvalidAccessTokenError from exc
 
 
-async def register_user(
-    session: AsyncSession,
-    email: str,
-    password: str,
-    tenant_name: str,
-    name: str | None = None,
-) -> tuple[User, Tenant]:
+async def create_user(
+    session: AsyncSession, email: str, password: str, name: str | None = None
+) -> User:
+    """A bare account with no workspace of its own — used by invitation
+    sign-up (the invite supplies the workspace) and by register_user."""
     normalized_email = email.strip().lower()
     existing = await session.execute(select(User).where(User.email == normalized_email))
     if existing.scalar_one_or_none() is not None:
@@ -102,8 +102,18 @@ async def register_user(
     stripped_name = name.strip() if name and name.strip() else None
     user = User(email=normalized_email, name=stripped_name, password_hash=hash_password(password))
     session.add(user)
-    await session.flush()  # populate user.id for the membership insert below
+    await session.flush()
+    return user
 
+
+async def register_user(
+    session: AsyncSession,
+    email: str,
+    password: str,
+    tenant_name: str,
+    name: str | None = None,
+) -> tuple[User, Tenant]:
+    user = await create_user(session, email, password, name)
     tenant = await tenants_service.create_tenant_with_owner(
         session, user_id=user.id, name=tenant_name
     )
@@ -147,6 +157,74 @@ async def get_emails_by_user_ids(
         return {}
     result = await session.execute(select(User.id, User.email).where(User.id.in_(user_ids)))
     return {user_id: email for user_id, email in result.all()}
+
+
+async def get_people_by_user_ids(
+    session: AsyncSession, user_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, tuple[str, str | None]]:
+    """user_id -> (email, name) for member lists."""
+    if not user_ids:
+        return {}
+    result = await session.execute(
+        select(User.id, User.email, User.name).where(User.id.in_(user_ids))
+    )
+    return {user_id: (email, name) for user_id, email, name in result.all()}
+
+
+# ---- forgot password --------------------------------------------------------
+
+RESET_TTL = timedelta(minutes=30)
+
+
+class InvalidResetTokenError(Exception):
+    """Unknown, expired or already-used reset link."""
+
+
+def _sha256(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+async def request_password_reset(session: AsyncSession, email: str) -> tuple[User, str] | None:
+    """A fresh single-use token for `email`, or None when no active account
+    has it (the route answers the same either way — no enumeration). Earlier
+    unused tokens for the user stop working."""
+    user = await get_user_by_email(session, email)
+    if user is None or not user.is_active:
+        return None
+    now = datetime.now(UTC)
+    await session.execute(
+        update(PasswordResetToken)
+        .where(PasswordResetToken.user_id == user.id, PasswordResetToken.used_at.is_(None))
+        .values(used_at=now)
+    )
+    token = secrets.token_urlsafe(32)
+    session.add(
+        PasswordResetToken(user_id=user.id, token_hash=_sha256(token), expires_at=now + RESET_TTL)
+    )
+    await session.flush()
+    return user, token
+
+
+async def reset_password(session: AsyncSession, token: str, new_password: str) -> User:
+    """Set a new password from a reset link; the token is spent and every
+    refresh token of the user is revoked (sign out everywhere)."""
+    now = datetime.now(UTC)
+    result = await session.execute(
+        select(PasswordResetToken).where(PasswordResetToken.token_hash == _sha256(token))
+    )
+    record = result.scalar_one_or_none()
+    if record is None or record.used_at is not None or record.expires_at <= now:
+        raise InvalidResetTokenError
+    user = (await session.execute(select(User).where(User.id == record.user_id))).scalar_one()
+    user.password_hash = hash_password(new_password)
+    record.used_at = now
+    await session.execute(
+        update(RefreshToken)
+        .where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+        .values(revoked_at=now)
+    )
+    await session.flush()
+    return user
 
 
 def _parse_refresh_token(raw: str) -> tuple[uuid.UUID, str]:

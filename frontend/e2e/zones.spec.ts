@@ -4,7 +4,8 @@ import { test } from "./fixtures";
 test("zones: create, rename and delete an empty zone from the docked editor", async ({ page }) => {
   const name = `E2E zone ${Date.now()}`;
   await page.goto("/zones");
-  await page.getByRole("button", { name: "New zone" }).click();
+  // The page header's button; an empty list repeats it in its first-use state.
+  await page.locator("header").getByRole("button", { name: "New zone" }).click();
 
   const editor = page.getByRole("region", { name: /editor$/ });
   await editor.getByLabel("Name", { exact: true }).fill(name);
