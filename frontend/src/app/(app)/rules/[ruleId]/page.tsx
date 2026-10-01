@@ -2,6 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { mutate as revalidate } from "swr";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -14,6 +15,7 @@ import { RuleEditor } from "@/components/rules/editor/RuleEditor";
 import { ResetLatchButton } from "@/components/rules/ResetLatchButton";
 import { RuleSimulatePanel } from "@/components/rules/RuleSimulatePanel";
 import { RunNowButton } from "@/components/rules/RunNowButton";
+import { RuleVersions } from "@/components/rules/RuleVersions";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { ApiRequestError } from "@/lib/api-client";
 import { upsertRuleInCache } from "@/lib/rule-cache";
@@ -22,10 +24,13 @@ import type { components } from "@/types/api";
 type RuleResponse = components["schemas"]["RuleResponse"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 
+type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
+
 const TABS = [
   { id: "edit", label: "Edit" },
   { id: "simulate", label: "Simulate" },
   { id: "activity", label: "Activity" },
+  { id: "versions", label: "Versions" },
 ];
 
 function unhealthySummary(rule: RuleResponse): string | null {
@@ -55,6 +60,8 @@ export default function EditRulePage() {
   } = useApiSWR<RuleResponse>(`/rules/${params.ruleId}`, { refreshInterval: 30_000 });
   const seedDevice = rule ? primaryInputDevice(rule) : undefined;
   const { data: device } = useApiSWR<DeviceResponse>(seedDevice ? `/devices/${seedDevice}` : null);
+  // A version loaded into the editor by Restore; cleared once saved.
+  const [restored, setRestored] = useState<RuleVersionResponse | null>(null);
 
   if (isLoading) return <LoadingSkeleton rows={4} rowClassName="h-12" />;
   if (error) {
@@ -69,8 +76,14 @@ export default function EditRulePage() {
 
   function onSaved(saved: RuleResponse) {
     upsertRuleInCache(saved);
+    void revalidate(`/rules/${saved.id}/versions`);
+    setRestored(null);
     router.push("/rules");
   }
+
+  // Restore: the saved snapshot over the live rule (ids, devices and health
+  // stay current), shown in the editor as an unsaved draft.
+  const editing: RuleResponse = restored ? ({ ...rule, ...restored.snapshot } as RuleResponse) : rule;
 
   return (
     <div className="flex flex-col gap-4">
@@ -99,12 +112,35 @@ export default function EditRulePage() {
       <Tabs tabs={TABS} active={tab} onChange={setTab} />
 
       <TabPanel id="edit" active={tab}>
+        {restored && (
+          <Callout tone="info" className="mb-3">
+            <span className="flex flex-wrap items-center justify-between gap-3">
+              <span>
+                Version {restored.version} is loaded into the editor. Review it, then save to make it the current version.
+              </span>
+              <button type="button" className="text-sm font-medium text-accent hover:underline" onClick={() => setRestored(null)}>
+                Discard and go back to the current version
+              </button>
+            </span>
+          </Callout>
+        )}
         <RuleEditor
-          key={rule.id}
+          key={restored ? `${rule.id}-v${restored.version}` : rule.id}
           deviceId={seedDevice}
-          existing={rule}
+          existing={editing}
           onSaved={onSaved}
           onCancel={() => router.push("/rules")}
+        />
+      </TabPanel>
+
+      <TabPanel id="versions" active={tab}>
+        <RuleVersions
+          ruleId={params.ruleId}
+          canRestore={isAdmin}
+          onRestore={(v) => {
+            setRestored(v);
+            setTab("edit");
+          }}
         />
       </TabPanel>
 

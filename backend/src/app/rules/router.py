@@ -34,6 +34,7 @@ from app.rules.schemas import (
     RuleHealth,
     RuleResponse,
     RuleUpdateRequest,
+    RuleVersionResponse,
     SimulateRequest,
     SimulateResponse,
 )
@@ -149,6 +150,7 @@ async def create_rule(
             clear_actions=[a.model_dump(mode="json") for a in body.clear_actions],
             editor_graph=body.editor_graph,
             enabled=body.enabled,
+            author_id=ctx.user_id,
         )
     except service.RuleValidationError as exc:
         raise HTTPException(
@@ -182,6 +184,7 @@ async def create_device_rule(
                 else None
             ),
             enabled=body.enabled,
+            author_id=ctx.user_id,
         )
     except service.RuleValidationError as exc:
         raise HTTPException(
@@ -282,6 +285,28 @@ async def simulate_rule(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+@router.get("/rules/{rule_id}/versions", response_model=list[RuleVersionResponse])
+async def list_rule_versions(
+    rule: Rule = Depends(get_rule_or_404),
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> list[RuleVersionResponse]:
+    """Saved states, newest first. Membership is enough (read-side)."""
+    rows = await service.list_rule_versions(session, ctx.tenant_id, rule.id)
+    return [
+        RuleVersionResponse(
+            id=v.id,
+            version=v.version,
+            snapshot=v.snapshot,
+            change_lines=list(v.change_lines),
+            author_id=v.author_id,
+            author=author,
+            created_at=v.created_at,
+        )
+        for v, author in rows
+    ]
+
+
 @router.get("/rules/{rule_id}/executions", response_model=list[RuleExecutionResponse])
 async def list_rule_executions(
     rule: Rule = Depends(get_rule_or_404),
@@ -357,6 +382,7 @@ async def update_rule(
                 if body.clear_actions is not None
                 else None
             ),
+            author_id=ctx.user_id,
         )
     except service.RuleValidationError as exc:
         raise HTTPException(
