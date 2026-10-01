@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { mutate, useSWRConfig } from "swr";
 import { useAuth } from "@/hooks/useAuth";
 import { connectRealtime, type RealtimeMessage, type RealtimeStatus } from "@/lib/realtime";
+import { emitRealtime } from "@/lib/realtime-bus";
 import { applyDeviceHealth, appendPoint, markOnline, mergeLatest } from "@/lib/live-telemetry";
 import type { components } from "@/types/api";
 
@@ -71,6 +72,7 @@ export function useRealtime(): RealtimeStatus {
     }
 
     function onMessage(message: RealtimeMessage) {
+      emitRealtime(message);
       if (
         message.type === "telemetry" &&
         message.device_id &&
