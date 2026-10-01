@@ -222,3 +222,92 @@ async def test_simulate_replay_over_history(
         headers=headers,
     )
     assert bad.status_code == 422
+
+
+# ---- POST /rules/simulate: unsaved drafts (the editor preview) --------------
+
+
+def _draft(device_id: str, threshold: float = 30.0) -> dict[str, Any]:
+    return {
+        "name": "Draft",
+        "condition": {
+            "kind": "leaf",
+            "device_id": device_id,
+            "metric": "temperature",
+            "operator": ">",
+            "rhs": {"source": "static", "value": threshold},
+        },
+        "actions": [
+            {"type": "actuator_command", "device_id": device_id, "actuator": "fan1", "value": True}
+        ],
+    }
+
+
+async def test_draft_live_uses_current_values_and_writes_nothing(
+    client: httpx.AsyncClient, admin_session: AsyncSession
+) -> None:
+    owner = await _register(client, "owner-d1@example.com", "DraftS1")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device_id = (await _create_device(client, headers))["device"]["id"]
+    await _seed_health(admin_session, tenant_id, device_id, "temperature", 35.0, datetime.now(UTC))
+    before = await _counts(admin_session)
+
+    resp = await client.post("/rules/simulate", json={"rule": _draft(device_id)}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["mode"] == "live"
+    assert resp.json()["would_fire"] is True
+
+    higher = await client.post(
+        "/rules/simulate", json={"rule": _draft(device_id, 40.0)}, headers=headers
+    )
+    assert higher.json()["would_fire"] is False
+    # A draft is never saved: no rule, no execution, no command.
+    assert await _counts(admin_session) == before
+    rules = await admin_session.execute(text("SELECT count(*) FROM rules"))
+    assert rules.scalar_one() == 0
+
+
+async def test_draft_replay_over_history(
+    client: httpx.AsyncClient, admin_session: AsyncSession
+) -> None:
+    owner = await _register(client, "owner-d2@example.com", "DraftS2")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device_id = (await _create_device(client, headers))["device"]["id"]
+    base = datetime.now(UTC) - timedelta(hours=2)
+    for i, value in enumerate((20.0, 40.0, 20.0, 45.0)):
+        await admin_session.execute(
+            text(
+                "INSERT INTO telemetry (time, tenant_id, device_id, metric, value) "
+                "VALUES (:t, :tenant_id, :device_id, 'temperature', :v)"
+            ),
+            {
+                "t": base + timedelta(minutes=i * 10),
+                "tenant_id": tenant_id,
+                "device_id": device_id,
+                "v": value,
+            },
+        )
+    await admin_session.commit()
+
+    resp = await client.post(
+        "/rules/simulate",
+        json={
+            "rule": _draft(device_id),
+            "replay": {"from": base.isoformat(), "to": datetime.now(UTC).isoformat()},
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert len(resp.json()["replay"]["would_have_fired_at"]) == 2
+
+
+async def test_draft_with_another_tenants_device_is_refused(client: httpx.AsyncClient) -> None:
+    a = await _register(client, "owner-d3a@example.com", "DraftS3a")
+    headers_a = _auth_headers(a, a["memberships"][0]["tenant_id"])
+    foreign = (await _create_device(client, headers_a))["device"]["id"]
+    b = await _register(client, "owner-d3b@example.com", "DraftS3b")
+    headers_b = _auth_headers(b, b["memberships"][0]["tenant_id"])
+    resp = await client.post("/rules/simulate", json={"rule": _draft(foreign)}, headers=headers_b)
+    assert resp.status_code == 422

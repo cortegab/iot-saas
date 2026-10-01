@@ -10,7 +10,8 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+import { Tag } from "@/components/ui/Badge";
+import { SwitchField } from "@/components/ui/Switch";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -26,7 +27,8 @@ import { RuleSummary, type RuleSummaryData } from "@/components/rules/RuleSummar
 import { LadderMode } from "@/components/rules/ladder/LadderMode";
 import type { components } from "@/types/api";
 import { FormMode } from "./FormMode";
-import { SECTION_LABEL } from "./fields";
+import { SectionCard, StepsContext } from "./fields";
+import { RulePreview } from "./RulePreview";
 import { useRuleCatalog } from "./useRuleCatalog";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -53,19 +55,22 @@ function writeMode(mode: EditorMode) {
 export function RuleEditor({
   deviceId,
   existing,
+  initialDraft,
   onSaved,
   onCancel,
 }: {
   /** Seeds the first condition and action device for a new rule. */
   deviceId?: string;
   existing?: RuleResponse;
+  /** A new rule's starting point (a recipe); blank otherwise. */
+  initialDraft?: RuleDraft;
   onSaved: (saved: RuleResponse) => void;
   onCancel: () => void;
 }) {
   const api = useApi();
   const catalog = useRuleCatalog();
   const [draft, setDraft] = useState<RuleDraft>(() =>
-    existing ? draftFromRule(existing) : emptyDraft(deviceId ?? ""),
+    existing ? draftFromRule(existing) : (initialDraft ?? emptyDraft(deviceId ?? "")),
   );
   const [mode, setMode] = useState<EditorMode>("form");
   const [error, setError] = useState<string | null>(null);
@@ -120,68 +125,30 @@ export function RuleEditor({
     preview = null;
   }
 
-  return (
-    <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
-      <Card padding="md">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-          <Field label="Rule name" hint="Left blank, a name is generated." className="flex-1">
-            <Input
-              compact
-              value={draft.name}
-              onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-              placeholder="e.g. Boiler overheat interlock"
-            />
-          </Field>
-          <SegmentedControl
-            ariaLabel="Editor view"
-            value={mode}
-            onChange={changeMode}
-            options={[
-              { value: "form", label: "Form" },
-              { value: "ladder", label: "Ladder" },
-            ]}
-          />
-        </div>
-      </Card>
-
-      {mode === "form" ? (
-        <FormMode draft={draft} catalog={catalog} update={setDraft} />
-      ) : (
-        <LadderMode draft={draft} catalog={catalog} update={setDraft} />
-      )}
-
-      <Card padding="md">
-        <label className="flex items-center gap-2 text-sm text-ink">
-          <input
-            type="checkbox"
-            className="accent-accent"
-            checked={draft.enabled}
-            onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })}
-          />
-          Enabled
-        </label>
-      </Card>
-
-      {preview && (
-        <Card padding="md">
-          <div className="flex flex-col gap-1">
-            <span className={SECTION_LABEL}>Summary</span>
-            <RuleSummary
-              rule={preview}
-              placeholder="…"
-              className="text-[15px] leading-relaxed"
-              deviceNameById={catalog.deviceNameById}
-            />
-          </div>
-        </Card>
-      )}
-
+  const isNew = !existing;
+  const nameCard = (
+    <SectionCard title="Name" step={4}>
+      <Field label="Rule name" hint="Left blank, a name is generated.">
+        <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Boiler overheat interlock" />
+      </Field>
+      <SwitchField
+        label="Status"
+        checked={draft.enabled}
+        onChange={(enabled) => setDraft({ ...draft, enabled })}
+        onLabel="Enabled"
+        offLabel="Disabled"
+        onHint="Fires when its trigger and conditions are met."
+        offHint="Keeps its settings and history, but won't fire."
+      />
+    </SectionCard>
+  );
+  const footer = (
+    <>
       {error && (
         <p role="alert" className="text-sm text-status-error">
           {error}
         </p>
       )}
-
       <div className="flex gap-3 border-t border-border pt-4">
         <Button type="submit" size="md" disabled={submitting}>
           {submitting ? "Saving…" : existing ? "Save changes" : "Create rule"}
@@ -190,6 +157,54 @@ export function RuleEditor({
           Cancel
         </Button>
       </div>
-    </form>
+    </>
+  );
+
+  return (
+    <StepsContext.Provider value={isNew}>
+      <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {preview ? (
+            <RuleSummary rule={preview} placeholder="…" className="min-w-0 flex-1 text-[15px] leading-relaxed" deviceNameById={catalog.deviceNameById} />
+          ) : (
+            <span className="text-[13px] text-ink-muted">Fill in the steps below; the rule reads back here as a sentence.</span>
+          )}
+          <div className="flex items-center gap-2">
+            <SegmentedControl
+              ariaLabel="Editor view"
+              value={mode}
+              onChange={changeMode}
+              options={[
+                { value: "form", label: "Form" },
+                { value: "ladder", label: "Ladder" },
+              ]}
+            />
+            <Tag tone="neutral" size="sm">
+              Ladder: expert
+            </Tag>
+          </div>
+        </div>
+
+        {mode === "form" ? (
+          <div className="grid items-start gap-4 wb:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="flex min-w-0 flex-col gap-4">
+              <FormMode draft={draft} catalog={catalog} update={setDraft} />
+              {nameCard}
+              {footer}
+            </div>
+            <aside aria-label="Preview" className="flex flex-col gap-3 wb:sticky wb:top-4">
+              <RulePreview draft={draft} catalog={catalog} ruleId={existing?.id} />
+            </aside>
+          </div>
+        ) : (
+          <>
+            <LadderMode draft={draft} catalog={catalog} update={setDraft} />
+            {nameCard}
+            <RulePreview draft={draft} catalog={catalog} ruleId={existing?.id} layout="grid" />
+            {footer}
+          </>
+        )}
+      </form>
+    </StepsContext.Provider>
   );
 }

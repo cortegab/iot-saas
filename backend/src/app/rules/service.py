@@ -2311,3 +2311,34 @@ async def rule_activity(
             cells[cell_of(t)] = "fired"
         out.append(RuleActivityRow(rule_id, cells, len(fires), fires[-1] if fires else None))
     return out
+
+
+async def simulate_draft(
+    session: AsyncSession, tenant_id: uuid.UUID, body: dict[str, Any], req: SimulateRequest
+) -> SimulateResponse:
+    """Simulate a rule that isn't saved yet: the same validation as a save,
+    then simulate_rule on a transient Rule that is never added to the
+    session — nothing is written, nothing is dispatched. API-side only."""
+    condition = body.get("condition")
+    trigger = body["trigger"]
+    actions = body["actions"]
+    clear_actions = body.get("clear_actions") or []
+    policy = body["execution_policy"]
+    _assert_leaves_have_device(condition)
+    _validate_trigger(trigger)
+    _validate_clear_actions(trigger, clear_actions)
+    _validate_latch(trigger, policy, clear_actions)
+    device_map = _rule_device_map(condition, actions, trigger, clear_actions)
+    await _validate_devices_in_tenant(session, tenant_id, set(device_map))
+    draft = Rule(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        name=body.get("name") or "Draft",
+        trigger=trigger,
+        condition=condition,
+        execution_policy=policy,
+        actions=actions,
+        clear_actions=clear_actions,
+        enabled=True,
+    )
+    return await simulate_rule(session, tenant_id, draft, req)
