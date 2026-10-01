@@ -468,3 +468,14 @@ class RuleVersionResponse(BaseModel):
     # Display name or email; null for an API-key save or a deleted user.
     author: str | None
     created_at: datetime
+
+
+class RuleActivityResponse(BaseModel):
+    """One rule's recent activity for the list's mini strip (DESIGN.md §5):
+    `cells` oldest → newest, each "fired" (a firing landed in it), "true"
+    (inside a fire → clear span; only rules that record clears), or "idle"."""
+
+    rule_id: uuid.UUID
+    cells: list[Literal["idle", "true", "fired"]]
+    fired: int
+    last_fired_at: datetime | None

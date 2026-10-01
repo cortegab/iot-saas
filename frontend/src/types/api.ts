@@ -617,6 +617,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rules/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rules Activity
+         * @description Every rule's recent firings in buckets, for the list's mini strips.
+         *     Declared above GET /rules/{rule_id} so "activity" isn't read as an id.
+         */
+        get: operations["rules_activity_rules_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rules/failed-actions/{action_id}/retry": {
         parameters: {
             query?: never;
@@ -1880,6 +1901,25 @@ export interface components {
              * @default 5
              */
             timeout_s: number;
+        };
+        /**
+         * RuleActivityResponse
+         * @description One rule's recent activity for the list's mini strip (DESIGN.md §5):
+         *     `cells` oldest → newest, each "fired" (a firing landed in it), "true"
+         *     (inside a fire → clear span; only rules that record clears), or "idle".
+         */
+        RuleActivityResponse: {
+            /**
+             * Rule Id
+             * Format: uuid
+             */
+            rule_id: string;
+            /** Cells */
+            cells: ("idle" | "true" | "fired")[];
+            /** Fired */
+            fired: number;
+            /** Last Fired At */
+            last_fired_at: string | null;
         };
         /**
          * RuleCreateRequest
@@ -4069,6 +4109,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FailedActionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rules_activity_rules_activity_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+                buckets?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleActivityResponse"][];
                 };
             };
             /** @description Validation Error */
