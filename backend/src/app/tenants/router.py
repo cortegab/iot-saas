@@ -112,7 +112,7 @@ def _last_owner() -> HTTPException:
 
 @router.get("/members", response_model=list[MemberResponse])
 async def list_members(
-    ctx: TenantContext = Depends(require_tenant_context),
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
     session: AsyncSession = Depends(get_session),
 ) -> list[MemberResponse]:
     rows = await service.list_members(session, ctx.tenant_id)
@@ -132,7 +132,7 @@ async def list_members(
 @router.post("/members", response_model=MemberResponse, status_code=status.HTTP_201_CREATED)
 async def add_member(
     body: AddMemberRequest,
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     session: AsyncSession = Depends(get_session),
 ) -> MemberResponse:
     try:
@@ -157,7 +157,7 @@ async def add_member(
 async def change_member_role(
     user_id: uuid.UUID,
     body: ChangeRoleRequest,
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     session: AsyncSession = Depends(get_session),
 ) -> MemberResponse:
     try:
@@ -177,7 +177,7 @@ async def change_member_role(
 @router.delete("/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_member(
     user_id: uuid.UUID,
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     try:
@@ -239,7 +239,7 @@ async def _send_invitation(
 
 @router.get("/invitations", response_model=list[InvitationResponse])
 async def list_invitations(
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     session: AsyncSession = Depends(get_session),
 ) -> list[InvitationResponse]:
     return [_invitation_response(i) for i in await service.list_invitations(session, ctx.tenant_id)]
@@ -248,7 +248,7 @@ async def list_invitations(
 @router.post("/invitations", response_model=InvitationResponse, status_code=status.HTTP_201_CREATED)
 async def create_invitation(
     body: InvitationCreateRequest,
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InvitationResponse:
@@ -287,7 +287,7 @@ async def create_invitation(
 @router.post("/invitations/{invitation_id}/resend", response_model=InvitationResponse)
 async def resend_invitation(
     invitation_id: uuid.UUID,
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> InvitationResponse:
@@ -307,7 +307,7 @@ async def resend_invitation(
 @router.delete("/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def cancel_invitation(
     invitation_id: uuid.UUID,
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     try:

@@ -964,6 +964,11 @@ export interface components {
             name: string;
             /** @default viewer */
             role: components["schemas"]["TenantRole"];
+            /**
+             * Expires In Days
+             * @default 90
+             */
+            expires_in_days: number | null;
         };
         /** ApiKeyCreateResponse */
         ApiKeyCreateResponse: {
@@ -996,6 +1001,8 @@ export interface components {
             last_used_at: string | null;
             /** Revoked At */
             revoked_at: string | null;
+            /** Expires At */
+            expires_at: string | null;
         };
         /** CatalogActuator */
         CatalogActuator: {
@@ -2703,9 +2710,9 @@ export interface operations {
     get_current_tenant_tenants_current_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2735,9 +2742,9 @@ export interface operations {
     update_current_tenant_tenants_current_patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2771,9 +2778,9 @@ export interface operations {
     list_members_tenants_members_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2803,9 +2810,9 @@ export interface operations {
     add_member_tenants_members_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2839,9 +2846,9 @@ export interface operations {
     remove_member_tenants_members__user_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 user_id: string;
@@ -2871,9 +2878,9 @@ export interface operations {
     change_member_role_tenants_members__user_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 user_id: string;
@@ -2909,9 +2916,9 @@ export interface operations {
     leave_tenant_tenants_leave_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2939,9 +2946,9 @@ export interface operations {
     list_invitations_tenants_invitations_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2971,9 +2978,9 @@ export interface operations {
     create_invitation_tenants_invitations_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3007,9 +3014,9 @@ export interface operations {
     resend_invitation_tenants_invitations__invitation_id__resend_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 invitation_id: string;
@@ -3041,9 +3048,9 @@ export interface operations {
     cancel_invitation_tenants_invitations__invitation_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 invitation_id: string;
@@ -3073,9 +3080,9 @@ export interface operations {
     list_catalog_entries_catalog_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3105,9 +3112,9 @@ export interface operations {
     create_catalog_entry_catalog_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3141,9 +3148,9 @@ export interface operations {
     get_catalog_entry_catalog__entry_id__get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 entry_id: string;
@@ -3175,9 +3182,9 @@ export interface operations {
     delete_catalog_entry_catalog__entry_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 entry_id: string;
@@ -3207,9 +3214,9 @@ export interface operations {
     update_catalog_entry_catalog__entry_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 entry_id: string;
@@ -3245,9 +3252,9 @@ export interface operations {
     get_catalog_usage_catalog__entry_id__usage_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 entry_id: string;
@@ -3279,9 +3286,9 @@ export interface operations {
     list_devices_devices_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3311,9 +3318,9 @@ export interface operations {
     create_device_devices_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3347,9 +3354,9 @@ export interface operations {
     get_device_devices__device_id__get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -3381,9 +3388,9 @@ export interface operations {
     delete_device_devices__device_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -3413,9 +3420,9 @@ export interface operations {
     update_device_devices__device_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -3451,9 +3458,9 @@ export interface operations {
     rotate_credential_devices__device_id__rotate_credential_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -3485,9 +3492,9 @@ export interface operations {
     list_api_keys_api_keys_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3517,9 +3524,9 @@ export interface operations {
     create_api_key_api_keys_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3553,9 +3560,9 @@ export interface operations {
     revoke_api_key_api_keys__key_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 key_id: string;
@@ -3585,9 +3592,9 @@ export interface operations {
     latest_devices__device_id__latest_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -3624,9 +3631,9 @@ export interface operations {
                 to?: string | null;
                 resolution?: string;
             };
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -3765,9 +3772,9 @@ export interface operations {
     list_rules_devices__device_id__rules_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -3799,9 +3806,9 @@ export interface operations {
     create_device_rule_devices__device_id__rules_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -3837,9 +3844,9 @@ export interface operations {
     list_all_rules_rules_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3869,9 +3876,9 @@ export interface operations {
     create_rule_rules_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3905,9 +3912,9 @@ export interface operations {
     list_failed_actions_rules_failed_actions_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3937,9 +3944,9 @@ export interface operations {
     get_rule_rules__rule_id__get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -3971,9 +3978,9 @@ export interface operations {
     delete_rule_rules__rule_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -4003,9 +4010,9 @@ export interface operations {
     update_rule_rules__rule_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -4041,9 +4048,9 @@ export interface operations {
     run_rule_rules__rule_id__run_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -4075,9 +4082,9 @@ export interface operations {
     reset_rule_rules__rule_id__reset_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -4109,9 +4116,9 @@ export interface operations {
     simulate_rule_rules__rule_id__simulate_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -4147,9 +4154,9 @@ export interface operations {
     list_rule_executions_rules__rule_id__executions_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -4181,9 +4188,9 @@ export interface operations {
     list_commands_devices__device_id__commands_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -4215,9 +4222,9 @@ export interface operations {
     request_command_devices__device_id__commands_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -4253,9 +4260,9 @@ export interface operations {
     list_dashboards_dashboards_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -4285,9 +4292,9 @@ export interface operations {
     create_dashboard_dashboards_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -4321,9 +4328,9 @@ export interface operations {
     get_dashboard_dashboards__dashboard_id__get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 dashboard_id: string;
@@ -4355,9 +4362,9 @@ export interface operations {
     delete_dashboard_dashboards__dashboard_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 dashboard_id: string;
@@ -4387,9 +4394,9 @@ export interface operations {
     update_dashboard_dashboards__dashboard_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 dashboard_id: string;
@@ -4425,9 +4432,9 @@ export interface operations {
     list_notifications_notifications_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -4457,9 +4464,9 @@ export interface operations {
     mark_all_read_notifications_read_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -4489,9 +4496,9 @@ export interface operations {
     mark_read_notifications__notification_id__read_patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 notification_id: string;
@@ -4523,9 +4530,9 @@ export interface operations {
     list_zones_zones_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -4555,9 +4562,9 @@ export interface operations {
     create_zone_zones_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -4591,9 +4598,9 @@ export interface operations {
     get_zone_zones__zone_id__get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 zone_id: string;
@@ -4625,9 +4632,9 @@ export interface operations {
     delete_zone_zones__zone_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 zone_id: string;
@@ -4657,9 +4664,9 @@ export interface operations {
     update_zone_zones__zone_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 zone_id: string;
