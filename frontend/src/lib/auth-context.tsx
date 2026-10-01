@@ -37,6 +37,9 @@ interface AuthContextValue extends AuthState {
    * waiting on this component's next render. */
   refresh: () => Promise<TokenPairResponse | null>;
   setCurrentTenantId: (tenantId: string) => void;
+  /** Adopt a token pair returned by another endpoint (e.g. accepting an
+   * invitation), optionally switching to a given tenant. */
+  adoptSession: (data: TokenPairResponse, tenantId?: string) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -135,9 +138,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState((s) => ({ ...s, currentTenantId: tenantId }));
   }, []);
 
+  const adoptSession = useCallback(
+    (data: TokenPairResponse, tenantId?: string) => {
+      void mutate(() => true, undefined, { revalidate: false });
+      applySession(data, tenantId);
+    },
+    [applySession],
+  );
+
   const value = useMemo<AuthContextValue>(
-    () => ({ ...state, login, register, logout, refresh, setCurrentTenantId }),
-    [state, login, register, logout, refresh, setCurrentTenantId],
+    () => ({ ...state, login, register, logout, refresh, setCurrentTenantId, adoptSession }),
+    [state, login, register, logout, refresh, setCurrentTenantId, adoptSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

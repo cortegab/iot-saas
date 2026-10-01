@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     # sends via aiosmtplib and requires smtp_host (app.notifications.email
     # fails fast at startup if it's blank). A future provider (Resend/SES) is a
     # drop-in behind the same EmailProvider protocol.
+    # Public URL of the web app — the base of links sent by email (member
+    # invitations, password resets).
+    app_base_url: str = "http://localhost:3000"
     email_provider: Literal["console", "smtp"] = "console"
     email_from: str = "alerts@example.com"
     smtp_host: str = ""

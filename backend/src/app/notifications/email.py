@@ -20,8 +20,10 @@ from email.message import EmailMessage as _StdEmailMessage
 from typing import Protocol
 
 import aiosmtplib
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, settings
+from app.db import add_post_commit_callback
 
 log = logging.getLogger("notifications.email")
 
@@ -88,6 +90,22 @@ class SmtpEmailProvider:
             use_tls=implicit_tls,
             start_tls=self._use_tls and not implicit_tls,
         )
+
+
+def send_after_commit(session: AsyncSession, message: EmailMessage) -> None:
+    """Queue a transactional email (invitation, password reset) to go out
+    only once the request's transaction commits. A delivery failure is
+    logged, never raised — the record exists, and the user can resend."""
+
+    async def _send() -> None:
+        try:
+            await get_email_provider().send(message)
+        except Exception:
+            log.exception(
+                "email delivery failed -> %s | %r", ", ".join(message.to), message.subject
+            )
+
+    add_post_commit_callback(session, _send)
 
 
 _provider: EmailProvider | None = None
