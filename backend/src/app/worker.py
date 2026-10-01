@@ -81,6 +81,7 @@ from app.health import service as health_service
 from app.ingestion import service as ingestion_service
 from app.ingestion.schemas import StatusPayload, TelemetryPayload
 from app.logging_config import configure_logging
+from app.notifications import service as notifications_service
 from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules import service as rules_service
@@ -231,6 +232,22 @@ async def _handle_status(
         await rules_service.run_device_status_rules(
             client, factory, resolved.tenant_id, resolved.device_id, data.online
         )
+        # A genuine flip to offline (never the first observation after a
+        # restart, so retained LWTs don't re-alert) is a critical feed row.
+        if not data.online and resolved.status != DeviceStatus.DISABLED:
+            try:
+                await notifications_service.create_notification(
+                    factory,
+                    resolved.tenant_id,
+                    resolved.device_id,
+                    None,
+                    f"{parsed.device_slug} went offline",
+                    severity="critical",
+                    kind="device_offline",
+                    detail="Its last will arrived: the connection dropped without a goodbye.",
+                )
+            except Exception:
+                log.exception("offline notification failed for %s", resolved.device_id)
 
 
 async def _handle_ack(

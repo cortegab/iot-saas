@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
-import { Bell, Check, CheckCheck } from "lucide-react";
+import { AlertTriangle, Bell, Check, CheckCheck, Info, Mail, X, Zap } from "lucide-react";
 import { NOTIFICATIONS_KEY, useNotifications } from "@/hooks/useNotifications";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { Button } from "@/components/ui/Button";
@@ -24,29 +24,59 @@ import type { components } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
+type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
+type Severity = components["schemas"]["NotificationResponse"]["severity"];
 
-/** The notification feed (demo G): what rules and devices reported, with
- * links to the device page or the rule. Opening a link marks it read. */
+const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; className: string }> = {
+  critical: { icon: AlertTriangle, label: "Critical", className: "bg-status-error-surface text-status-error" },
+  warning: { icon: Zap, label: "Warning", className: "bg-status-pending-surface text-status-pending" },
+  info: { icon: Info, label: "Info", className: "bg-surface-raised text-ink-muted" },
+};
+
+/** The notification feed (demo G): what rules and devices reported, by
+ * severity, with links to the device page, rule or template. Opening a link
+ * marks it read; Dismiss removes it with an Undo. */
 export default function NotificationsPage() {
   const router = useRouter();
   const toast = useToast();
-  const { notifications, unreadCount, isLoading, error, markAllRead, markRead } = useNotifications();
+  const { notifications, unreadCount, isLoading, error, markAllRead, markRead, markUnread, dismiss, restore } = useNotifications();
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
+  const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const list = useListState({ show: "all" });
 
   const deviceName = useMemo(() => new Map((devices ?? []).map((d) => [d.id, d.name])), [devices]);
   const ruleName = useMemo(() => new Map((rules ?? []).map((r) => [r.id, r.name])), [rules]);
+  const templateName = useMemo(() => new Map((templates ?? []).map((t) => [t.id, t.name])), [templates]);
 
   const filtered = useMemo(
     () =>
       notifications.filter(
         (n) =>
           (list.filters.show === "all" || n.read_at == null) &&
-          matchesQuery(list.q, n.message, n.device_id ? deviceName.get(n.device_id) : null, n.rule_id ? ruleName.get(n.rule_id) : null),
+          matchesQuery(
+            list.q,
+            n.message,
+            n.detail,
+            n.device_id ? deviceName.get(n.device_id) : null,
+            n.rule_id ? ruleName.get(n.rule_id) : null,
+            n.catalog_entry_id ? templateName.get(n.catalog_entry_id) : null,
+          ),
       ),
-    [notifications, list.filters.show, list.q, deviceName, ruleName],
+    [notifications, list.filters.show, list.q, deviceName, ruleName, templateName],
   );
+
+  async function onDismiss(id: string) {
+    try {
+      await dismiss(id);
+      toast({
+        title: "Notification dismissed",
+        action: { label: "Undo", onClick: () => void restore(id) },
+      });
+    } catch (err) {
+      toast({ tone: "error", title: "Couldn't dismiss it", detail: err instanceof ApiRequestError ? err.message : undefined });
+    }
+  }
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
 
   async function open(id: string, read: boolean, href: string) {
@@ -60,7 +90,7 @@ export default function NotificationsPage() {
     <>
       <PageHeader
         title="Notifications"
-        description="What rules and devices reported. Links open the related device page or rule."
+        description="What rules, devices and templates reported. Links open the related device, rule or template."
         actions={
           <Button
             variant="secondary"
@@ -119,6 +149,8 @@ export default function NotificationsPage() {
                   const unread = n.read_at == null;
                   const dev = n.device_id ? deviceName.get(n.device_id) : null;
                   const rule = n.rule_id ? ruleName.get(n.rule_id) : null;
+                  const sev = SEVERITY[n.severity];
+                  const SevIcon = n.kind === "delivery_failed" ? Mail : sev.icon;
                   return (
                     <li
                       key={n.id}
@@ -127,8 +159,9 @@ export default function NotificationsPage() {
                         unread && "bg-accent/[0.04]",
                       )}
                     >
-                      <span aria-hidden className="grid h-[30px] w-[30px] shrink-0 place-items-center rounded-md bg-surface-raised text-ink-muted">
-                        <Bell size={16} />
+                      <span title={sev.label} className={cn("grid h-[30px] w-[30px] shrink-0 place-items-center rounded-md", sev.className)}>
+                        <SevIcon aria-hidden size={16} />
+                        <span className="sr-only">{sev.label}</span>
                       </span>
                       <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
                         <p className="text-ink">
@@ -137,6 +170,7 @@ export default function NotificationsPage() {
                           )}
                           <strong className="font-medium">{n.message}</strong>
                         </p>
+                        {n.detail && <span className="text-[13.5px] text-ink">{n.detail}</span>}
                         {(dev || rule) && (
                           <span className="text-[13.5px] text-ink-muted">{[dev, rule && `rule ${rule}`].filter(Boolean).join(" · ")}</span>
                         )}
@@ -151,17 +185,29 @@ export default function NotificationsPage() {
                               Open rule
                             </button>
                           )}
+                          {n.catalog_entry_id && templateName.has(n.catalog_entry_id) && (
+                            <button
+                              type="button"
+                              className="text-sm text-accent hover:underline"
+                              onClick={() => void open(n.id, !unread, `/templates?edit=${n.catalog_entry_id}`)}
+                            >
+                              Open template
+                            </button>
+                          )}
                         </span>
                       </div>
                       <span className="whitespace-nowrap text-[12.5px] text-ink-muted" title={new Date(n.created_at).toLocaleString()}>
                         {timeAgo(n.created_at)}
                       </span>
                       <DropdownMenu
-                        label="Actions"
+                        label={`Actions for ${n.message}`}
                         groups={[
-                          unread
-                            ? [{ label: "Mark as read", icon: <Check size={15} />, onClick: () => void markRead(n.id) }]
-                            : [{ label: "Already read", disabled: true, onClick: () => {} }],
+                          [
+                            unread
+                              ? { label: "Mark as read", icon: <Check size={15} />, onClick: () => void markRead(n.id) }
+                              : { label: "Mark as unread", icon: <Bell size={15} />, onClick: () => void markUnread(n.id) },
+                          ],
+                          [{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(n.id) }],
                         ]}
                       />
                     </li>

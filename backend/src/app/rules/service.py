@@ -1064,7 +1064,13 @@ async def _dispatch_actions(
         message = notif["message"] if notif is not None else _default_message(rule, snapshot, edge)
         try:
             await notifications_service.create_notification(
-                factory, tenant_id, trigger_device_id, rule.id, message
+                factory,
+                tenant_id,
+                trigger_device_id,
+                rule.id,
+                message,
+                severity="warning" if edge == "fire" else "info",
+                kind="rule_fired" if edge == "fire" else "rule_cleared",
             )
             outcomes.append(
                 _ActionOutcome("notification", notif_index, "success", {"message": message}, None)
@@ -1256,6 +1262,43 @@ async def _write_deferred_result(
     )
 
 
+_DELIVERY_LABEL = {"email": "Email", "webhook": "Webhook"}
+
+
+def _failure_reason(detail: dict[str, Any] | None) -> str:
+    detail = detail or {}
+    reason = detail.get("error") or detail.get("reason") or "unknown error"
+    if detail.get("status_code"):
+        reason = f"HTTP {detail['status_code']}: {reason}"
+    return str(reason).replace("_", " ")[:_DETAIL_STRING_MAX]
+
+
+async def _notify_delivery_failed(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    rule_name: str,
+    kind: str,
+    detail: dict[str, Any] | None,
+) -> None:
+    """A webhook/email that exhausted its retries surfaces in the feed, not
+    only in Rules → Failed deliveries. Its own try/except: the delivery row is
+    already written, and a feed write must never mask that."""
+    try:
+        await notifications_service.create_notification(
+            factory,
+            tenant_id,
+            None,
+            rule_id,
+            f'{_DELIVERY_LABEL.get(kind, kind.title())} delivery failed for "{rule_name}"',
+            severity="warning",
+            kind="delivery_failed",
+            detail=f"{_failure_reason(detail)}. Retry it from Rules → Failed deliveries.",
+        )
+    except Exception:
+        log.exception("delivery-failed notification write failed for rule %s", rule_id)
+
+
 async def _run_deferred_action(
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
@@ -1290,6 +1333,9 @@ async def _run_deferred_action(
                         "failed",
                         {"reason": "no_recipients"},
                     )
+                    await _notify_delivery_failed(
+                        factory, tenant_id, rule_id, rule_name, "email", {"reason": "no_recipients"}
+                    )
                     return
                 if descriptor.config.get("type") == "email":
                     config: dict[str, Any] = {
@@ -1316,6 +1362,10 @@ async def _run_deferred_action(
                 result.status,
                 result.detail,
             )
+            if result.status == "failed":
+                await _notify_delivery_failed(
+                    factory, tenant_id, rule_id, rule_name, descriptor.kind, result.detail
+                )
     except Exception:
         log.exception("deferred %s action failed for rule %s", descriptor.kind, rule_id)
 
@@ -1437,12 +1487,108 @@ async def list_failed_actions(
             "FROM action_executions ae "
             "JOIN rule_executions re ON re.id = ae.rule_execution_id "
             "LEFT JOIN rules r ON r.id = re.rule_id "
-            "WHERE ae.tenant_id = :tenant_id AND ae.status = 'failed' "
+            "WHERE ae.tenant_id = :tenant_id AND ae.status = 'failed' AND ae.retried_at IS NULL "
             "ORDER BY ae.created_at DESC LIMIT :limit"
         ),
         {"tenant_id": tenant_id, "limit": limit},
     )
     return [FailedActionRow(**row) for row in result.mappings().all()]
+
+
+class FailedActionNotFoundError(Exception):
+    pass
+
+
+class FailedActionNotRetryableError(Exception):
+    """Why a failed delivery can't be retried — the message is user-facing."""
+
+
+async def retry_failed_action(
+    session: AsyncSession, tenant_id: uuid.UUID, action_execution_id: uuid.UUID
+) -> None:
+    """Re-send one failed webhook/email delivery (Rules → Failed deliveries).
+
+    Off the hot path entirely: runs in the API process as a background task
+    after this request commits, through the same _run_deferred_action the
+    worker uses, appending its own action_executions row to the original
+    execution. Actuator commands are never retried — a command sent minutes
+    late can act on state that has moved on; the rule fires again when its
+    condition holds.
+
+    The action is taken from the rule as it is now (same index, same type);
+    if the rule changed so that action no longer exists, there's nothing
+    faithful to retry.
+    """
+    row = (
+        await session.execute(
+            select(ActionExecution, RuleExecution)
+            .join(RuleExecution, RuleExecution.id == ActionExecution.rule_execution_id)
+            .where(
+                ActionExecution.tenant_id == tenant_id,
+                ActionExecution.id == action_execution_id,
+                ActionExecution.status == "failed",
+            )
+        )
+    ).first()
+    if row is None:
+        raise FailedActionNotFoundError
+    failed, execution = row
+    if failed.retried_at is not None:
+        raise FailedActionNotRetryableError("This delivery was already retried.")
+    if failed.action_type not in ("webhook", "email"):
+        raise FailedActionNotRetryableError(
+            "Only webhook and email deliveries can be retried. Actuator commands aren't "
+            "resent late; the rule fires again when its condition holds."
+        )
+    rule = (
+        await session.execute(
+            select(Rule).where(Rule.tenant_id == tenant_id, Rule.id == execution.rule_id)
+        )
+    ).scalar_one_or_none()
+    actions = (
+        (rule.actions if execution.edge == "fire" else rule.clear_actions or []) if rule else []
+    )
+    index = failed.action_index
+    action = actions[index] if index is not None and 0 <= index < len(actions) else None
+    descriptor: _DeferredAction | None = None
+    if rule is not None and action is not None:
+        if failed.action_type == "webhook" and action.get("type") == "webhook":
+            descriptor = _DeferredAction("webhook", index, dict(action))
+        elif failed.action_type == "email" and action.get("type") == "email":
+            descriptor = _DeferredAction("email", index, dict(action))
+        elif (
+            failed.action_type == "email"
+            and action.get("type") == "notification"
+            and "email" in (action.get("channels") or [])
+        ):
+            descriptor = _DeferredAction(
+                "email",
+                index,
+                {
+                    "message": action.get("message", ""),
+                    "rule_name": rule.name,
+                    "edge": execution.edge,
+                },
+            )
+    if rule is None or descriptor is None:
+        raise FailedActionNotRetryableError(
+            "The rule changed since this failed, so the action no longer exists as it was."
+        )
+
+    failed.retried_at = datetime.now(UTC)
+    await session.flush()
+
+    # Same engine as this request (so the same role and RLS), not the
+    # worker's module factory.
+    factory = async_sessionmaker(session.bind, expire_on_commit=False)
+    rule_id, rule_name, execution_id = rule.id, rule.name, execution.id
+
+    async def _spawn() -> None:
+        _spawn_deferred(
+            _run_deferred_action(factory, tenant_id, rule_id, rule_name, execution_id, descriptor)
+        )
+
+    add_post_commit_callback(session, _spawn)
 
 
 # ---- Out-of-band runs: manual "Run now" + scheduled triggers ----------------
@@ -2034,6 +2180,8 @@ async def emit_rule_health_transitions(factory: async_sessionmaker[AsyncSession]
                 None,
                 rule.id,
                 f'Rule "{rule.name}" can\'t evaluate right now: {_bad_signal_phrase(bad)}.',
+                severity="warning",
+                kind="rule_health",
             )
             alert_at = now
         _rule_health_tracks[rule.id] = _RuleHealthTrack(evaluatable, alert_at)
