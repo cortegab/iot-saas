@@ -12,7 +12,7 @@ are still accepted).
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -28,6 +28,7 @@ from app.rules.schemas import (
     DeviceRuleCreateRequest,
     ExecutionPolicy,
     FailedActionResponse,
+    RuleActivityResponse,
     RuleCreateRequest,
     RuleDeviceRef,
     RuleExecutionResponse,
@@ -215,6 +216,27 @@ async def list_failed_actions(
             created_at=row.created_at,
         )
         for row in rows
+    ]
+
+
+@router.get("/rules/activity", response_model=list[RuleActivityResponse])
+async def rules_activity(
+    hours: int = Query(default=24, ge=1, le=168),
+    buckets: int = Query(default=48, ge=4, le=168),
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> list[RuleActivityResponse]:
+    """Every rule's recent firings in buckets, for the list's mini strips.
+    Declared above GET /rules/{rule_id} so "activity" isn't read as an id."""
+    rows = await service.rule_activity(session, ctx.tenant_id, hours=hours, buckets=buckets)
+    return [
+        RuleActivityResponse(
+            rule_id=r.rule_id,
+            cells=r.cells,
+            fired=r.fired,
+            last_fired_at=r.last_fired_at,
+        )
+        for r in rows
     ]
 
 
