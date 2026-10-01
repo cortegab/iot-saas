@@ -34,7 +34,8 @@ const MIN_ROLE: Record<Action, Role> = {
   "members.grantOwner": "owner",
   "keys.manage": "admin",
   "workspace.rename": "owner",
-  "workspace.alerts": "owner",
+  // Alert recipients and the time zone (DESIGN.md §8); renaming stays owner-only.
+  "workspace.alerts": "admin",
   // Dashboards are personal: every member edits their own.
   "dashboards.write": "viewer",
 };

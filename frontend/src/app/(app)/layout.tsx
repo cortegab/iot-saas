@@ -8,6 +8,7 @@ import { useRealtime } from "@/hooks/useRealtime";
 import { Sheet } from "@/components/ui/Sheet";
 import { AppSidebar } from "@/components/shell/AppSidebar";
 import { CommandPalette } from "@/components/shell/CommandPalette";
+import { NoWorkspace } from "@/components/shell/NoWorkspace";
 import { ShellContext } from "@/components/shell/shell-context";
 import { cn } from "@/lib/cn";
 
@@ -58,7 +59,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   // Unauthenticated: the effect above is already redirecting; render nothing to
   // avoid a flash of app chrome with no valid session behind it.
-  if (status !== "authenticated" || !currentTenantId) return null;
+  if (status !== "authenticated") return null;
+  if (!currentTenantId) return <NoWorkspace />;
 
   const workspaceName = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_name ?? "";
 

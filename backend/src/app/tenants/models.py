@@ -45,6 +45,8 @@ class Tenant(Base):
     notification_emails: Mapped[list[str]] = mapped_column(
         JSONB, nullable=False, server_default="[]"
     )
+    # IANA zone name: the default for new schedules and for showing times.
+    timezone: Mapped[str] = mapped_column(nullable=False, server_default="UTC")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 

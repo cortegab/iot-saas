@@ -236,7 +236,7 @@ function UserMenu({ realtime }: { realtime: RealtimeStatus }) {
           </div>
         )}
         <div className="flex flex-col pt-1">
-          <MenuLink href="/settings#profile" icon={<UserRound size={15} />} label="Profile" />
+          <MenuLink href="/settings#ps-account" icon={<UserRound size={15} />} label="Profile" />
           <MenuLink href="/" icon={<Globe size={15} />} label="Website" />
           <div className="my-1 h-px bg-border" role="separator" />
           <button

@@ -56,9 +56,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const applySession = useCallback((data: TokenPairResponse, tenantOverride?: string) => {
     localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
-    const tenantId =
-      tenantOverride ?? localStorage.getItem(TENANT_ID_KEY) ?? data.memberships[0]?.tenant_id ?? null;
+    // A remembered workspace only counts while still a member of it (left,
+    // removed or deleted otherwise) — then fall back to the first one.
+    const isMember = (id: string | null | undefined) => !!id && data.memberships.some((m) => m.tenant_id === id);
+    const stored = localStorage.getItem(TENANT_ID_KEY);
+    const tenantId = [tenantOverride, stored].find(isMember) ?? data.memberships[0]?.tenant_id ?? null;
     if (tenantId) localStorage.setItem(TENANT_ID_KEY, tenantId);
+    else localStorage.removeItem(TENANT_ID_KEY);
     setState({
       accessToken: data.access_token,
       memberships: data.memberships,
