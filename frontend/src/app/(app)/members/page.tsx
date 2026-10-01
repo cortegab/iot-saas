@@ -24,7 +24,7 @@ import { SplitView } from "@/components/editor/SplitView";
 import { MemberEditor } from "@/components/members/MemberEditor";
 import { ApiRequestError } from "@/lib/api-client";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
-import { formatWhen, timeAgo } from "@/lib/time-ago";
+import { formatDate, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 
 type MemberResponse = components["schemas"]["MemberResponse"];
@@ -168,9 +168,9 @@ export default function MembersPage() {
       hideOnPhone: true,
       cell: (x) =>
         x.kind === "invite" ? (
-          <span className="text-ink-muted">Expires {formatWhen(x.invite.expires_at)}</span>
+          <span className="text-ink-muted">Expires {formatDate(x.invite.expires_at)}</span>
         ) : (
-          <span className="text-ink-muted">{x.joined ? formatWhen(x.joined) : "—"}</span>
+          <span className="text-ink-muted">{x.joined ? formatDate(x.joined) : "—"}</span>
         ),
     },
   ];

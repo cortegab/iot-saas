@@ -1,5 +1,5 @@
-"""API key routes: create/list/revoke. CRUD-only this phase — see
-api_keys/models.py's module docstring for why.
+"""API key routes: create/list/revoke. Managing keys needs a signed-in admin —
+a key can never mint or revoke keys (get_current_user refuses one).
 
 Thin per CLAUDE.md §6 — validation and delegation only.
 """
@@ -30,12 +30,13 @@ def _to_response(api_key: ApiKey) -> ApiKeyResponse:
         created_at=api_key.created_at,
         last_used_at=api_key.last_used_at,
         revoked_at=api_key.revoked_at,
+        expires_at=api_key.expires_at,
     )
 
 
 @router.get("", response_model=list[ApiKeyResponse])
 async def list_api_keys(
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     session: AsyncSession = Depends(get_session),
 ) -> list[ApiKeyResponse]:
     keys = await service.list_api_keys(session, ctx.tenant_id)
@@ -45,12 +46,17 @@ async def list_api_keys(
 @router.post("", response_model=ApiKeyCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_api_key(
     body: ApiKeyCreateRequest,
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> ApiKeyCreateResponse:
     api_key, full_key = await service.create_api_key(
-        session, ctx.tenant_id, body.name, body.role, current_user.id
+        session,
+        ctx.tenant_id,
+        body.name,
+        body.role,
+        current_user.id,
+        expires_in_days=body.expires_in_days,
     )
     return ApiKeyCreateResponse(api_key=_to_response(api_key), key=full_key)
 
@@ -58,7 +64,7 @@ async def create_api_key(
 @router.delete("/{key_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_api_key(
     key_id: uuid.UUID,
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     try:

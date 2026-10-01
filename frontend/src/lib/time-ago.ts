@@ -43,3 +43,10 @@ export function formatWhen(iso: string, timeZone?: string): string {
 export function ageMinutes(iso: string | null | undefined, now: number = Date.now()): number | null {
   return iso ? Math.floor((now - new Date(iso).getTime()) / 60_000) : null;
 }
+
+/** "30 Oct 2026" — calendar dates where the hour doesn't matter (expiry,
+ * joined). */
+export function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+}
