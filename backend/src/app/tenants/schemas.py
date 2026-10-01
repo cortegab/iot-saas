@@ -4,12 +4,16 @@ Register/login's membership list reuses app.auth.schemas.MembershipSummary
 (same tenant_id/tenant_name/role shape) rather than duplicating it here.
 """
 
+import re
 import uuid
 from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.tenants.models import TenantRole
+
+_EMAIL = re.compile(r"[^\s@]+@[^\s@]+\.[^\s@]+")
 
 
 class TenantCreateRequest(BaseModel):
@@ -22,6 +26,29 @@ class TenantUpdateRequest(BaseModel):
     # has no `pydantic[email]` dependency (see auth/schemas.py). At most 50, so
     # a fat-fingered paste can't blow up every alert.
     notification_emails: list[str] | None = Field(default=None, max_length=50)
+    timezone: str | None = Field(default=None, max_length=64)
+
+    @field_validator("notification_emails")
+    @classmethod
+    def _emails(cls, emails: list[str] | None) -> list[str] | None:
+        if emails is None:
+            return None
+        cleaned = [e.strip().lower() for e in emails if e.strip()]
+        bad = [e for e in cleaned if not _EMAIL.fullmatch(e)]
+        if bad:
+            raise ValueError(f"Not an email address: {bad[0]}")
+        return list(dict.fromkeys(cleaned))
+
+    @field_validator("timezone")
+    @classmethod
+    def _zone(cls, zone: str | None) -> str | None:
+        if zone is None:
+            return None
+        try:
+            ZoneInfo(zone)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError(f"Unknown time zone: {zone}") from exc
+        return zone
 
 
 class TenantResponse(BaseModel):
@@ -29,6 +56,7 @@ class TenantResponse(BaseModel):
     name: str
     slug: str
     notification_emails: list[str]
+    timezone: str
     created_at: datetime
 
 

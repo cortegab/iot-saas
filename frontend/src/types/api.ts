@@ -2141,6 +2141,8 @@ export interface components {
             slug: string;
             /** Notification Emails */
             notification_emails: string[];
+            /** Timezone */
+            timezone: string;
             /**
              * Created At
              * Format: date-time
@@ -2162,6 +2164,8 @@ export interface components {
             name?: string | null;
             /** Notification Emails */
             notification_emails?: string[] | null;
+            /** Timezone */
+            timezone?: string | null;
         };
         /** TokenPairResponse */
         TokenPairResponse: {

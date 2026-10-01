@@ -77,18 +77,21 @@ async def update_tenant(
     *,
     name: str | None = None,
     notification_emails: list[str] | None = None,
+    timezone: str | None = None,
 ) -> Tenant:
-    """Update workspace settings. Callers gate this to TenantRole.OWNER
-    (tenants/router.py) — `tenants` itself carries no RLS (see
-    tenants/models.py's docstring), so the role check at the route layer is
-    the only thing standing between any member and editing the whole
-    workspace.
+    """Update workspace settings. Callers gate this by role (tenants/router.py:
+    admins for recipients and time zone, owners for the name) — `tenants`
+    itself carries no RLS (see tenants/models.py's docstring), so the role
+    check at the route layer is the only thing standing between any member
+    and editing the whole workspace.
     """
     tenant = await get_tenant(session, tenant_id)
     if name is not None:
         tenant.name = name
     if notification_emails is not None:
         tenant.notification_emails = [e.strip() for e in notification_emails if e.strip()]
+    if timezone is not None:
+        tenant.timezone = timezone
     await session.flush()
     return tenant
 

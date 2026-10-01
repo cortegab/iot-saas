@@ -8,6 +8,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useApi } from "@/hooks/useApi";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
@@ -69,6 +70,16 @@ export function RuleEditor({
   const [mode, setMode] = useState<EditorMode>("form");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // A new rule's schedule defaults to the workspace time zone, which may
+  // arrive after the draft is created. Once the author picks "schedule",
+  // their own choice stands.
+  const { data: workspace } = useWorkspace();
+  const workspaceTz = workspace?.timezone;
+  useEffect(() => {
+    if (existing || !workspaceTz) return;
+    setDraft((d) => (d.when.type === "schedule" ? d : { ...d, when: { ...d.when, timezone: workspaceTz } }));
+  }, [existing, workspaceTz]);
 
   // Read after mount — localStorage isn't available during server render.
   useEffect(() => setMode(readMode()), []);

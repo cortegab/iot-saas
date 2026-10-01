@@ -272,14 +272,15 @@ export function emptyAction(kind: ActionKind, deviceId: string): ActionDraft {
   }
 }
 
-export function emptyDraft(seedDevice = ""): RuleDraft {
+/** `timezone` is the workspace's: the default for a schedule trigger. */
+export function emptyDraft(seedDevice = "", timezone = "UTC"): RuleDraft {
   return {
     name: "",
     enabled: true,
     when: {
       type: "metric",
       cron: "0 8 * * *",
-      timezone: "UTC",
+      timezone,
       statusDeviceId: seedDevice,
       transition: "disconnected",
     },
