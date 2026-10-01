@@ -454,3 +454,17 @@ class SimulateResponse(BaseModel):
     actions: list[SimulateActionPreview]
     clear_actions: list[SimulateActionPreview] = Field(default_factory=list)
     replay: SimulateReplayResult | None
+
+
+class RuleVersionResponse(BaseModel):
+    """One saved state of a rule (DESIGN.md §9 Versions). `snapshot` holds
+    the rule's definition as saved, for the editor's client-side Restore."""
+
+    id: uuid.UUID
+    version: int
+    snapshot: dict[str, object]
+    change_lines: list[str]
+    author_id: uuid.UUID | None
+    # Display name or email; null for an API-key save or a deleted user.
+    author: str | None
+    created_at: datetime
