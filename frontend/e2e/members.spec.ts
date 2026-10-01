@@ -1,7 +1,15 @@
 import { expect, test as base } from "@playwright/test";
-import { test } from "./fixtures";
+import { API_URL, login, test } from "./fixtures";
 
-test("members: invite someone, resend the invite, then cancel it", async ({ page }) => {
+test("members: invite someone, resend the invite, then cancel it", async ({ page, request }) => {
+  // Cancel leftovers from an earlier interrupted run on the shared dev tenant.
+  const { accessToken, tenantId } = await login(request);
+  const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
+  const pending = (await (await request.get(`${API_URL}/tenants/invitations`, { headers })).json()) as { id: string; email: string }[];
+  for (const inv of pending.filter((i) => i.email.startsWith("e2e-invite-"))) {
+    await request.delete(`${API_URL}/tenants/invitations/${inv.id}`, { headers });
+  }
+
   const email = `e2e-invite-${Date.now()}@example.com`;
   await page.goto("/members");
   await page.getByRole("button", { name: "Invite member" }).click();
@@ -10,7 +18,7 @@ test("members: invite someone, resend the invite, then cancel it", async ({ page
   await editor.getByLabel("Email").fill(email);
   await editor.getByRole("radio", { name: /Admin/ }).check();
   await editor.getByRole("button", { name: "Send invite" }).click();
-  await expect(page.getByText("Invite sent")).toBeVisible();
+  await expect(page.getByText("Invite sent", { exact: true })).toBeVisible();
 
   const table = page.getByRole("table", { name: "Members" });
   const row = table.getByRole("row").filter({ hasText: email });
@@ -18,12 +26,12 @@ test("members: invite someone, resend the invite, then cancel it", async ({ page
 
   await row.getByRole("button", { name: `Actions for ${email}` }).click();
   await page.getByRole("menuitem", { name: "Resend invite" }).click();
-  await expect(page.getByText("Invite resent")).toBeVisible();
+  await expect(page.getByText("Invite resent", { exact: true })).toBeVisible();
 
   await row.getByRole("button", { name: `Actions for ${email}` }).click();
   await page.getByRole("menuitem", { name: "Cancel invite…" }).click();
   await page.getByRole("button", { name: "Cancel invite" }).click();
-  await expect(page.getByText("Invite cancelled")).toBeVisible();
+  await expect(page.getByText("Invite cancelled", { exact: true })).toBeVisible();
   await expect(table.getByText(email)).toHaveCount(0);
 });
 

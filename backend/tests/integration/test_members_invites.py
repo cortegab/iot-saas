@@ -33,6 +33,7 @@ class _Outbox:
 def outbox(monkeypatch: pytest.MonkeyPatch) -> _Outbox:
     box = _Outbox()
     monkeypatch.setattr(email_module, "_provider", box)
+    monkeypatch.setattr(email_module, "DELIVER_INLINE", True)
     return box
 
 
