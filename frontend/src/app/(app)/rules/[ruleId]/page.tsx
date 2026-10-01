@@ -13,7 +13,7 @@ import { Tabs, TabPanel } from "@/components/ui/Tabs";
 import { RuleExecutionHistory } from "@/components/rules/RuleExecutionHistory";
 import { RuleEditor } from "@/components/rules/editor/RuleEditor";
 import { ResetLatchButton } from "@/components/rules/ResetLatchButton";
-import { RuleSimulatePanel } from "@/components/rules/RuleSimulatePanel";
+import { useWideContent } from "@/components/shell/shell-context";
 import { RunNowButton } from "@/components/rules/RunNowButton";
 import { RuleVersions } from "@/components/rules/RuleVersions";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
@@ -26,12 +26,13 @@ type DeviceResponse = components["schemas"]["DeviceResponse"];
 
 type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
 
+// DESIGN.md §9.2: Logic · Activity. Simulating lives in the editor's
+// preview; versions sit under Activity.
 const TABS = [
-  { id: "edit", label: "Edit" },
-  { id: "simulate", label: "Simulate" },
+  { id: "edit", label: "Logic" },
   { id: "activity", label: "Activity" },
-  { id: "versions", label: "Versions" },
 ];
+const OLD_TABS: Record<string, string> = { simulate: "edit", versions: "activity" };
 
 function unhealthySummary(rule: RuleResponse): string | null {
   if (rule.health.evaluatable) return null;
@@ -51,7 +52,11 @@ export default function EditRulePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAdmin = useIsAdmin();
-  const [tab, setTab] = useState(searchParams.get("tab") ?? "edit");
+  useWideContent();
+  const [tab, setTab] = useState(() => {
+    const t = searchParams.get("tab") ?? "edit";
+    return OLD_TABS[t] ?? t;
+  });
   const {
     data: rule,
     error,
@@ -133,23 +138,24 @@ export default function EditRulePage() {
         />
       </TabPanel>
 
-      <TabPanel id="versions" active={tab}>
-        <RuleVersions
-          ruleId={params.ruleId}
-          canRestore={isAdmin}
-          onRestore={(v) => {
-            setRestored(v);
-            setTab("edit");
-          }}
-        />
-      </TabPanel>
-
-      <TabPanel id="simulate" active={tab}>
-        <RuleSimulatePanel rule={rule} />
-      </TabPanel>
-
       <TabPanel id="activity" active={tab}>
-        <RuleExecutionHistory ruleId={params.ruleId} />
+        <div className="flex flex-col gap-6">
+          <section className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-ink">Recent firings</h2>
+            <RuleExecutionHistory ruleId={params.ruleId} />
+          </section>
+          <section className="flex flex-col gap-3">
+            <h2 className="text-base font-semibold text-ink">Versions</h2>
+            <RuleVersions
+              ruleId={params.ruleId}
+              canRestore={isAdmin}
+              onRestore={(v) => {
+                setRestored(v);
+                setTab("edit");
+              }}
+            />
+          </section>
+        </div>
       </TabPanel>
     </div>
   );

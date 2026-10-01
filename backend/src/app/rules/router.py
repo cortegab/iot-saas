@@ -26,6 +26,7 @@ from app.rules.schemas import (
     ActionExecutionResponse,
     ConditionNode,
     DeviceRuleCreateRequest,
+    DraftSimulateRequest,
     ExecutionPolicy,
     FailedActionResponse,
     RuleActivityResponse,
@@ -217,6 +218,28 @@ async def list_failed_actions(
         )
         for row in rows
     ]
+
+
+@router.post("/rules/simulate", response_model=SimulateResponse)
+async def simulate_draft(
+    body: DraftSimulateRequest,
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> SimulateResponse:
+    """Dry-run an unsaved draft (the editor's preview): replay over stored
+    telemetry or evaluate against live values. Writes nothing, dispatches
+    nothing, never touches the worker. Declared above /rules/{rule_id}."""
+    try:
+        return await service.simulate_draft(
+            session,
+            ctx.tenant_id,
+            body.rule.model_dump(mode="json"),
+            SimulateRequest(overrides=body.overrides, replay=body.replay),
+        )
+    except service.RuleValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
 
 
 @router.get("/rules/activity", response_model=list[RuleActivityResponse])
