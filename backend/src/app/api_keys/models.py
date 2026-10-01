@@ -1,10 +1,8 @@
 """SQLAlchemy model for API keys.
 
-Tenant-scoped, CRUD-only in this phase — PLAN.md's Phase 1 milestone doesn't
-require key-based authentication to work end-to-end, and there's no real
-consumer for it until a later phase, so create/list/revoke is all that's built
-here. Wiring `Authorization: ApiKey <key>` into tenants.deps.require_tenant_context
-as an alternate credential path is the documented follow-up.
+Keys authenticate as `Authorization: Bearer iot_{key_id}_{secret}` on every
+tenant-scoped route (tenants.deps.require_tenant_context), capped at the
+key's role — never Owner — until `expires_at` or `revoked_at`.
 
 Uses the same split public-id/secret + argon2id pattern as devices/refresh
 tokens (see auth/service.py's hash_secret/verify_secret).
@@ -41,3 +39,5 @@ class ApiKey(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # NULL = never expires (allowed, but the UI steers towards a date).
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
