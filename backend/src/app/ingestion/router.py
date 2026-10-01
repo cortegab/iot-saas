@@ -57,7 +57,7 @@ async def _authenticate_device_basic(
 async def ingest(
     body: IngestRequest,
     authorization: str | None = Header(default=None),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> dict[str, str]:
     """HTTP REST ingest fallback (CLAUDE.md's device contract, §3's "HTTP REST
     ingest exists as a fallback"). Same device credentials as MQTT, same
@@ -84,7 +84,7 @@ async def ingest(
 )
 async def emqx_authenticate(
     body: EmqxAuthenticateRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> EmqxAuthenticateResponse:
     if body.username == settings.mqtt_worker_username:
         allowed = body.password == settings.mqtt_worker_password.get_secret_value()
@@ -124,7 +124,7 @@ def _is_worker_publish_topic(topic: str) -> bool:
 )
 async def emqx_authorize(
     body: EmqxAuthorizeRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> EmqxAuthorizeResponse:
     if body.username == settings.mqtt_worker_username:
         # Subscribe across every tenant's telemetry + ack topics; publish only

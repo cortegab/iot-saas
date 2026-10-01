@@ -37,7 +37,7 @@ def _to_response(api_key: ApiKey) -> ApiKeyResponse:
 @router.get("", response_model=list[ApiKeyResponse])
 async def list_api_keys(
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[ApiKeyResponse]:
     keys = await service.list_api_keys(session, ctx.tenant_id)
     return [_to_response(k) for k in keys]
@@ -48,7 +48,7 @@ async def create_api_key(
     body: ApiKeyCreateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> ApiKeyCreateResponse:
     api_key, full_key = await service.create_api_key(
         session,
@@ -65,7 +65,7 @@ async def create_api_key(
 async def revoke_api_key(
     key_id: uuid.UUID,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     try:
         await service.revoke_api_key(session, ctx.tenant_id, key_id)

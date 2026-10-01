@@ -22,7 +22,7 @@ router = APIRouter(prefix="/devices/{device_id}", tags=["telemetry"])
 @router.get("/latest", response_model=list[TelemetryLatestResponse])
 async def latest(
     device: Device = Depends(get_device_or_404),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[TelemetryLatestResponse]:
     return await service.get_latest(session, device.tenant_id, device.id)
 
@@ -34,12 +34,10 @@ async def data(
     to: datetime | None = Query(default=None),
     resolution: str = Query(default="raw"),
     device: Device = Depends(get_device_or_404),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> TelemetryDataResponse:
     if resolution not in service.VALID_RESOLUTIONS:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, f"invalid resolution: {resolution!r}"
-        )
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"invalid resolution: {resolution!r}")
     return await service.get_range(
         session, device.tenant_id, device.id, metric, from_, to or datetime.now(UTC), resolution
     )

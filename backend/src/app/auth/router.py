@@ -54,7 +54,7 @@ async def _token_pair_response(
 
 @router.post("/register", response_model=TokenPairResponse, status_code=status.HTTP_201_CREATED)
 async def register(
-    body: RegisterRequest, session: AsyncSession = Depends(get_session)
+    body: RegisterRequest, session: AsyncSession = Depends(get_session, scope="function")
 ) -> TokenPairResponse:
     try:
         user, _tenant = await service.register_user(
@@ -71,7 +71,7 @@ async def register(
 
 @router.post("/login", response_model=TokenPairResponse)
 async def login(
-    body: LoginRequest, session: AsyncSession = Depends(get_session)
+    body: LoginRequest, session: AsyncSession = Depends(get_session, scope="function")
 ) -> TokenPairResponse:
     try:
         user = await service.authenticate_user(session, body.email, body.password)
@@ -86,7 +86,7 @@ async def login(
 
 @router.post("/refresh", response_model=TokenPairResponse)
 async def refresh(
-    body: RefreshRequest, session: AsyncSession = Depends(get_session)
+    body: RefreshRequest, session: AsyncSession = Depends(get_session, scope="function")
 ) -> TokenPairResponse:
     try:
         new_refresh_token, user_id = await service.rotate_refresh_token(session, body.refresh_token)
@@ -99,7 +99,9 @@ async def refresh(
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(body: RefreshRequest, session: AsyncSession = Depends(get_session)) -> None:
+async def logout(
+    body: RefreshRequest, session: AsyncSession = Depends(get_session, scope="function")
+) -> None:
     await service.revoke_refresh_token(session, body.refresh_token)
 
 
@@ -115,7 +117,7 @@ async def me(current_user: User = Depends(get_current_user)) -> UserResponse:
 
 @router.get("/invitations/{token}", response_model=InvitationPreviewResponse)
 async def preview_invitation(
-    token: str, session: AsyncSession = Depends(get_session)
+    token: str, session: AsyncSession = Depends(get_session, scope="function")
 ) -> InvitationPreviewResponse:
     """Public: what the invite link is for (no tenant context yet)."""
     preview = await _usable_invitation(session, token)
@@ -133,7 +135,7 @@ async def accept_invitation(
     token: str,
     body: AcceptInvitationRequest,
     authorization: str | None = Header(default=None),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> TokenPairResponse:
     """Join the invited workspace. A signed-in invitee (Bearer) must be the
     invited email; otherwise a new account is created from `name`/`password`
@@ -198,7 +200,7 @@ _RESET_WINDOW_S = 15 * 60
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
 async def forgot_password(
-    body: ForgotPasswordRequest, session: AsyncSession = Depends(get_session)
+    body: ForgotPasswordRequest, session: AsyncSession = Depends(get_session, scope="function")
 ) -> dict[str, str]:
     """Always 202 with the same message — whether the email has an account is
     never revealed. At most a few emails per address per 15 minutes."""
@@ -228,7 +230,7 @@ async def forgot_password(
 
 @router.post("/reset-password", status_code=status.HTTP_204_NO_CONTENT)
 async def reset_password(
-    body: ResetPasswordRequest, session: AsyncSession = Depends(get_session)
+    body: ResetPasswordRequest, session: AsyncSession = Depends(get_session, scope="function")
 ) -> None:
     try:
         await service.reset_password(session, body.token, body.password)
@@ -243,7 +245,7 @@ async def reset_password(
 async def update_me(
     body: UpdateProfileRequest,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> UserResponse:
     user = await service.update_profile(session, current_user, body.name)
     return UserResponse(id=user.id, email=user.email, name=user.name, created_at=user.created_at)

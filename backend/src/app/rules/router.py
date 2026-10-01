@@ -113,7 +113,7 @@ async def _response(session: AsyncSession, tenant_id: uuid.UUID, rule: Rule) -> 
 @router.get("/devices/{device_id}/rules", response_model=list[RuleResponse])
 async def list_rules(
     device: Device = Depends(get_device_or_404),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[RuleResponse]:
     rules = await service.list_rules(session, device.tenant_id, device.id)
     return await _responses(session, device.tenant_id, rules)
@@ -122,7 +122,7 @@ async def list_rules(
 @router.get("/rules", response_model=list[RuleResponse])
 async def list_all_rules(
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[RuleResponse]:
     rules = await service.list_all_rules(session, ctx.tenant_id)
     return await _responses(session, ctx.tenant_id, rules)
@@ -132,7 +132,7 @@ async def list_all_rules(
 async def create_rule(
     body: RuleCreateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> RuleResponse:
     try:
         rule = await service.create_rule_canonical(
@@ -164,7 +164,7 @@ async def create_device_rule(
     body: DeviceRuleCreateRequest,
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> RuleResponse:
     try:
         rule = await service.create_device_rule(
@@ -193,7 +193,7 @@ async def create_device_rule(
 @router.get("/rules/failed-actions", response_model=list[FailedActionResponse])
 async def list_failed_actions(
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[FailedActionResponse]:
     # Declared above GET /rules/{rule_id} so "failed-actions" isn't matched as
     # a rule_id. Read-side feed — membership is enough, no admin gate (same
@@ -215,11 +215,29 @@ async def list_failed_actions(
     ]
 
 
+@router.post("/rules/failed-actions/{action_id}/retry", status_code=status.HTTP_202_ACCEPTED)
+async def retry_failed_action(
+    action_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> None:
+    """Re-send a failed webhook/email delivery in the background. The result
+    lands as a new attempt (and a fresh failed row if it fails again)."""
+    try:
+        await service.retry_failed_action(session, ctx.tenant_id, action_id)
+    except service.FailedActionNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Failed delivery not found"
+        ) from exc
+    except service.FailedActionNotRetryableError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+
 @router.get("/rules/{rule_id}", response_model=RuleResponse)
 async def get_rule(
     rule: Rule = Depends(get_rule_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> RuleResponse:
     return await _response(session, ctx.tenant_id, rule)
 
@@ -228,7 +246,7 @@ async def get_rule(
 async def run_rule(
     rule: Rule = Depends(get_rule_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     """Manual "Run now" — publishes a one-shot run request; app.worker
     evaluates the condition against the live signal cache and fires only if
@@ -253,7 +271,7 @@ async def simulate_rule(
     body: SimulateRequest,
     rule: Rule = Depends(get_rule_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> SimulateResponse:
     """Dry-run: evaluate the rule against current values (or overrides, or a
     replay window) and report what would happen — writes nothing, dispatches
@@ -268,7 +286,7 @@ async def simulate_rule(
 async def list_rule_executions(
     rule: Rule = Depends(get_rule_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[RuleExecutionResponse]:
     rows = await service.list_rule_executions(session, ctx.tenant_id, rule.id)
     return [
@@ -306,7 +324,7 @@ async def update_rule(
     body: RuleUpdateRequest,
     rule: Rule = Depends(get_rule_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> RuleResponse:
     try:
         updated = await service.update_rule(
@@ -351,6 +369,6 @@ async def update_rule(
 async def delete_rule(
     rule: Rule = Depends(get_rule_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     await service.delete_rule(session, ctx.tenant_id, rule.id)

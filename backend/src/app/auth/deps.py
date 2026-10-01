@@ -35,7 +35,7 @@ async def authenticate_access_token(token: str, session: AsyncSession) -> User:
 
 async def get_current_user(
     authorization: str | None = Header(default=None),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> User:
     """A signed-in person only — API keys are refused here (401), which is
     what keeps personal routes (dashboards, /auth/me, membership) key-free."""

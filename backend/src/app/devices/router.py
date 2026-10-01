@@ -78,7 +78,7 @@ def _to_response(
 @router.get("", response_model=list[DeviceResponse])
 async def list_devices(
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[DeviceResponse]:
     devices = await service.list_devices(session, ctx.tenant_id)
     return [_to_response(d) for d in devices]
@@ -88,7 +88,7 @@ async def list_devices(
 async def create_device(
     body: DeviceCreateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceCreateResponse:
     try:
         device, secret = await service.create_device(
@@ -117,7 +117,7 @@ async def create_device(
 async def get_device(
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceResponse:
     metrics_health = await health_service.list_for_device(session, ctx.tenant_id, device.id)
     return _to_response(device, metrics_health)
@@ -128,7 +128,7 @@ async def update_device(
     body: DeviceUpdateRequest,
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceResponse:
     try:
         updated = await service.update_device(
@@ -149,7 +149,7 @@ async def update_device(
 async def delete_device(
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     await service.delete_device(session, ctx.tenant_id, device.id)
 
@@ -158,7 +158,7 @@ async def delete_device(
 async def rotate_credential(
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceCreateResponse:
     updated, secret = await service.rotate_credential(session, ctx.tenant_id, device.id)
     tenant_slug = await tenants_service.get_tenant_slug(session, ctx.tenant_id)

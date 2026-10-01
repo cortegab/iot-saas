@@ -51,7 +51,7 @@ def _parse_tenant_id(value: str) -> uuid.UUID:
 async def require_tenant_context(
     authorization: str | None = Header(default=None),
     x_tenant_id: str | None = Header(default=None, alias="X-Tenant-Id"),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> TenantContext:
     if authorization is None or not authorization.startswith("Bearer "):
         raise HTTPException(

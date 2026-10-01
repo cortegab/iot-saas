@@ -66,7 +66,7 @@ def _to_response(entry: DeviceCatalogEntry, device_count: int = 0) -> CatalogEnt
 @router.get("", response_model=list[CatalogEntryResponse])
 async def list_catalog_entries(
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[CatalogEntryResponse]:
     entries = await service.list_catalog_entries(session, ctx.tenant_id)
     counts = await devices_service.count_devices_by_catalog_entry(session, ctx.tenant_id)
@@ -77,7 +77,7 @@ async def list_catalog_entries(
 async def create_catalog_entry(
     body: CatalogEntryCreateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> CatalogEntryResponse:
     try:
         entry = await service.create_catalog_entry(
@@ -96,7 +96,7 @@ async def create_catalog_entry(
 async def get_catalog_entry(
     entry: DeviceCatalogEntry = Depends(get_catalog_entry_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> CatalogEntryResponse:
     counts = await devices_service.count_devices_by_catalog_entry(session, ctx.tenant_id)
     return _to_response(entry, counts.get(entry.id, 0))
@@ -106,7 +106,7 @@ async def get_catalog_entry(
 async def get_catalog_usage(
     entry: DeviceCatalogEntry = Depends(get_catalog_entry_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> CatalogUsageResponse:
     usage = await service.get_catalog_usage(session, ctx.tenant_id, entry)
     return CatalogUsageResponse(
@@ -126,7 +126,7 @@ async def update_catalog_entry(
     body: CatalogEntryUpdateRequest,
     entry: DeviceCatalogEntry = Depends(get_catalog_entry_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> CatalogEntryResponse:
     metrics = (
         [m.model_dump(mode="json") for m in body.metrics] if body.metrics is not None else None
@@ -150,7 +150,7 @@ async def update_catalog_entry(
 async def delete_catalog_entry(
     entry_id: uuid.UUID,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     try:
         await service.delete_catalog_entry(session, ctx.tenant_id, entry_id)

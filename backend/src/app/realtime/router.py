@@ -6,7 +6,7 @@ tenants.deps.require_tenant_context reads for every HTTP route — but
 realtime.service.authenticate calls the same service functions HTTP auth
 uses underneath.
 
-Deliberately does NOT use Depends(get_session): that dependency wraps its
+Deliberately does NOT use Depends(get_session, scope="function"): that dependency wraps its
 session in a transaction for the lifetime of the route handler
 (app/db.py's get_session docstring), which for a WebSocket route would hold
 a pooled connection open for as long as the socket stays connected — for
