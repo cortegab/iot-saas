@@ -38,7 +38,7 @@ export function ValueCardWidget({
         ) : !metric || !reading ? (
           <EmptyState title="No reading yet" description={metric ? undefined : "No metric configured."} />
         ) : (
-          <Readout label={metric} value={reading.value} size="lg" />
+          <Readout label={metric} value={reading.value} size="lg" framed={false} />
         )}
         {device && (
           <div className="mt-2">

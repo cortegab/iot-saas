@@ -108,6 +108,41 @@ export interface SketchInfo {
   metrics: SketchMetric[];
   actuators: SketchActuator[];
   credential: SketchCredential | null;
+  /** Wi-Fi typed into the sketch (a bench-test shortcut; readable from the
+   * binary). Omitted → the board provisions over BLE. */
+  wifi?: { ssid: string; password: string };
+  /** GPIO overrides keyed "m:<metric id>" (bool inputs) / "a:<actuator id>"
+   * (outputs); anything not given uses defaultPins(). */
+  pins?: Record<string, number>;
+}
+
+/** Every GPIO the pickers offer — the input and output pools together. */
+export const PIN_CHOICES: readonly number[] = [...new Set([...INPUT_PINS, ...OUTPUT_PINS])].sort((a, b) => a - b);
+
+/** Pins handed out in order: bool metrics from the input pool, non-string
+ * actuators from the output pool, so the defaults never clash. */
+export function defaultPins(metrics: SketchMetric[], actuators: SketchActuator[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  let i = 0;
+  let o = 0;
+  for (const m of metrics) if (m.data_type === "bool") out[`m:${wireId(m)}`] = INPUT_PINS[i++] ?? 0;
+  for (const a of actuators) if ((a.value_type ?? "bool") !== "string") out[`a:${wireId(a)}`] = OUTPUT_PINS[o++] ?? 0;
+  return out;
+}
+
+/** Keys whose pin is shared with another key, with the reason to show. */
+export function pinClashes(pins: Record<string, number>): Record<string, string> {
+  const byPin = new Map<number, string[]>();
+  for (const [key, pin] of Object.entries(pins)) byPin.set(pin, [...(byPin.get(pin) ?? []), key]);
+  const out: Record<string, string> = {};
+  for (const [pin, keys] of byPin) {
+    if (keys.length < 2) continue;
+    for (const k of keys) {
+      const others = keys.filter((x) => x !== k).map((x) => x.slice(2));
+      out[k] = `GPIO ${pin} is also used by ${others.join(", ")}.`;
+    }
+  }
+  return out;
 }
 
 function toIdentifier(name: string): string {
@@ -136,20 +171,18 @@ export function buildSketch(info: SketchInfo): string {
   const username = info.credential?.username ?? CREDENTIAL_PLACEHOLDER;
   const password = info.credential?.password ?? CREDENTIAL_PLACEHOLDER;
 
-  let nextInput = 0;
-  let nextOutput = 0;
-  const takePin = (pool: number[], index: number) => pool[index] ?? 0;
+  const pins = { ...defaultPins(metrics, actuators), ...(info.pins ?? {}) };
 
   const metricRows = metrics.map((m) => {
     const id = toIdentifier(wireId(m));
     const isBool = m.data_type === "bool";
-    const pin = isBool ? takePin(INPUT_PINS, nextInput++) : null;
+    const pin = isBool ? (pins[`m:${wireId(m)}`] ?? 0) : null;
     return { m, id, isBool, pin, pinConst: `${id.toUpperCase()}_PIN` };
   });
   const actuatorRows = actuators.map((a) => {
     const id = toIdentifier(wireId(a));
     const type = a.value_type ?? "bool";
-    const pin = type === "string" ? null : takePin(OUTPUT_PINS, nextOutput++);
+    const pin = type === "string" ? null : (pins[`a:${wireId(a)}`] ?? 0);
     return { a, id, type, pin, pinConst: `${id.toUpperCase()}_PIN` };
   });
 
@@ -182,8 +215,8 @@ const char* BLE_DEVICE_NAME = "${bleName}";
 
 // Development shortcut: if set, these are used (and saved) when no Wi-Fi has
 // been provisioned yet, skipping BLE. Leave empty to provision over BLE.
-const char* DEV_WIFI_SSID = "";
-const char* DEV_WIFI_PASSWORD = "";
+const char* DEV_WIFI_SSID = "${cText(info.wifi?.ssid ?? "")}";
+const char* DEV_WIFI_PASSWORD = "${cText(info.wifi?.password ?? "")}";
 
 ${
   tls
