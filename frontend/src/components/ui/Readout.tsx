@@ -2,7 +2,8 @@ import { AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export interface ReadoutProps {
-  label: string;
+  /** Omitted when the surrounding card already names the metric. */
+  label?: string;
   value: number | string;
   unit?: string;
   /** Gauge range; the gauge shows only when both are known. */
@@ -57,7 +58,7 @@ export function Readout({
         className,
       )}
     >
-      <span className="text-xs text-ink-muted">{label}</span>
+      {label && <span className="text-xs text-ink-muted">{label}</span>}
       <span
         className={cn(
           "flex items-baseline gap-[5px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink tabular-nums",
