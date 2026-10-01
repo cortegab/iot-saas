@@ -479,3 +479,10 @@ class RuleActivityResponse(BaseModel):
     cells: list[Literal["idle", "true", "fired"]]
     fired: int
     last_fired_at: datetime | None
+
+
+class DraftSimulateRequest(SimulateRequest):
+    """Simulate an unsaved draft (the editor's live preview): the rule body
+    as it would be created, plus the usual overrides / replay window."""
+
+    rule: RuleCreateRequest

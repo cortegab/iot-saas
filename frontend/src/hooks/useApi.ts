@@ -63,6 +63,10 @@ export function useApi() {
       get: <T,>(path: string) => withRetry<T>((ctx) => apiClient.get<T>(path, ctx)),
       post: <T,>(path: string, body?: Record<string, unknown>) =>
         withRetry<T>((ctx) => apiClient.post<T>(path, ctx, body)).then(afterWrite),
+      /** A POST that reads (simulate, dry runs): no write happened, so no
+       * blanket revalidation — the rule preview calls it as you type. */
+      query: <T,>(path: string, body?: Record<string, unknown>) =>
+        withRetry<T>((ctx) => apiClient.post<T>(path, ctx, body)),
       patch: <T,>(path: string, body?: Record<string, unknown>) =>
         withRetry<T>((ctx) => apiClient.patch<T>(path, ctx, body)).then(afterWrite),
       delete: <T,>(path: string) =>
