@@ -1,22 +1,21 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { AuthScreen } from "@/components/auth/AuthCard";
+import { safeNext } from "@/lib/safe-next";
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   const { status } = useAuth();
   const router = useRouter();
+  const next = safeNext(useSearchParams().get("next"));
 
   useEffect(() => {
-    if (status === "authenticated") router.replace("/devices");
-  }, [status, router]);
+    if (status === "authenticated") router.replace(next);
+  }, [status, router, next]);
 
   if (status === "authenticated") return null;
 
-  return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <div className="w-full max-w-sm">{children}</div>
-    </main>
-  );
+  return <AuthScreen>{children}</AuthScreen>;
 }

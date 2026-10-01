@@ -201,11 +201,17 @@ export function DataTable<T>({
                 ))}
                 {rowMenu && (
                   <td className="w-11 pr-1.5 text-right align-middle max-sm:absolute max-sm:right-1 max-sm:top-1 max-sm:w-auto max-sm:p-0">
-                    <DropdownMenu
-                      groups={rowMenu(row)}
-                      label={rowMenuLabel?.(row) ?? "Actions"}
-                      triggerClassName="inline-grid h-[30px] w-[30px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink max-sm:h-[42px] max-sm:w-[42px]"
-                    />
+                    {(() => {
+                      // A row with nothing to offer shows no ⋯ at all, not an empty menu.
+                      const groups = rowMenu(row).filter((g) => g.length > 0);
+                      return groups.length > 0 ? (
+                        <DropdownMenu
+                          groups={groups}
+                          label={rowMenuLabel?.(row) ?? "Actions"}
+                          triggerClassName="inline-grid h-[30px] w-[30px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink max-sm:h-[42px] max-sm:w-[42px]"
+                        />
+                      ) : null;
+                    })()}
                   </td>
                 )}
               </tr>
