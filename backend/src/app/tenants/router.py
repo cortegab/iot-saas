@@ -49,7 +49,7 @@ def _tenant_response(tenant: Tenant) -> TenantResponse:
 @router.get("/mine", response_model=list[MembershipSummary])
 async def list_mine(
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[MembershipSummary]:
     await set_user_context(session, current_user.id)
     memberships = await service.list_my_tenants(session, current_user.id)
@@ -65,7 +65,7 @@ async def list_mine(
 async def create_tenant(
     body: TenantCreateRequest,
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> TenantResponse:
     tenant = await service.create_tenant_with_owner(
         session, user_id=current_user.id, name=body.name
@@ -76,7 +76,7 @@ async def create_tenant(
 @router.get("/current", response_model=TenantResponse)
 async def get_current_tenant(
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> TenantResponse:
     tenant = await service.get_tenant(session, ctx.tenant_id)
     return _tenant_response(tenant)
@@ -86,7 +86,7 @@ async def get_current_tenant(
 async def update_current_tenant(
     body: TenantUpdateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> TenantResponse:
     # Admins manage alert recipients and the time zone; renaming the
     # workspace stays with owners (DESIGN.md §8).
@@ -122,7 +122,7 @@ def _last_owner() -> HTTPException:
 @router.get("/members", response_model=list[MemberResponse])
 async def list_members(
     ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[MemberResponse]:
     rows = await service.list_members(session, ctx.tenant_id)
     people = await auth_service.get_people_by_user_ids(session, [user_id for user_id, _, _ in rows])
@@ -142,7 +142,7 @@ async def list_members(
 async def add_member(
     body: AddMemberRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> MemberResponse:
     try:
         service.assert_can_assign(ctx.role.value, body.role)
@@ -167,7 +167,7 @@ async def change_member_role(
     user_id: uuid.UUID,
     body: ChangeRoleRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> MemberResponse:
     try:
         await service.change_role(session, ctx.tenant_id, user_id, body.role, ctx.role.value)
@@ -187,7 +187,7 @@ async def change_member_role(
 async def remove_member(
     user_id: uuid.UUID,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     try:
         await service.remove_member(session, ctx.tenant_id, user_id, ctx.role.value)
@@ -205,7 +205,7 @@ async def remove_member(
 async def leave_tenant(
     ctx: TenantContext = Depends(require_tenant_context),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     """Any member can leave; the last owner can't."""
     try:
@@ -249,7 +249,7 @@ async def _send_invitation(
 @router.get("/invitations", response_model=list[InvitationResponse])
 async def list_invitations(
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[InvitationResponse]:
     return [_invitation_response(i) for i in await service.list_invitations(session, ctx.tenant_id)]
 
@@ -259,7 +259,7 @@ async def create_invitation(
     body: InvitationCreateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> InvitationResponse:
     try:
         service.assert_can_assign(ctx.role.value, body.role)
@@ -298,7 +298,7 @@ async def resend_invitation(
     invitation_id: uuid.UUID,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> InvitationResponse:
     try:
         invitation = await service.get_invitation(session, ctx.tenant_id, invitation_id)
@@ -317,7 +317,7 @@ async def resend_invitation(
 async def cancel_invitation(
     invitation_id: uuid.UUID,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     try:
         invitation = await service.get_invitation(session, ctx.tenant_id, invitation_id)

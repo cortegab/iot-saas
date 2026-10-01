@@ -199,3 +199,6 @@ class ActionExecution(Base):
         ForeignKey("commands.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Set on a failed delivery once someone retries it: the retry appends its
+    # own row, so the failed-deliveries feed shows only the latest attempt.
+    retried_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

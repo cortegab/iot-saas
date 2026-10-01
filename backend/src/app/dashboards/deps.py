@@ -17,7 +17,7 @@ async def get_dashboard_or_404(
     dashboard_id: uuid.UUID,
     ctx: TenantContext = Depends(require_tenant_context),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> Dashboard:
     try:
         return await service.get_dashboard(session, ctx.tenant_id, current_user.id, dashboard_id)

@@ -40,7 +40,7 @@ def _to_response(dashboard: Dashboard) -> DashboardResponse:
 async def list_dashboards(
     ctx: TenantContext = Depends(require_tenant_context),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[DashboardResponse]:
     dashboards = await service.list_my_dashboards(session, ctx.tenant_id, current_user.id)
     return [_to_response(d) for d in dashboards]
@@ -51,7 +51,7 @@ async def create_dashboard(
     body: DashboardCreateRequest,
     ctx: TenantContext = Depends(require_tenant_context),
     current_user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DashboardResponse:
     dashboard = await service.create_dashboard(session, ctx.tenant_id, current_user.id, body.name)
     return _to_response(dashboard)
@@ -66,7 +66,7 @@ async def get_dashboard(dashboard: Dashboard = Depends(get_dashboard_or_404)) ->
 async def update_dashboard(
     body: DashboardUpdateRequest,
     dashboard: Dashboard = Depends(get_dashboard_or_404),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DashboardResponse:
     layout = [w.model_dump(mode="json") for w in body.layout] if body.layout is not None else None
     updated = await service.update_dashboard(dashboard, body.name, layout)
@@ -82,6 +82,6 @@ async def update_dashboard(
 @router.delete("/{dashboard_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_dashboard(
     dashboard: Dashboard = Depends(get_dashboard_or_404),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     await service.delete_dashboard(session, dashboard)

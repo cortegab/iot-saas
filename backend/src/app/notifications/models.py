@@ -33,6 +33,16 @@ class Notification(Base):
     rule_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("rules.id", ondelete="SET NULL"), nullable=True
     )
+    catalog_entry_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("device_catalog_entries.id", ondelete="SET NULL"), nullable=True
+    )
     message: Mapped[str] = mapped_column(nullable=False)
+    # Optional second line under the message.
+    detail: Mapped[str | None] = mapped_column(nullable=True)
+    severity: Mapped[str] = mapped_column(nullable=False, server_default="warning")
+    # What produced it — see NotificationKind.
+    kind: Mapped[str] = mapped_column(nullable=False, server_default="rule_fired")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Dismissed rows leave the feed; restoring (Undo) clears this.
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
