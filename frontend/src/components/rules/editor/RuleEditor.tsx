@@ -6,7 +6,7 @@
  * lossless — both edit the draft through the same `rule-draft` operations.
  */
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { Button } from "@/components/ui/Button";
@@ -23,7 +23,9 @@ import {
   validateDraft,
   type RuleDraft,
 } from "@/lib/rule-draft";
-import { RuleSummary, type RuleSummaryData } from "@/components/rules/RuleSummary";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { useToast } from "@/components/ui/Toast";
+import { EditableSentence } from "./EditableSentence";
 import { LadderMode } from "@/components/rules/ladder/LadderMode";
 import type { components } from "@/types/api";
 import { FormMode } from "./FormMode";
@@ -32,6 +34,7 @@ import { RulePreview } from "./RulePreview";
 import { useRuleCatalog } from "./useRuleCatalog";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
+type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
 type EditorMode = "form" | "ladder";
 
 const MODE_KEY = "rule-editor-mode";
@@ -75,6 +78,9 @@ export function RuleEditor({
   const [mode, setMode] = useState<EditorMode>("form");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const toast = useToast();
+  const { confirm, dialog } = useConfirm();
+  const formTop = useRef<HTMLDivElement>(null);
 
   // A new rule's schedule defaults to the workspace time zone, which may
   // arrive after the draft is created. Once the author picks "schedule",
@@ -102,12 +108,30 @@ export function RuleEditor({
       setError(problem);
       return;
     }
+    // A live rule acts on the next reading: say so before saving (§9.8).
+    if (existing?.enabled) {
+      const ok = await confirm("Changes apply from the next reading. The rule's history and versions are kept.", {
+        title: `Save changes to ${existing.name}?`,
+        confirmLabel: "Save changes",
+        danger: false,
+      });
+      if (!ok) return;
+    }
     setSubmitting(true);
     try {
       const body = draftToRequest(draft);
       const saved = existing
         ? await api.patch<RuleResponse>(`/rules/${existing.id}`, body)
         : await api.post<RuleResponse>(`/rules`, body);
+      // The toast says what changed, from the version the save just wrote.
+      let detail: string | undefined;
+      try {
+        const [latest] = await api.get<RuleVersionResponse[]>(`/rules/${saved.id}/versions`);
+        if (existing && latest) detail = `${latest.change_lines.length} change${latest.change_lines.length === 1 ? "" : "s"}: ${latest.change_lines.join("; ")}`;
+      } catch {
+        // The save succeeded; only the summary is missing.
+      }
+      toast({ title: existing ? `${saved.name} saved` : `${saved.name} created`, detail });
       onSaved(saved);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Couldn't save this rule.");
@@ -116,13 +140,9 @@ export function RuleEditor({
     }
   }
 
-  // The preview must render even while fields are half-filled (an unparsable
-  // webhook body would make draftToRequest throw).
-  let preview: RuleSummaryData | null = null;
-  try {
-    preview = draftToRequest(draft) as unknown as RuleSummaryData;
-  } catch {
-    preview = null;
+  function openFull() {
+    changeMode("form");
+    window.requestAnimationFrame(() => formTop.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
   }
 
   const isNew = !existing;
@@ -164,11 +184,9 @@ export function RuleEditor({
     <StepsContext.Provider value={isNew}>
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          {preview ? (
-            <RuleSummary rule={preview} placeholder="…" className="min-w-0 flex-1 text-[15px] leading-relaxed" deviceNameById={catalog.deviceNameById} />
-          ) : (
-            <span className="text-[13px] text-ink-muted">Fill in the steps below; the rule reads back here as a sentence.</span>
-          )}
+          <div className="min-w-0 flex-1">
+            <EditableSentence draft={draft} catalog={catalog} update={setDraft} onOpenFull={openFull} />
+          </div>
           <div className="flex items-center gap-2">
             <SegmentedControl
               ariaLabel="Editor view"
@@ -186,7 +204,7 @@ export function RuleEditor({
         </div>
 
         {mode === "form" ? (
-          <div className="grid items-start gap-4 wb:grid-cols-[minmax(0,1fr)_340px]">
+          <div ref={formTop} className="grid scroll-mt-4 items-start gap-4 wb:grid-cols-[minmax(0,1fr)_340px]">
             <div className="flex min-w-0 flex-col gap-4">
               <FormMode draft={draft} catalog={catalog} update={setDraft} />
               {nameCard}
@@ -205,6 +223,7 @@ export function RuleEditor({
           </>
         )}
       </form>
+      {dialog}
     </StepsContext.Provider>
   );
 }

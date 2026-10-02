@@ -47,10 +47,50 @@ def _seconds(v: object) -> str:
     return f"{n} s"
 
 
+_DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+
+def _ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def cron_human(cron: str) -> str:
+    """The editor's plain schedule wording (frontend lib/schedule.ts
+    cronHuman) for the common shapes; anything else stays as the cron."""
+    parts = cron.split()
+    if len(parts) != 5:
+        return cron
+    mi, h, dom, mon, dow = parts
+    if mon == "*" and mi.isdigit() and h.isdigit():
+        at = f"{int(h):02d}:{int(mi):02d}"
+        if dom == "*" and dow == "*":
+            return f"every day at {at}"
+        if dom == "*":
+            if dow == "1-5":
+                return f"weekdays at {at}"
+            if dow in ("0,6", "6,0"):
+                return f"weekends at {at}"
+            days = [int(d) % 7 for d in dow.split(",") if d.isdigit()]
+            if days and len(days) == len(dow.split(",")):
+                order = [1, 2, 3, 4, 5, 6, 0]
+                return f"{', '.join(_DOW[d] for d in order if d in days)} at {at}"
+        if dow == "*" and dom.isdigit():
+            return f"on the {_ordinal(int(dom))} of each month at {at}"
+    if dom == mon == dow == "*":
+        if h == "*" and mi.startswith("*/") and mi[2:].isdigit():
+            return f"every {mi[2:]} min"
+        if mi.isdigit() and h == "*":
+            return f"every hour at :{int(mi):02d}"
+        if mi.isdigit() and h.startswith("*/") and h[2:].isdigit():
+            return f"every {h[2:]} hours at :{int(mi):02d}"
+    return cron
+
+
 def _trigger_text(t: dict[str, Any]) -> str:
     kind = t.get("type", "metric")
     if kind == "schedule":
-        return f"schedule {t.get('cron', '?')} ({t.get('timezone', 'UTC')})"
+        return f"{cron_human(str(t.get('cron', '?')))} ({t.get('timezone', 'UTC')})"
     if kind == "device_status":
         return f"device {t.get('transition', '?')}"
     return {"metric": "every reading", "manual": "manual only"}.get(kind, str(kind))
