@@ -46,8 +46,13 @@ export const BOARDS: Record<
     ideSettings: [],
     bootPin: 0,
     bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BTDM",
-    inputs: [4, 5, 13, 14, 16, 17, 18, 19],
-    outputs: [2, 23, 22, 21, 27, 26, 25, 33],
+    // Broken out on both the 30- and 38-pin DevKits. Left out: strapping pins
+    // 0 (BOOT button), 2 (onboard LED), 5, 12, 15; UART0 1/3; flash 6–11; and
+    // input-only 34–39 (no pull-ups; keep them for analog sensors on ADC1).
+    inputs: [4, 13, 14, 16, 17, 18, 19],
+    // Quiet at boot, so relays don't click on power-up. 21/22 are the default
+    // I2C pins (SDA/SCL), so they're handed out last.
+    outputs: [23, 27, 26, 25, 33, 32, 21, 22],
   },
   esp32c3: {
     label: "ESP32-C3",
