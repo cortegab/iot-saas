@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, Download, KeyRound, Loader2 } from "lucide-react";
@@ -19,13 +19,15 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { SecretReveal } from "@/components/ui/SecretReveal";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
+import { ProvisioningQr } from "@/components/devices/ProvisioningQr";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiRequestError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { forgetCredential, peekCredential } from "@/lib/credential-handoff";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
-import { buildSketch, defaultPins, pinClashes, PIN_CHOICES, type SketchCredential } from "@/lib/firmware-sketch";
+import { BOARDS, buildSketch, defaultPins, pinChoices, pinClashes, provName, type SketchBoard, type SketchCredential } from "@/lib/firmware-sketch";
 import { useRealtimeEvents } from "@/lib/realtime-bus";
+import { sec2Credentials } from "@/lib/srp6a";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
@@ -33,12 +35,10 @@ type DeviceResponse = components["schemas"]["DeviceResponse"];
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
-const STEPS = [
-  ["Credential", "Shown once"],
-  ["Firmware", "Board, Wi-Fi, pins"],
-  ["Flash and Wi-Fi", "Upload and join"],
-  ["Live check", "First data"],
-] as const;
+const APP_LINKS = {
+  android: "https://play.google.com/store/apps/details?id=com.espressif.provble",
+  ios: "https://apps.apple.com/app/esp-ble-provisioning/id1473590141",
+};
 
 type CheckState = { ok?: boolean; busy?: boolean; detail?: string };
 type CatalogActuator = components["schemas"]["CatalogActuator"];
@@ -51,7 +51,15 @@ interface CheckItem {
   actuator?: CatalogActuator;
 }
 
-/** Connect a device (DESIGN.md §8, demo G): credential → firmware → flash →
+interface Sec2 {
+  /** The credential password these were computed for. */
+  forPassword: string;
+  salt: Uint8Array;
+  verifier: Uint8Array;
+}
+
+/** Connect a device (DESIGN.md §8, demo G): credential → options → flash →
+ * Wi-Fi from a phone (Espressif provisioning, docs/ble-provisioning.md) →
  * live check. The live check listens on the app's realtime socket. */
 export function ConnectFlow({ deviceId }: { deviceId: string }) {
   const api = useApi();
@@ -68,19 +76,38 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
   const [credential, setCredential] = useState<SketchCredential | null>(() => peekCredential(deviceId));
   const [stored, setStored] = useState(false);
   const [rotating, setRotating] = useState(false);
+  const [board, setBoard] = useState<SketchBoard>("esp32");
   const [wifiMode, setWifiMode] = useState<"ble" | "sketch">("ble");
+  const [security, setSecurity] = useState<1 | 2>(2);
   const [ssid, setSsid] = useState("");
   const [wifiPassword, setWifiPassword] = useState("");
   const [tls, setTls] = useState(() => typeof window !== "undefined" && window.location.protocol === "https:");
   const [pinOverrides, setPinOverrides] = useState<Record<string, number>>({});
+  const [sec2, setSec2] = useState<Sec2 | null>(null);
   const [live, setLive] = useState<Record<string, CheckState>>({});
 
   const metrics = useMemo(() => template?.metrics ?? [], [template]);
   const actuators = useMemo(() => template?.actuators ?? [], [template]);
-  const pins = useMemo(() => ({ ...defaultPins(metrics, actuators), ...pinOverrides }), [metrics, actuators, pinOverrides]);
+  const pins = useMemo(() => ({ ...defaultPins(metrics, actuators, board), ...pinOverrides }), [metrics, actuators, board, pinOverrides]);
   const clashes = pinClashes(pins);
   const blocked = Object.keys(clashes).length > 0;
   const host = typeof window !== "undefined" ? window.location.hostname : "YOUR_SERVER_HOST";
+  const phone = wifiMode === "ble";
+
+  // Security 2: the SRP6a salt + verifier for this credential, computed once
+  // per credential — a rotation means a new sketch and a new QR.
+  const needSec2 = phone && security === 2 && credential != null;
+  const sec2Ready = !needSec2 || sec2?.forPassword === credential?.password;
+  useEffect(() => {
+    if (!needSec2 || !credential || sec2?.forPassword === credential.password) return;
+    let cancelled = false;
+    void sec2Credentials(credential.username, credential.password).then(({ salt, verifier }) => {
+      if (!cancelled) setSec2({ forPassword: credential.password, salt, verifier });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needSec2, credential, sec2?.forPassword]);
 
   // The live check: status, first reading per metric, command acks.
   useRealtimeEvents((m) => {
@@ -102,23 +129,35 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
 
   const st = DEVICE_STATUS[deviceStatusKey(device)];
   const neverConnected = device.connection_state === "never_connected";
+  const boardInfo = BOARDS[board];
+  const name = provName(device.name);
   const sketchFor = (cred: SketchCredential | null) =>
     buildSketch({
       tenantSlug,
       deviceSlug: device.slug,
       deviceName: device.name,
+      board,
       host,
       tls,
       metrics,
       actuators,
       credential: cred,
-      wifi: wifiMode === "sketch" ? { ssid, password: wifiPassword } : undefined,
+      wifi: phone ? undefined : { ssid, password: wifiPassword },
+      provisioning: phone ? (security === 2 ? { security: 2, salt: sec2?.salt, verifier: sec2?.verifier } : { security: 1 }) : undefined,
       pins,
     });
 
+  const steps: [string, string][] = [
+    ["Credential", "Shown once"],
+    ["Options", "Board, Wi-Fi, pins"],
+    ["Flash", "Download and upload"],
+    ["Wi-Fi", phone ? "From your phone" : "Skipped: in the sketch"],
+    ["Live check", "First data"],
+  ];
+
   async function rotate() {
     if (!neverConnected) {
-      const ok = await confirm("The firmware running now disconnects until the new sketch is flashed.", {
+      const ok = await confirm("The firmware running now disconnects until the new sketch is flashed. The provisioning QR changes too.", {
         title: `Rotate the credential for ${device!.name}?`,
         confirmLabel: "Rotate credential",
       });
@@ -129,7 +168,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
       const result = await api.post<DeviceCreateResponse>(`/devices/${deviceId}/rotate-credential`);
       setCredential(result.credential);
       setStored(false);
-      toast({ title: "Credential ready", detail: "Store it, then continue to the firmware." });
+      toast({ title: "Credential ready", detail: "Store it, then choose the firmware options." });
     } catch (err) {
       toast({ tone: "error", title: "Couldn't rotate the credential", detail: err instanceof ApiRequestError ? err.message : undefined });
     } finally {
@@ -171,6 +210,11 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
     router.push(href);
   }
 
+  function changeBoard(next: SketchBoard) {
+    setBoard(next);
+    setPinOverrides({}); // the other board has different GPIOs
+  }
+
   const boolActuators = actuators.filter((a) => (a.value_type ?? "bool") === "bool");
   const items: CheckItem[] = [
     { k: "status", label: "Reached the broker", sub: `${tenantSlug}/${device.slug}/status`, hint: "Check the board is powered and on a 2.4 GHz network, and that the whole credential was pasted." },
@@ -189,6 +233,21 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
     })),
   ];
   const allLive = items.every((it) => live[it.k]?.ok);
+
+  const serialLines = [
+    ...(phone ? [`[PROV] no Wi-Fi stored, advertising over BLE as ${name}`, "[PROV] Wi-Fi received from the app", "[PROV] Wi-Fi saved"] : [`[WIFI] connecting to ${ssid || "your network"}`]),
+    "[WIFI] connected, IP: 192.168.1.42",
+    `[MQTT] connecting as ${credential?.username ?? device.id} ... connected`,
+  ];
+  const serialMonitor = (
+    <div className="overflow-hidden rounded-lg border border-border">
+      <div className="flex justify-between border-b border-border bg-surface-raised px-3 py-2 text-xs text-ink-muted">
+        <span>What the Serial Monitor shows when it works</span>
+        <span className="font-mono">115200</span>
+      </div>
+      <pre className="overflow-auto bg-canvas p-3 font-mono text-[12px] leading-[1.55] text-ink">{serialLines.join("\n")}</pre>
+    </div>
+  );
 
   return (
     <>
@@ -210,14 +269,15 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
 
       <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
         <ol aria-label="Steps" className="flex gap-1 overflow-x-auto md:flex-col">
-          {STEPS.map(([title, sub], i) => {
+          {steps.map(([title, sub], i) => {
             const n = i + 1;
-            const state = (n === 4 && allLive) || n < step ? "done" : n === step ? "cur" : "todo";
+            const skipped = n === 4 && !phone;
+            const state = (n === 5 && allLive) || (n < step && !skipped) ? "done" : n === step ? "cur" : "todo";
             return (
               <li key={title}>
                 <button
                   type="button"
-                  disabled={n > 1 && !stored}
+                  disabled={(n > 1 && !stored) || skipped}
                   aria-current={n === step ? "step" : undefined}
                   onClick={() => setStep(n)}
                   className={cn(
@@ -231,7 +291,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                       state === "done" ? "bg-status-online text-on-accent" : state === "cur" ? "bg-accent text-on-accent" : "bg-surface-raised text-ink-muted",
                     )}
                   >
-                    {state === "done" ? <Check aria-hidden size={13} /> : n}
+                    {state === "done" ? <Check aria-hidden size={13} /> : skipped ? "–" : n}
                   </span>
                   <span className="flex flex-col">
                     <strong className="whitespace-nowrap text-sm font-medium text-ink">{title}</strong>
@@ -268,8 +328,8 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
               ) : (
                 <>
                   <p className="text-sm text-ink-muted">
-                    This is the MQTT login for <code className="font-mono">{device.name}</code>. It&apos;s already in the sketch on the next step, but
-                    it&apos;s shown only once, so store it too. Broker: <code className="font-mono">{host}:{tls ? "8883 (TLS)" : "1883"}</code>.
+                    This is the MQTT login for <code className="font-mono">{device.name}</code>. It goes into the sketch, and its password into the phone
+                    provisioning QR. It&apos;s shown only once, so store it too. Broker: <code className="font-mono">{host}:{tls ? "8883 (TLS)" : "1883"}</code>.
                   </p>
                   <SecretReveal
                     fields={[
@@ -292,22 +352,41 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
 
           {step === 2 && (
             <>
-              <h2 className="text-lg font-semibold text-ink">Firmware</h2>
+              <h2 className="text-lg font-semibold text-ink">Options</h2>
               <p className="text-sm text-ink-muted">
-                A ready-to-flash Arduino sketch for an ESP32 DevKit, built from the <b className="text-ink">{template.name}</b> template.
+                The sketch is built from the <b className="text-ink">{template.name}</b> template and these choices. You get it on the next step.
               </p>
-              <div className="grid gap-5 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+              <div className="grid gap-5 xl:grid-cols-2">
                 <div className="flex flex-col gap-4">
+                  <OptionGroup
+                    label="Board"
+                    value={board}
+                    onChange={(v) => changeBoard(v as SketchBoard)}
+                    options={[
+                      ["esp32", BOARDS.esp32.label, "Classic ESP32, 30/38-pin dev boards."],
+                      ["esp32c3", BOARDS.esp32c3.label, "ESP32-C3 DevKitM, Super Mini and similar."],
+                    ]}
+                  />
                   <OptionGroup
                     label="Wi-Fi"
                     value={wifiMode}
                     onChange={(v) => setWifiMode(v as "ble" | "sketch")}
                     options={[
-                      ["ble", "Set up from a phone", "Over BLE, encrypted. Nothing secret in the firmware."],
+                      ["ble", "Set up from a phone", "ESP BLE Provisioning app: scan a QR, pick the network. Nothing about your Wi-Fi in the firmware."],
                       ["sketch", "Type it into the sketch", "Quick for a bench test. Readable from the binary."],
                     ]}
                   />
-                  {wifiMode === "sketch" && (
+                  {phone ? (
+                    <OptionGroup
+                      label="Provisioning security"
+                      value={String(security)}
+                      onChange={(v) => setSecurity(v === "1" ? 1 : 2)}
+                      options={[
+                        ["2", "2 – SRP6a", "Stronger handshake: a captured session can't be used to guess the password. Needs ESP BLE Provisioning 2.1 or later."],
+                        ["1", "1 – PoP", "Works with every app version. The proof of possession is the device's password."],
+                      ]}
+                    />
+                  ) : (
                     <div className="grid grid-cols-2 gap-2">
                       <Field label="Network (2.4 GHz)">
                         <Input value={ssid} autoComplete="off" onChange={(e) => setSsid(e.target.value)} />
@@ -317,6 +396,8 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                       </Field>
                     </div>
                   )}
+                </div>
+                <div className="flex flex-col gap-4">
                   <OptionGroup
                     label="Connection"
                     value={tls ? "tls" : "plain"}
@@ -335,18 +416,18 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                   {Object.keys(pins).length > 0 && (
                     <fieldset className="flex flex-col gap-2">
                       <legend className="mb-1 text-[13px] font-medium text-ink">Pins</legend>
-                      {[...metrics.filter((m) => m.data_type === "bool").map((m) => [`m:${wireId(m)}`, m.name, "input"] as const), ...boolActuators.map((a) => [`a:${wireId(a)}`, a.name, "output"] as const)].map(([k, name, dir]) => (
+                      {[...metrics.filter((m) => m.data_type === "bool").map((m) => [`m:${wireId(m)}`, m.name, "input"] as const), ...boolActuators.map((a) => [`a:${wireId(a)}`, a.name, "output"] as const)].map(([k, label, dir]) => (
                         <div key={k} className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-2">
                           <span className="min-w-0 text-sm text-ink">
-                            {name} <small className="font-mono text-ink-muted">{k.slice(2)} · {dir}</small>
+                            {label} <small className="font-mono text-ink-muted">{k.slice(2)} · {dir}</small>
                           </span>
                           <Select
-                            aria-label={`GPIO for ${name}`}
+                            aria-label={`GPIO for ${label}`}
                             aria-invalid={clashes[k] ? true : undefined}
                             value={pins[k]}
                             onChange={(e) => setPinOverrides((p) => ({ ...p, [k]: Number(e.target.value) }))}
                           >
-                            {PIN_CHOICES.map((p) => (
+                            {pinChoices(board).map((p) => (
                               <option key={p} value={p}>
                                 GPIO {p}
                               </option>
@@ -357,109 +438,128 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                       ))}
                     </fieldset>
                   )}
-                  <div className="text-[13px] text-ink-muted">
-                    <p className="mb-1 font-medium text-ink">Install once</p>
-                    <ul className="list-disc pl-5">
-                      <li>ESP32 board package by Espressif (Boards Manager)</li>
-                      <li>PubSubClient by Nick O&apos;Leary</li>
-                      <li>ArduinoJson by Benoit Blanchon</li>
+                  <div className="rounded-lg bg-canvas px-3.5 py-3 text-[13px]">
+                    <p className="mb-1 font-medium text-ink">The sketch includes</p>
+                    <ul className="list-disc pl-5 text-ink-muted">
+                      <li>
+                        {boardInfo.label}: Arduino board &quot;{boardInfo.arduinoBoard}&quot;{boardInfo.ideSettings.length ? `, ${boardInfo.ideSettings.join(", ")}` : ""}
+                      </li>
+                      <li>
+                        {phone
+                          ? `Wi-Fi from a phone (Espressif provisioning, Security ${security}), advertised as "${name}". Needs the Huge APP partition.`
+                          : "Wi-Fi in the firmware. Fits the default partition."}
+                      </li>
+                      <li>
+                        MQTT over {tls ? "TLS on 8883" : "plain 1883"}, {metrics.length} metric{metrics.length === 1 ? "" : "s"}, {actuators.length} actuator
+                        {actuators.length === 1 ? "" : "s"}
+                      </li>
                     </ul>
                   </div>
                 </div>
-                <div className="flex min-w-0 flex-col overflow-hidden rounded-lg border border-border">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-border bg-surface-raised px-3 py-2">
-                    <span className="font-mono text-[12.5px] text-ink">{device.slug}.ino</span>
-                    <span className="mr-auto text-xs text-ink-muted">{sketchFor(null).split("\n").length} lines</span>
-                    <Button size="sm" variant="ghost" disabled={blocked} onClick={() => void copySketch()}>
-                      <Copy aria-hidden size={14} />
-                      Copy sketch
-                    </Button>
-                    <Button size="sm" variant="secondary" disabled={blocked} onClick={downloadSketch}>
-                      <Download aria-hidden size={14} />
-                      Download .ino
-                    </Button>
-                  </div>
-                  <pre aria-label="Generated sketch" className="max-h-[520px] overflow-auto bg-canvas p-3 font-mono text-[12px] leading-[1.55] text-ink">
-                    <code>{sketchFor(credential ? { username: credential.username, password: "••••••••" } : null)}</code>
-                  </pre>
-                  <p className="border-t border-border px-3 py-2 text-xs text-ink-muted">The preview masks the password. Copy and Download include it in full.</p>
-                </div>
               </div>
-              <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={blocked} />
+              <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={blocked || (!phone && !ssid)} />
             </>
           )}
 
           {step === 3 && (
             <>
-              <h2 className="text-lg font-semibold text-ink">Flash and Wi-Fi</h2>
+              <h2 className="text-lg font-semibold text-ink">Flash</h2>
               <p className="text-sm text-ink-muted">
-                Upload the sketch{wifiMode === "ble" ? ", then give the board your Wi-Fi from a phone" : ""}. Keep the Serial Monitor open: it tells you
-                exactly where the board is.
+                Your sketch for <b className="text-ink">{boardInfo.label}</b>
+                {phone ? `, Wi-Fi from a phone (Security ${security})` : `, Wi-Fi "${ssid}"`}. Download it, add your sensor code, and upload it.
               </p>
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="rounded-lg border border-border p-4">
-                  <h3 className="mb-2 text-sm font-semibold text-ink">Upload with Arduino IDE</h3>
-                  <ol className="list-decimal space-y-1 pl-5 text-sm text-ink">
-                    <li>Plug the ESP32 in over USB.</li>
-                    <li>
-                      Tools → Board → <b>ESP32 Dev Module</b>.
+              <div className="flex flex-wrap items-center gap-2">
+                <Button disabled={blocked || !sec2Ready} onClick={downloadSketch}>
+                  <Download aria-hidden size={15} />
+                  Download {device.slug}.ino
+                </Button>
+                <Button variant="secondary" disabled={blocked || !sec2Ready} onClick={() => void copySketch()}>
+                  <Copy aria-hidden size={14} />
+                  Copy sketch
+                </Button>
+                {!sec2Ready && (
+                  <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
+                    <Loader2 aria-hidden size={13} className="animate-spin" /> Computing the Security 2 verifier…
+                  </span>
+                )}
+              </div>
+              <details className="overflow-hidden rounded-lg border border-border">
+                <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-[13px] text-ink">
+                  Preview the sketch <span className="text-ink-muted">· {sketchFor(null).split("\n").length} lines, password masked</span>
+                </summary>
+                <pre aria-label="Generated sketch" className="max-h-[520px] overflow-auto bg-canvas p-3 font-mono text-[12px] leading-[1.55] text-ink">
+                  <code>{sketchFor(credential ? { username: credential.username, password: "••••••••" } : null)}</code>
+                </pre>
+              </details>
+              <div className="rounded-lg border border-border p-4">
+                <h3 className="mb-2 text-sm font-semibold text-ink">Upload with Arduino IDE</h3>
+                <ol className="list-decimal space-y-1 pl-5 text-sm text-ink">
+                  <li>Boards Manager: ESP32 by Espressif, version 3.x. Library Manager: PubSubClient, ArduinoJson.</li>
+                  <li>Plug the board in over USB.</li>
+                  <li>
+                    Tools → Board → <b>{boardInfo.arduinoBoard}</b>.
+                  </li>
+                  {boardInfo.ideSettings.map((s) => (
+                    <li key={s}>
+                      Tools → <b>{s}</b>.
                     </li>
+                  ))}
+                  {phone && (
                     <li>
                       Tools → Partition Scheme → <b>Huge APP (3MB No OTA/1MB SPIFFS)</b>. BLE and Wi-Fi don&apos;t fit the default.
                     </li>
-                    <li>Paste the sketch, add your sensor code, and select Upload.</li>
-                    <li>
-                      Open the Serial Monitor at <b>115200 baud</b>.
-                    </li>
-                  </ol>
-                  <p className="mt-2 text-xs text-ink-muted">
-                    PlatformIO works too: <code className="font-mono">board = esp32dev</code>, same libraries.
-                  </p>
-                </div>
-                {wifiMode === "ble" ? (
-                  <div className="rounded-lg border border-border p-4">
-                    <h3 className="mb-2 text-sm font-semibold text-ink">Wi-Fi from your phone</h3>
-                    <ol className="list-decimal space-y-1 pl-5 text-sm text-ink">
-                      <li>Open the provisioning app and choose Set up Wi-Fi.</li>
-                      <li>
-                        Pick <b className="font-mono">{device.name.slice(0, 20)}</b> from the nearby boards.
-                      </li>
-                      <li>Accept the pairing request. The link is encrypted before the password is sent.</li>
-                      <li>Choose a 2.4 GHz network and enter its password.</li>
-                    </ol>
-                    <p className="mt-2 text-xs text-ink-muted">To provision again later, re-upload with &quot;Erase All Flash Before Sketch Upload&quot; on.</p>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-border p-4">
-                    <h3 className="mb-2 text-sm font-semibold text-ink">Wi-Fi in the sketch</h3>
-                    <p className="text-sm text-ink-muted">
-                      The board joins <b className="text-ink">{ssid || "your network"}</b> on first boot and saves it. Change it by editing the sketch and
-                      uploading again.
-                    </p>
-                  </div>
-                )}
+                  )}
+                  <li>Open the sketch, add your sensor code, and select Upload.</li>
+                  <li>
+                    Open the Serial Monitor at <b>115200 baud</b>.
+                  </li>
+                </ol>
+                <p className="mt-2 text-xs text-ink-muted">
+                  PlatformIO works too: <code className="font-mono">board = {board === "esp32c3" ? "esp32-c3-devkitm-1" : "esp32dev"}</code>, same libraries.
+                </p>
               </div>
-              <div className="overflow-hidden rounded-lg border border-border">
-                <div className="flex justify-between border-b border-border bg-surface-raised px-3 py-2 text-xs text-ink-muted">
-                  <span>What the Serial Monitor shows when it works</span>
-                  <span className="font-mono">115200</span>
-                </div>
-                <pre className="overflow-auto bg-canvas p-3 font-mono text-[12px] leading-[1.55] text-ink">
-                  {[
-                    `[BOOT] ${device.name}`,
-                    ...(wifiMode === "ble" ? [`[PROV] no Wi-Fi stored, advertising over BLE as ${device.name.slice(0, 20)}`] : []),
-                    "[WIFI] connected",
-                    `[MQTT] connecting to ${host}:${tls ? "8883 (tls)" : "1883"}`,
-                    "[MQTT] connected",
-                    `[PUB ] ${tenantSlug}/${device.slug}/${metrics[0] ? wireId(metrics[0]) : "status"}`,
-                  ].join("\n")}
-                </pre>
-              </div>
-              <StepNav onBack={() => setStep(2)} onNext={() => setStep(4)} />
+              {!phone && serialMonitor}
+              <StepNav onBack={() => setStep(2)} onNext={() => setStep(phone ? 4 : 5)} />
             </>
           )}
 
-          {step === 4 && (
+          {step === 4 && phone && credential && (
+            <>
+              <h2 className="text-lg font-semibold text-ink">Wi-Fi from your phone</h2>
+              <p className="text-sm text-ink-muted">
+                Once the sketch is running, the board waits for Wi-Fi over Bluetooth as <b className="font-mono text-ink">{name}</b>. Give it your network with
+                the ESP BLE Provisioning app.
+              </p>
+              <ProvisioningQr deviceName={device.name} username={credential.username} password={credential.password} security={security} />
+              <div className="rounded-lg border border-border p-4">
+                <h3 className="mb-2 text-sm font-semibold text-ink">In the app</h3>
+                <ol className="list-decimal space-y-1 pl-5 text-sm text-ink">
+                  <li>
+                    Install ESP BLE Provisioning (
+                    <a href={APP_LINKS.android} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                      Android
+                    </a>
+                    {" · "}
+                    <a href={APP_LINKS.ios} target="_blank" rel="noreferrer" className="text-accent hover:underline">
+                      iOS
+                    </a>
+                    ){security === 2 ? ", version 2.1 or later" : ""}.
+                  </li>
+                  <li>Tap Provision New Device, then scan this QR.</li>
+                  <li>Pick a 2.4 GHz network and enter its password.</li>
+                  <li>The board joins and connects to the broker; the next step turns green.</li>
+                </ol>
+                <p className="mt-2 text-xs text-ink-muted">
+                  To give it a different network later, hold BOOT for 5 seconds while the board is running. Searching without the QR? Clear the app&apos;s
+                  &quot;PROV_&quot; name filter in its settings first.
+                </p>
+              </div>
+              {serialMonitor}
+              <StepNav onBack={() => setStep(3)} onNext={() => setStep(5)} />
+            </>
+          )}
+
+          {step === 5 && (
             <>
               <h2 className="text-lg font-semibold text-ink">Live check</h2>
               <p className="text-sm text-ink-muted">
@@ -519,7 +619,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                   );
                 })}
               </ul>
-              <StepNav onBack={() => setStep(3)} />
+              <StepNav onBack={() => setStep(phone ? 4 : 3)} />
             </>
           )}
         </section>
@@ -528,7 +628,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
       <p className="sr-only" aria-live="polite">
         {allLive ? `${device.name} is live.` : ""}
       </p>
-      {step === 4 && !allLive && (
+      {step === 5 && !allLive && (
         <p className="text-xs text-ink-muted">
           Stuck? The device page shows its <Link href={`/devices/${deviceId}`} className="text-accent hover:underline">status and readings</Link> too.
         </p>
