@@ -189,7 +189,7 @@ export default function NotificationsPage() {
                             <button
                               type="button"
                               className="text-sm text-accent hover:underline"
-                              onClick={() => void open(n.id, !unread, `/templates?edit=${n.catalog_entry_id}`)}
+                              onClick={() => void open(n.id, !unread, `/templates/${n.catalog_entry_id}`)}
                             >
                               Open template
                             </button>

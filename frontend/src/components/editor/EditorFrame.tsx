@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import Link from "next/link";
-import { AlertCircle, Check, Eye, Maximize2, PanelRight, X } from "lucide-react";
-import { Button, IconButton, buttonClassName } from "@/components/ui/Button";
+import { AlertCircle, Check, Eye, X } from "lucide-react";
+import { Button, IconButton } from "@/components/ui/Button";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
@@ -49,12 +48,12 @@ export interface EditorFrameProps {
   onSave: () => Promise<boolean>;
   onDiscard: () => void;
   onClose?: () => void;
-  /** Dock/drawer: link to the full page. Page: link back beside the list. */
-  expandHref?: string;
-  dockHref?: string;
   menu?: DropdownMenuItem[][];
   /** Extra header buttons (e.g. Duplicate). */
   headerActions?: ReactNode;
+  /** Page mode inside another page (a record page's Settings tab): no title
+   * block, menu or rail — the host page has them; fields and save bar only. */
+  headless?: boolean;
   children: ReactNode;
 }
 
@@ -106,10 +105,9 @@ export function EditorFrame({
   onSave,
   onDiscard,
   onClose,
-  expandHref,
-  dockHref,
   menu,
   headerActions,
+  headless = false,
   children,
 }: EditorFrameProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -229,10 +227,12 @@ export function EditorFrame({
     </>
   );
 
-  const showRail = mode === "page" && sections.length > 1;
-  const showJump = sections.length > 1;
+  const showRail = mode === "page" && !headless && sections.length > 1;
+  const showJump = !headless && sections.length > 1;
 
-  const head = (
+  const head = headless ? (
+    consequence ? <p className="max-w-[70ch] pb-1 text-[14px] text-ink-muted">{consequence}</p> : null
+  ) : (
     <div
       className={cn(
         "flex shrink-0 items-start gap-2.5 max-md:flex-col max-md:items-stretch",
@@ -259,22 +259,6 @@ export function EditorFrame({
       <div className="flex shrink-0 items-center gap-1 max-md:order-first max-md:justify-end">
         {headerActions}
         {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
-        {mode !== "page" && expandHref && (
-          <Link
-            href={expandHref}
-            aria-label="Expand to full page"
-            title="Expand to full page"
-            className="hidden h-[30px] w-[30px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink shell:inline-grid"
-          >
-            <Maximize2 aria-hidden size={16} />
-          </Link>
-        )}
-        {mode === "page" && dockHref && (
-          <Link href={dockHref} className={cn(buttonClassName({ variant: "secondary", size: "sm" }), "hidden shell:inline-flex")}>
-            <PanelRight aria-hidden size={14} />
-            Show beside list
-          </Link>
-        )}
         {onClose && (
           <IconButton aria-label={`Close ${noun} editor`} onClick={onClose}>
             <X size={18} />
@@ -435,7 +419,8 @@ export function EditorFrame({
       <div
         ref={rootRef}
         className={cn(
-          "-mb-[110px] flex flex-col",
+          "flex flex-col",
+          !headless && "-mb-[110px]",
           showRail && "wb:grid wb:grid-cols-[230px_minmax(0,1fr)] wb:items-start wb:gap-x-9 wb:[grid-template-areas:'head_head''rail_body''foot_foot']",
         )}
       >

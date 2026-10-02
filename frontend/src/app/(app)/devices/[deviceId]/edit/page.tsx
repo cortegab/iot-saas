@@ -1,27 +1,15 @@
 "use client";
 
-import { useParams } from "next/navigation";
-import { useApiSWR } from "@/hooks/useApiSWR";
-import { Breadcrumbs } from "@/components/ui/PageHeader";
-import { DeviceEditor } from "@/components/devices/DeviceEditor";
-import type { components } from "@/types/api";
+import { useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 
-type DeviceResponse = components["schemas"]["DeviceResponse"];
-
-/** The device editor as a full page (DESIGN.md §7 "Expand"), deep-linkable. */
-export default function DeviceEditPage() {
+/** A device is edited in its page's Settings tab (DESIGN.md §7); this route
+ * keeps old links working. */
+export default function DeviceEditRedirect() {
   const { deviceId } = useParams<{ deviceId: string }>();
-  const { data: device } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
-  return (
-    <>
-      <Breadcrumbs
-        crumbs={[
-          { label: "Devices", href: "/devices" },
-          { label: device?.name ?? "Device", href: `/devices/${deviceId}` },
-          { label: "Edit" },
-        ]}
-      />
-      <DeviceEditor deviceId={deviceId} mode="page" dockHref={`/devices?edit=${deviceId}`} />
-    </>
-  );
+  const router = useRouter();
+  useEffect(() => {
+    router.replace(`/devices/${deviceId}?tab=settings`);
+  }, [router, deviceId]);
+  return null;
 }

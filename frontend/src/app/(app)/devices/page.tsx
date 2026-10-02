@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Cpu, KeyRound, Pencil, Plus, Power, SquareArrowOutUpRight, Trash2, Wrench } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
@@ -23,7 +23,8 @@ import { BulkBar, FilterChips, ListToolbar, type FilterChip } from "@/components
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
-import { DeviceEditor } from "@/components/devices/DeviceEditor";
+import { DevicePeek } from "@/components/devices/DevicePeek";
+import { usePeek } from "@/components/list/usePeek";
 import { SplitView } from "@/components/editor/SplitView";
 import { ApiRequestError } from "@/lib/api-client";
 import { DEVICE_STATUS, deviceStatusKey, type DeviceStatusKey } from "@/lib/device-status";
@@ -57,17 +58,6 @@ export default function DevicesPage() {
   const zoneName = useMemo(() => new Map((zones ?? []).map((z) => [z.id, z.name])), [zones]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // `?edit=<id>` docks the device editor beside the list (DESIGN.md §7).
-  const params = useSearchParams();
-  const pathname = usePathname();
-  const editId = params.get("edit");
-  function setEditId(id: string | null) {
-    const next = new URLSearchParams(params.toString());
-    if (id) next.set("edit", id);
-    else next.delete("edit");
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
   const [revealed, setRevealed] = useState<{ name: string; credential: DeviceCreateResponse["credential"] } | null>(null);
 
   const templateName = useMemo(() => {
@@ -109,6 +99,8 @@ export default function DevicesPage() {
   }, [devices, list.filters, list.q, list.sort, templateName, zoneName]);
 
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
+  // A row peeks (DESIGN.md §7); a device is opened and edited on its page.
+  const peek = usePeek({ rows: pageRows, rowKey: (d) => d.id, pageHref: (id) => `/devices/${id}`, newHref: "/devices/new" });
 
   // ---------------------------------------------------------------- actions
   async function setEnabled(targets: DeviceResponse[], enabled: boolean, undoable = true) {
@@ -130,7 +122,8 @@ export default function DevicesPage() {
     }
   }
 
-  async function remove(targets: DeviceResponse[]) {
+  /** Resolves true once the devices are deleted. */
+  async function remove(targets: DeviceResponse[]): Promise<boolean> {
     const ruleCount = targets.reduce((n, d) => n + (rulesPerDevice.get(d.id) ?? 0), 0);
     const one = targets.length === 1;
     const ok = await confirm(
@@ -158,15 +151,17 @@ export default function DevicesPage() {
         ),
       },
     );
-    if (!ok) return;
+    if (!ok) return false;
     try {
       for (const d of targets) await api.delete(`/devices/${d.id}`);
       setSelected(new Set());
       await mutate();
       toast({ title: one ? `${targets[0].name} deleted` : `${plural(targets.length, "device")} deleted` });
+      return true;
     } catch (err) {
       toast({ tone: "error", title: "Couldn't delete", detail: err instanceof ApiRequestError ? err.message : undefined });
       await mutate();
+      return false;
     }
   }
 
@@ -235,8 +230,8 @@ export default function DevicesPage() {
     ];
     if (canWrite) {
       groups[0].push(
-        { label: "Edit", icon: <Pencil size={15} />, onClick: () => setEditId(d.id) },
-        { label: "Get firmware", icon: <Wrench size={15} />, onClick: () => router.push(`/devices/${d.id}?tab=settings`) },
+        { label: "Edit settings", icon: <Pencil size={15} />, onClick: () => router.push(`/devices/${d.id}?tab=settings`) },
+        { label: "Connect and get firmware", icon: <Wrench size={15} />, onClick: () => router.push(`/devices/${d.id}/connect`) },
       );
       groups.push(
         [
@@ -329,19 +324,27 @@ export default function DevicesPage() {
         />
       ) : (
         <SplitView
-          editorLabel="Edit device"
-          onClose={() => setEditId(null)}
+          editorLabel="Device"
+          onClose={peek.close}
           editor={
-            editId
-              ? (mode) => (
-                  <DeviceEditor
-                    key={editId}
-                    deviceId={editId}
-                    mode={mode}
-                    onClose={() => setEditId(null)}
-                    expandHref={`/devices/${editId}/edit`}
-                  />
-                )
+            peek.peekId
+              ? (mode) => {
+                  const d = devices.find((x) => x.id === peek.peekId);
+                  return (
+                    <DevicePeek
+                      key={peek.peekId}
+                      device={d}
+                      template={d ? templates?.find((t) => t.id === d.catalog_entry_id) : undefined}
+                      zoneName={d?.zone_id ? zoneName.get(d.zone_id) : undefined}
+                      ruleCount={d ? (rulesPerDevice.get(d.id) ?? 0) : 0}
+                      mode={mode}
+                      onClose={peek.close}
+                      onRotate={(x) => void rotate(x)}
+                      onToggle={(x) => void setEnabled([x], x.status !== "active")}
+                      onDelete={(x) => void remove([x]).then((gone) => gone && peek.close())}
+                    />
+                  );
+                }
               : null
           }
         >
@@ -417,12 +420,13 @@ export default function DevicesPage() {
                 rowKey={(d) => d.id}
                 sort={list.sort}
                 onSort={list.toggleSort}
-                onRowClick={(d) => router.push(`/devices/${d.id}`)}
+                onRowClick={peek.onRowClick}
+                onRowEnter={peek.onRowEnter}
                 selection={canWrite ? { selected, onChange: setSelected, rowLabel: (d) => d.name } : undefined}
                 rowMenu={rowMenu}
                 rowMenuLabel={(d) => `Actions for ${d.name}`}
                 rowClassName={(d) => (d.status === "disabled" ? "[&>td]:opacity-60" : undefined)}
-                currentKey={editId}
+                currentKey={peek.peekId}
               />
               <TableFooter
                 shown={filtered.length}
