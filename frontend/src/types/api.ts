@@ -996,6 +996,26 @@ export interface paths {
         patch: operations["update_zone_zones__zone_id__patch"];
         trace?: never;
     };
+    "/public/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Contact
+         * @description The landing page's contact form. Emails the team; stores nothing.
+         */
+        post: operations["contact_public_contact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -1348,6 +1368,32 @@ export interface components {
              * @default 0
              */
             hysteresis: number;
+        };
+        /** ContactRequest */
+        ContactRequest: {
+            /** Name */
+            name: string;
+            /** Email */
+            email: string;
+            /** Company */
+            company?: string | null;
+            /**
+             * Deployment
+             * @default not_sure
+             * @enum {string}
+             */
+            deployment: "cloud" | "dedicated" | "on_prem" | "not_sure";
+            /** Devices */
+            devices?: string | null;
+            /** Message */
+            message: string;
+            /** Website */
+            website?: string | null;
+        };
+        /** ContactResponse */
+        ContactResponse: {
+            /** Detail */
+            detail: string;
         };
         /** DashboardCreateRequest */
         DashboardCreateRequest: {
@@ -5141,6 +5187,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ZoneResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    contact_public_contact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             /** @description Validation Error */

@@ -101,6 +101,26 @@ DELIVER_INLINE = False
 _PENDING: set[asyncio.Task[None]] = set()
 
 
+async def send_soon(message: EmailMessage) -> None:
+    """Send without a database transaction to wait for (the public contact
+    form): in the background like send_after_commit, inline under tests."""
+
+    async def _deliver() -> None:
+        try:
+            await get_email_provider().send(message)
+        except Exception:
+            log.exception(
+                "email delivery failed -> %s | %r", ", ".join(message.to), message.subject
+            )
+
+    if DELIVER_INLINE:
+        await _deliver()
+        return
+    task = asyncio.create_task(_deliver())
+    _PENDING.add(task)
+    task.add_done_callback(_PENDING.discard)
+
+
 def send_after_commit(session: AsyncSession, message: EmailMessage) -> None:
     """Queue a transactional email (invitation, password reset) to go out
     only once the request's transaction commits. A delivery failure is
