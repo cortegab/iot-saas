@@ -1,27 +1,27 @@
 "use client";
 
 import { useMemo } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Plus, Send, Trash2, Users } from "lucide-react";
-import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { useToast } from "@/components/ui/Toast";
 import { DataTable, NameCell, type DataColumn } from "@/components/list/DataTable";
 import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/ListToolbar";
 import { NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { SplitView } from "@/components/editor/SplitView";
-import { MemberEditor } from "@/components/members/MemberEditor";
+import { MemberPeek } from "@/components/members/MemberPeek";
+import { useMemberActions } from "@/components/members/useMemberActions";
+import { usePeek } from "@/components/list/usePeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, timeAgo } from "@/lib/time-ago";
@@ -40,29 +40,17 @@ const roleLabel = (r: string) => {
 };
 
 /** Members (DESIGN.md §6/§8): Member · Role · Joined, invites listed with the
- * members they'll become. Owner is granted and removed by owners only. */
+ * members they'll become. A row peeks; roles change on /members/{id}, and
+ * invites are sent from /members/invite. Owner is granted and removed by
+ * owners only. */
 export default function MembersPage() {
-  const api = useApi();
   const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
-  const toast = useToast();
-  const { confirm, dialog } = useConfirm();
   const { role: myRole, can } = usePermissions();
   const canManage = can("members.manage");
   const { data: me } = useCurrentUser();
   const { data: members, error, isLoading, mutate } = useApiSWR<MemberResponse[]>("/tenants/members");
-  const { data: invites, mutate: mutateInvites } = useApiSWR<InvitationResponse[]>(canManage ? "/tenants/invitations" : null);
+  const { data: invites } = useApiSWR<InvitationResponse[]>(canManage ? "/tenants/invitations" : null);
   const list = useListState({ show: "all" }, { key: "name", dir: "asc" });
-
-  const editId = params.get("edit");
-  function setEditId(id: string | null) {
-    const next = new URLSearchParams(params.toString());
-    if (id) next.set("edit", id);
-    else next.delete("edit");
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
 
   const rows = useMemo<Row[]>(
     () => [
@@ -91,47 +79,10 @@ export default function MembersPage() {
   }, [rows, list.filters.show, list.q, list.sort]);
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
 
-  async function removeMember(m: MemberResponse) {
-    if (m.role === "owner" && myRole !== "owner") {
-      toast({ tone: "error", title: "Only an owner can remove an owner" });
-      return;
-    }
-    const ok = await confirm("They lose access immediately. Their dashboards are deleted; rules they created keep running.", {
-      title: `Remove ${m.name || m.email}?`,
-      confirmLabel: "Remove member",
-    });
-    if (!ok) return;
-    try {
-      await api.delete(`/tenants/members/${m.user_id}`);
-      if (editId === m.user_id) setEditId(null);
-      await mutate();
-      toast({ title: "Member removed", detail: m.email });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't remove the member", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
-  }
-
-  async function resend(i: InvitationResponse) {
-    try {
-      await api.post(`/tenants/invitations/${i.id}/resend`);
-      await mutateInvites();
-      toast({ title: "Invite resent", detail: `${i.email} · the new link expires in 7 days.` });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't resend the invite", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
-  }
-
-  async function cancelInvite(i: InvitationResponse) {
-    const ok = await confirm("The link in their email stops working.", { title: `Cancel the invite for ${i.email}?`, confirmLabel: "Cancel invite", cancelLabel: "Keep it" });
-    if (!ok) return;
-    try {
-      await api.delete(`/tenants/invitations/${i.id}`);
-      await mutateInvites();
-      toast({ title: "Invite cancelled", detail: i.email });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't cancel the invite", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
-  }
+  const peek = usePeek({ rows: pageRows, rowKey: (x) => x.id, pageHref: (id) => (id.startsWith("invite.") ? `/members?peek=${id}` : `/members/${id}`), newHref: "/members/invite" });
+  const { removeMember, resend, cancelInvite, dialog } = useMemberActions((id) => {
+    if (peek.peekId === id) peek.close();
+  });
 
   const columns: DataColumn<Row>[] = [
     {
@@ -142,7 +93,13 @@ export default function MembersPage() {
         <NameCell
           name={
             <>
-              {x.name}
+              {x.kind === "member" ? (
+                <Link href={`/members/${x.id}`} className="hover:underline hover:underline-offset-[3px]">
+                  {x.name}
+                </Link>
+              ) : (
+                x.name
+              )}
               {x.you && <span className="font-normal text-ink-muted"> (you)</span>}
             </>
           }
@@ -178,7 +135,7 @@ export default function MembersPage() {
   const rowMenu = (x: Row): DropdownMenuItem[][] => {
     if (!canManage) return [];
     // Leaving the workspace lives in Workspace settings, not here.
-    if (x.you) return [[{ label: "Change your role", icon: <Users size={15} />, onClick: () => setEditId(x.id) }]];
+    if (x.you) return [[{ label: "Change your role", icon: <Users size={15} />, onClick: () => router.push(`/members/${x.id}`) }]];
     if (x.kind === "invite") {
       return [
         [{ label: "Resend invite", icon: <Send size={15} />, onClick: () => void resend(x.invite) }],
@@ -187,19 +144,19 @@ export default function MembersPage() {
     }
     const ownerLocked = x.role === "owner" && myRole !== "owner";
     return [
-      [{ label: "Change role", icon: <Users size={15} />, onClick: () => setEditId(x.id) }],
+      [{ label: "Change role", icon: <Users size={15} />, onClick: () => router.push(`/members/${x.id}`) }],
       ...(ownerLocked ? [] : [[{ label: "Remove from workspace…", icon: <Trash2 size={15} />, danger: true, onClick: () => void removeMember(x.member) }]]),
     ];
   };
 
   const chips: FilterChip[] = list.q ? [{ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") }] : [];
   const inviteButton = canManage ? (
-    <Button onClick={() => setEditId("new")}>
+    <Link href="/members/invite" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
       Invite member
-    </Button>
+    </Link>
   ) : null;
-  const memberId = editId && !editId.startsWith("invite.") ? editId : null;
+  const peeked = peek.peekId ? rows.find((x) => x.id === peek.peekId) : undefined;
 
   return (
     <>
@@ -214,17 +171,18 @@ export default function MembersPage() {
         <TableSkeleton rows={4} columns={3} />
       ) : (
         <SplitView
-          editorLabel={editId === "new" ? "Invite member" : "Edit member"}
-          onClose={() => setEditId(null)}
+          editorLabel="Member"
+          onClose={peek.close}
           editor={
-            editId === "new" || memberId
+            peek.peekId
               ? (mode) => (
-                  <MemberEditor
-                    key={editId}
-                    memberId={editId === "new" ? null : memberId}
+                  <MemberPeek
+                    key={peek.peekId}
+                    member={peeked?.kind === "member" ? peeked.member : undefined}
+                    invite={peeked?.kind === "invite" ? peeked.invite : undefined}
+                    isMe={peeked?.you ?? false}
                     mode={mode}
-                    onClose={() => setEditId(null)}
-                    onRemove={(m) => void removeMember(m)}
+                    onClose={peek.close}
                   />
                 )
               : null
@@ -261,10 +219,11 @@ export default function MembersPage() {
                 rowKey={(x) => x.id}
                 sort={list.sort}
                 onSort={list.toggleSort}
-                onRowClick={(x) => (x.kind === "member" ? setEditId(x.id) : undefined)}
+                onRowClick={peek.onRowClick}
+                onRowEnter={peek.onRowEnter}
                 rowMenu={rowMenu}
                 rowMenuLabel={(x) => `Actions for ${x.name}`}
-                currentKey={editId}
+                currentKey={peek.peekId}
               />
               <TableFooter
                 shown={filtered.length}

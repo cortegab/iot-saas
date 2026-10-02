@@ -2,11 +2,11 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Copy, LayoutDashboard, LayoutGrid, Pencil, Plus, SquareArrowOutUpRight, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Copy, LayoutDashboard, LayoutGrid, Plus, SquareArrowOutUpRight, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { Button } from "@/components/ui/Button";
+import { buttonClassName } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -19,7 +19,8 @@ import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { SplitView } from "@/components/editor/SplitView";
-import { DashboardEditor } from "@/components/dashboards/DashboardEditor";
+import { DashboardPeek } from "@/components/dashboards/DashboardPeek";
+import { usePeek } from "@/components/list/usePeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { widgetSummary } from "@/lib/dashboard-summary";
 import { timeAgo } from "@/lib/time-ago";
@@ -30,27 +31,15 @@ type DashboardResponse = components["schemas"]["DashboardResponse"];
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** Dashboards are personal (DESIGN.md §8): every member creates and edits
- * their own, so nothing here is role-gated. New and Edit details open the
- * docked editor (`?edit=new` / `?edit=<id>`), as on every catalog; a row
- * opens the dashboard itself. */
+ * their own, so nothing here is role-gated. A row peeks; a dashboard is
+ * created on /dashboards/new and opened, arranged and renamed on its page. */
 export default function DashboardsPage() {
   const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
   const api = useApi();
   const toast = useToast();
   const { confirm, dialog } = useConfirm();
   const { data: dashboards, error, isLoading, mutate } = useApiSWR<DashboardResponse[]>("/dashboards");
   const list = useListState({}, { key: "updated", dir: "asc" });
-
-  const editId = params.get("edit");
-  function setEditId(id: string | null) {
-    const next = new URLSearchParams(params.toString());
-    if (id) next.set("edit", id);
-    else next.delete("edit");
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
 
   const filtered = useMemo(() => {
     const rows = (dashboards ?? []).filter((d) => matchesQuery(list.q, d.name, widgetSummary(d.layout)));
@@ -62,15 +51,16 @@ export default function DashboardsPage() {
   }, [dashboards, list.q, list.sort]);
 
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
+  const peek = usePeek({ rows: pageRows, rowKey: (d) => d.id, pageHref: (id) => `/dashboards/${id}`, newHref: "/dashboards/new" });
 
-  // A copy with every widget in place, docked so it can be renamed.
+  // A copy with every widget in place, peeked; it's renamed on its page.
   async function duplicate(d: DashboardResponse) {
     try {
       const created = await api.post<DashboardResponse>("/dashboards", { name: `${d.name} copy`.slice(0, 100) });
       await api.patch(`/dashboards/${created.id}`, { layout: d.layout as unknown as Record<string, unknown>[] });
       await mutate();
       toast({ title: "Dashboard duplicated", detail: `${created.name}: ${plural(d.layout.length, "widget")} copied.` });
-      setEditId(created.id);
+      peek.setPeek(created.id);
     } catch (err) {
       toast({ tone: "error", title: "Couldn't duplicate the dashboard", detail: err instanceof ApiRequestError ? err.message : undefined });
     }
@@ -85,7 +75,7 @@ export default function DashboardsPage() {
     try {
       await api.delete(`/dashboards/${d.id}`);
       await mutate();
-      if (editId === d.id) setEditId(null);
+      if (peek.peekId === d.id) peek.close();
       toast({ title: `${d.name} deleted` });
     } catch (err) {
       toast({ tone: "error", title: "Couldn't delete the dashboard", detail: err instanceof ApiRequestError ? err.message : undefined });
@@ -129,7 +119,6 @@ export default function DashboardsPage() {
     [
       { label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/dashboards/${d.id}`) },
       { label: "Edit layout", icon: <LayoutGrid size={15} />, onClick: () => router.push(`/dashboards/${d.id}?edit=1`) },
-      { label: "Edit details", icon: <Pencil size={15} />, onClick: () => setEditId(d.id) },
       { label: "Duplicate", icon: <Copy size={15} />, onClick: () => void duplicate(d) },
     ],
     [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(d) }],
@@ -138,10 +127,10 @@ export default function DashboardsPage() {
   const chips: FilterChip[] = list.q ? [{ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") }] : [];
   const total = dashboards?.length ?? 0;
   const newButton = (
-    <Button onClick={() => setEditId("new")}>
+    <Link href="/dashboards/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
       New dashboard
-    </Button>
+    </Link>
   );
 
   return (
@@ -158,18 +147,18 @@ export default function DashboardsPage() {
         <TableSkeleton rows={3} columns={4} />
       ) : (
         <SplitView
-          editorLabel={editId === "new" ? "New dashboard" : "Edit dashboard"}
-          onClose={() => setEditId(null)}
+          editorLabel="Dashboard"
+          onClose={peek.close}
           editor={
-            editId
+            peek.peekId
               ? (mode) => (
-                  <DashboardEditor
-                    key={editId}
-                    dashboardId={editId === "new" ? null : editId}
+                  <DashboardPeek
+                    key={peek.peekId}
+                    dashboard={dashboards.find((d) => d.id === peek.peekId)}
                     mode={mode}
-                    onClose={() => setEditId(null)}
-                    onCreated={(id) => setEditId(id)}
+                    onClose={peek.close}
                     onDuplicate={(d) => void duplicate(d)}
+                    onDelete={(d) => void remove(d)}
                   />
                 )
               : null
@@ -197,10 +186,11 @@ export default function DashboardsPage() {
                     rowKey={(d) => d.id}
                     sort={list.sort}
                     onSort={list.toggleSort}
-                    onRowClick={(d) => router.push(`/dashboards/${d.id}`)}
+                    onRowClick={peek.onRowClick}
+                    onRowEnter={peek.onRowEnter}
                     rowMenu={rowMenu}
                     rowMenuLabel={(d) => `Actions for ${d.name}`}
-                    currentKey={editId}
+                    currentKey={peek.peekId}
                   />
                   <TableFooter
                     shown={filtered.length}

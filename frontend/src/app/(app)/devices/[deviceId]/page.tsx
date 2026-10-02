@@ -4,7 +4,7 @@ import { useEffect, useMemo, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { mutate as revalidate } from "swr";
-import { Cpu, KeyRound, Pencil, Plus, Power, Trash2, Zap } from "lucide-react";
+import { Cpu, KeyRound, Pencil, Plus, Trash2, Zap } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuthContext } from "@/lib/auth-context";
@@ -25,6 +25,7 @@ import { DeviceTrendChart } from "@/components/chart/DeviceTrendChart";
 import type { ChartThreshold } from "@/components/chart/TrendChart";
 import { RuleList } from "@/components/rules/RuleList";
 import { ActuatorControl } from "@/components/actuators/ActuatorControl";
+import { DeviceEditor } from "@/components/devices/DeviceEditor";
 import { CommandHistory } from "@/components/actuators/CommandHistory";
 import { leafPredicates } from "@/components/rules/RuleSummary";
 import { ApiRequestError } from "@/lib/api-client";
@@ -220,18 +221,6 @@ export default function DeviceDetailPage() {
   const metrics = template?.metrics ?? [];
   const hasReadings = (latest?.length ?? 0) > 0;
 
-  async function toggleStatus() {
-    const next = device!.status === "active" ? "disabled" : "active";
-    try {
-      await api.patch(`/devices/${deviceId}`, { status: next });
-      await mutate();
-      void revalidate("/devices");
-      toast({ title: next === "active" ? `${device!.name} enabled` : `${device!.name} disabled` });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't update the device", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
-  }
-
   async function remove() {
     const ok = await confirm("Its credential stops working and its telemetry history is removed.", {
       title: `Delete ${device!.name}?`,
@@ -259,7 +248,7 @@ export default function DeviceDetailPage() {
     zone && (
       <span key="z">
         Zone{" "}
-        <Link href={`/zones?edit=${zone.id}`} className="text-accent hover:underline">
+        <Link href={`/zones?peek=${zone.id}`} className="text-accent hover:underline">
           {zone.name}
         </Link>
       </span>
@@ -267,7 +256,7 @@ export default function DeviceDetailPage() {
     template && (
       <span key="t">
         Template{" "}
-        <Link href={`/templates?edit=${template.id}`} className="text-accent hover:underline">
+        <Link href={`/templates?peek=${template.id}`} className="text-accent hover:underline">
           {template.name}
         </Link>
       </span>
@@ -309,10 +298,12 @@ export default function DeviceDetailPage() {
                   Connect device
                 </Link>
               )}
-              <Link href={`/devices?edit=${deviceId}`} className={buttonClassName({ variant: "secondary" })}>
-                <Pencil aria-hidden size={15} />
-                Edit device
-              </Link>
+              {tab !== "settings" && (
+                <Button variant="secondary" onClick={() => setTab("settings")}>
+                  <Pencil aria-hidden size={15} />
+                  Edit device
+                </Button>
+              )}
             </>
           ) : undefined
         }
@@ -376,7 +367,9 @@ export default function DeviceDetailPage() {
       </TabPanel>
 
       <TabPanel id="settings" active={tab}>
-        <div className="grid gap-4 lg:grid-cols-2">
+        {/* The one place a device is edited (DESIGN.md §7); the list only peeks. */}
+        <DeviceEditor deviceId={deviceId} embedded />
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <Card>
             <h2 className="mb-3 text-base font-semibold text-ink">Credentials and firmware</h2>
             <SettingRow
@@ -410,17 +403,7 @@ export default function DeviceDetailPage() {
           </Card>
           {canWrite && (
             <Card>
-              <h2 className="mb-3 text-base font-semibold text-ink">Manage device</h2>
-              <SettingRow
-                title={device.status === "active" ? "Disable device" : "Enable device"}
-                body={device.status === "active" ? "Rules stop evaluating it. Telemetry is still stored." : "Rules evaluate it again from the next reading."}
-                action={
-                  <Button variant="secondary" onClick={() => void toggleStatus()}>
-                    <Power aria-hidden size={14} />
-                    {device.status === "active" ? "Disable" : "Enable"}
-                  </Button>
-                }
-              />
+              <h2 className="mb-3 text-base font-semibold text-ink">Delete</h2>
               <SettingRow
                 title="Delete device"
                 body="Revokes its credential and removes its telemetry history."

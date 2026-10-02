@@ -34,8 +34,11 @@ export interface DataTableProps<T> {
   rowMenu?: (row: T) => DropdownMenuItem[][];
   rowMenuLabel?: (row: T) => string;
   rowClassName?: (row: T) => string | undefined;
-  /** Highlights the row whose editor is open. */
+  /** Highlights the row whose peek is open. */
   currentKey?: string | null;
+  /** Enter on a focused row; defaults to `onRowClick` (a peek list opens
+   * the record page when its row is already peeked). */
+  onRowEnter?: (row: T) => void;
 }
 
 const INTERACTIVE = "a, button, input, select, textarea, label, [role='menuitem']";
@@ -57,6 +60,7 @@ export function DataTable<T>({
   rowMenuLabel,
   rowClassName,
   currentKey,
+  onRowEnter,
 }: DataTableProps<T>) {
   const allSelected = selection != null && rows.length > 0 && rows.every((r) => selection.selected.has(rowKey(r)));
   const someSelected = selection != null && rows.some((r) => selection.selected.has(rowKey(r)));
@@ -87,7 +91,7 @@ export function DataTable<T>({
 
   function onRowKey(e: KeyboardEvent<HTMLTableRowElement>, row: T) {
     if (!onRowClick || e.target !== e.currentTarget) return;
-    if (e.key === "Enter") onRowClick(row);
+    if (e.key === "Enter") (onRowEnter ?? onRowClick)(row);
   }
 
   return (
@@ -162,7 +166,11 @@ export function DataTable<T>({
                 key={key}
                 onClick={(e) => onRowActivate(e, row)}
                 onKeyDown={(e) => onRowKey(e, row)}
+                tabIndex={onRowClick ? 0 : undefined}
+                data-row-key={key}
+                aria-current={currentKey === key || undefined}
                 className={cn(
+                  "focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
                   "group border-b border-border-soft transition-colors duration-100 last:border-b-0 hover:bg-row-hover",
                   onRowClick && "cursor-pointer",
                   selected && "bg-accent-muted hover:bg-accent-muted",

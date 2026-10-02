@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { KeyRound, SquareArrowOutUpRight, Trash2 } from "lucide-react";
@@ -17,7 +17,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Select } from "@/components/ui/Select";
 import { SwitchField } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
-import { EditorFrame, EditorSection, type EditorMode } from "@/components/editor/EditorFrame";
+import { EditorFrame, EditorSection } from "@/components/editor/EditorFrame";
 import { useRecordEditor, type Validation } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { ApiRequestError } from "@/lib/api-client";
@@ -50,21 +50,10 @@ function validate(d: DeviceDraft): Validation {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** Edit a device's name and rule evaluation (DESIGN.md §7/§8). Zone and
- * template change join once the backend accepts them. */
-export function DeviceEditor({
-  deviceId,
-  mode,
-  onClose,
-  expandHref,
-  dockHref,
-}: {
-  deviceId: string;
-  mode: EditorMode;
-  onClose?: () => void;
-  expandHref?: string;
-  dockHref?: string;
-}) {
+/** Edit a device's name, zone and rule evaluation (DESIGN.md §7/§8). It
+ * lives in the device page's Settings tab (`embedded`: the page has the
+ * title and record menu); the devices list only peeks. */
+export function DeviceEditor({ deviceId, embedded = false }: { deviceId: string; embedded?: boolean }) {
   const api = useApi();
   const router = useRouter();
   const toast = useToast();
@@ -83,16 +72,12 @@ export function DeviceEditor({
     [device],
   );
   const editor = useRecordEditor({ source, validate });
-  const { confirmLeave, dialog: guardDialog } = useUnsavedGuard(editor.dirty, device ? device.name : "this device");
+  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, device ? device.name : "this device");
 
   const ruleCount = useMemo(
     () => (rules ?? []).filter((r) => r.devices.some((d) => d.device_id === deviceId)).length,
     [rules, deviceId],
   );
-
-  const close = useCallback(async () => {
-    if (await confirmLeave()) onClose?.();
-  }, [confirmLeave, onClose]);
 
   async function onSave(): Promise<boolean> {
     const before = editor.original;
@@ -164,7 +149,8 @@ export function DeviceEditor({
   return (
     <>
       <EditorFrame
-        mode={mode}
+        mode="page"
+        headless={embedded}
         noun="device"
         title={d.name.trim() || device.name}
         eyebrow={
@@ -181,9 +167,6 @@ export function DeviceEditor({
         readOnly={readOnly}
         onSave={onSave}
         onDiscard={editor.discard}
-        onClose={onClose ? () => void close() : undefined}
-        expandHref={expandHref}
-        dockHref={dockHref}
         menu={[
           [
             { label: "Open device page", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/devices/${device.id}`) },

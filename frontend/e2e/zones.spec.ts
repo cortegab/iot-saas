@@ -1,25 +1,63 @@
 import { expect } from "@playwright/test";
-import { test } from "./fixtures";
+import { API_URL, login, test } from "./fixtures";
 
-test("zones: create, rename and delete an empty zone from the docked editor", async ({ page }) => {
+test("zones: create, rename and delete an empty zone on its page", async ({ page }) => {
   const name = `E2E zone ${Date.now()}`;
   await page.goto("/zones");
-  // The page header's button; an empty list repeats it in its first-use state.
-  await page.locator("header").getByRole("button", { name: "New zone" }).click();
+  // The page header's link; an empty list repeats it in its first-use state.
+  await page.locator("header").getByRole("link", { name: "New zone" }).click();
+  await expect(page).toHaveURL("/zones/new");
+  await page.waitForLoadState("networkidle");
 
-  const editor = page.getByRole("region", { name: /editor$/ });
-  await editor.getByLabel("Name", { exact: true }).fill(name);
-  await editor.getByRole("button", { name: "Create zone" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(name);
+  await page.getByRole("button", { name: "Create zone" }).click();
   await expect(page.getByText("Zone created")).toBeVisible();
-  await expect(page.getByRole("table", { name: "Zones" }).getByText(name)).toBeVisible();
+  await expect(page).toHaveURL(/\/zones\/[0-9a-f-]{36}$/);
 
-  await editor.getByLabel("Name", { exact: true }).fill(`${name} renamed`);
+  await page.getByLabel("Name", { exact: true }).fill(`${name} renamed`);
   await page.keyboard.press("Control+s");
   await expect(page.getByText("Zone saved")).toBeVisible();
 
-  await editor.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Delete zone…" }).click();
   await page.getByRole("button", { name: "Delete zone" }).click();
   await expect(page.getByText(`${name} renamed deleted`)).toBeVisible();
+  await expect(page).toHaveURL("/zones");
   await expect(page.getByRole("table", { name: "Zones" }).getByText(`${name} renamed`)).toHaveCount(0);
+});
+
+test("lists peek: a row opens a read-only peek, ↓ moves it, Enter opens the page, old ?edit links redirect", async ({ page, request }) => {
+  const { accessToken, tenantId } = await login(request);
+  const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
+  const stamp = Date.now();
+  const made: string[] = [];
+  for (const n of ["a", "b"]) {
+    const res = await request.post(`${API_URL}/zones`, { headers, data: { name: `E2E peek ${stamp} ${n}`, notes: `note ${n}` } });
+    expect(res.ok()).toBeTruthy();
+    made.push(((await res.json()) as { id: string }).id);
+  }
+  try {
+    await page.goto(`/zones?q=${encodeURIComponent(`E2E peek ${stamp}`)}`);
+    const table = page.getByRole("table", { name: "Zones" });
+    await table.getByRole("row").filter({ hasText: `E2E peek ${stamp} a` }).getByText("note a").click();
+
+    const peekA = page.getByRole("region", { name: `E2E peek ${stamp} a details` });
+    await expect(peekA).toBeVisible();
+    await expect(peekA.getByRole("textbox")).toHaveCount(0);
+    await expect(peekA.getByRole("link", { name: /Edit zone|View zone/ })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`peek=${made[0]}`));
+
+    // Focus is on the row; ↓ walks the peek to the next one.
+    await table.getByRole("row").filter({ hasText: `E2E peek ${stamp} a` }).focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("region", { name: `E2E peek ${stamp} b details` })).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(`/zones/${made[1]}`);
+
+    // A docked-editor-era link lands on the record's page.
+    await page.goto(`/zones?edit=${made[0]}`);
+    await expect(page).toHaveURL(`/zones/${made[0]}`);
+  } finally {
+    for (const id of made) await request.delete(`${API_URL}/zones/${id}`, { headers });
+  }
 });

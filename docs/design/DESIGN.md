@@ -148,9 +148,9 @@ font in a component.** If you need a value that has no token, add the token here
 - The logo links to Dashboards, which is the first nav item.
 - **Page header**: breadcrumbs, an overline and status pill where relevant, an H1, a one-line
   description, a meta row, and actions on the right. The primary action is rightmost.
-- **Content column**: max 1120 px, and 1520 px for wide views (list with docked editor, dashboards).
+- **Content column**: max 1120 px, and 1520 px for wide views (list with a peek open, dashboards).
   Padding is 36 px top, 40 px sides and 110 px bottom so the save bar never covers content.
-- **Below 1100 px** the sidebar becomes a drawer behind a menu button, and docked editors become
+- **Below 1100 px** the sidebar becomes a drawer behind a menu button, and peeks become
   drawers.
 
 ---
@@ -173,7 +173,7 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | Callout | existing | `info` (accent-muted), `warning` (pending surface), `error` (error surface). Dismissible for tips only. |
 | **Toast** | NEW | Bottom-right, stacked. Title plus a detail line; save toasts carry the **change summary** ("2 changes: Schedule: … → …"). |
 | ConfirmDialog | existing | For destructive actions and guards. Title states the action; the body states the consequence with real numbers; the danger button repeats the verb. |
-| **Sheet / Drawer** | NEW | Right-side editor on narrow screens; mobile nav. Scrim + focus trap + Esc. |
+| **Sheet / Drawer** | NEW | Right-side peek on narrow screens; mobile nav. Scrim + focus trap + Esc. |
 | **CopyField / SecretReveal** | NEW | One component for every one-time secret (device token, API key). It replaces the four copies in the devices and tokens pages. Shown once, with a copy button and a "won't be shown again" warning. |
 | EmptyState / ErrorState / LoadingSkeleton | existing | Every list and panel has all three. Empty explains why and offers the primary action. Error and empty never render together. |
 | Table | existing | See §6. |
@@ -199,7 +199,9 @@ gets restyled to the tokens. **NEW** means it has to be created.
    - A name cell with a secondary line.
    - Status pill, right-aligned numbers, and a row actions menu (⋯).
    - Bulk-select checkbox column where bulk actions exist.
-   - Hover highlight; clicking a row opens the record.
+   - Hover highlight; clicking a row opens its **read-only peek** beside the list (§7). The name is a
+     link to the record's page. With a peek open, ↑/↓ move it through the rows and Enter opens the
+     page.
 5. **Table footer**: pagination and page size.
 6. States: loading skeleton rows · empty (first-use) · no results (with "Clear filters") · error with a retry.
 
@@ -223,9 +225,11 @@ three presentations.
 
 | Presentation | When |
 |---|---|
-| **Docked panel** beside the list | Default for quick edits from a list, ≥ 1100 px |
-| **Drawer** (Sheet) | Same editor, narrow screens |
-| **Full page** | Complex records (rules, device templates) or on request ("Expand"); deep-linkable |
+| **Peek** beside the list (drawer below 1100 px) | **Looking only.** Key facts, status, the next step (Edit / Open) and a ⋯ menu. No fields, no save bar. `?peek=<id>` |
+| **Full page** | **Every create and edit**, for every record: `/x/new`, `/x/{id}` (a device: its page's Settings tab). Deep-linkable. |
+
+One place to look and one place to change each record; "New" goes where "Edit" goes. There is no
+editable side panel and no "Expand" toggle.
 
 **Shared chrome (all three presentations):**
 - A title ("Edit rule", "New device template") and a record menu (⋯: Duplicate, Delete).
@@ -242,8 +246,8 @@ three presentations.
   template"). A delete that is allowed confirms with the real consequence.
 - **Rename warnings** when a key is referenced ("`temperature` is used by 3 rules and 2 widgets").
 - Read-only mode for roles without edit rights shows a banner, disabled controls and no save bar.
-- **Deep links:** every record and every editor state has a URL (list, list + docked editor, full
-  page, section).
+- **Deep links:** every record and every editor state has a URL (list, list + peek, full page,
+  section). The page's breadcrumb returns to the list with that record peeked.
 
 ---
 
@@ -541,3 +545,4 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-01 | §10 sign-in: every account page (sign in, register, forgot/reset password, invitation) sits on the landing's network canvas with the card centred, as §10 asks; this replaces G's split layout. The password field has Show / Hide and keeps "Password" as its accessible name. A Caps Lock hint appears only after two failed attempts. There is one generic error and never "no such email". An account in more than one workspace chooses one after signing in, unless a ?next= link already says where to go. |
 | 2026-10-01 | §10 fidelity pass, superseding the centred sign-in above: the account pages use **G's split screen** (night brand panel beside the card), and the landing takes G's night nav, hero, close and footer, mono eyebrows, numbered step cards, two-column FAQ and the control-loop **log** (replacing the threshold-scope instrument). The canvas is G's broker picture for both. The brand panel shows the design figures (< 2 s, < 500 ms, 500–1,000 devices) instead of G's ticking demo statistics, which would read as live data. "Keep me signed in" is real: unchecked, the refresh token goes to sessionStorage. §9 rule page: G's header (breadcrumbs, state and last firing, consequence line, Duplicate, ⋮ with Run now and Delete, close), the sentence in an accent box, and the ladder's properties in an inspector beside the rung. A duplicate starts disabled. |
 | 2026-10-02 | §8 dashboards: **New dashboard** and **Edit details** use the docked editor beside the list (`?edit=new` / `?edit=<id>`), like zones and every other catalog, instead of G's name dialog — one pattern per job. The editor holds the name only (widgets stay on the grid) and links to Open and Edit layout / Add widgets. A row still opens the dashboard. **Duplicate** copies every widget into "Name copy" and docks it for renaming. Renaming from the dashboard page itself keeps its in-place dialog. |
+| 2026-10-02 | §6/§7 **Peek everywhere** (user decision, supersedes the docked-editor default and the dashboards entry above): a quick-edit panel beside a full-page edit of the same record was confusing. List panels are now read-only **peeks** (`?peek=<id>`, ↑/↓ to move, Enter to open), and every create and edit is a full page: `/zones/new`, `/zones/{id}`, `/members/invite`, `/members/{id}`, `/keys/new` (shows the one-time secret, then the key page), `/keys/{id}`, `/dashboards/new` (then Edit layout). A device is edited in its page's **Settings tab**; `/devices/{id}/edit` redirects there. Old `?edit=` links redirect to the matching page. With a peek open, the rules list drops its When/Then columns, which the peek repeats. |
