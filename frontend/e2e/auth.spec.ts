@@ -29,16 +29,37 @@ test("sign in: generic error, show/hide password, then a workspace choice", asyn
 
   // One generic error, whatever was wrong.
   await page.getByLabel("Email").fill(email);
-  await page.getByRole("button", { name: "Log in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByText("That email and password don't match. Check both and try again.")).toBeVisible();
 
   await pw.fill(password);
-  await page.getByRole("button", { name: "Log in" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   const choices = page.getByRole("list", { name: "Workspaces" });
   await expect(page.getByRole("heading", { name: "Choose a workspace" })).toBeVisible();
   await choices.getByRole("button", { name: /E2E Second/ }).click();
   await expect(page).toHaveURL("/devices");
   await expect(page.getByRole("complementary", { name: "Primary" }).getByText("E2E Second")).toBeVisible();
+});
+
+test("sign in without 'Keep me signed in' keeps the session out of localStorage", async ({ page, request }) => {
+  const email = `e2e-nokeep-${Date.now()}@example.com`;
+  const password = "hunter2hunter2";
+  const reg = await request.post(`${API_URL}/auth/register`, { data: { email, password, tenant_name: "E2E No Keep" } });
+  expect(reg.ok(), await reg.text()).toBeTruthy();
+
+  await page.goto("/login");
+  await page.waitForLoadState("networkidle");
+  await page.getByLabel("Email").fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByLabel("Keep me signed in on this device").uncheck();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL("/devices");
+  const stored = await page.evaluate(() => ({
+    local: localStorage.getItem("iot-saas:refresh_token"),
+    session: sessionStorage.getItem("iot-saas:refresh_token"),
+  }));
+  expect(stored.local).toBeNull();
+  expect(stored.session).toBeTruthy();
 });
 
 test("register: the workspace is created with the account", async ({ page }) => {
