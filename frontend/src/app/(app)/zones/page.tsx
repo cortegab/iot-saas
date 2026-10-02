@@ -17,7 +17,7 @@ import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/Lis
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
-import { SplitView } from "@/components/editor/SplitView";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { ZonePeek } from "@/components/zones/ZonePeek";
 import { usePeek } from "@/components/list/usePeek";
 import { ApiRequestError } from "@/lib/api-client";
@@ -109,17 +109,16 @@ export default function ZonesPage() {
       ) : isLoading || !zones ? (
         <TableSkeleton rows={4} columns={3} />
       ) : (
-        <SplitView
-          editorLabel="Zone"
+        <ListWithPeek
+          label="Zone"
           onClose={peek.close}
-          editor={
+          nav={peek.nav}
+          peek={
             peek.peekId
-              ? (mode) => (
+              ? (
                   <ZonePeek
-                    key={peek.peekId}
                     zone={zones.find((z) => z.id === peek.peekId)}
                     offline={offline.get(peek.peekId!) ?? 0}
-                    mode={mode}
                     onClose={peek.close}
                   />
                 )
@@ -183,7 +182,7 @@ export default function ZonesPage() {
               )}
             </>
           )}
-        </SplitView>
+        </ListWithPeek>
       )}
     </>
   );

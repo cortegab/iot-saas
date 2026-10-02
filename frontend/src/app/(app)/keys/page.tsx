@@ -19,7 +19,7 @@ import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/Lis
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
-import { SplitView } from "@/components/editor/SplitView";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { KeyPeek } from "@/components/keys/KeyPeek";
 import { useRevokeKey } from "@/components/keys/useRevokeKey";
 import { usePeek } from "@/components/list/usePeek";
@@ -138,12 +138,13 @@ export default function KeysPage() {
       ) : isLoading || !keys ? (
         <TableSkeleton rows={3} columns={5} />
       ) : (
-        <SplitView
-          editorLabel="API key"
+        <ListWithPeek
+          label="API key"
           onClose={peek.close}
-          editor={
+          nav={peek.nav}
+          peek={
             peek.peekId
-              ? (mode) => <KeyPeek key={peek.peekId} apiKey={keys.find((k) => k.id === peek.peekId)} mode={mode} onClose={peek.close} />
+              ? <KeyPeek apiKey={keys.find((k) => k.id === peek.peekId)} onClose={peek.close} />
               : null
           }
         >
@@ -204,7 +205,7 @@ export default function KeysPage() {
               )}
             </>
           )}
-        </SplitView>
+        </ListWithPeek>
       )}
       {dialog}
     </>

@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder, type PeekMode } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekPlaceholder } from "@/components/editor/PeekFrame";
 import { useDeleteZone } from "./useDeleteZone";
 import type { components } from "@/types/api";
 
@@ -17,14 +17,14 @@ type ZoneResponse = components["schemas"]["ZoneResponse"];
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** A zone at a glance beside the list; editing happens on /zones/{id}. */
-export function ZonePeek({ zone, offline, mode, onClose }: { zone: ZoneResponse | undefined; offline: number; mode: PeekMode; onClose: () => void }) {
+export function ZonePeek({ zone, offline, onClose }: { zone: ZoneResponse | undefined; offline: number; onClose: () => void }) {
   const router = useRouter();
   const toast = useToast();
   const { can } = usePermissions();
   const canWrite = can("zones.write");
   const { remove, dialog } = useDeleteZone(onClose);
 
-  if (!zone) return <PeekPlaceholder mode={mode} noun="zone" missing onClose={onClose} />;
+  if (!zone) return <PeekPlaceholder noun="zone" missing onClose={onClose} />;
 
   const status =
     zone.device_count === 0 ? (
@@ -50,7 +50,6 @@ export function ZonePeek({ zone, offline, mode, onClose }: { zone: ZoneResponse 
   return (
     <>
       <PeekFrame
-        mode={mode}
         noun="zone"
         title={zone.name}
         eyebrow={<>Zone {status}</>}

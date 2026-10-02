@@ -5,7 +5,7 @@ import { Copy, LayoutGrid, Link2, SquareArrowOutUpRight, Trash2 } from "lucide-r
 import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder, type PeekMode } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekPlaceholder } from "@/components/editor/PeekFrame";
 import { widgetSummary } from "@/lib/dashboard-summary";
 import { formatWhen, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
@@ -17,19 +17,17 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 /** A dashboard at a glance; it's opened, arranged and renamed on its page. */
 export function DashboardPeek({
   dashboard,
-  mode,
   onClose,
   onDuplicate,
   onDelete,
 }: {
   dashboard: DashboardResponse | undefined;
-  mode: PeekMode;
   onClose: () => void;
   onDuplicate: (d: DashboardResponse) => void;
   onDelete: (d: DashboardResponse) => void;
 }) {
   const toast = useToast();
-  if (!dashboard) return <PeekPlaceholder mode={mode} noun="dashboard" missing onClose={onClose} />;
+  if (!dashboard) return <PeekPlaceholder noun="dashboard" missing onClose={onClose} />;
 
   const devices = new Set(dashboard.layout.map((w) => w.device_id)).size;
   const menu: DropdownMenuItem[][] = [
@@ -46,7 +44,6 @@ export function DashboardPeek({
 
   return (
     <PeekFrame
-      mode={mode}
       noun="dashboard"
       title={dashboard.name}
       eyebrow="Dashboard · only you see it"

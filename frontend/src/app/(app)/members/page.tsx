@@ -18,7 +18,7 @@ import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/Lis
 import { NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
-import { SplitView } from "@/components/editor/SplitView";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { MemberPeek } from "@/components/members/MemberPeek";
 import { useMemberActions } from "@/components/members/useMemberActions";
 import { usePeek } from "@/components/list/usePeek";
@@ -170,18 +170,17 @@ export default function MembersPage() {
       ) : isLoading || !members ? (
         <TableSkeleton rows={4} columns={3} />
       ) : (
-        <SplitView
-          editorLabel="Member"
+        <ListWithPeek
+          label="Member"
           onClose={peek.close}
-          editor={
+          nav={peek.nav}
+          peek={
             peek.peekId
-              ? (mode) => (
+              ? (
                   <MemberPeek
-                    key={peek.peekId}
                     member={peeked?.kind === "member" ? peeked.member : undefined}
                     invite={peeked?.kind === "invite" ? peeked.invite : undefined}
                     isMe={peeked?.you ?? false}
-                    mode={mode}
                     onClose={peek.close}
                   />
                 )
@@ -237,7 +236,7 @@ export default function MembersPage() {
               />
             </div>
           )}
-        </SplitView>
+        </ListWithPeek>
       )}
       {dialog}
     </>

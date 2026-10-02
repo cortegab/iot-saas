@@ -1,14 +1,21 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { PeekNav } from "./peek-nav";
+
+const rowFor = (id: string) => document.querySelector<HTMLElement>(`tr[data-row-key="${CSS.escape(id)}"]`);
 
 /**
- * A list's read-only peek (DESIGN.md §7): `?peek=<id>` beside the list.
- * Looking happens in the peek; changing happens on the record's page.
+ * A list's read-only peek (DESIGN.md §7): `?peek=<id>`, shown in a drawer over
+ * the list (ListWithPeek). Looking happens in the peek; changing happens on
+ * the record's page.
  *
  * - Row click peeks; Enter on the peeked row opens its page.
- * - While a peek is open, ↑/↓ move it (and focus) to the next/previous row.
+ * - The drawer blocks the list, so browsing happens inside it: `nav` drives
+ *   its ‹ › buttons, and ↑/↓ move it while focus is in the drawer. The row
+ *   follows along behind the scrim.
+ * - Closing returns focus to the row of the record last shown.
  * - Old `?edit=new` / `?edit=<id>` links go to the new/record page.
  */
 export function usePeek<T>({
@@ -28,7 +35,8 @@ export function usePeek<T>({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const peekId = params.get("peek");
+  const legacyEdit = params.get("edit");
+  const peekId = legacyEdit ? null : params.get("peek");
 
   const setPeek = useCallback(
     (id: string | null) => {
@@ -42,7 +50,6 @@ export function usePeek<T>({
   );
 
   // Old deep links from the docked-editor era.
-  const legacyEdit = params.get("edit");
   useEffect(() => {
     if (!legacyEdit) return;
     if (legacyEdit === "new") {
@@ -51,6 +58,14 @@ export function usePeek<T>({
       router.replace(pageHref(legacyEdit));
     }
   }, [legacyEdit, newHref, pageHref, router]);
+
+  const close = useCallback(() => {
+    const last = peekId;
+    setPeek(null);
+    // After the drawer has returned focus to its trigger, land on the row
+    // the user browsed to.
+    if (last) window.setTimeout(() => rowFor(last)?.focus({ preventScroll: true }), 60);
+  }, [peekId, setPeek]);
 
   const onRowClick = useCallback((row: T) => setPeek(rowKey(row)), [rowKey, setPeek]);
   const onRowEnter = useCallback(
@@ -62,26 +77,48 @@ export function usePeek<T>({
     [rowKey, peekId, pageHref, router, setPeek],
   );
 
-  // ↑/↓ walk the peek through the shown rows.
+  const index = peekId ? rows.findIndex((r) => rowKey(r) === peekId) : -1;
+  const move = useCallback(
+    (to: number) => {
+      const row = rows[to];
+      if (!row) return;
+      const id = rowKey(row);
+      setPeek(id);
+      rowFor(id)?.scrollIntoView({ block: "nearest" });
+    },
+    [rows, rowKey, setPeek],
+  );
+
+  const nav = useMemo<PeekNav | null>(
+    () =>
+      peekId
+        ? {
+            index,
+            total: rows.length,
+            prev: index > 0 ? () => move(index - 1) : null,
+            next: index >= 0 && index < rows.length - 1 ? () => move(index + 1) : null,
+          }
+        : null,
+    [peekId, index, rows.length, move],
+  );
+
+  // ↑/↓ inside the drawer walk the peek through the shown rows.
   useEffect(() => {
-    if (!peekId) return;
+    if (!nav) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
       if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
       const t = e.target as HTMLElement | null;
-      if (t?.closest("input, textarea, select, [contenteditable='true'], [role='menu'], [role='listbox'], [role='dialog'], [role='alertdialog']")) return;
-      const i = rows.findIndex((r) => rowKey(r) === peekId);
-      if (i < 0) return;
-      const next = rows[e.key === "ArrowDown" ? i + 1 : i - 1];
-      if (!next) return;
+      if (!t?.closest("[data-peek]")) return;
+      if (t.closest("input, textarea, select, [contenteditable='true'], [role='menu'], [role='listbox'], [role='alertdialog']")) return;
+      const go = e.key === "ArrowDown" ? nav!.next : nav!.prev;
+      if (!go) return;
       e.preventDefault();
-      const id = rowKey(next);
-      setPeek(id);
-      document.querySelector<HTMLElement>(`tr[data-row-key="${CSS.escape(id)}"]`)?.focus({ preventScroll: false });
+      go();
     }
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [peekId, rows, rowKey, setPeek]);
+  }, [nav]);
 
-  return { peekId: legacyEdit ? null : peekId, setPeek, close: () => setPeek(null), onRowClick, onRowEnter };
+  return { peekId, setPeek, close, onRowClick, onRowEnter, nav };
 }

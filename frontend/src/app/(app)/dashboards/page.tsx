@@ -18,7 +18,7 @@ import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/Lis
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
-import { SplitView } from "@/components/editor/SplitView";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { DashboardPeek } from "@/components/dashboards/DashboardPeek";
 import { usePeek } from "@/components/list/usePeek";
 import { ApiRequestError } from "@/lib/api-client";
@@ -146,16 +146,15 @@ export default function DashboardsPage() {
       ) : isLoading || !dashboards ? (
         <TableSkeleton rows={3} columns={4} />
       ) : (
-        <SplitView
-          editorLabel="Dashboard"
+        <ListWithPeek
+          label="Dashboard"
           onClose={peek.close}
-          editor={
+          nav={peek.nav}
+          peek={
             peek.peekId
-              ? (mode) => (
+              ? (
                   <DashboardPeek
-                    key={peek.peekId}
                     dashboard={dashboards.find((d) => d.id === peek.peekId)}
-                    mode={mode}
                     onClose={peek.close}
                     onDuplicate={(d) => void duplicate(d)}
                     onDelete={(d) => void remove(d)}
@@ -206,7 +205,7 @@ export default function DashboardsPage() {
               )}
             </>
           )}
-        </SplitView>
+        </ListWithPeek>
       )}
       {dialog}
     </>

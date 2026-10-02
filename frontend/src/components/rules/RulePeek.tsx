@@ -12,7 +12,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { MiniStrip, type StripCell } from "@/components/ui/MiniStrip";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder, PeekSection, type PeekMode } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekPlaceholder, PeekSection } from "@/components/editor/PeekFrame";
 import { ApiRequestError } from "@/lib/api-client";
 import { upsertRuleInCache } from "@/lib/rule-cache";
 import { draftFromRule, draftToRequest } from "@/lib/rule-draft";
@@ -35,7 +35,6 @@ export function RulePeek({
   rule,
   activity,
   shares,
-  mode,
   onClose,
   onToggle,
   onDelete,
@@ -44,7 +43,6 @@ export function RulePeek({
   activity: RuleActivityResponse | undefined;
   /** Actuators another enabled rule also drives. */
   shares: string[] | undefined;
-  mode: PeekMode;
   onClose: () => void;
   onToggle: (r: RuleResponse) => void;
   onDelete: (r: RuleResponse) => void;
@@ -55,7 +53,7 @@ export function RulePeek({
   const { can } = usePermissions();
   const canWrite = can("rules.write");
   const { confirm, dialog } = useConfirm();
-  if (!rule) return <PeekPlaceholder mode={mode} noun="rule" missing onClose={onClose} />;
+  if (!rule) return <PeekPlaceholder noun="rule" missing onClose={onClose} />;
   const r = rule;
 
   async function runNow() {
@@ -113,7 +111,6 @@ export function RulePeek({
   return (
     <>
       <PeekFrame
-        mode={mode}
         noun="rule"
         title={r.name}
         eyebrow={
