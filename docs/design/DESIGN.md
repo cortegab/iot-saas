@@ -403,11 +403,18 @@ path (CLAUDE.md §9.1).
 
 ## 10. Public pages
 
-- **Login:** a branded background (network canvas), never an empty page. A centred card with the
-  form, and clear error and loading states.
+- **Night surfaces:** the landing nav, hero, closing band and footer, and the sign-in brand panel,
+  are dark in both themes (the static `night` tokens in `globals.css`). Over them sits the shared
+  network canvas: devices in zones around the broker ("RULES · IN MEMORY"), readings in, commands out.
+- **Login:** G's split screen. On the left, a night brand panel: the network, a line about the
+  product, example reading chips, and the design figures (no live-looking statistics). On the
+  right, the card. Below `lg` the panel becomes a band above the card. The card has "Forgot
+  password?" on the password label row, **Keep me signed in on this device** (unchecked, the
+  session ends with the browser), clear error and loading states.
 - **Landing** (`(marketing)`, same tokens and fonts as the app):
-  - A text-only hero over the network canvas.
-  - The **control-loop card** lives in the Onboarding section.
+  - A text-only night hero over the network canvas, KPIs on a hairline row.
+  - The **control-loop card** lives in the Onboarding section: G's log of one rule's life (in · rule
+    · cmd · ack · clear), beside the onboarding steps.
   - A **Deployment** section: Cloud (shared) · Dedicated cloud · On-premise, plus an edge-connector
     note (CLAUDE.md §3).
   - An **in-page contact form**.
@@ -532,3 +539,5 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-01 | §9.3/§9.5/§9.8: the rule summary is the **editable sentence**. Chips cover each reading (operator and value), the hold time, and each on/off actuator, edited in a popover with Apply / Cancel; Esc returns focus to the chip. Range, set and comparison conditions, schedules and non-boolean actuators offer *Open full condition*. The clear clause reads as plain text. Schedules use the SchedulePicker with TimezoneSelect (no cron field by default), and version history words schedules the same way ("every day at 08:00 (Europe/Madrid)"; unusual crons stay as cron). Saving an enabled rule asks for confirmation; the toast lists the version's change lines. Reset latch shows the current readings and a dry run's verdict on whether it would fire again right away. |
 | 2026-10-01 | §10 landing: rebuilt in G's order (nav · hero over the network canvas with KPIs · product tour · how it works · safety · onboarding with the ControlLoop · security and operations · deployment · FAQ · close · footer). There is no public demo workspace, so every "Open the demo" becomes **Talk to us** or **Sign in** ("Open console" when signed in). The tour's screens are illustrations built from the app's own components with fixture data, and they are inert. Deployment's Talk to us is a dialog that emails CONTACT_EMAIL_TO through POST /public/contact. It stores nothing, has a honeypot, and allows 5 messages per address per hour. With CONTACT_EMAIL_TO empty, enquiries are only logged. |
 | 2026-10-01 | §10 sign-in: every account page (sign in, register, forgot/reset password, invitation) sits on the landing's network canvas with the card centred, as §10 asks; this replaces G's split layout. The password field has Show / Hide and keeps "Password" as its accessible name. A Caps Lock hint appears only after two failed attempts. There is one generic error and never "no such email". An account in more than one workspace chooses one after signing in, unless a ?next= link already says where to go. |
+| 2026-10-01 | §10 fidelity pass, superseding the centred sign-in above: the account pages use **G's split screen** (night brand panel beside the card), and the landing takes G's night nav, hero, close and footer, mono eyebrows, numbered step cards, two-column FAQ and the control-loop **log** (replacing the threshold-scope instrument). The canvas is G's broker picture for both. The brand panel shows the design figures (< 2 s, < 500 ms, 500–1,000 devices) instead of G's ticking demo statistics, which would read as live data. "Keep me signed in" is real: unchecked, the refresh token goes to sessionStorage. §9 rule page: G's header (breadcrumbs, state and last firing, consequence line, Duplicate, ⋮ with Run now and Delete, close), the sentence in an accent box, and the ladder's properties in an inspector beside the rung. A duplicate starts disabled. |
+| 2026-10-02 | §8 dashboards: **New dashboard** and **Edit details** use the docked editor beside the list (`?edit=new` / `?edit=<id>`), like zones and every other catalog, instead of G's name dialog — one pattern per job. The editor holds the name only (widgets stay on the grid) and links to Open and Edit layout / Add widgets. A row still opens the dashboard. **Duplicate** copies every widget into "Name copy" and docks it for renaming. Renaming from the dashboard page itself keeps its in-place dialog. |

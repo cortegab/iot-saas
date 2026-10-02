@@ -1,206 +1,15 @@
 /*
  * Landing page (iodriven.tech). The page itself is Tailwind on the app's
- * tokens (docs/design/DESIGN.md §3, §10); this file keeps only what Tailwind
- * can't say well: the ControlLoop instrument (an SVG scope and its readout)
- * and the entrance motion. Every colour aliases a `globals.css` token, so the
- * page follows the light/dark theme like the rest of the app. `--color-chart`
- * draws live data; the accent is chrome only.
+ * tokens (docs/design/DESIGN.md §3, §10), with the static "night" tokens and
+ * classes from globals.css for the dark hero, close and footer. This file
+ * keeps only the entrance motion and the control-loop log's line animation.
  */
 
 .mkt {
-  --panel: var(--color-surface);
-  --panel-2: var(--color-surface-raised);
-  --line: var(--color-border);
-  --line-soft: var(--color-border-soft);
-  --ink: var(--color-ink);
-  --ink-dim: var(--color-ink-muted);
-  --signal: var(--color-accent);
-  --armed: var(--color-status-online);
-  --breach: var(--color-status-offline);
-  --font-mono: var(--ff-mono), ui-monospace, "SFMono-Regular", monospace;
   min-height: 100vh;
   background: var(--color-canvas);
-  color: var(--ink);
+  color: var(--color-ink);
   -webkit-font-smoothing: antialiased;
-}
-
-/* ---- ControlLoop instrument ---- */
-.mkt-instrument {
-  position: relative;
-  margin-top: clamp(2.5rem, 6vw, 4rem);
-  /* The scope graticule lives only inside the instrument — the signal is the
-   * one place on the page that earns a grid. Lines sit over an opaque fill. */
-  background:
-    linear-gradient(var(--line-soft) 1px, transparent 1px) 0 0 / 32px 32px,
-    linear-gradient(90deg, var(--line-soft) 1px, transparent 1px) 0 0 / 32px 32px,
-    linear-gradient(180deg, var(--panel) 0%, var(--panel-2) 100%);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-xl);
-  padding: clamp(1.1rem, 3vw, 2rem);
-}
-/* corner registration marks */
-.mkt-instrument::before,
-.mkt-instrument::after {
-  content: "";
-  position: absolute;
-  width: 14px;
-  height: 14px;
-  border: 1px solid var(--signal);
-  opacity: 0.5;
-}
-.mkt-instrument::before {
-  top: -1px;
-  left: -1px;
-  border-right: 0;
-  border-bottom: 0;
-}
-.mkt-instrument::after {
-  bottom: -1px;
-  right: -1px;
-  border-left: 0;
-  border-top: 0;
-}
-
-.mkt-readout {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5rem 1.5rem;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  letter-spacing: 0.04em;
-  color: var(--ink-dim);
-  text-transform: uppercase;
-}
-.mkt-readout .metric {
-  color: var(--ink);
-  text-transform: none;
-}
-.mkt-readout .value {
-  font-size: 1.75rem;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-}
-.mkt-readout .value.is-breach {
-  color: var(--breach);
-}
-
-.mkt-scope {
-  margin-top: 0.9rem;
-  width: 100%;
-  height: auto;
-  display: block;
-  overflow: visible;
-}
-.mkt-scope .trace {
-  fill: none;
-  stroke: var(--color-chart); /* live data — the data colour, never the chrome accent */
-  stroke-width: 2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--color-chart) 40%, transparent));
-}
-.mkt-scope .threshold {
-  stroke: var(--breach);
-  stroke-width: 1;
-  stroke-dasharray: 5 4;
-  opacity: 0.8;
-}
-.mkt-scope .rearm {
-  stroke: var(--armed);
-  stroke-width: 1;
-  stroke-dasharray: 2 5;
-  opacity: 0.55;
-}
-.mkt-scope .grid {
-  stroke: var(--line);
-  stroke-width: 1;
-  opacity: 0.5;
-}
-.mkt-scope .head {
-  fill: var(--color-chart);
-}
-.mkt-scope .head.is-breach {
-  fill: var(--breach);
-}
-.mkt-scope text {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  fill: var(--ink-dim);
-  letter-spacing: 0.03em;
-}
-
-.mkt-loopbar {
-  margin-top: 1rem;
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 0.75rem 1.5rem;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 0.8125rem;
-}
-.mkt-loopbar > .mkt-cmd {
-  grid-column: 1 / -1;
-}
-@media (min-width: 900px) {
-  .mkt-loopbar > .mkt-cmd {
-    grid-column: auto;
-  }
-}
-.mkt-cmd {
-  color: var(--ink-dim);
-  overflow-x: auto;
-  white-space: nowrap;
-}
-.mkt-cmd.is-fired {
-  color: var(--ink);
-}
-.mkt-cmd .arrow {
-  color: var(--signal);
-}
-.mkt-cmd .payload {
-  color: var(--armed);
-}
-.mkt-latency {
-  color: var(--ink-dim);
-}
-.mkt-latency b {
-  color: var(--ink);
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-}
-.mkt-relay {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.4rem 0.7rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  color: var(--ink-dim);
-  white-space: nowrap;
-}
-.mkt-relay .led {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--ink-dim);
-}
-.mkt-relay.is-on {
-  color: var(--ink);
-  border-color: color-mix(in srgb, var(--armed) 50%, var(--line));
-}
-.mkt-relay.is-on .led {
-  background: var(--armed);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--armed) 22%, transparent);
-}
-
-/* ---- generic section rhythm ---- */
-
-@media (max-width: 760px) {
-  .mkt-loopbar {
-    grid-template-columns: 1fr;
-  }
 }
 
 /* ---- motion ---- */
@@ -215,12 +24,9 @@
   .mkt-fade-3 { animation-delay: 0.25s; }
   .mkt-fade-4 { animation-delay: 0.4s; }
 
-  @supports (animation-timeline: view()) {
-    .mkt-reveal {
-      animation: mkt-fade-up 0.9s cubic-bezier(0.22, 1, 0.36, 1) both;
-      animation-timeline: view();
-      animation-range: entry 0% cover 22%;
-    }
+  /* A control-loop log line arriving (G .ll). */
+  .mkt-logline {
+    animation: mkt-logline 0.35s ease-out;
   }
 }
 
@@ -228,5 +34,12 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes mkt-logline {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
   }
 }

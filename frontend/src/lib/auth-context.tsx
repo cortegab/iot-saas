@@ -19,6 +19,22 @@ type MembershipSummary = components["schemas"]["MembershipSummary"];
 const REFRESH_TOKEN_KEY = "iot-saas:refresh_token";
 const TENANT_ID_KEY = "iot-saas:tenant_id";
 
+/* "Keep me signed in on this device": a kept session's refresh token lives in
+ * localStorage; otherwise in sessionStorage, so it ends with the browser.
+ * A refresh writes back to whichever store already holds the session. */
+function readRefreshToken(): string | null {
+  return sessionStorage.getItem(REFRESH_TOKEN_KEY) ?? localStorage.getItem(REFRESH_TOKEN_KEY);
+}
+
+function writeRefreshToken(token: string, keep: boolean) {
+  (keep ? localStorage : sessionStorage).setItem(REFRESH_TOKEN_KEY, token);
+  (keep ? sessionStorage : localStorage).removeItem(REFRESH_TOKEN_KEY);
+}
+
+function isKept(): boolean {
+  return sessionStorage.getItem(REFRESH_TOKEN_KEY) === null;
+}
+
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 interface AuthState {
@@ -38,8 +54,9 @@ interface AuthContextValue extends AuthState {
   refresh: () => Promise<TokenPairResponse | null>;
   setCurrentTenantId: (tenantId: string) => void;
   /** Adopt a token pair returned by another endpoint (e.g. accepting an
-   * invitation), optionally switching to a given tenant. */
-  adoptSession: (data: TokenPairResponse, tenantId?: string) => void;
+   * invitation), optionally switching to a given tenant. `keep: false` ends
+   * the session with the browser (sign-in's "Keep me signed in"). */
+  adoptSession: (data: TokenPairResponse, tenantId?: string, options?: { keep?: boolean }) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -54,8 +71,8 @@ const initialState: AuthState = {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>(initialState);
 
-  const applySession = useCallback((data: TokenPairResponse, tenantOverride?: string) => {
-    localStorage.setItem(REFRESH_TOKEN_KEY, data.refresh_token);
+  const applySession = useCallback((data: TokenPairResponse, tenantOverride?: string, keep: boolean = isKept()) => {
+    writeRefreshToken(data.refresh_token, keep);
     // A remembered workspace only counts while still a member of it (left,
     // removed or deleted otherwise) — then fall back to the first one.
     const isMember = (id: string | null | undefined) => !!id && data.memberships.some((m) => m.tenant_id === id);
@@ -73,12 +90,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(REFRESH_TOKEN_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
     localStorage.removeItem(TENANT_ID_KEY);
     setState({ accessToken: null, memberships: [], currentTenantId: null, status: "unauthenticated" });
   }, []);
 
   const refresh = useCallback(async (): Promise<TokenPairResponse | null> => {
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    const refreshToken = readRefreshToken();
     if (!refreshToken) {
       setState((s) => ({ ...s, status: "unauthenticated" }));
       return null;
@@ -122,7 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    const refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+    const refreshToken = readRefreshToken();
     if (refreshToken) {
       try {
         await apiClient.post("/auth/logout", {}, { refresh_token: refreshToken });
@@ -143,9 +161,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const adoptSession = useCallback(
-    (data: TokenPairResponse, tenantId?: string) => {
+    (data: TokenPairResponse, tenantId?: string, options?: { keep?: boolean }) => {
       void mutate(() => true, undefined, { revalidate: false });
-      applySession(data, tenantId);
+      applySession(data, tenantId, options?.keep ?? true);
     },
     [applySession],
   );

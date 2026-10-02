@@ -183,24 +183,31 @@ export function RuleEditor({
   return (
     <StepsContext.Provider value={isNew}>
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 flex-1">
-            <EditableSentence draft={draft} catalog={catalog} update={setDraft} onOpenFull={openFull} />
-          </div>
-          <div className="flex items-center gap-2">
-            <SegmentedControl
-              ariaLabel="Editor view"
-              value={mode}
-              onChange={changeMode}
-              options={[
-                { value: "form", label: "Form" },
-                { value: "ladder", label: "Ladder" },
-              ]}
-            />
-            <Tag tone="neutral" size="sm">
-              Ladder: expert
-            </Tag>
-          </div>
+        {/* demo G: the rule as a sentence in a highlighted box, then the
+            Form / Ladder switch (Ladder tagged "expert"). */}
+        <div className="rounded-xl border border-accent/30 bg-accent-muted/60 px-4 py-3">
+          <EditableSentence draft={draft} catalog={catalog} update={setDraft} onOpenFull={openFull} />
+        </div>
+        <div className="flex justify-end">
+          <SegmentedControl
+            ariaLabel="Editor view"
+            value={mode}
+            onChange={changeMode}
+            options={[
+              { value: "form", label: "Form" },
+              {
+                value: "ladder",
+                label: (
+                  <span className="inline-flex items-center gap-1.5">
+                    Ladder
+                    <Tag tone="neutral" size="sm">
+                      expert
+                    </Tag>
+                  </span>
+                ),
+              },
+            ]}
+          />
         </div>
 
         {mode === "form" ? (

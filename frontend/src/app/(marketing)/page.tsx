@@ -1,19 +1,21 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Activity, Building2, ChevronDown, Cpu, KeyRound, Lock, RefreshCw, Send, ShieldAlert, SlidersHorizontal, Users, Zap } from "lucide-react";
-import { buttonClassName } from "@/components/ui/Button";
-import { ControlLoop } from "@/components/marketing/ControlLoop";
+import { Activity, Building2, ChevronDown, ChevronRight, Cpu, KeyRound, Lock, RefreshCw, Send, ShieldAlert, SlidersHorizontal, Users, Zap } from "lucide-react";
+import { ControlLoopLog } from "@/components/marketing/ControlLoopLog";
 import { Deployment } from "@/components/marketing/Deployment";
 import { EnterButton } from "@/components/marketing/EnterButton";
 import { NetworkCanvas } from "@/components/marketing/NetworkCanvas";
 import { ProductTour } from "@/components/marketing/ProductTour";
+import { nightButtonClassName } from "@/components/marketing/night";
 import { cn } from "@/lib/cn";
 
-/* iodriven.tech landing (DESIGN.md §10, demo G): nav · hero over the network
- * · product tour · how it works · safety · onboarding (ControlLoop) ·
- * security and operations · deployment (Talk to us) · FAQ · close · footer.
- * There is no public demo workspace, so G's "Open the demo" becomes
- * "Sign in" / "Talk to us". */
+/* iodriven.tech landing (DESIGN.md §10, demo G): a night nav and hero over
+ * the network · product tour · how it works · safety · onboarding (the
+ * control-loop log) · security and operations · deployment (Talk to us) ·
+ * FAQ · a night close and footer. There is no public demo workspace, so G's
+ * "Open the demo" becomes "Sign in" / "Talk to us". */
+
+const EYEBROW = "mb-3 font-mono text-[12px] uppercase tracking-[0.14em]";
 
 const NAV: [string, string][] = [
   ["tour", "Product"],
@@ -25,16 +27,41 @@ const NAV: [string, string][] = [
   ["faq", "FAQ"],
 ];
 
+const INNER = "mx-auto w-full max-w-[1180px] px-4 md:px-6";
+
+function Heading({ eyebrow, title }: { eyebrow: string; title: string }) {
+  return (
+    <>
+      <p className={cn(EYEBROW, "text-accent")}>{eyebrow}</p>
+      <h2 className="max-w-[22ch] text-balance text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-ink md:text-[40px]">{title}</h2>
+    </>
+  );
+}
+
 function Section({ id, eyebrow, title, note, alt, children }: { id: string; eyebrow: string; title: string; note?: ReactNode; alt?: boolean; children: ReactNode }) {
   return (
-    <section id={id} className={cn("scroll-mt-16 py-16 md:py-24", alt && "border-y border-border bg-surface")}>
-      <div className="mx-auto w-full max-w-[1120px] px-4 md:px-6">
-        <p className="mb-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-accent">{eyebrow}</p>
-        <h2 className="max-w-[24ch] text-[30px] font-semibold leading-[1.15] tracking-[-0.025em] text-ink md:text-[38px]">{title}</h2>
-        {note && <p className="mt-4 max-w-[68ch] text-[16px] leading-relaxed text-ink-muted">{note}</p>}
-        <div className="mt-10">{children}</div>
+    <section id={id} className={cn("scroll-mt-16 py-16 md:py-[88px]", alt && "border-y border-border bg-surface")}>
+      <div className={INNER}>
+        <Heading eyebrow={eyebrow} title={title} />
+        {note && <p className="mt-3.5 max-w-[68ch] text-[16px] leading-[1.65] text-ink-muted">{note}</p>}
+        <div className="mt-8">{children}</div>
       </div>
     </section>
+  );
+}
+
+/** Numbered step cards (G .steps4): "01" in mono accent above each step. */
+function Steps({ steps, vertical }: { steps: [string, string][]; vertical?: boolean }) {
+  return (
+    <ol className={cn("grid gap-4", vertical ? "grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-4")}>
+      {steps.map(([t, d], i) => (
+        <li key={t} className={cn("flex flex-col gap-1.5 rounded-xl border border-border p-[18px] text-sm", vertical ? "bg-surface" : "bg-canvas")}>
+          <span className="font-mono text-[12px] font-semibold text-accent">{String(i + 1).padStart(2, "0")}</span>
+          <b className="text-[16px] text-ink">{t}</b>
+          <span className="leading-[1.55] text-ink-muted">{d}</span>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -100,22 +127,22 @@ mosquitto_pub -t "northfield/bay1-climate/temperature" -m '{"value": 31.5}'`}
 export default function LandingPage() {
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-border bg-canvas/85 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-[1120px] items-center gap-6 px-4 md:px-6">
-          <Link href="/" className="flex items-center gap-2 text-[17px] font-bold tracking-[-0.01em] text-ink">
-            <span aria-hidden className="h-[18px] w-[18px] rounded-[5px] bg-[linear-gradient(135deg,var(--color-accent),var(--color-chart))]" />
-            iodriven<span className="font-normal text-ink-muted">.tech</span>
+      <header className="sticky top-0 z-40 border-b border-[rgba(148,163,184,0.14)] bg-[rgba(9,13,27,0.82)] backdrop-blur-md">
+        <div className={cn(INNER, "flex h-[62px] items-center gap-5")}>
+          <Link href="/" className="flex items-center gap-2.5 text-[18px] font-bold tracking-[-0.01em] text-white">
+            <span aria-hidden className="h-[22px] w-[22px] rounded-[6px] bg-[linear-gradient(135deg,#818cf8,#22d3ee)] shadow-[0_0_22px_rgba(129,140,248,0.55)]" />
+            iodriven<span className="font-medium text-night-sky">.tech</span>
           </Link>
-          <nav aria-label="Page sections" className="hidden flex-1 items-center gap-1 lg:flex">
+          <nav aria-label="Page sections" className="ml-3 hidden items-center gap-0.5 lg:flex">
             {NAV.map(([id, label]) => (
-              <a key={id} href={`#${id}`} className="rounded-md px-2.5 py-1.5 text-sm text-ink-muted hover:bg-surface-raised hover:text-ink">
+              <a key={id} href={`#${id}`} className="rounded-lg px-2.5 py-2 text-sm text-[#b8c4d6] hover:bg-[rgba(148,163,184,0.12)] hover:text-white">
                 {label}
               </a>
             ))}
           </nav>
           <div className="ml-auto flex items-center gap-2">
-            <EnterButton variant="ghost" />
-            <a href="#deployment" className={buttonClassName()}>
+            <EnterButton />
+            <a href="#deployment" className={nightButtonClassName()}>
               Talk to us
             </a>
           </div>
@@ -123,37 +150,43 @@ export default function LandingPage() {
       </header>
 
       <main>
-        <section id="top" className="relative overflow-hidden">
-          <NetworkCanvas className="absolute inset-0 h-full w-full opacity-60" />
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,var(--color-canvas)_35%,transparent_80%)]" />
-          <div className="relative mx-auto w-full max-w-[1120px] px-4 pb-14 pt-20 md:px-6 md:pt-28">
-            <p className="mkt-fade mkt-fade-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-accent">IoT platform · MQTT · rules · control</p>
-            <h1 className="mkt-fade mkt-fade-2 mt-3 max-w-[16ch] text-[40px] font-semibold leading-[1.05] tracking-[-0.035em] text-ink md:text-[60px]">
-              Your sensors report. <span className="text-ink-muted">Your rules decide.</span> <span className="text-ink-muted">Your actuators move.</span>
-            </h1>
-            <p className="mkt-fade mkt-fade-3 mt-6 max-w-[58ch] text-[17px] leading-relaxed text-ink-muted">
-              iodriven takes telemetry over MQTT, checks every rule <b className="text-ink">in memory, the moment a reading arrives</b>, and sends the response: an
-              actuator command, an email, a notification or a webhook. Well inside two seconds.
-            </p>
-            <div className="mkt-fade mkt-fade-3 mt-8 flex flex-wrap gap-3">
-              <a href="#deployment" className={cn(buttonClassName(), "h-11 px-5 text-[15px]")}>
-                Talk to us
-              </a>
-              <a href="#how" className={cn(buttonClassName({ variant: "secondary" }), "h-11 px-5 text-[15px]")}>
-                See how it works
-              </a>
+        <section id="top" className="night-bg relative isolate overflow-hidden pb-10 pt-[72px] text-night-ink">
+          <NetworkCanvas className="absolute inset-0 -z-20 h-full w-full" />
+          <div aria-hidden className="night-scrim-hero pointer-events-none absolute inset-0 -z-10" />
+          <div className={INNER}>
+            <div className="max-w-[760px]">
+              <p className={cn(EYEBROW, "mkt-fade mkt-fade-1 text-night-sky")}>IoT platform · MQTT · rules · control</p>
+              <h1 className="mkt-fade mkt-fade-2 text-balance text-[38px] font-semibold leading-[1.02] tracking-[-0.04em] text-white md:text-[64px]">
+                Your sensors report.
+                <br />
+                <span className="text-[#93a4bd]">Your rules decide.</span>
+                <br />
+                <span className="text-[#93a4bd]">Your actuators move.</span>
+              </h1>
+              <p className="mkt-fade mkt-fade-3 mt-5 max-w-[52ch] text-[17px] leading-[1.6] text-night-muted">
+                iodriven takes telemetry over MQTT, checks every rule <b className="font-semibold text-white">in memory, the moment a reading arrives</b>, and sends the
+                response: an actuator command, an email, a notification or a webhook. Well inside two seconds.
+              </p>
+              <div className="mkt-fade mkt-fade-3 mt-7 flex flex-wrap gap-2.5">
+                <a href="#deployment" className={nightButtonClassName({ size: "lg" })}>
+                  Talk to us <ChevronRight aria-hidden size={16} />
+                </a>
+                <a href="#how" className={nightButtonClassName({ kind: "ghost", size: "lg" })}>
+                  See how it works
+                </a>
+              </div>
             </div>
-            <dl className="mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <dl className="mt-14 grid grid-cols-2 gap-4 border-t border-night-line pt-[22px] lg:grid-cols-4">
               {[
                 ["Breach → command", "< 2 s", "the requirement every design choice protects"],
                 ["Typical on one host", "< 500 ms", "no disk, queue or batch on the hot path"],
                 ["Devices per host", "500–1,000", "one Linux VPS, Docker Compose"],
                 ["Sign-up to live data", "10 min", "template, sketch, flash"],
               ].map(([dt, dd, note]) => (
-                <div key={dt} className="rounded-2xl border border-border bg-surface/90 p-4 shadow-card backdrop-blur">
-                  <dt className="text-[13px] text-ink-muted">{dt}</dt>
-                  <dd className="mt-1 text-[28px] font-semibold tracking-[-0.02em] text-ink tabular-nums">{dd}</dd>
-                  <span className="text-[12.5px] text-ink-muted">{note}</span>
+                <div key={dt}>
+                  <dt className="text-[12.5px] text-night-dim">{dt}</dt>
+                  <dd className="mb-0.5 mt-1 font-mono text-[22px] tracking-[-0.02em] text-white tabular-nums md:text-[28px]">{dd}</dd>
+                  <span className="text-[12.5px] text-night-faint">{note}</span>
                 </div>
               ))}
             </dl>
@@ -196,20 +229,16 @@ export default function LandingPage() {
               </div>
             </div>
           </div>
-          <ol className="mt-10 grid gap-4 md:grid-cols-4">
-            {[
-              ["Acquire", "Devices publish readings over MQTT/TLS. Malformed messages are dropped and logged, never stop the stream."],
-              ["Decide", "Rules evaluate on the reading itself, across devices, with ALL / ANY logic. No polling, no cron."],
-              ["Act", "A firing rule switches actuators, emails the alert list, posts a notification or calls a webhook."],
-              ["Confirm", "The device acknowledges the command. Failures land in Failed deliveries with the reason, and can be retried."],
-            ].map(([t, d], i) => (
-              <li key={t} className="flex flex-col gap-1.5">
-                <span className="grid h-7 w-7 place-items-center rounded-full bg-accent text-[13px] font-semibold text-on-accent">{i + 1}</span>
-                <b className="text-ink">{t}</b>
-                <span className="text-[14.5px] leading-relaxed text-ink-muted">{d}</span>
-              </li>
-            ))}
-          </ol>
+          <div className="mt-8">
+            <Steps
+              steps={[
+                ["Acquire", "Devices publish readings over MQTT/TLS. Malformed messages are dropped and logged, never stop the stream."],
+                ["Decide", "Rules evaluate on the reading itself, across devices, with ALL / ANY logic. No polling, no cron."],
+                ["Act", "A firing rule switches actuators, emails the alert list, posts a notification or calls a webhook."],
+                ["Confirm", "The device acknowledges the command. Failures land in Failed deliveries with the reason, and can be retried."],
+              ]}
+            />
+          </div>
         </Section>
 
         <Section
@@ -244,33 +273,32 @@ export default function LandingPage() {
           </div>
         </Section>
 
-        <Section id="onboarding" alt eyebrow="Onboarding" title="From sign-up to live data in ten minutes.">
-          <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
-            <ol className="flex flex-col gap-5">
-              {[
-                ["Create a workspace", "The tenant is provisioned in the same step. Invite your team as Admins or Viewers."],
-                ["Define a device template", "The metrics it reports, the actuators it drives, units and ranges."],
-                ["Copy the generated sketch", "Topics, TLS and the device's credential are already filled in. Wi-Fi can be provisioned over BLE."],
-                ["Flash it", "The connect page turns green as the board reports in, and any armed rule is already watching."],
-              ].map(([t, d], i) => (
-                <li key={t} className="flex gap-3">
-                  <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent text-[13px] font-semibold text-on-accent">{i + 1}</span>
-                  <span className="flex flex-col gap-0.5">
-                    <b className="text-ink">{t}</b>
-                    <span className="text-[14.5px] leading-relaxed text-ink-muted">{d}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-            <div className="flex flex-col gap-3">
-              <ControlLoop />
-              <p className="text-[13.5px] text-ink-muted">
+        {/* G .s-split: steps on the left, the control loop beside them. */}
+        <section id="onboarding" className="scroll-mt-16 border-y border-border bg-surface py-16 md:py-[88px]">
+          <div className={cn(INNER, "grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]")}>
+            <div>
+              <Heading eyebrow="Onboarding" title="From sign-up to live data in ten minutes." />
+              <div className="mt-8">
+                <Steps
+                  vertical
+                  steps={[
+                    ["Create a workspace", "The tenant is provisioned in the same step. Invite your team as Admins or Viewers."],
+                    ["Define a device template", "The metrics it reports, the actuators it drives, units and ranges."],
+                    ["Copy the generated sketch", "Topics, TLS and the device's credential are already filled in. Wi-Fi can be provisioned over BLE."],
+                    ["Flash it", "The connect page turns green as the board reports in, and any armed rule is already watching."],
+                  ]}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-3 lg:sticky lg:top-[90px]">
+              <ControlLoopLog />
+              <p className="text-[13.5px] leading-relaxed text-ink-muted">
                 What happens after step 4: a reading crosses the threshold, the rule holds, fires, and the actuator acknowledges. All in memory, before anything is
                 written to disk.
               </p>
             </div>
           </div>
-        </Section>
+        </section>
 
         <Section id="security" eyebrow="Security and operations" title="Runs on one box. Isolated by the database.">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -305,38 +333,44 @@ export default function LandingPage() {
           <Deployment />
         </Section>
 
-        <Section id="faq" eyebrow="FAQ" title="Questions operators ask first.">
-          <div className="flex max-w-[820px] flex-col divide-y divide-border rounded-2xl border border-border bg-surface">
-            {FAQ.map(([q, a], i) => (
-              <details key={q} open={i === 0} className="group px-5 py-4">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-medium text-ink">
-                  {q}
-                  <ChevronDown aria-hidden size={16} className="shrink-0 text-ink-muted transition-transform group-open:rotate-180" />
-                </summary>
-                <div className="mt-2 text-[14.5px] leading-relaxed text-ink-muted">{a}</div>
-              </details>
-            ))}
+        {/* G .s-faq: the heading beside the questions. */}
+        <section id="faq" className="scroll-mt-16 py-16 md:py-[88px]">
+          <div className={cn(INNER, "grid gap-12 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]")}>
+            <div>
+              <Heading eyebrow="FAQ" title="Questions operators ask first." />
+            </div>
+            <div className="flex flex-col border-t border-border">
+              {FAQ.map(([q, a], i) => (
+                <details key={q} open={i === 0} className="group border-b border-border">
+                  <summary className="flex cursor-pointer list-none justify-between gap-3 py-[18px] text-[16px] font-semibold text-ink [&::-webkit-details-marker]:hidden">
+                    {q}
+                    <ChevronDown aria-hidden size={16} className="mt-[3px] shrink-0 text-ink-muted transition-transform group-open:rotate-180" />
+                  </summary>
+                  <div className="max-w-[64ch] pb-[18px] leading-[1.65] text-ink-muted">{a}</div>
+                </details>
+              ))}
+            </div>
           </div>
-        </Section>
+        </section>
 
-        <section className="border-t border-border py-20">
-          <div className="mx-auto flex w-full max-w-[1120px] flex-col items-start gap-4 px-4 md:px-6">
-            <h2 className="text-[30px] font-semibold tracking-[-0.025em] text-ink md:text-[38px]">Ready when your devices are.</h2>
-            <p className="max-w-[60ch] text-[16px] text-ink-muted">Tell us about your sites and how you want to run it. Already have a workspace? Sign in.</p>
-            <div className="flex flex-wrap gap-3">
-              <a href="#deployment" className={cn(buttonClassName(), "h-11 px-5 text-[15px]")}>
-                Talk to us
+        <section className="night-close py-16 text-center text-white md:py-[88px]">
+          <div className={INNER}>
+            <h2 className="mx-auto max-w-[22ch] text-balance text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] md:text-[40px]">Ready when your devices are.</h2>
+            <p className="mt-3 text-[16px] text-night-muted">Tell us about your sites and how you want to run it. Already have a workspace? Sign in.</p>
+            <div className="mt-7 flex flex-wrap justify-center gap-2.5">
+              <a href="#deployment" className={nightButtonClassName({ size: "lg" })}>
+                Talk to us <ChevronRight aria-hidden size={16} />
               </a>
-              <EnterButton variant="secondary" className="h-11 px-5 text-[15px]" />
+              <EnterButton size="lg" />
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex w-full max-w-[1120px] flex-wrap items-center justify-between gap-3 px-4 py-6 text-[13px] text-ink-muted md:px-6">
-          <span className="flex items-center gap-2">
-            <span aria-hidden className="h-3.5 w-3.5 rounded-[4px] bg-[linear-gradient(135deg,var(--color-accent),var(--color-chart))]" />
+      <footer className="bg-night-deep text-[13px] text-night-faint">
+        <div className={cn(INNER, "flex flex-wrap items-center justify-between gap-4 py-7")}>
+          <span className="flex items-center gap-2 font-semibold text-night-ink">
+            <span aria-hidden className="h-4 w-4 rounded-[4px] bg-[linear-gradient(135deg,#818cf8,#22d3ee)] shadow-[0_0_22px_rgba(129,140,248,0.55)]" />
             iodriven.tech
           </span>
           <span>MQTT/TLS · FastAPI · TimescaleDB · EMQX · Docker Compose</span>

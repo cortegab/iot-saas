@@ -48,3 +48,27 @@ test("dashboard: an unknown id explains itself instead of spinning", async ({ pa
   await expect(page.getByRole("heading", { name: "This dashboard doesn't exist" })).toBeVisible();
   await expect(page.getByRole("link", { name: "All dashboards" })).toBeVisible();
 });
+
+test("dashboards: create, rename and delete from the docked editor, like every catalog", async ({ page }) => {
+  const name = `E2E new dash ${Date.now()}`;
+  await page.goto("/dashboards");
+  await page.locator("header").getByRole("button", { name: "New dashboard" }).click();
+  await expect(page).toHaveURL(/edit=new/);
+
+  const editor = page.getByRole("region", { name: /editor$/ });
+  await editor.getByLabel("Name", { exact: true }).fill(name);
+  await editor.getByRole("button", { name: "Create dashboard" }).click();
+  await expect(page.getByText("Dashboard created")).toBeVisible();
+  await expect(page.getByRole("table", { name: "Dashboards" }).getByText(name)).toBeVisible();
+  await expect(editor.getByRole("link", { name: "Add widgets" })).toBeVisible();
+
+  await editor.getByLabel("Name", { exact: true }).fill(`${name} renamed`);
+  await page.keyboard.press("Control+s");
+  await expect(page.getByText("Dashboard saved")).toBeVisible();
+
+  await editor.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("menuitem", { name: "Delete dashboard…" }).click();
+  await page.getByRole("button", { name: "Delete dashboard" }).click();
+  await expect(page.getByText(`${name} renamed deleted`)).toBeVisible();
+  await expect(page.getByRole("table", { name: "Dashboards" }).getByText(`${name} renamed`)).toHaveCount(0);
+});
