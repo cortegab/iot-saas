@@ -79,17 +79,18 @@ describe("boards", () => {
     expect(pins).toEqual({ "m:door": 4, "a:fan1": 23 });
   });
 
-  it("ESP32: BTDM handler, BOOT on GPIO 0", () => {
+  it("ESP32: BTDM handler, reset button on GPIO 19 (on both headers)", () => {
     const sketch = buildSketch(base);
     expect(sketch).toContain("NETWORK_PROV_SCHEME_HANDLER_FREE_BTDM");
-    expect(sketch).toContain("const int BOOT_PIN = 0;");
+    expect(sketch).toContain("const int RESET_PIN = 19;");
+    expect(pinChoices("esp32")).not.toContain(19);
     expect(sketch).toContain('Board: "ESP32 Dev Module"');
   });
 
-  it("ESP32-C3: BLE-only handler, BOOT on GPIO 9, low TX power, C3 pins, IDE settings", () => {
+  it("ESP32-C3: BLE-only handler, reset on BOOT (GPIO 9), low TX power, C3 pins, IDE settings", () => {
     const sketch = buildSketch({ ...base, board: "esp32c3" });
     expect(sketch).toContain("NETWORK_PROV_SCHEME_HANDLER_FREE_BLE");
-    expect(sketch).toContain("const int BOOT_PIN = 9;");
+    expect(sketch).toContain("const int RESET_PIN = 9;");
     expect(sketch).toContain("WIFI_POWER_8_5dBm");
     expect(sketch).toContain("USB CDC On Boot: Enabled");
     const pins = defaultPins(base.metrics, base.actuators, "esp32c3");
