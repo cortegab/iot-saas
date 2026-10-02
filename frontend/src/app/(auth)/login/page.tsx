@@ -19,7 +19,8 @@ import type { components } from "@/types/api";
 type TokenPairResponse = components["schemas"]["TokenPairResponse"];
 
 /** Sign in (DESIGN.md §10). One generic error (never "no such email"),
- * show/hide password, a Caps Lock hint once two attempts have failed, and a
+ * show/hide password, a Caps Lock hint once two attempts have failed, "Keep
+ * me signed in" (unchecked, the session ends with the browser), and a
  * workspace choice when the account belongs to more than one. */
 export default function LoginPage() {
   const { adoptSession } = useAuth();
@@ -33,9 +34,10 @@ export default function LoginPage() {
   const [failures, setFailures] = useState(0);
   const [capsOn, setCapsOn] = useState(false);
   const [choosing, setChoosing] = useState<TokenPairResponse | null>(null);
+  const [keep, setKeep] = useState(true);
 
   function enter(data: TokenPairResponse, tenantId?: string) {
-    adoptSession(data, tenantId);
+    adoptSession(data, tenantId, { keep });
     router.replace(next);
   }
 
@@ -95,36 +97,46 @@ export default function LoginPage() {
   return (
     <AuthCard
       title="Sign in"
-      description="Welcome back."
+      description="Welcome back. Sign in to your iodriven workspace."
       footer={
         <>
-          No account?{" "}
+          New to iodriven?{" "}
           <Link href="/register" className="font-medium text-accent hover:underline">
-            Create one
+            Create an account
           </Link>
         </>
       }
     >
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3.5">
         {params.get("reset") === "1" && <Callout>Password changed. Sign in with the new one.</Callout>}
-        <Field label="Email">
-          <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-        </Field>
-        <div className="flex flex-col gap-[5px]">
-          <Field label="Password" warning={failures >= 2 && capsOn ? "Caps Lock is on." : undefined}>
-            <PasswordInput required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} onCapsLock={setCapsOn} />
-          </Field>
-          <Link href="/forgot-password" className="self-end text-[12.5px] font-medium text-accent hover:underline">
-            Forgot password?
-          </Link>
-        </div>
         {error && (
-          <p role="alert" className="text-sm text-status-error">
-            {error}
-          </p>
+          <Callout tone="error">
+            <span role="alert">
+              <strong className="font-semibold">{error}</strong>
+              {failures >= 2 && <span className="block">Check Caps Lock, or reset your password.</span>}
+            </span>
+          </Callout>
         )}
+        <Field label="Email">
+          <Input type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+        <Field
+          label="Password"
+          warning={failures >= 2 && capsOn ? "Caps Lock is on." : undefined}
+          action={
+            <Link href="/forgot-password" className="text-[12.5px] font-medium text-accent hover:underline">
+              Forgot password?
+            </Link>
+          }
+        >
+          <PasswordInput required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} onCapsLock={setCapsOn} />
+        </Field>
+        <label className="flex cursor-pointer items-start gap-2 text-sm text-ink">
+          <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} className="mt-[3px] accent-[var(--color-accent)]" />
+          Keep me signed in on this device
+        </label>
         <Button type="submit" disabled={submitting} className="h-11 w-full text-[15px]">
-          {submitting ? "Signing in…" : "Log in"}
+          {submitting ? "Signing in…" : "Sign in"}
         </Button>
       </form>
     </AuthCard>

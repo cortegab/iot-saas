@@ -14,6 +14,9 @@ export interface FieldProps {
   error?: ReactNode;
   /** Warning (a risk, not a blocker) — replaces the hint. */
   warning?: ReactNode;
+  /** A small link on the label row's right (e.g. "Forgot password?"). It
+   * sits outside the <label>, so it isn't part of the control's name. */
+  action?: ReactNode;
   children: ReactNode;
   className?: string;
 }
@@ -23,7 +26,7 @@ export interface FieldProps {
  * control should NOT also carry an `aria-label`. When the child is a single
  * element, the message line is wired to it via `aria-describedby`, and
  * `aria-invalid` is set while there is an error. */
-export function Field({ label, optional, hint, error, warning, children, className }: FieldProps) {
+export function Field({ label, optional, hint, error, warning, action, children, className }: FieldProps) {
   const msgId = useId();
   const message = error ?? warning ?? hint;
   const tone = error ? "error" : warning ? "warning" : "hint";
@@ -40,7 +43,7 @@ export function Field({ label, optional, hint, error, warning, children, classNa
   // The <label> holds only the label text and the control, so the control's
   // accessible name is the label; the message line is its description.
   return (
-    <div className={cn("flex min-w-0 flex-col gap-[5px]", className)}>
+    <div className={cn("relative flex min-w-0 flex-col gap-[5px]", className)}>
       <label className="flex min-w-0 flex-col gap-[5px]">
         <span className="text-xs font-medium text-ink-muted">
           {label}
@@ -48,6 +51,8 @@ export function Field({ label, optional, hint, error, warning, children, classNa
         </span>
         {control}
       </label>
+      {/* After the control in tab order; shown on the label row. */}
+      {action && <span className="absolute right-0 top-0 text-xs leading-[1.4]">{action}</span>}
       {message != null && message !== false && (
         <span
           id={msgId}

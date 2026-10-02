@@ -140,8 +140,8 @@ export function ProductTour() {
   const [tab, setTab] = useState<TourKey>("dashboards");
   const t = TOUR[tab];
   return (
-    <div className="flex flex-col gap-5">
-      <div role="tablist" aria-label="Product areas" className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
+    <div className="flex flex-col gap-7">
+      <div role="tablist" aria-label="Product areas" className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
         {(Object.keys(TOUR) as TourKey[]).map((k) => {
           const Icon = TOUR[k].icon;
           return (
@@ -152,8 +152,8 @@ export function ProductTour() {
               aria-selected={tab === k}
               onClick={() => setTab(k)}
               className={cn(
-                "inline-flex shrink-0 items-center gap-2 rounded-full px-3.5 py-2 text-sm",
-                tab === k ? "bg-accent-muted font-medium text-accent-strong" : "text-ink-muted hover:bg-surface-raised hover:text-ink",
+                "inline-flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-sm font-medium",
+                tab === k ? "border-ink bg-ink text-canvas" : "border-border bg-surface text-ink-muted hover:text-ink",
               )}
             >
               <Icon aria-hidden size={16} />
@@ -162,7 +162,7 @@ export function ProductTour() {
           );
         })}
       </div>
-      <div role="tabpanel" className="grid gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
+      <div role="tabpanel" className="grid items-start gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:gap-10">
         <div className="flex flex-col gap-3">
           <h3 className="text-xl font-semibold tracking-[-0.015em] text-ink">{t.title}</h3>
           <ul className="flex flex-col gap-2.5">
