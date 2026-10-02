@@ -8,7 +8,6 @@ import { Cpu, Link2, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -18,6 +17,7 @@ import { useToast } from "@/components/ui/Toast";
 import { EditorFrame, EditorSection, type EditorMode } from "@/components/editor/EditorFrame";
 import { useRecordEditor, type Validation } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
+import { useDeleteZone } from "./useDeleteZone";
 import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
 import type { components } from "@/types/api";
@@ -37,26 +37,22 @@ const DIFF: DiffField<ZoneDraft>[] = [
 const BLANK: ZoneDraft = { name: "", notes: "" };
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** A zone: name and notes only (DESIGN.md §8). Devices are assigned from
+/** A zone: name and notes only (DESIGN.md §8), edited on its own page
+ * (/zones/new, /zones/{id}); the list only peeks. Devices are assigned from
  * their own settings, never from here. */
 export function ZoneEditor({
   zoneId,
-  mode,
-  onClose,
-  onCreated,
+  mode = "page",
 }: {
   /** null = new zone. */
   zoneId: string | null;
-  mode: EditorMode;
-  onClose?: () => void;
-  onCreated?: (id: string) => void;
+  mode?: EditorMode;
 }) {
   const api = useApi();
   const router = useRouter();
   const toast = useToast();
   const { can } = usePermissions();
   const readOnly = !can("zones.write");
-  const { confirm, dialog } = useConfirm();
   const { data: zone, error, mutate } = useApiSWR<ZoneResponse>(zoneId ? `/zones/${zoneId}` : null);
   const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
 
@@ -79,11 +75,8 @@ export function ZoneEditor({
     [otherNames],
   );
   const editor = useRecordEditor({ source, isNew, validate });
-  const { confirmLeave, dialog: guardDialog } = useUnsavedGuard(editor.dirty, zone?.name ?? "this zone");
-
-  const close = useCallback(async () => {
-    if (await confirmLeave()) onClose?.();
-  }, [confirmLeave, onClose]);
+  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, zone?.name ?? "this zone");
+  const { remove, dialog } = useDeleteZone(() => router.push("/zones"));
 
   async function onSave(): Promise<boolean> {
     const before = editor.original;
@@ -95,7 +88,7 @@ export function ZoneEditor({
             const created = await api.post<ZoneResponse>("/zones", body);
             void revalidate("/zones");
             toast({ title: "Zone created", detail: created.name });
-            onCreated?.(created.id);
+            router.replace(`/zones/${created.id}`);
           } else {
             await api.patch(`/zones/${zoneId}`, body);
             await mutate();
@@ -109,29 +102,6 @@ export function ZoneEditor({
         }
       })
       .catch(() => false);
-  }
-
-  async function remove() {
-    if (!zone) return;
-    if (zone.device_count > 0) {
-      const go = await confirm(`${plural(zone.device_count, "device is", "devices are")} assigned to it. Move them to another zone from their settings first.`, {
-        title: `${zone.name} is in use`,
-        confirmLabel: "View its devices",
-        cancelLabel: "Close",
-        danger: false,
-      });
-      if (go) router.push(`/devices?zone=${zone.id}`);
-      return;
-    }
-    if (!(await confirm("No devices are assigned to it.", { title: `Delete ${zone.name}?`, confirmLabel: "Delete zone" }))) return;
-    try {
-      await api.delete(`/zones/${zone.id}`);
-      void revalidate("/zones");
-      toast({ title: `${zone.name} deleted` });
-      onClose?.();
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete the zone", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
   }
 
   if (error) {
@@ -165,7 +135,6 @@ export function ZoneEditor({
         saveLabel={isNew ? "Create zone" : "Save"}
         onSave={onSave}
         onDiscard={editor.discard}
-        onClose={onClose ? () => void close() : undefined}
         menu={
           isNew
             ? undefined
@@ -175,10 +144,10 @@ export function ZoneEditor({
                   {
                     label: "Copy link",
                     icon: <Link2 size={15} />,
-                    onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/zones?edit=${zoneId}`).then(() => toast({ tone: "info", title: "Link copied" })),
+                    onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/zones/${zoneId}`).then(() => toast({ tone: "info", title: "Link copied" })),
                   },
                 ],
-                ...(readOnly ? [] : [[{ label: "Delete zone…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]]),
+                ...(readOnly ? [] : [[{ label: "Delete zone…", icon: <Trash2 size={15} />, danger: true, onClick: () => zone && void remove(zone) }]]),
               ]
         }
       >

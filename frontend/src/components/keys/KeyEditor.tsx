@@ -8,7 +8,6 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -19,6 +18,7 @@ import { useToast } from "@/components/ui/Toast";
 import { EditorFrame, EditorSection, type EditorMode } from "@/components/editor/EditorFrame";
 import { useRecordEditor, type Validation } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
+import { useRevokeKey } from "./useRevokeKey";
 import { ApiRequestError } from "@/lib/api-client";
 import { KEY_STATUS_LABEL, KEY_STATUS_TONE, keyStatus, type ApiKey } from "@/lib/api-key-status";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
@@ -44,25 +44,24 @@ function Fact({ label, children }: { label: string; children: React.ReactNode })
   );
 }
 
-/** API keys (DESIGN.md §8): create (name, role, expiry), then read-only —
- * keys can't be edited; to change one, create a new key and revoke the old. */
+/** API keys (DESIGN.md §8), on their own pages: create (/keys/new: name,
+ * role, expiry), then read-only (/keys/{id}) — keys can't be edited; to
+ * change one, create a new key and revoke the old. */
 export function KeyEditor({
   keyId,
-  mode,
-  onClose,
+  mode = "page",
   onCreated,
 }: {
   /** null = new key. */
   keyId: string | null;
-  mode: EditorMode;
-  onClose?: () => void;
+  mode?: EditorMode;
   /** Receives the one-time secret; the page shows it. */
   onCreated?: (result: ApiKeyCreateResponse) => void;
 }) {
   const api = useApi();
   const toast = useToast();
   const { can } = usePermissions();
-  const { confirm, dialog } = useConfirm();
+  const { revoke, dialog } = useRevokeKey();
   const { data: keys, error, mutate } = useApiSWR<ApiKey[]>("/api-keys");
   const isNew = keyId == null;
   const key = keys?.find((k) => k.id === keyId);
@@ -77,11 +76,7 @@ export function KeyEditor({
     return { errors, warnings };
   }, []);
   const editor = useRecordEditor({ source, isNew, validate });
-  const { confirmLeave, dialog: guardDialog } = useUnsavedGuard(editor.dirty, "this key");
-
-  const close = useCallback(async () => {
-    if (await confirmLeave()) onClose?.();
-  }, [confirmLeave, onClose]);
+  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, "this key");
 
   async function onSave(): Promise<boolean> {
     return editor
@@ -102,25 +97,6 @@ export function KeyEditor({
         }
       })
       .catch(() => false);
-  }
-
-  async function revoke() {
-    if (!key) return;
-    const ok = await confirm(
-      <>
-        Requests using <code className="font-mono">{key.key_prefix}…</code> fail from now on. Last used{" "}
-        {key.last_used_at ? timeAgo(key.last_used_at) : "never"}.
-      </>,
-      { title: `Revoke ${key.name}?`, confirmLabel: "Revoke key" },
-    );
-    if (!ok) return;
-    try {
-      await api.delete(`/api-keys/${key.id}`);
-      await mutate();
-      toast({ title: "Key revoked", detail: key.name });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't revoke the key", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
   }
 
   if (error) {
@@ -159,13 +135,12 @@ export function KeyEditor({
           readOnlyNote={false}
           onSave={() => Promise.resolve(false)}
           onDiscard={() => undefined}
-          onClose={onClose}
           menu={[
             [
               {
                 label: "Copy link",
                 icon: <Link2 size={15} />,
-                onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/keys?edit=${key.id}`).then(() => toast({ tone: "info", title: "Link copied" })),
+                onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/keys/${key.id}`).then(() => toast({ tone: "info", title: "Link copied" })),
               },
             ],
           ]}
@@ -190,7 +165,7 @@ export function KeyEditor({
             </p>
             {st === "active" && can("keys.manage") ? (
               <div>
-                <Button variant="danger" onClick={() => void revoke()}>
+                <Button variant="danger" onClick={() => void revoke(key)}>
                   <Ban aria-hidden size={14} />
                   Revoke key
                 </Button>
@@ -220,7 +195,6 @@ export function KeyEditor({
         saveLabel="Create key"
         onSave={onSave}
         onDiscard={editor.discard}
-        onClose={onClose ? () => void close() : undefined}
       >
         <EditorSection id="key" title="Key">
           <Field label="Name" error={editor.errorFor("key.name")}>

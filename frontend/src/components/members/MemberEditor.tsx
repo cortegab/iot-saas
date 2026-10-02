@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
 import { Lock, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
@@ -17,6 +18,7 @@ import { useToast } from "@/components/ui/Toast";
 import { EditorFrame, EditorSection, type EditorMode } from "@/components/editor/EditorFrame";
 import { useRecordEditor, type Validation } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
+import { useMemberActions } from "./useMemberActions";
 import { ApiRequestError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { ROLE_LABEL, type Role } from "@/lib/permissions";
@@ -40,21 +42,13 @@ export const ROLE_HELP: Record<Role, string> = {
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const ROLES: Role[] = ["viewer", "admin", "owner"];
 
-/** Invite someone (memberId null) or change a member's role (DESIGN.md §8).
- * Only an owner grants or removes Owner; the backend enforces the same and
- * refuses to demote or remove the last owner. */
-export function MemberEditor({
-  memberId,
-  mode,
-  onClose,
-  onRemove,
-}: {
-  memberId: string | null;
-  mode: EditorMode;
-  onClose?: () => void;
-  onRemove?: (m: MemberResponse) => void;
-}) {
+/** Invite someone (memberId null, /members/invite) or change a member's role
+ * (/members/{id}) — DESIGN.md §8; the list only peeks. Only an owner grants
+ * or removes Owner; the backend enforces the same and refuses to demote or
+ * remove the last owner. */
+export function MemberEditor({ memberId, mode = "page" }: { memberId: string | null; mode?: EditorMode }) {
   const api = useApi();
+  const router = useRouter();
   const toast = useToast();
   const { refresh } = useAuth();
   const { role: myRole, can } = usePermissions();
@@ -94,11 +88,8 @@ export function MemberEditor({
     [isNew, taken, iAmOwner, member, isMe],
   );
   const editor = useRecordEditor({ source, isNew, validate });
-  const { confirmLeave, dialog: guardDialog } = useUnsavedGuard(editor.dirty, member?.email ?? "this invite");
-
-  const close = useCallback(async () => {
-    if (await confirmLeave()) onClose?.();
-  }, [confirmLeave, onClose]);
+  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, member?.email ?? "this invite");
+  const { removeMember, dialog: actionDialog } = useMemberActions(() => router.push("/members"));
 
   async function onSave(): Promise<boolean> {
     const d = editor.draft;
@@ -115,10 +106,11 @@ export function MemberEditor({
         try {
           if (isNew) {
             const email = v.email.trim().toLowerCase();
-            await api.post("/tenants/invitations", { email, role: v.role });
-            void revalidate("/tenants/invitations");
+            const sent = await api.post<InvitationResponse>("/tenants/invitations", { email, role: v.role });
+            await revalidate("/tenants/invitations");
             toast({ title: "Invite sent", detail: `${email} joins as ${ROLE_LABEL[v.role]}.` });
-            onClose?.();
+            // An invite has no page of its own: back to the list, showing it.
+            router.push(`/members?peek=invite.${sent.id}`);
           } else {
             await api.patch(`/tenants/members/${memberId}`, { role: v.role });
             await mutate();
@@ -174,10 +166,9 @@ export function MemberEditor({
         saveLabel={isNew ? "Send invite" : "Save role"}
         onSave={onSave}
         onDiscard={editor.discard}
-        onClose={onClose ? () => void close() : undefined}
         menu={
-          !isNew && !readOnly && !isMe && onRemove
-            ? [[{ label: "Remove from workspace…", icon: <Trash2 size={15} />, danger: true, onClick: () => onRemove(member!) }]]
+          !isNew && !readOnly && !isMe
+            ? [[{ label: "Remove from workspace…", icon: <Trash2 size={15} />, danger: true, onClick: () => void removeMember(member!) }]]
             : undefined
         }
       >
@@ -248,6 +239,7 @@ export function MemberEditor({
         </EditorSection>
       </EditorFrame>
       {dialog}
+      {actionDialog}
       {guardDialog}
     </>
   );

@@ -68,9 +68,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       { label: "Add device", href: "/devices/new", icon: Cpu, requires: "devices.write" },
       { label: "New rule", href: "/rules/new", icon: ListChecks, requires: "rules.write" },
       { label: "New device template", href: "/templates/new", icon: Boxes, requires: "templates.write" },
-      { label: "New zone", href: "/zones?edit=new", icon: MapPin, requires: "zones.write" },
-      { label: "Invite member", href: "/members", icon: UserRound, requires: "members.manage" },
-      { label: "New API key", href: "/keys", icon: Plus, requires: "keys.manage" },
+      { label: "New zone", href: "/zones/new", icon: MapPin, requires: "zones.write" },
+      { label: "Invite member", href: "/members/invite", icon: UserRound, requires: "members.manage" },
+      { label: "New API key", href: "/keys/new", icon: Plus, requires: "keys.manage" },
     ];
     for (const c of create) {
       if (can(c.requires)) out.push({ id: `new:${c.href}`, group: "Create", label: c.label, icon: Plus, run: go(c.href) });
@@ -129,11 +129,11 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         label: z.name,
         hint: `${z.device_count} device${z.device_count === 1 ? "" : "s"}`,
         icon: MapPin,
-        run: go(`/zones?edit=${z.id}`),
+        run: go(`/zones/${z.id}`),
       });
     }
     for (const m of data.members) {
-      out.push({ id: `mem:${m.user_id}`, group: "Members", label: m.email, hint: m.role, icon: UserRound, run: go("/members") });
+      out.push({ id: `mem:${m.user_id}`, group: "Members", label: m.email, hint: m.role, icon: UserRound, run: go(`/members/${m.user_id}`) });
     }
     return out;
   }, [can, data, router, setPreference, theme]);

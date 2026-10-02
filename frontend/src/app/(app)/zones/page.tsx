@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Cpu, MapPin, Pencil, Plus } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -16,8 +17,9 @@ import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/Lis
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
-import { SplitView } from "@/components/editor/SplitView";
-import { ZoneEditor } from "@/components/zones/ZoneEditor";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
+import { ZonePeek } from "@/components/zones/ZonePeek";
+import { usePeek } from "@/components/list/usePeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { deviceStatusKey } from "@/lib/device-status";
 import type { components } from "@/types/api";
@@ -25,26 +27,15 @@ import type { components } from "@/types/api";
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 
-/** Zones (DESIGN.md §6/§8): Zone · Devices · Status. Name and notes only;
- * devices are assigned from their own settings. */
+/** Zones (DESIGN.md §6/§8): Zone · Devices · Status. A row peeks; the
+ * zone is edited on its page. Devices are assigned from their own settings. */
 export default function ZonesPage() {
   const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
   const { can } = usePermissions();
   const canWrite = can("zones.write");
   const { data: zones, error, isLoading, mutate } = useApiSWR<ZoneResponse[]>("/zones");
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
   const list = useListState({ show: "all" }, { key: "name", dir: "asc" });
-
-  const editId = params.get("edit");
-  function setEditId(id: string | null) {
-    const next = new URLSearchParams(params.toString());
-    if (id) next.set("edit", id);
-    else next.delete("edit");
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
 
   // Offline count per zone, from the devices list (disabled devices don't count).
   const offline = useMemo(() => {
@@ -66,6 +57,7 @@ export default function ZonesPage() {
     return sortRows(rows, list.sort, (z, key) => (key === "devices" ? z.device_count : z.name));
   }, [zones, list.filters.show, list.q, list.sort]);
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
+  const peek = usePeek({ rows: pageRows, rowKey: (z) => z.id, pageHref: (id) => `/zones/${id}`, newHref: "/zones/new" });
 
   const status = (z: ZoneResponse) => {
     if (z.device_count === 0) return <Badge tone="unknown" shape="square" label="No devices" />;
@@ -74,14 +66,28 @@ export default function ZonesPage() {
   };
 
   const columns: DataColumn<ZoneResponse>[] = [
-    { id: "name", header: "Zone", sortable: true, cell: (z) => <NameCell name={z.name} sub={z.notes ?? undefined} /> },
+    {
+      id: "name",
+      header: "Zone",
+      sortable: true,
+      cell: (z) => (
+        <NameCell
+          name={
+            <Link href={`/zones/${z.id}`} className="hover:underline hover:underline-offset-[3px]">
+              {z.name}
+            </Link>
+          }
+          sub={z.notes ?? undefined}
+        />
+      ),
+    },
     { id: "devices", header: "Devices", sortable: true, numeric: true, cell: (z) => z.device_count },
     { id: "status", header: "Status", cell: status },
   ];
 
   const rowMenu = (z: ZoneResponse): DropdownMenuItem[][] => [
     [
-      { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => setEditId(z.id) },
+      { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => router.push(`/zones/${z.id}`) },
       { label: "View its devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${z.id}`) },
     ],
   ];
@@ -89,10 +95,10 @@ export default function ZonesPage() {
   const chips: FilterChip[] = list.q ? [{ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") }] : [];
   const total = zones?.length ?? 0;
   const newButton = canWrite ? (
-    <Button onClick={() => setEditId("new")}>
+    <Link href="/zones/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
       New zone
-    </Button>
+    </Link>
   ) : null;
 
   return (
@@ -103,18 +109,17 @@ export default function ZonesPage() {
       ) : isLoading || !zones ? (
         <TableSkeleton rows={4} columns={3} />
       ) : (
-        <SplitView
-          editorLabel={editId === "new" ? "New zone" : "Edit zone"}
-          onClose={() => setEditId(null)}
-          editor={
-            editId
-              ? (mode) => (
-                  <ZoneEditor
-                    key={editId}
-                    zoneId={editId === "new" ? null : editId}
-                    mode={mode}
-                    onClose={() => setEditId(null)}
-                    onCreated={(id) => setEditId(id)}
+        <ListWithPeek
+          label="Zone"
+          onClose={peek.close}
+          nav={peek.nav}
+          peek={
+            peek.peekId
+              ? (
+                  <ZonePeek
+                    zone={zones.find((z) => z.id === peek.peekId)}
+                    offline={offline.get(peek.peekId!) ?? 0}
+                    onClose={peek.close}
                   />
                 )
               : null
@@ -157,10 +162,11 @@ export default function ZonesPage() {
                     rowKey={(z) => z.id}
                     sort={list.sort}
                     onSort={list.toggleSort}
-                    onRowClick={(z) => setEditId(z.id)}
+                    onRowClick={peek.onRowClick}
+                    onRowEnter={peek.onRowEnter}
                     rowMenu={rowMenu}
                     rowMenuLabel={(z) => `Actions for ${z.name}`}
-                    currentKey={editId}
+                    currentKey={peek.peekId}
                   />
                   <TableFooter
                     shown={filtered.length}
@@ -176,7 +182,7 @@ export default function ZonesPage() {
               )}
             </>
           )}
-        </SplitView>
+        </ListWithPeek>
       )}
     </>
   );

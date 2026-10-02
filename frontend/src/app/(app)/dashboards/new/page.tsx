@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Breadcrumbs } from "@/components/ui/PageHeader";
+import { DashboardEditor } from "@/components/dashboards/DashboardEditor";
 
-/** "New dashboard" is the docked editor on the list (?edit=new); this route keeps
- * old links and the ⌘K "New dashboard" command working. */
-export default function NewDashboardRedirect() {
-  const router = useRouter();
-  useEffect(() => {
-    router.replace("/dashboards?edit=new");
-  }, [router]);
-  return null;
+/** New dashboard (DESIGN.md §7: every create is a full page). Creating it
+ * opens the dashboard in Edit layout to add widgets. */
+export default function NewDashboardPage() {
+  return (
+    <>
+      <Breadcrumbs crumbs={[{ label: "Dashboards", href: "/dashboards" }, { label: "New" }]} />
+      <DashboardEditor />
+    </>
+  );
 }

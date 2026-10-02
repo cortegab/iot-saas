@@ -196,7 +196,7 @@ export default function DashboardDetailPage() {
         })),
         [
           { label: "All dashboards", icon: <List size={15} />, onClick: () => router.push("/dashboards") },
-          { label: "New dashboard…", icon: <Plus size={15} />, onClick: () => router.push("/dashboards?edit=new") },
+          { label: "New dashboard…", icon: <Plus size={15} />, onClick: () => router.push("/dashboards/new") },
         ],
       ]}
     />

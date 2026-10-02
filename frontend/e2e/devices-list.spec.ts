@@ -1,25 +1,32 @@
 import { expect } from "@playwright/test";
 import { test } from "./fixtures";
 
-test("device editor docks beside the list, tracks unsaved changes and discards", async ({ page }) => {
+test("a device peeks from the list and is edited in its Settings tab", async ({ page }) => {
   await page.goto("/devices");
-  const firstRowMenu = page.getByRole("button", { name: /^Actions for / }).first();
-  await firstRowMenu.click();
-  await page.getByRole("menuitem", { name: "Edit" }).click();
-  await expect(page).toHaveURL(/edit=/);
+  const row = page.getByRole("table", { name: "Devices" }).locator("tbody tr").first();
+  await row.locator("td").nth(-2).click();
+  await expect(page).toHaveURL(/peek=/);
+  const peek = page.getByRole("region", { name: / details$/ });
+  await expect(peek.getByRole("link", { name: "Open device" })).toBeVisible();
+  await expect(peek.getByRole("textbox")).toHaveCount(0);
 
-  const editor = page.getByRole("region", { name: /editor$/ });
-  const name = editor.getByLabel("Name", { exact: true });
+  await peek.getByRole("link", { name: "Edit settings" }).click();
+  await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\?tab=settings$/);
+  const name = page.getByLabel("Name", { exact: true });
   const original = await name.inputValue();
   await name.fill(`${original} draft`);
-  await expect(editor.getByText("Unsaved changes")).toBeVisible();
-
-  await editor.getByRole("button", { name: "Discard" }).click();
+  await expect(page.getByText("Unsaved changes")).toBeVisible();
+  await page.getByRole("button", { name: "Discard" }).click();
   await expect(name).toHaveValue(original);
-  await expect(editor.getByText("All changes saved")).toBeVisible();
+  // The save bar only shows while there is something to save.
+  await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
-  await editor.getByRole("button", { name: "Close device editor" }).click();
-  await expect(page).not.toHaveURL(/edit=/);
+  // One settings page: stacked sections, one connect action, the danger zone last.
+  for (const heading of ["General", "Rule evaluation", "Template", "Connection", "MQTT topics", "Danger zone"]) {
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("link", { name: "Connect and get firmware" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Delete device…" })).toBeVisible();
 });
 
 test("devices list: KPI filter, chips and a search that matches nothing", async ({ page }) => {
