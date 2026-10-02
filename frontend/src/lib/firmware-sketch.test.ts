@@ -72,6 +72,13 @@ describe("Wi-Fi: only the chosen mode is in the sketch", () => {
 });
 
 describe("boards", () => {
+  it("ESP32: pins common to the 30- and 38-pin DevKits, no strapping, UART, flash or input-only pins", () => {
+    const choices = pinChoices("esp32");
+    for (const bad of [0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 15, 34, 35, 36, 39]) expect(choices).not.toContain(bad);
+    const pins = defaultPins(base.metrics, base.actuators, "esp32");
+    expect(pins).toEqual({ "m:door": 4, "a:fan1": 23 });
+  });
+
   it("ESP32: BTDM handler, BOOT on GPIO 0", () => {
     const sketch = buildSketch(base);
     expect(sketch).toContain("NETWORK_PROV_SCHEME_HANDLER_FREE_BTDM");
