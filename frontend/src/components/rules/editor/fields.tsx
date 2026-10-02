@@ -48,6 +48,16 @@ const VALUE_TYPE_WORD: Record<CatalogActuator["value_type"], string> = {
  * (DESIGN.md §9.2: 1 When · 2 Then · 3 Safety · 4 Name). */
 export const StepsContext = createContext(false);
 
+/** True inside a narrow panel (the ladder inspector): field rows stack one
+ * per line instead of going wide on viewport breakpoints. */
+export const CompactFields = createContext(false);
+
+/** A row of fields: `wide` columns on large viewports, one column when compact. */
+export function FieldRow({ wide, children }: { wide: string; children: ReactNode }) {
+  const compact = useContext(CompactFields);
+  return <div className={cn("grid grid-cols-1 gap-4", !compact && wide)}>{children}</div>;
+}
+
 export function SectionCard({
   title,
   aside,
@@ -217,7 +227,7 @@ export function WhenFields({
       />
       <p className="text-sm text-ink-muted">{TRIGGER_HELP[when.type]}</p>
       {when.type === "device_status" && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <FieldRow wide="sm:grid-cols-2">
           <Field label="Device">
             <DeviceSelect
               ariaLabel="Watched device"
@@ -237,7 +247,7 @@ export function WhenFields({
               ]}
             />
           </Field>
-        </div>
+        </FieldRow>
       )}
       {when.type === "schedule" && (
         // DESIGN.md §9.5: never ask for cron by default; cron stays the
@@ -327,6 +337,7 @@ export function ContactFields({
 }) {
   const arity = OPERATOR_ARITY[contact.operator] ?? "one";
   const boolMode = isBoolContact(contact, catalog);
+  const compact = useContext(CompactFields);
 
   function pickMetric(metric: string) {
     // A freshly picked on/off metric starts as "is ON" — the common case.
@@ -339,7 +350,7 @@ export function ContactFields({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-[1.4fr_1.4fr_1.2fr_1fr]">
+      <FieldRow wide="sm:grid-cols-2 lg:grid-cols-[1.4fr_1.4fr_1.2fr_1fr]">
         <Field label="Device">
           <DeviceSelect
             ariaLabel="Condition device"
@@ -358,7 +369,7 @@ export function ContactFields({
           />
         </Field>
         {boolMode ? (
-          <Field label="Is" className="lg:col-span-2">
+          <Field label="Is" className={compact ? undefined : "lg:col-span-2"}>
             <SegmentedControl
               ariaLabel="Contact state"
               variant="solid"
@@ -391,7 +402,7 @@ export function ContactFields({
             </Field>
           </>
         )}
-      </div>
+      </FieldRow>
 
       {!boolMode && arity === "one" && (
         <div className="flex flex-col gap-2">
@@ -406,7 +417,7 @@ export function ContactFields({
               : "Compare to another device instead"}
           </Button>
           {contact.rhsKind === "metric" && (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FieldRow wide="sm:grid-cols-2">
               <Field label="Other device">
                 <DeviceSelect
                   ariaLabel="Comparison device"
@@ -424,7 +435,7 @@ export function ContactFields({
                   onChange={(rhsMetric) => onChange({ rhsMetric })}
                 />
               </Field>
-            </div>
+            </FieldRow>
           )}
         </div>
       )}
@@ -527,7 +538,7 @@ function ActuatorFields({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <FieldRow wide="sm:grid-cols-2">
         <Field label="Device">
           <DeviceSelect
             ariaLabel="Actuator device"
@@ -545,7 +556,7 @@ function ActuatorFields({
             onChange={pickActuator}
           />
         </Field>
-      </div>
+      </FieldRow>
       {action.actuator.trim() !== "" && !selected && (
         <Field label="Value kind" hint="This actuator isn't in the device template — pick how its value is sent.">
           <Select
