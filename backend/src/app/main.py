@@ -13,6 +13,7 @@ from app.auth.router import router as auth_router
 from app.catalog.router import router as catalog_router
 from app.commands.router import router as commands_router
 from app.config import settings
+from app.contact.router import router as contact_router
 from app.dashboards.router import router as dashboards_router
 from app.devices.router import router as devices_router
 from app.ingestion.router import router as ingestion_router
@@ -51,6 +52,7 @@ app.include_router(dashboards_router)
 app.include_router(realtime_router)
 app.include_router(notifications_router)
 app.include_router(zones_router)
+app.include_router(contact_router)
 
 
 @app.get("/")
