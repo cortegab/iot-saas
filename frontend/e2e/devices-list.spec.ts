@@ -18,7 +18,15 @@ test("a device peeks from the list and is edited in its Settings tab", async ({ 
   await expect(page.getByText("Unsaved changes")).toBeVisible();
   await page.getByRole("button", { name: "Discard" }).click();
   await expect(name).toHaveValue(original);
-  await expect(page.getByText("All changes saved")).toBeVisible();
+  // The save bar only shows while there is something to save.
+  await expect(page.getByText("Unsaved changes")).toHaveCount(0);
+
+  // One settings page: stacked sections, one connect action, the danger zone last.
+  for (const heading of ["General", "Rule evaluation", "Template", "Connection", "MQTT topics", "Danger zone"]) {
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  }
+  await expect(page.getByRole("link", { name: "Connect and get firmware" })).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Delete device…" })).toBeVisible();
 });
 
 test("devices list: KPI filter, chips and a search that matches nothing", async ({ page }) => {

@@ -63,18 +63,32 @@ export function EditorSection({
   title,
   lead,
   actions,
+  card = false,
+  tone,
   children,
 }: {
   id: string;
   title: ReactNode;
   lead?: ReactNode;
   actions?: ReactNode;
+  /** A bordered card (stacked settings, e.g. a device's Settings tab). */
+  card?: boolean;
+  /** "danger": the red-outlined Danger zone, always last. */
+  tone?: "danger";
   children: ReactNode;
 }) {
   return (
-    <section id={`ps-${id}`} data-editor-section={id} className="flex scroll-mt-6 flex-col gap-3">
+    <section
+      id={`ps-${id}`}
+      data-editor-section={id}
+      className={cn(
+        "flex scroll-mt-6 flex-col gap-3",
+        card && "rounded-xl border border-border bg-surface p-5 shadow-card",
+        tone === "danger" && "border-status-error/45",
+      )}
+    >
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{title}</h3>
+        <h3 className={cn("text-[15px] font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{title}</h3>
         {actions}
       </div>
       {lead && <p className="-mt-1.5 max-w-[64ch] text-[13.5px] text-ink-muted">{lead}</p>}
@@ -230,9 +244,7 @@ export function EditorFrame({
   const showRail = mode === "page" && !headless && sections.length > 1;
   const showJump = !headless && sections.length > 1;
 
-  const head = headless ? (
-    consequence ? <p className="max-w-[70ch] pb-1 text-[14px] text-ink-muted">{consequence}</p> : null
-  ) : (
+  const head = headless ? null : (
     <div
       className={cn(
         "flex shrink-0 items-start gap-2.5 max-md:flex-col max-md:items-stretch",
@@ -365,8 +377,12 @@ export function EditorFrame({
       ref={bodyRef}
       className={cn(
         // @container: editor bodies lay out by their own width (dock vs page).
-        "@container flex flex-col gap-7",
-        mode === "page" ? "max-w-[980px] py-6 [grid-area:body] wb:pt-2" : "min-h-0 flex-1 overflow-auto px-5 pb-8 pt-5",
+        "@container flex flex-col",
+        headless
+          ? "max-w-[760px] gap-4 pb-4"
+          : mode === "page"
+            ? "max-w-[980px] gap-7 py-6 [grid-area:body] wb:pt-2"
+            : "min-h-0 flex-1 gap-7 overflow-auto px-5 pb-8 pt-5",
       )}
     >
       {readOnly && readOnlyNote !== false && (
@@ -379,11 +395,16 @@ export function EditorFrame({
     </div>
   );
 
-  const foot = !readOnly && (
+  // Inside a host page the bar only appears when there is something to save.
+  const showFoot = !readOnly && (!headless || status.dirty || status.saving || issues > 0);
+  const foot = showFoot && (
     <div
       className={cn(
         "flex shrink-0 flex-wrap items-center gap-2.5 border-t border-border",
-        mode === "page"
+        // Inside a host page (a Settings tab): a floating bar within the column.
+        headless
+          ? "sticky bottom-3 z-[6] max-w-[760px] rounded-xl border bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-[10px] motion-safe:animate-[toastin_.15s_ease-out]"
+          : mode === "page"
           ? "sticky bottom-0 z-[6] -mx-4 bg-surface/92 px-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-[10px] [grid-area:foot] md:-mx-10 md:px-10"
           : "bg-surface px-5 py-3",
       )}
