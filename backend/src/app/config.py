@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     # Public URL of the web app — the base of links sent by email (member
     # invitations, password resets).
     app_base_url: str = "http://localhost:3000"
+    # Where the public contact form (POST /public/contact) sends enquiries.
+    # Empty = the form still answers, and the enquiry is only logged.
+    contact_email_to: str = ""
     email_provider: Literal["console", "smtp"] = "console"
     email_from: str = "alerts@example.com"
     smtp_host: str = ""
