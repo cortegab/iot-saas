@@ -163,9 +163,10 @@ device's credential**, so reflash with the new sketch.
 
 What the generated sketch does:
 
-- **Wi-Fi over Bluetooth.** With no Wi-Fi stored, the board advertises a BLE provisioning service
-  and waits for an SSID and password (`docs/ble-provisioning.md`). Until the app exists, use
-  `tools/ble-provision-mock/provision.py`, or fill in the sketch's `DEV_WIFI_*` constants.
+- **Wi-Fi from a phone, or typed in.** With "Set up from a phone", the board uses Espressif's
+  provisioning: scan the QR on the connect page with the **ESP BLE Provisioning** app (Security 1
+  or 2; `docs/ble-provisioning.md`), or use `esp_prov.py` from a computer. With "Type it into the
+  sketch", the Wi-Fi is in the firmware and there's no BLE code at all.
 - **Publishes per the device template's profile.** An `on_change` metric (with a deadband and a
   heartbeat) sends a switch press within about 20 ms. The sketch also follows the platform's
   retained `config` topic, so changing the profile in the dashboard takes effect without a reflash.
