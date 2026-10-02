@@ -109,7 +109,7 @@ export default function EditRulePage() {
         <Callout tone="warning">
           <span className="flex flex-wrap items-center justify-between gap-3">
             <span>Latched — this rule fired and won&rsquo;t fire again until it&rsquo;s reset.</span>
-            {isAdmin && <ResetLatchButton ruleId={params.ruleId} />}
+            {isAdmin && <ResetLatchButton rule={rule} />}
           </span>
         </Callout>
       )}
