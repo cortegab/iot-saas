@@ -449,6 +449,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                           ? `Wi-Fi from a phone (Espressif provisioning, Security ${security}), advertised as "${name}". Needs the Huge APP partition.`
                           : "Wi-Fi in the firmware. Fits the default partition."}
                       </li>
+                      {phone && <li>To set a new Wi-Fi later: hold {boardInfo.resetButton} for 5 seconds.</li>}
                       <li>
                         MQTT over {tls ? "TLS on 8883" : "plain 1883"}, {metrics.length} metric{metrics.length === 1 ? "" : "s"}, {actuators.length} actuator
                         {actuators.length === 1 ? "" : "s"}
@@ -509,6 +510,11 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                       Tools → Partition Scheme → <b>Huge APP (3MB No OTA/1MB SPIFFS)</b>. BLE and Wi-Fi don&apos;t fit the default.
                     </li>
                   )}
+                  {phone && board === "esp32" && (
+                    <li>
+                      Wire a push button between <b>GPIO 19</b> and <b>GND</b> (optional). Holding it for 5 seconds clears the Wi-Fi so you can set a new one.
+                    </li>
+                  )}
                   <li>Open the sketch, add your sensor code, and select Upload.</li>
                   <li>
                     Open the Serial Monitor at <b>115200 baud</b>.
@@ -550,7 +556,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                   <li>The board joins and connects to the broker; the next step turns green.</li>
                 </ol>
                 <p className="mt-2 text-xs text-ink-muted">
-                  To give it a different network later, hold BOOT for 5 seconds while the board is running. Searching without the QR? Clear the app&apos;s
+                  To give it a different network later, hold {boardInfo.resetButton} for 5 seconds while the board is running. Searching without the QR? Clear the app&apos;s
                   &quot;PROV_&quot; name filter in its settings first.
                 </p>
               </div>

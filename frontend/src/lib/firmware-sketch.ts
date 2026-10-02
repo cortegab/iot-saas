@@ -32,24 +32,27 @@ const FW_VERSION = "1.0.0";
 
 export type SketchBoard = "esp32" | "esp32c3";
 
-/** What differs per board: the Arduino IDE settings, the BOOT button, the BLE
+/** What differs per board: the Arduino IDE settings, the provisioning-reset button, the BLE
  * memory handler WiFiProv frees after provisioning, and the GPIOs handed out —
  * inputs and outputs from separate pools so a generated sketch never wires two
  * things to one pin. No strapping, flash or USB pins. */
 export const BOARDS: Record<
   SketchBoard,
-  { label: string; arduinoBoard: string; ideSettings: string[]; bootPin: number; bleHandler: string; inputs: number[]; outputs: number[] }
+  { label: string; arduinoBoard: string; ideSettings: string[]; resetPin: number; resetButton: string; bleHandler: string; inputs: number[]; outputs: number[] }
 > = {
   esp32: {
     label: "ESP32 DevKit",
     arduinoBoard: "ESP32 Dev Module",
     ideSettings: [],
-    bootPin: 0,
+    // A button between GPIO 19 and GND: on the header of both the 30- and the
+    // 38-pin DevKit (GPIO 0, the BOOT button, isn't on the 30-pin header).
+    resetPin: 19,
+    resetButton: "the button on GPIO 19 (wired to GND)",
     bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BTDM",
-    // Broken out on both the 30- and 38-pin DevKits. Left out: strapping pins
-    // 0 (BOOT button), 2 (onboard LED), 5, 12, 15; UART0 1/3; flash 6–11; and
+    // Broken out on both the 30- and 38-pin DevKits. Left out: the reset button
+    // (19), strapping pins 0, 2 (onboard LED), 5, 12, 15; UART0 1/3; flash 6–11; and
     // input-only 34–39 (no pull-ups; keep them for analog sensors on ADC1).
-    inputs: [4, 13, 14, 16, 17, 18, 19],
+    inputs: [4, 13, 14, 16, 17, 18],
     // Quiet at boot, so relays don't click on power-up. 21/22 are the default
     // I2C pins (SDA/SCL), so they're handed out last.
     outputs: [23, 27, 26, 25, 33, 32, 21, 22],
@@ -58,7 +61,8 @@ export const BOARDS: Record<
     label: "ESP32-C3",
     arduinoBoard: "ESP32C3 Dev Module",
     ideSettings: ["USB CDC On Boot: Enabled", "Flash Mode: DIO"],
-    bootPin: 9,
+    resetPin: 9,
+    resetButton: "BOOT",
     bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BLE",
     // Strapping pins 2, 8, 9 and USB pins 18, 19 are left out; 20/21 (UART0)
     // are free with USB CDC on boot and go last.
@@ -277,7 +281,7 @@ ${
     ? `// Wi-Fi: set it from a phone. On first boot the board advertises as
 // "${bleName}"; scan the QR on the dashboard with the ESP BLE Provisioning app
 // (Security ${prov.security}). The Wi-Fi is kept in flash. To set a new one, hold
-// BOOT for 5 seconds while the board is running.`
+// ${board.resetButton} for 5 seconds while the board is running.`
     : `// Wi-Fi: typed into this sketch (bench test). It's readable from the binary.`
 }`;
 
@@ -355,7 +359,7 @@ ${prov.verifier ? cBytes(prov.verifier) : "  0x00 /* computed by the dashboard w
 static network_prov_security2_params_t SEC2_PARAMS = {SEC2_SALT, sizeof(SEC2_SALT), SEC2_VERIFIER, sizeof(SEC2_VERIFIER)};`
     : `// Security 1: the proof of possession is the device's password (MQTT_PASSWORD).`
 }
-const int BOOT_PIN = ${board.bootPin};
+const int RESET_PIN = ${board.resetPin};  // hold 5 s while running: provision again
 const unsigned long RESET_HOLD_MS = 5000;${c3Power}
 
 void onWifiEvent(arduino_event_t* e) {
@@ -391,17 +395,18 @@ void provisioningBegin() {
                           PROV_NAME, NULL, NULL, false);
 }
 
-// Hold BOOT for 5 seconds while running: forget the Wi-Fi and provision again.
+// Hold the reset button (RESET_PIN to GND) for 5 seconds while running: forget
+// the Wi-Fi and provision again.
 // (Holding it while powering up would start the bootloader instead.)
-unsigned long bootDownSince = 0;
+unsigned long resetDownSince = 0;
 void watchProvisioningReset() {
-  if (digitalRead(BOOT_PIN) != LOW) {
-    bootDownSince = 0;
+  if (digitalRead(RESET_PIN) != LOW) {
+    resetDownSince = 0;
     return;
   }
-  if (bootDownSince == 0) bootDownSince = millis();
-  if (millis() - bootDownSince >= RESET_HOLD_MS) {
-    Serial.println("[PROV] BOOT held: forgetting Wi-Fi and restarting");
+  if (resetDownSince == 0) resetDownSince = millis();
+  if (millis() - resetDownSince >= RESET_HOLD_MS) {
+    Serial.println("[PROV] reset button held: forgetting Wi-Fi and restarting");
     WiFi.disconnect(false, true);  // erase the stored network only
     delay(100);
     ESP.restart();
@@ -723,7 +728,7 @@ ${actuatorRows
 ${pinModes ? `${pinModes}\n` : ""}
 ${
   phone
-    ? `${isC3 ? '  esp_log_level_set("protocomm_nimble", ESP_LOG_NONE);\n' : ""}  pinMode(BOOT_PIN, INPUT_PULLUP);
+    ? `${isC3 ? '  esp_log_level_set("protocomm_nimble", ESP_LOG_NONE);\n' : ""}  pinMode(RESET_PIN, INPUT_PULLUP);
   provisioningBegin();
 `
     : `${isC3 ? "  WiFi.onEvent(onWifiEvent);\n" : ""}  connectWifi();

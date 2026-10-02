@@ -19,9 +19,13 @@ that speaks it works: today the **ESP BLE Provisioning** app (Android / iOS) and
   "Type it into the sketch" there is no BLE code at all.
 - On boot, `WiFiProv.beginProvision(...)` connects with the Wi-Fi stored in flash (NVS) or, if there
   is none, starts advertising for provisioning. `reset_provisioned` is `false`.
-- **Provision again:** hold **BOOT** for 5 seconds **while the board is running** (GPIO 0 on ESP32,
-  GPIO 9 on ESP32-C3). The sketch erases the stored network and restarts into provisioning. Holding
-  BOOT while powering up starts the bootloader instead.
+- **Provision again:** hold the reset button for 5 seconds **while the board is running**. The
+  sketch erases the stored network and restarts into provisioning.
+  - **ESP32:** a push button between **GPIO 19** and **GND** (`RESET_PIN`, internal pull-up). GPIO 19
+    is on the header of both the 30- and 38-pin DevKits; GPIO 0 (the BOOT button) isn't on the
+    30-pin header. GPIO 19 is never handed out to a sensor or relay.
+  - **ESP32-C3:** the on-board **BOOT** button (GPIO 9). Holding it while powering up starts the
+    bootloader instead, hence "while running".
 
 ## Identity and secrets
 
