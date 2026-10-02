@@ -1,77 +1,111 @@
 # BLE Wi-Fi provisioning — device contract
 
 How a board flashed with a dashboard-generated sketch (`frontend/src/lib/firmware-sketch.ts`)
-receives its Wi-Fi credentials over Bluetooth LE. Written for whoever builds the provisioning
-app. Like the MQTT contract in CLAUDE.md §4, this is shared with the single-tenant deployment
-variant: **treat the UUIDs and payloads as stable**. Changing them breaks every board already
-in the field.
+receives its Wi-Fi credentials from a phone. Like the MQTT contract in CLAUDE.md §4, this is
+shared with the single-tenant deployment variant: **apply every change here to both**, with
+already-flashed boards in mind.
+
+Provisioning is **Espressif's unified provisioning** (protocomm over BLE), driven on the board by
+the Arduino core's `WiFiProv` library (ESP32 board package 3.x, `NETWORK_PROV_*` API). Any client
+that speaks it works: today the **ESP BLE Provisioning** app (Android / iOS) and Espressif's
+`esp_prov.py`; the future iodriven app embeds Espressif's provisioning libraries.
+
+> Replaces the earlier custom GATT service (`6e1f0001-…` UUIDs). Boards flashed with that firmware
+> that are already on Wi-Fi keep working; to provision one again, flash a newly generated sketch.
 
 ## When a board is provisionable
 
-- On boot, the sketch reads Wi-Fi from flash (`Preferences` namespace `iot`, keys `ssid` / `pass`).
-- **Nothing stored** → it starts BLE provisioning and waits. MQTT is not started.
-- **Something stored** → it connects to that network and never starts BLE (even if the network
-  is down — it keeps retrying). To provision again, re-flash with *Erase All Flash Before Sketch
-  Upload* enabled.
-- Development shortcut: `DEV_WIFI_SSID` / `DEV_WIFI_PASSWORD` in the sketch, if non-empty, are
-  used and saved when nothing is stored, skipping BLE entirely.
+- The sketch is generated with **"Set up from a phone"** (connect flow, Options step). With
+  "Type it into the sketch" there is no BLE code at all.
+- On boot, `WiFiProv.beginProvision(...)` connects with the Wi-Fi stored in flash (NVS) or, if there
+  is none, starts advertising for provisioning. `reset_provisioned` is `false`.
+- **Provision again:** hold **BOOT** for 5 seconds **while the board is running** (GPIO 0 on ESP32,
+  GPIO 9 on ESP32-C3). The sketch erases the stored network and restarts into provisioning. Holding
+  BOOT while powering up starts the bootloader instead.
 
-## Advertising
+## Identity and secrets
 
-- Local name: the device's name in the dashboard, truncated to 20 bytes.
-- Advertised service UUID: `6e1f0001-7c3a-4b8e-9d2f-5a4b3c2d1e0f`. Filter scans on this.
+Provisioning reuses the device's **own MQTT credential**. No separate secret exists.
 
-## GATT service `6e1f0001-7c3a-4b8e-9d2f-5a4b3c2d1e0f`
+| | Value |
+|---|---|
+| Service name (BLE name, QR `name`, sketch `PROV_NAME`) | the device name in printable ASCII, accents dropped, ≤ 29 bytes (`provName()`) |
+| Proof of possession / SRP password (QR `pop`) | the device's MQTT password |
+| SRP username (QR `username`, Security 2 only) | the device's MQTT username, i.e. the device id |
 
-| Characteristic | UUID | Properties | Payload |
-|---|---|---|---|
-| ssid | `6e1f0002-7c3a-4b8e-9d2f-5a4b3c2d1e0f` | write | UTF-8, 1–32 bytes |
-| password | `6e1f0003-7c3a-4b8e-9d2f-5a4b3c2d1e0f` | write | UTF-8, 0–64 bytes (empty = open network) |
-| control | `6e1f0004-7c3a-4b8e-9d2f-5a4b3c2d1e0f` | write | one byte: `0x01` = apply |
-| status | `6e1f0005-7c3a-4b8e-9d2f-5a4b3c2d1e0f` | read, notify | JSON, see below |
-| info | `6e1f0006-7c3a-4b8e-9d2f-5a4b3c2d1e0f` | read | JSON `{"device_id","topic_prefix","fw_version"}` |
+- The credential is stored hashed on the platform and shown once, so the QR exists only in the
+  connect flow, right after Create / Rotate credential. **Rotating the credential means a new sketch
+  and a new QR**; the old QR stops working once the new sketch is flashed.
+- The QR, and any printed label, contains the device's broker password: keep it like a key.
+- A device renamed after flashing keeps advertising the name it was flashed with; the QR generated
+  with that sketch carries the same name.
 
-`info.device_id` is the platform device UUID (also the MQTT username), so the app can match the
-board it found to a device record via the API. `topic_prefix` is `{tenant}/{device}`.
+## Security levels
 
-**Security.** Every characteristic requires an **encrypted, bonded link** (LE Secure
-Connections, "Just Works" — the board has no display or keypad). Pair before reading or writing;
-an unpaired write fails with *insufficient authentication/encryption*. This keeps the Wi-Fi
-password off the air in the clear. It does not authenticate *which* phone is pairing — anyone in
-range can provision an unprovisioned board, which is acceptable only because a board is
-provisionable only until it has Wi-Fi. A passkey is a candidate upgrade once the app exists.
+Chosen in the connect flow's Options step.
+
+| | Security 1 – PoP | Security 2 – SRP6a (default) |
+|---|---|---|
+| Firmware | `NETWORK_PROV_SECURITY_1`, PoP = `MQTT_PASSWORD` | `NETWORK_PROV_SECURITY_2`, `network_prov_security2_params_t` with `SEC2_SALT[]` / `SEC2_VERIFIER[]` |
+| Handshake | Curve25519 + AES-CTR keyed with the PoP | SRP6a (3072-bit group, SHA-512): a captured session can't be used to guess the password offline |
+| App | every version | ESP BLE Provisioning 2.1 or later |
+
+- **Security 2 salt and verifier** are computed in the browser by `frontend/src/lib/srp6a.ts`, a port
+  matching ESP-IDF `components/protocomm/src/crypto/srp6a/esp_srp.c`:
+  `x = SHA-512(salt ‖ SHA-512(username ":" password))`, `v = g^x mod N`, 16-byte salt.
+- Its unit test reproduces ESP-IDF's own test vector (`test_srp.c`: `wifiprov` / `abcd1234`).
+- Arduino's `beginProvision` passes its `pop` argument to ESP-IDF as `const void*`, so the sketch
+  hands it `(const char*)&SEC2_PARAMS`.
+
+## QR payload
+
+JSON, as scanned by the ESP BLE Provisioning app (`provisioningPayload()`). `security` is always
+explicit, because the app assumes 2 when it's missing.
+
+```json
+// Security 1
+{"ver":"v1","name":"<device name>","pop":"<mqtt password>","transport":"ble","network":"wifi","security":1}
+
+// Security 2
+{"ver":"v1","name":"<device name>","username":"<device id>","pop":"<mqtt password>","transport":"ble","network":"wifi","security":2}
+```
+
+The app connects to the board with that exact name. To find a board **without** the QR, clear the
+app's default `PROV_` name-prefix filter in its settings.
+
+## Per-board firmware details
+
+| | ESP32 DevKit | ESP32-C3 |
+|---|---|---|
+| Arduino board | ESP32 Dev Module | ESP32C3 Dev Module (USB CDC On Boot: Enabled, Flash Mode: DIO) |
+| Scheme handler | `NETWORK_PROV_SCHEME_HANDLER_FREE_BTDM` | `NETWORK_PROV_SCHEME_HANDLER_FREE_BLE` |
+| Extras | — | TX power 8.5 dBm on `STA_START`; `protocomm_nimble` logs off |
+| Partition | Huge APP (3MB No OTA/1MB SPIFFS) | same |
+
+Both keep `extern "C" bool btInUse() { return true; }` so the BT controller's RAM stays reserved.
 
 ## Flow
 
 ```
-app                                   board
- |  scan for service 6e1f0001            |  advertising (no Wi-Fi stored)
- |  connect + pair (Just Works)          |
- |  read info  ------------------------> |  {"device_id":"…","topic_prefix":"…","fw_version":"1.0.0"}
- |  subscribe status (notify)            |
- |  write ssid, write password           |
- |  write control = 0x01  -------------> |
- |  <---------------------- status       |  {"state":"connecting","reason":""}
- |                                       |  tries Wi-Fi for up to 20 s
- |  <---------------------- status       |  {"state":"connected","reason":""} → saved, reboots in ~1 s
- |                                  or   |  {"state":"failed","reason":"wifi_connect_failed"} → still advertising, retry
+app                                         board
+ |  scan QR (name, pop[, username], security) |  advertising as <device name> (no Wi-Fi stored)
+ |  connect over BLE, open a secure session  |  Security 1: PoP · Security 2: SRP6a
+ |  send SSID + passphrase  ---------------> |  [PROV] Wi-Fi received from the app
+ |  <--------------------- result            |  joins → [PROV] Wi-Fi saved → [WIFI] connected
+ |                                           |  → MQTT: retained status, live check turns green
 ```
-
-`status.state` values: `idle`, `connecting`, `connected`, `failed`. `reason` on failure:
-`invalid_ssid`, `invalid_password`, `missing_ssid`, `wifi_connect_failed`.
-
-After `connected` the board reboots, joins Wi-Fi, and connects to the broker. The dashboard
-shows it online once its retained `status` message arrives (CLAUDE.md §4).
 
 ## Testing without the app
 
-`tools/ble-provision-mock/provision.py` plays the app's role from a computer with Bluetooth:
+Espressif's `esp_prov.py` (package `esp-idf-provisioning`, or ESP-IDF's tools) plays the app's role
+from a computer with Bluetooth:
 
 ```bash
-uv run --with bleak tools/ble-provision-mock/provision.py --ssid "MyWifi" --password "secret"
-# optional: --name "ESP32-O1" to pick a board when several are advertising
-```
+# Security 2
+esp_prov.py --transport ble --service_name "<device name>" --sec_ver 2 \
+  --sec2_username <device id> --sec2_pwd <mqtt password> --ssid "MyWifi" --passphrase "secret"
 
-It scans for the service, pairs, prints `info`, writes the credentials, and streams `status`
-notifications until `connected` or `failed`. Windows is the easiest host (WinRT handles Just
-Works pairing on its own); on Linux, BlueZ may ask you to confirm pairing first.
+# Security 1
+esp_prov.py --transport ble --service_name "<device name>" --sec_ver 1 \
+  --pop <mqtt password> --ssid "MyWifi" --passphrase "secret"
+```
