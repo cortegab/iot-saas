@@ -27,7 +27,7 @@ import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { LadderOverview } from "@/components/rules/ladder/LadderOverview";
 import { RulePeek } from "@/components/rules/RulePeek";
-import { SplitView } from "@/components/editor/SplitView";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { usePeek } from "@/components/list/usePeek";
 import { RulesTabs } from "@/components/rules/RulesTabs";
 import { ApiRequestError } from "@/lib/api-client";
@@ -323,18 +323,17 @@ export default function RulesPage() {
           ) : list.filters.view === "ladder" ? (
             <LadderOverview rules={filtered} />
           ) : (
-            <SplitView
-              editorLabel="Rule"
+            <ListWithPeek
+              label="Rule"
               onClose={peek.close}
-              editor={
+              nav={peek.nav}
+              peek={
                 peek.peekId
-                  ? (mode) => (
+                  ? (
                       <RulePeek
-                        key={peek.peekId}
                         rule={rules.find((r) => r.id === peek.peekId)}
                         activity={activityByRule.get(peek.peekId!)}
                         shares={shared.get(peek.peekId!)}
-                        mode={mode}
                         onClose={peek.close}
                         onToggle={(r) => void setEnabled(r, !r.enabled)}
                         onDelete={(r) => void remove(r).then((gone) => gone && peek.close())}
@@ -346,8 +345,7 @@ export default function RulesPage() {
             <div className="flex flex-col gap-2">
               <DataTable
                 label="Rules"
-                // The peek repeats When/Then; dropping them keeps the state readable beside it.
-                columns={peek.peekId ? columns.filter((c) => c.id !== "trigger" && c.id !== "action") : columns}
+                columns={columns}
                 rows={pageRows}
                 rowKey={(r) => r.id}
                 sort={list.sort}
@@ -370,7 +368,7 @@ export default function RulesPage() {
                 onPageSize={list.setPageSize}
               />
             </div>
-            </SplitView>
+            </ListWithPeek>
           )}
         </>
       )}

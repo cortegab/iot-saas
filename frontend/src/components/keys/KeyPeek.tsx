@@ -6,17 +6,17 @@ import { Badge } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder, type PeekMode } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekPlaceholder } from "@/components/editor/PeekFrame";
 import { KEY_STATUS_LABEL, KEY_STATUS_TONE, keyStatus, type ApiKey } from "@/lib/api-key-status";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, timeAgo } from "@/lib/time-ago";
 import { useRevokeKey } from "./useRevokeKey";
 
 /** An API key at a glance; its page is /keys/{id}. */
-export function KeyPeek({ apiKey, mode, onClose }: { apiKey: ApiKey | undefined; mode: PeekMode; onClose: () => void }) {
+export function KeyPeek({ apiKey, onClose }: { apiKey: ApiKey | undefined; onClose: () => void }) {
   const toast = useToast();
   const { revoke, dialog } = useRevokeKey();
-  if (!apiKey) return <PeekPlaceholder mode={mode} noun="key" missing onClose={onClose} />;
+  if (!apiKey) return <PeekPlaceholder noun="key" missing onClose={onClose} />;
 
   const st = keyStatus(apiKey);
   const role = toRole(apiKey.role);
@@ -36,7 +36,6 @@ export function KeyPeek({ apiKey, mode, onClose }: { apiKey: ApiKey | undefined;
   return (
     <>
       <PeekFrame
-        mode={mode}
         noun="key"
         title={apiKey.name}
         eyebrow={

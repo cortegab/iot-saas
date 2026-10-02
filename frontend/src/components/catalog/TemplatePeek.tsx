@@ -9,7 +9,7 @@ import { Badge, Tag } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder, PeekSection, type PeekMode } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekPlaceholder, PeekSection } from "@/components/editor/PeekFrame";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 
@@ -51,13 +51,11 @@ function KeyList({ items, usage }: { items: { key: string; label: string; unit?:
  * depends on each key. It's edited on /templates/{id}. */
 export function TemplatePeek({
   entry,
-  mode,
   onClose,
   onToggle,
   onDelete,
 }: {
   entry: CatalogEntryResponse | undefined;
-  mode: PeekMode;
   onClose: () => void;
   onToggle: (e: CatalogEntryResponse) => void;
   onDelete: (e: CatalogEntryResponse) => void;
@@ -67,7 +65,7 @@ export function TemplatePeek({
   const { can } = usePermissions();
   const canWrite = can("templates.write");
   const { data: usage } = useApiSWR<CatalogUsageResponse>(entry ? `/catalog/${entry.id}/usage` : null);
-  if (!entry) return <PeekPlaceholder mode={mode} noun="template" missing onClose={onClose} />;
+  if (!entry) return <PeekPlaceholder noun="template" missing onClose={onClose} />;
 
   const menu: DropdownMenuItem[][] = [
     [
@@ -97,7 +95,6 @@ export function TemplatePeek({
 
   return (
     <PeekFrame
-      mode={mode}
       noun="template"
       title={entry.name}
       eyebrow={

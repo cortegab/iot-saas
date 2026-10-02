@@ -6,7 +6,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
-import { PeekFrame, PeekPlaceholder, type PeekMode } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekPlaceholder } from "@/components/editor/PeekFrame";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, timeAgo } from "@/lib/time-ago";
 import { ROLE_HELP } from "./MemberEditor";
@@ -26,13 +26,11 @@ export function MemberPeek({
   member,
   invite,
   isMe,
-  mode,
   onClose,
 }: {
   member?: MemberResponse;
   invite?: InvitationResponse;
   isMe: boolean;
-  mode: PeekMode;
   onClose: () => void;
 }) {
   const { role: myRole, can } = usePermissions();
@@ -43,7 +41,6 @@ export function MemberPeek({
     return (
       <>
         <PeekFrame
-          mode={mode}
           noun="invite"
           title={invite.email}
           eyebrow={
@@ -71,7 +68,7 @@ export function MemberPeek({
       </>
     );
   }
-  if (!member) return <PeekPlaceholder mode={mode} noun="member" missing onClose={onClose} />;
+  if (!member) return <PeekPlaceholder noun="member" missing onClose={onClose} />;
 
   const role = toRole(member.role);
   const ownerLocked = member.role === "owner" && myRole !== "owner";
@@ -81,7 +78,6 @@ export function MemberPeek({
   return (
     <>
       <PeekFrame
-        mode={mode}
         noun="member"
         title={member.name || member.email}
         eyebrow={<>Member{isMe && <span>· you</span>}</>}

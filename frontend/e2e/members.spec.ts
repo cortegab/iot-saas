@@ -29,14 +29,16 @@ test("members: invite someone, resend the invite, then cancel it", async ({ page
   const row = table.getByRole("row").filter({ hasText: email });
   await expect(row.getByText("Invited")).toBeVisible();
 
-  await row.getByRole("button", { name: `Actions for ${email}` }).click();
-  await page.getByRole("menuitem", { name: "Resend invite" }).click();
+  // The invite's peek (a drawer over the list) has its actions.
+  const peek = page.getByRole("region", { name: `${email} details` });
+  await peek.getByRole("button", { name: "Resend invite" }).click();
   await expect(page.getByText("Invite resent", { exact: true })).toBeVisible();
 
-  await row.getByRole("button", { name: `Actions for ${email}` }).click();
+  await peek.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("menuitem", { name: "Cancel invite…" }).click();
   await page.getByRole("button", { name: "Cancel invite" }).click();
   await expect(page.getByText("Invite cancelled", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Member" })).toHaveCount(0);
   await expect(table.getByText(email)).toHaveCount(0);
 });
 

@@ -25,7 +25,7 @@ import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { DevicePeek } from "@/components/devices/DevicePeek";
 import { usePeek } from "@/components/list/usePeek";
-import { SplitView } from "@/components/editor/SplitView";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { DEVICE_STATUS, deviceStatusKey, type DeviceStatusKey } from "@/lib/device-status";
 import { ageMinutes, timeAgo } from "@/lib/time-ago";
@@ -323,28 +323,27 @@ export default function DevicesPage() {
           readOnlyNote="Ask an admin to add the first device."
         />
       ) : (
-        <SplitView
-          editorLabel="Device"
+        <ListWithPeek
+          label="Device"
           onClose={peek.close}
-          editor={
+          nav={peek.nav}
+          peek={
             peek.peekId
-              ? (mode) => {
+              ? (() => {
                   const d = devices.find((x) => x.id === peek.peekId);
                   return (
                     <DevicePeek
-                      key={peek.peekId}
                       device={d}
                       template={d ? templates?.find((t) => t.id === d.catalog_entry_id) : undefined}
                       zoneName={d?.zone_id ? zoneName.get(d.zone_id) : undefined}
                       ruleCount={d ? (rulesPerDevice.get(d.id) ?? 0) : 0}
-                      mode={mode}
                       onClose={peek.close}
                       onRotate={(x) => void rotate(x)}
                       onToggle={(x) => void setEnabled([x], x.status !== "active")}
                       onDelete={(x) => void remove([x]).then((gone) => gone && peek.close())}
                     />
                   );
-                }
+                })()
               : null
           }
         >
@@ -440,7 +439,7 @@ export default function DevicesPage() {
               />
             </div>
           )}
-        </SplitView>
+        </ListWithPeek>
       )}
       {dialog}
     </>

@@ -22,7 +22,7 @@ import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { TemplatePeek } from "@/components/catalog/TemplatePeek";
 import { usePeek } from "@/components/list/usePeek";
-import { SplitView } from "@/components/editor/SplitView";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
@@ -225,16 +225,15 @@ export default function DeviceTemplatesPage() {
           readOnlyNote="Ask an admin to create one."
         />
       ) : (
-        <SplitView
-          editorLabel="Device template"
+        <ListWithPeek
+          label="Device template"
           onClose={peek.close}
-          editor={
+          nav={peek.nav}
+          peek={
             peek.peekId
-              ? (mode) => (
+              ? (
                   <TemplatePeek
-                    key={peek.peekId}
                     entry={entries.find((e) => e.id === peek.peekId)}
-                    mode={mode}
                     onClose={peek.close}
                     onToggle={(e) => void setEnabled(e, e.status !== "active")}
                     onDelete={(e) => void remove(e).then((gone) => gone && peek.close())}
@@ -289,7 +288,7 @@ export default function DeviceTemplatesPage() {
               />
             </div>
           )}
-        </SplitView>
+        </ListWithPeek>
       )}
       {dialog}
     </>

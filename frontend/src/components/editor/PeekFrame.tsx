@@ -1,23 +1,20 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { useContext, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { IconButton } from "@/components/ui/Button";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
-import { cn } from "@/lib/cn";
-
-export type PeekMode = "dock" | "drawer";
+import { PeekNavContext } from "@/components/list/peek-nav";
 
 /**
- * A record's read-only peek beside its list (DESIGN.md §7): looking happens
- * here, changing happens on the record's page. Eyebrow + title, a line of
- * description, key facts, the one or two next steps (Edit / Open), a ⋯ menu
- * and a close button. No fields and no save bar. Docked at ≥ 1100 px, a
- * drawer below (SplitView).
+ * A record's read-only peek (DESIGN.md §7), shown in a drawer over its list
+ * (ListWithPeek): looking happens here, changing happens on the record's
+ * page. Eyebrow + title, a line of description, key facts, the one or two
+ * next steps (Edit / Open), ‹ › to the neighbouring rows with "n of N", a ⋯
+ * menu and close. No fields and no save bar.
  */
 export function PeekFrame({
-  mode,
   noun,
   title,
   eyebrow,
@@ -28,7 +25,6 @@ export function PeekFrame({
   onClose,
   children,
 }: {
-  mode: PeekMode;
   /** Record kind in words ("zone", "device template"). */
   noun: string;
   title: string;
@@ -42,35 +38,11 @@ export function PeekFrame({
   onClose: () => void;
   children?: ReactNode;
 }) {
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  // Esc closes a docked peek while focus is inside it (the Sheet handles the drawer).
-  useEffect(() => {
-    if (mode !== "dock") return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape" || !rootRef.current?.contains(document.activeElement)) return;
-      if (document.querySelector('[role="alertdialog"], [role="menu"], [role="dialog"][aria-modal="true"]')) return;
-      e.preventDefault();
-      onClose();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [mode, onClose]);
-
+  const nav = useContext(PeekNavContext);
   const shown = (facts ?? []).filter(([, v]) => v != null && v !== false && v !== "");
 
   return (
-    <div
-      ref={rootRef}
-      role={mode === "dock" ? "region" : undefined}
-      aria-label={mode === "dock" ? `${title} details` : undefined}
-      className={cn(
-        "flex min-w-0 flex-col bg-surface",
-        mode === "dock"
-          ? "sticky top-4 max-h-[calc(100vh-32px)] overflow-hidden rounded-2xl border border-border shadow-pop motion-safe:animate-[panein_.18s_ease-out]"
-          : "h-full",
-      )}
-    >
+    <div role="region" aria-label={`${title} details`} className="flex h-full min-h-0 min-w-0 flex-col bg-surface">
       <div className="flex shrink-0 items-start gap-2.5 border-b border-border px-5 pb-4 pt-4">
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
           {eyebrow && <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">{eyebrow}</div>}
@@ -78,7 +50,20 @@ export function PeekFrame({
           {description && <p className="mt-0.5 text-[13px] text-ink-muted">{description}</p>}
           {primary && <div className="mt-3 flex flex-wrap items-center gap-2">{primary}</div>}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5">
+          {nav && nav.index >= 0 && nav.total > 1 && (
+            <div className="mr-1 flex items-center">
+              <IconButton aria-label={`Previous ${noun}`} disabled={!nav.prev} onClick={() => nav.prev?.()}>
+                <ChevronLeft size={17} />
+              </IconButton>
+              <span aria-live="polite" className="min-w-[44px] text-center text-[12.5px] tabular-nums text-ink-muted">
+                {nav.index + 1} of {nav.total}
+              </span>
+              <IconButton aria-label={`Next ${noun}`} disabled={!nav.next} onClick={() => nav.next?.()}>
+                <ChevronRight size={17} />
+              </IconButton>
+            </div>
+          )}
           {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
           <IconButton aria-label={`Close ${noun}`} onClick={onClose}>
             <X size={18} />
@@ -113,9 +98,9 @@ export function PeekSection({ title, children }: { title: string; children: Reac
 }
 
 /** While the record loads, or when it no longer exists. */
-export function PeekPlaceholder({ mode, noun, missing, onClose }: { mode: PeekMode; noun: string; missing?: boolean; onClose: () => void }) {
+export function PeekPlaceholder({ noun, missing, onClose }: { noun: string; missing?: boolean; onClose: () => void }) {
   return (
-    <PeekFrame mode={mode} noun={noun} title={missing ? `This ${noun} doesn't exist` : "Loading…"} onClose={onClose} description={missing ? "It may have been deleted." : undefined}>
+    <PeekFrame noun={noun} title={missing ? `This ${noun} doesn't exist` : "Loading…"} onClose={onClose} description={missing ? "It may have been deleted." : undefined}>
       {!missing && <LoadingSkeleton rows={3} rowClassName="h-6" />}
     </PeekFrame>
   );

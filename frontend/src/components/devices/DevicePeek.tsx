@@ -10,7 +10,7 @@ import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder, PeekSection, type PeekMode } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekPlaceholder, PeekSection } from "@/components/editor/PeekFrame";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 
@@ -27,7 +27,6 @@ export function DevicePeek({
   template,
   zoneName,
   ruleCount,
-  mode,
   onClose,
   onRotate,
   onToggle,
@@ -37,7 +36,6 @@ export function DevicePeek({
   template: CatalogEntryResponse | undefined;
   zoneName: string | undefined;
   ruleCount: number;
-  mode: PeekMode;
   onClose: () => void;
   onRotate: (d: DeviceResponse) => void;
   onToggle: (d: DeviceResponse) => void;
@@ -48,7 +46,7 @@ export function DevicePeek({
   const { can } = usePermissions();
   const canWrite = can("devices.write");
   const { data: latest } = useApiSWR<TelemetryLatestResponse[]>(device ? `/devices/${device.id}/latest` : null);
-  if (!device) return <PeekPlaceholder mode={mode} noun="device" missing onClose={onClose} />;
+  if (!device) return <PeekPlaceholder noun="device" missing onClose={onClose} />;
 
   const metricMeta = new Map((template?.metrics ?? []).map((m) => [m.key ?? m.name, m]));
   const stale = device.connection_state !== "online";
@@ -74,7 +72,6 @@ export function DevicePeek({
 
   return (
     <PeekFrame
-      mode={mode}
       noun="device"
       title={device.name}
       eyebrow={
