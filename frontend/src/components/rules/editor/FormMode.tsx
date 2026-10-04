@@ -3,6 +3,7 @@
 import { Fragment } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { SwitchField } from "@/components/ui/Switch";
 import { Callout } from "@/components/ui/Callout";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -176,7 +177,7 @@ function ConditionSection({ draft, catalog, update }: { draft: RuleDraft; catalo
 
   if (root === null) {
     return (
-      <SectionCard title={title}>
+      <SectionCard id="if" title={title} step={2}>
         <p className="text-sm text-ink-muted">
           {reading ? "Add the condition to check on each reading." : "No condition — it always runs when triggered."}
         </p>
@@ -194,7 +195,7 @@ function ConditionSection({ draft, catalog, update }: { draft: RuleDraft; catalo
 
   if (root.kind === "contact") {
     return (
-      <SectionCard title={title}>
+      <SectionCard id="if" title={title} step={2}>
         <ConditionNodeEditor node={root} draft={draft} catalog={catalog} update={update} depth={0} />
         <div className="flex flex-wrap gap-1.5">
           {(["AND", "OR"] as const).map((op) => (
@@ -215,7 +216,7 @@ function ConditionSection({ draft, catalog, update }: { draft: RuleDraft; catalo
   }
 
   return (
-    <SectionCard title={title}>
+    <SectionCard id="if" title={title} step={2}>
       <ConditionNodeEditor node={root} draft={draft} catalog={catalog} update={update} depth={0} />
     </SectionCard>
   );
@@ -227,8 +228,9 @@ function ThenSection({ draft, catalog, update }: { draft: RuleDraft; catalog: Ru
 
   return (
     <SectionCard
+      id="then"
       title="Then"
-      step={2}
+      step={3}
       aside={draft.actions.length > 1 && <span className="text-xs text-ink-muted">All run together</span>}
     >
       {draft.actions.map((action, i) => {
@@ -272,7 +274,7 @@ function ThenSection({ draft, catalog, update }: { draft: RuleDraft; catalog: Ru
 
 export function BehaviourSection({ draft, update }: { draft: RuleDraft; update: Update }) {
   return (
-    <SectionCard title={isReadingRule(draft) ? "Safety and behaviour" : "Repeat protection"} step={3}>
+    <SectionCard id="behaviour" title={isReadingRule(draft) ? "Behaviour" : "Repeat protection"} step={4}>
       <BehaviourFields draft={draft} update={update} />
     </SectionCard>
   );
@@ -342,15 +344,14 @@ function ClearFields({ draft, update }: { draft: RuleDraft; update: Update }) {
         Actuators set to “turn it back” above run once per firing. If a reading goes stale nothing is
         sent — the last state holds.
       </p>
-      <label className="flex items-center gap-2 text-sm text-ink">
-        <input
-          type="checkbox"
-          className="accent-accent"
-          checked={draft.clearNotify}
-          onChange={(e) => update({ ...draft, clearNotify: e.target.checked })}
-        />
-        Send a notification when it clears
-      </label>
+      <SwitchField
+        label="Send a notification when it clears"
+        checked={draft.clearNotify}
+        onChange={(clearNotify) => update({ ...draft, clearNotify })}
+        onLabel="On"
+        offLabel="Off"
+        onHint="Posts the message below to Notifications."
+      />
       {draft.clearNotify && (
         <Field label="Clear message">
           <Input
@@ -390,7 +391,7 @@ function ClearFields({ draft, update }: { draft: RuleDraft; update: Update }) {
 export function FormMode({ draft, catalog, update }: { draft: RuleDraft; catalog: RuleCatalog; update: Update }) {
   return (
     <>
-      <SectionCard title="When" step={1}>
+      <SectionCard id="when" title="When" step={1}>
         <WhenFields when={draft.when} catalog={catalog} onChange={(when) => update({ ...draft, when })} />
       </SectionCard>
       <ConditionSection draft={draft} catalog={catalog} update={update} />

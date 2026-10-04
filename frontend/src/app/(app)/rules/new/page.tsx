@@ -49,9 +49,10 @@ export default function NewRulePage() {
     );
   }, [device, catalog, timezone]);
 
+  // A new rule opens on its own page, where it can be checked and refined (DESIGN.md §7).
   function onSaved(saved: RuleResponse) {
     upsertRuleInCache(saved);
-    router.push(back);
+    router.replace(`/rules/${saved.id}`);
   }
 
   return (

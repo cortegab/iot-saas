@@ -11,7 +11,10 @@ test("a clear notification is configured in the form, summarised, and persisted"
   // The fixture's only action is a notification — there's no actuator to turn back.
   await expect(page.getByLabel("Turn it back when the condition clears")).toHaveCount(0);
 
-  await page.getByLabel("Send a notification when it clears").check();
+  // An on/off setting is a Switch (DESIGN.md §5), not a checkbox.
+  const notify = page.getByRole("switch", { name: "Send a notification when it clears" });
+  await notify.click();
+  await expect(notify).toBeChecked();
   await page.getByLabel("Clear message").fill("E2E fixture cleared");
   await page.getByLabel("Clear delay (s)").fill("5");
 
@@ -20,10 +23,12 @@ test("a clear notification is configured in the form, summarised, and persisted"
   await page.getByRole("button", { name: "Save changes" }).click();
   // The rule is live: confirm.
   await page.getByRole("alertdialog").getByRole("button", { name: "Save changes" }).click();
-  await expect(page).toHaveURL("/rules");
+  // The editor stays on the rule after saving (DESIGN.md §7).
+  await expect(page.getByText("All changes saved")).toBeVisible();
+  await expect(page).toHaveURL(`/rules/${ruleUnderTest.id}`);
 
-  await page.goto(`/rules/${ruleUnderTest.id}`);
-  await expect(page.getByLabel("Send a notification when it clears")).toBeChecked();
+  await page.reload();
+  await expect(page.getByRole("switch", { name: "Send a notification when it clears" })).toBeChecked();
   await expect(page.getByLabel("Clear message")).toHaveValue("E2E fixture cleared");
   await expect(page.getByLabel("Clear delay (s)")).toHaveValue("5");
 });

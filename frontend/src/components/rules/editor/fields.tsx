@@ -15,6 +15,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { Button } from "@/components/ui/Button";
+import { SwitchField } from "@/components/ui/Switch";
 import { cn } from "@/lib/cn";
 import {
   ACTION_LABELS,
@@ -59,11 +60,14 @@ export function FieldRow({ wide, children }: { wide: string; children: ReactNode
 }
 
 export function SectionCard({
+  id,
   title,
   aside,
   step,
   children,
 }: {
+  /** The rail section it belongs to: the anchor the rail scrolls to. */
+  id?: string;
   title: string;
   aside?: ReactNode;
   /** Shown only while creating (StepsContext). */
@@ -72,6 +76,7 @@ export function SectionCard({
 }) {
   const numbered = useContext(StepsContext) && step != null;
   return (
+    <div id={id ? `rule-sec-${id}` : undefined} data-rule-section={id} className="scroll-mt-4">
     <Card padding="md">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
@@ -89,6 +94,7 @@ export function SectionCard({
         {children}
       </div>
     </Card>
+    </div>
   );
 }
 
@@ -591,15 +597,15 @@ function ActuatorFields({
 
       {clearing && (
         <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
-          <label className="flex items-center gap-2 text-sm text-ink">
-            <input
-              type="checkbox"
-              className="accent-accent"
-              checked={action.revertOnClear}
-              onChange={(e) => patch({ revertOnClear: e.target.checked })}
-            />
-            Turn it back when the condition clears
-          </label>
+          <SwitchField
+            label="Turn it back when the condition clears"
+            checked={action.revertOnClear}
+            onChange={(revertOnClear) => patch({ revertOnClear })}
+            onLabel="On"
+            offLabel="Off"
+            onHint="Runs once when the condition is known to be false again."
+            offHint="It stays as the rule left it."
+          />
           {action.revertOnClear && (
             <Field
               label="Back to"

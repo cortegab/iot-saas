@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { recipesFor } from "./rule-recipes";
-import { ruleChecks, wouldSend } from "./rule-preview";
+import { ruleChecks, sectionIssues, wouldSend } from "./rule-preview";
 
 const device = {
   id: "dev-1",
@@ -42,5 +42,39 @@ describe("wouldSend", () => {
       { kind: "command", target: "acme/bay1-climate/cmd/fan1", payload: '{"value":true,"ttl":30}' },
       { kind: "clear", target: "acme/bay1-climate/cmd/fan1", payload: '{"value":false,"ttl":30}' },
     ]);
+  });
+});
+
+describe("sectionIssues", () => {
+  it("a safe hardware rule has none", () => {
+    expect(sectionIssues(hot())).toEqual([]);
+  });
+
+  it("places each problem in the section that fixes it; only completeness blocks a save", () => {
+    const d = hot();
+    d.forDuration = 0;
+    d.cooldown = 5;
+    if (d.condition?.kind === "contact") d.condition.hysteresis = 0;
+    d.actions = [];
+    d.name = "x".repeat(201);
+    const issues = sectionIssues(d);
+    expect(issues.map((i) => [i.section, i.blocking])).toEqual([
+      ["then", true],
+      ["behaviour", false],
+      ["behaviour", false],
+      ["name", true],
+    ]);
+  });
+
+  it("warns about missing hysteresis on a rule that switches hardware, under If", () => {
+    const d = hot();
+    if (d.condition?.kind === "contact") d.condition.hysteresis = 0;
+    expect(sectionIssues(d)).toEqual([{ section: "if", blocking: false, message: expect.stringContaining("hysteresis") }]);
+  });
+
+  it("blocks a reading rule with no condition", () => {
+    const d = hot();
+    d.condition = null;
+    expect(sectionIssues(d).filter((i) => i.blocking).map((i) => i.section)).toEqual(["if"]);
   });
 });

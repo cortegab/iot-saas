@@ -29,6 +29,8 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   await page.goto("/rules/new");
   await page.getByRole("button", { name: /Start blank/ }).click();
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
+  // In Ladder the rule's name is edited in the inspector, picked from the rail.
+  await page.getByRole("navigation", { name: "Rule sections" }).getByRole("button", { name: /^Name/ }).click();
   await page.getByLabel("Rule name").fill(name);
 
   // A — the starting contact.
@@ -61,7 +63,8 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   await expect(page.getByText(/ and \(.+ or .+\) and /)).toBeVisible();
 
   await page.getByRole("button", { name: "Create rule" }).click();
-  await expect(page).toHaveURL("/rules");
+  // A new rule opens on its own page.
+  await expect(page).toHaveURL(/\/rules\/[0-9a-f-]{36}$/);
 
   const rules = (await (await request.get(`${API_URL}/rules`, { headers })).json()) as {
     id: string;

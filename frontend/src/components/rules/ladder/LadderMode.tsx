@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import type { ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -233,54 +233,97 @@ const LEGEND: { glyph: string; text: string }[] = [
   { glyph: "(S)", text: "latched until reset" },
 ];
 
-/** Ladder view (DESIGN.md §9, demo G): the rung on the left and the
- * selected element's properties in an inspector on the right. */
-export function LadderMode({ draft, catalog, update }: { draft: RuleDraft; catalog: RuleCatalog; update: Update }) {
-  const [selection, setSelection] = useState<LadderSelection>(null);
+/** What the rule editor has selected: a rung element, or the rule itself
+ * (name and status, which has no element on the rung). */
+export type EditorSelection = LadderSelection | { kind: "name" };
 
-  // A selection whose target was just removed (e.g. via undoing in form mode)
-  // falls back to "nothing selected" instead of an empty inspector.
-  const live =
-    selection?.kind === "node"
-      ? findNode(draft.condition, selection.id)
-        ? selection
-        : null
-      : selection?.kind === "action"
-        ? draft.actions.some((a) => a.id === selection.id)
-          ? selection
-          : null
-        : selection;
+/** A selection whose target was just removed (e.g. deleted in Form) falls
+ * back to "nothing selected" instead of an empty inspector. */
+export function liveSelection(draft: RuleDraft, selection: EditorSelection): EditorSelection {
+  if (selection?.kind === "node") return findNode(draft.condition, selection.id) ? selection : null;
+  if (selection?.kind === "action") return draft.actions.some((a) => a.id === selection.id) ? selection : null;
+  return selection;
+}
 
+/** The rung, its hint and legend (DESIGN.md §9.2) — the Ladder canvas. */
+export function LadderCanvas({
+  draft,
+  catalog,
+  update,
+  selection,
+  onSelect,
+}: {
+  draft: RuleDraft;
+  catalog: RuleCatalog;
+  update: Update;
+  selection: EditorSelection;
+  onSelect: (s: EditorSelection) => void;
+}) {
   function addSeriesAtEnd() {
     const fresh = emptyContact(lastDevice(draft));
     const root = draft.condition;
     update({ ...draft, condition: root === null ? fresh : insertBeside(root, root.id, fresh, "AND") });
-    setSelection({ kind: "node", id: fresh.id });
+    onSelect({ kind: "node", id: fresh.id });
   }
-
   return (
-    <div className="grid items-start gap-x-4 gap-y-3 lg:grid-cols-[minmax(0,1fr)_310px]">
-      <div className="flex min-w-0 flex-col gap-2">
-        <div className="overflow-x-auto rounded-xl border border-border bg-surface bg-[radial-gradient(var(--color-border)_1px,transparent_1px)] p-4 shadow-card [background-size:14px_14px]">
-          <LadderRung draft={draft} catalog={catalog} selection={live} onSelect={setSelection} onAddSeriesAtEnd={addSeriesAtEnd} ariaLabel="Rule rung editor" />
-        </div>
-        <p className="text-[13px] text-ink-muted">
-          Series contacts must all be true; parallel branches need any one. Select an element to edit it. The ladder and the form edit the same rule.
-        </p>
-        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
-          {LEGEND.map((l) => (
-            <li key={l.glyph}>
-              <span className="font-mono text-ink">{l.glyph}</span> {l.text}
-            </li>
-          ))}
-        </ul>
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="overflow-x-auto rounded-xl border border-border bg-surface bg-[radial-gradient(var(--color-border)_1px,transparent_1px)] p-4 shadow-card [background-size:14px_14px]">
+        <LadderRung
+          draft={draft}
+          catalog={catalog}
+          selection={selection?.kind === "name" ? null : selection}
+          onSelect={onSelect}
+          onAddSeriesAtEnd={addSeriesAtEnd}
+          ariaLabel="Rule rung editor"
+        />
       </div>
-      {/* A 310px panel: every field takes its own row, as in demo G. */}
-      <aside aria-label="Inspector" className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-canvas p-4 lg:sticky lg:top-4">
-        <CompactFields.Provider value={true}>
-          <InspectorBody selection={live} draft={draft} catalog={catalog} update={update} select={setSelection} />
-        </CompactFields.Provider>
-      </aside>
+      <p className="text-[13px] text-ink-muted">
+        Series contacts must all be true; parallel branches need any one. Select an element to edit it on the right. The ladder and the form edit the same rule.
+      </p>
+      <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
+        {LEGEND.map((l) => (
+          <li key={l.glyph}>
+            <span className="font-mono text-ink">{l.glyph}</span> {l.text}
+          </li>
+        ))}
+      </ul>
     </div>
+  );
+}
+
+/** The selected element's properties (demo G inspector), in the editor's
+ * right column. Fields stack one per row in the narrow panel. */
+export function LadderInspector({
+  draft,
+  catalog,
+  update,
+  selection,
+  onSelect,
+  nameFields,
+}: {
+  draft: RuleDraft;
+  catalog: RuleCatalog;
+  update: Update;
+  selection: EditorSelection;
+  onSelect: (s: EditorSelection) => void;
+  /** Name and status, shown when the rule itself is selected. */
+  nameFields: ReactNode;
+}) {
+  return (
+    <section aria-label="Inspector" className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-surface p-4 shadow-card">
+      <CompactFields.Provider value={true}>
+        {selection?.kind === "name" ? (
+          <>
+            <nav aria-label="Where this sits" className="font-mono text-[12px] text-ink-muted">
+              Rule
+            </nav>
+            <Title>Name and status</Title>
+            {nameFields}
+          </>
+        ) : (
+          <InspectorBody selection={selection} draft={draft} catalog={catalog} update={update} select={onSelect} />
+        )}
+      </CompactFields.Provider>
+    </section>
   );
 }

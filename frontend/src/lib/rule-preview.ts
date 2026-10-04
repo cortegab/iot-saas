@@ -5,6 +5,7 @@
  */
 import {
   actionProblem,
+  canClear,
   contactProblem,
   contacts,
   draftToRequest,
@@ -65,6 +66,59 @@ export function ruleChecks(d: RuleDraft): Check[] {
     });
   }
   return checks;
+}
+
+/** The editor's sections, in rail order (DESIGN.md §9.2). */
+export type RuleSection = "when" | "if" | "then" | "behaviour" | "name";
+export const RULE_SECTIONS: { id: RuleSection; label: string; sub: string }[] = [
+  { id: "when", label: "When", sub: "Trigger" },
+  { id: "if", label: "If", sub: "Conditions" },
+  { id: "then", label: "Then", sub: "Actions" },
+  { id: "behaviour", label: "Behaviour", sub: "Hold, interval, clear" },
+  { id: "name", label: "Name", sub: "Name and status" },
+];
+
+export interface SectionIssue {
+  section: RuleSection;
+  message: string;
+  /** Blocking issues stop a save; the rest are safety warnings shown while typing. */
+  blocking: boolean;
+}
+
+export const MAX_NAME = 200;
+
+/** Every problem with a draft, placed in the section that fixes it — the
+ * rail's badges, "N to fix" and the save gate all read this one list. */
+export function sectionIssues(d: RuleDraft): SectionIssue[] {
+  const out: SectionIssue[] = [];
+  const add = (section: RuleSection, message: string, blocking: boolean) => out.push({ section, message, blocking });
+  const w = d.when;
+  const reading = isReadingRule(d);
+  const leafs = contacts(d.condition);
+
+  if (w.type === "schedule" && !w.cron.trim()) add("when", "Pick when it runs.", true);
+  if (w.type === "device_status" && !w.statusDeviceId) add("when", "Pick the device to watch.", true);
+
+  if (reading && d.condition === null) add("if", "A rule that runs on each reading needs at least one condition.", true);
+  for (const c of leafs) {
+    const p = contactProblem(c);
+    if (p) add("if", p, true);
+  }
+  if (reading && switchesHardware(d) && leafs.some((c) => HYSTERESIS_OPERATORS.has(c.operator) && !(c.hysteresis > 0)))
+    add("if", "Add hysteresis to the thresholds so a reading hovering at the line doesn't toggle the relay.", false);
+
+  if (d.actions.length === 0 && d.preserved.actions.length === 0) add("then", "Add at least one action.", true);
+  for (const a of d.actions) {
+    const p = actionProblem(a);
+    if (p) add("then", p, true);
+  }
+
+  if (reading && d.forDuration < MIN_HOLD) add("behaviour", `Hold for at least ${MIN_HOLD} s so one noisy reading can't fire it.`, false);
+  if (d.cooldown < MIN_INTERVAL) add("behaviour", `Keep at least ${MIN_INTERVAL} s between firings.`, false);
+  if (canClear(d) && d.clearNotify && !d.clearMessage.trim()) add("behaviour", "The clear notification needs a message.", true);
+
+  if (d.name.trim().length > MAX_NAME) add("name", `Keep the name to ${MAX_NAME} characters.`, true);
+  return out;
 }
 
 export interface Send {
