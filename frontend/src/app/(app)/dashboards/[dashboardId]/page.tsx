@@ -238,7 +238,7 @@ export default function DashboardDetailPage() {
                     { label: "Rename…", icon: <Pencil size={15} />, onClick: () => setRenaming(true) },
                     { label: "Duplicate…", icon: <Copy size={15} />, onClick: () => setDuplicating(true) },
                   ],
-                  [{ label: "Delete dashboard…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }],
+                  [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }],
                 ]}
               />
             </>

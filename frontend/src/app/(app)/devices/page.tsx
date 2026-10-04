@@ -242,7 +242,7 @@ export default function DevicesPage() {
             onClick: () => void setEnabled([d], d.status !== "active"),
           },
         ],
-        [{ label: "Delete device…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove([d]) }],
+        [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove([d]) }],
       );
     }
     return groups;

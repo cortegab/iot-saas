@@ -19,11 +19,31 @@ test("zones: create, rename and delete an empty zone on its page", async ({ page
   await expect(page.getByText("Zone saved")).toBeVisible();
 
   await page.getByRole("button", { name: "More actions" }).click();
-  await page.getByRole("menuitem", { name: "Delete zone…" }).click();
+  await page.getByRole("menuitem", { name: "Delete…" }).click();
   await page.getByRole("button", { name: "Delete zone" }).click();
   await expect(page.getByText(`${name} renamed deleted`)).toBeVisible();
   await expect(page).toHaveURL("/zones");
   await expect(page.getByRole("table", { name: "Zones" }).getByText(`${name} renamed`)).toHaveCount(0);
+});
+
+test("zones: delete from the list row's menu, same item as the peek and page", async ({ page, request }) => {
+  const { accessToken, tenantId } = await login(request);
+  const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
+  const name = `E2E row delete ${Date.now()}`;
+  const res = await request.post(`${API_URL}/zones`, { headers, data: { name } });
+  expect(res.ok()).toBeTruthy();
+  const { id } = (await res.json()) as { id: string };
+  try {
+    await page.goto(`/zones?q=${encodeURIComponent(name)}`);
+    const row = page.getByRole("table", { name: "Zones" }).getByRole("row").filter({ hasText: name });
+    await row.getByRole("button", { name: "Actions" }).click();
+    await page.getByRole("menuitem", { name: /^Delete…/ }).click();
+    await page.getByRole("button", { name: "Delete zone" }).click();
+    await expect(page.getByText(`${name} deleted`)).toBeVisible();
+    await expect(row).toHaveCount(0);
+  } finally {
+    await request.delete(`${API_URL}/zones/${id}`, { headers });
+  }
 });
 
 test("lists peek: a drawer you can browse with ‹ › and ↓, Esc returns to the row, old ?edit links redirect", async ({ page, request }) => {

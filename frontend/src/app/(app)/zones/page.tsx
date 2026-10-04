@@ -19,6 +19,7 @@ import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { ZonePeek } from "@/components/zones/ZonePeek";
+import { useDeleteZone } from "@/components/zones/useDeleteZone";
 import { usePeek } from "@/components/list/usePeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { deviceStatusKey } from "@/lib/device-status";
@@ -58,6 +59,7 @@ export default function ZonesPage() {
   }, [zones, list.filters.show, list.q, list.sort]);
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
   const peek = usePeek({ rows: pageRows, rowKey: (z) => z.id, pageHref: (id) => `/zones/${id}`, newHref: "/zones/new" });
+  const deleteZone = useDeleteZone(peek.close);
 
   const status = (z: ZoneResponse) => {
     if (z.device_count === 0) return <Badge tone="unknown" shape="square" label="No devices" />;
@@ -88,8 +90,9 @@ export default function ZonesPage() {
   const rowMenu = (z: ZoneResponse): DropdownMenuItem[][] => [
     [
       { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => router.push(`/zones/${z.id}`) },
-      { label: "View its devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${z.id}`) },
+      { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${z.id}`) },
     ],
+    ...(canWrite ? [[deleteZone.menuItem(z)]] : []),
   ];
 
   const chips: FilterChip[] = list.q ? [{ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") }] : [];
@@ -184,6 +187,7 @@ export default function ZonesPage() {
           )}
         </ListWithPeek>
       )}
+      {deleteZone.dialog}
     </>
   );
 }

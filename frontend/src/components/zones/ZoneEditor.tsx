@@ -4,7 +4,7 @@ import { useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
-import { Cpu, Link2, Trash2 } from "lucide-react";
+import { Cpu, Link2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -76,7 +76,7 @@ export function ZoneEditor({
   );
   const editor = useRecordEditor({ source, isNew, validate });
   const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, zone?.name ?? "this zone");
-  const { remove, dialog } = useDeleteZone(() => router.push("/zones"));
+  const { menuItem, dialog } = useDeleteZone(() => router.push("/zones"));
 
   async function onSave(): Promise<boolean> {
     const before = editor.original;
@@ -140,14 +140,14 @@ export function ZoneEditor({
             ? undefined
             : [
                 [
-                  { label: "View its devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${zoneId}`) },
+                  { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${zoneId}`) },
                   {
                     label: "Copy link",
                     icon: <Link2 size={15} />,
                     onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/zones/${zoneId}`).then(() => toast({ tone: "info", title: "Link copied" })),
                   },
                 ],
-                ...(readOnly ? [] : [[{ label: "Delete zone…", icon: <Trash2 size={15} />, danger: true, onClick: () => zone && void remove(zone) }]]),
+                ...(readOnly || !zone ? [] : [[menuItem(zone)]]),
               ]
         }
       >
