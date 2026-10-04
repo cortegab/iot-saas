@@ -11,7 +11,9 @@ import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { useToast } from "@/components/ui/Toast";
 import { PeekFrame, PeekPlaceholder, PeekSection } from "@/components/editor/PeekFrame";
+import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { timeAgo } from "@/lib/time-ago";
+import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
@@ -48,7 +50,7 @@ export function DevicePeek({
   const { data: latest } = useApiSWR<TelemetryLatestResponse[]>(device ? `/devices/${device.id}/latest` : null);
   if (!device) return <PeekPlaceholder noun="device" missing onClose={onClose} />;
 
-  const metricMeta = new Map((template?.metrics ?? []).map((m) => [m.key ?? m.name, m]));
+  const metricMeta = new Map((template?.metrics ?? []).map((m) => [wireId(m), m]));
   const stale = device.connection_state !== "online";
   const menu: DropdownMenuItem[][] = [
     [
@@ -111,14 +113,14 @@ export function DevicePeek({
           <ul className="flex flex-col divide-y divide-border-soft rounded-lg border border-border">
             {latest.map((r) => {
               const meta = metricMeta.get(r.metric);
-              const value = meta?.data_type === "bool" ? (r.value ? "On" : "Off") : meta?.decimals != null ? r.value.toFixed(meta.decimals) : String(r.value);
+              const value = formatReading(r.value, meta);
               return (
                 <li key={r.metric} className="flex items-baseline justify-between gap-3 px-3 py-2 text-[13.5px]">
                   <span className="truncate text-ink-muted">{meta?.name ?? r.metric}</span>
                   <span className="flex items-baseline gap-2 whitespace-nowrap">
                     <b className={stale ? "font-medium text-ink-muted" : "font-medium text-ink"}>
                       {value}
-                      {meta?.unit && meta.data_type !== "bool" && <span className="ml-0.5 text-[12px] font-normal text-ink-muted">{meta.unit}</span>}
+                      {meta?.unit && !isBoolMetric(meta) && <span className="ml-0.5 text-[12px] font-normal text-ink-muted">{meta.unit}</span>}
                     </b>
                     <span className="text-[12px] text-ink-muted">{timeAgo(r.time)}</span>
                   </span>
