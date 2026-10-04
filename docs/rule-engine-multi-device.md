@@ -2,6 +2,9 @@
 
 Companion to `PLAN.md`'s rule-engine roadmap (Phase 1). What landed and how to exercise it.
 
+> This doc is authoritative for rule **semantics** (tree, latch, `clear_actions`, stale = unknown).
+> How the rule editor **presents** them is defined in `docs/design/DESIGN.md` §9.
+
 ## What changed
 
 A rule is no longer bound to one device.
