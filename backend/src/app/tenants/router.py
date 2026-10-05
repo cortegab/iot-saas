@@ -41,6 +41,7 @@ def _tenant_response(tenant: Tenant) -> TenantResponse:
         name=tenant.name,
         slug=tenant.slug,
         notification_emails=list(tenant.notification_emails),
+        timezone=tenant.timezone,
         created_at=tenant.created_at,
     )
 
@@ -84,14 +85,22 @@ async def get_current_tenant(
 @router.patch("/current", response_model=TenantResponse)
 async def update_current_tenant(
     body: TenantUpdateRequest,
-    ctx: TenantContext = Depends(require_role(TenantRole.OWNER)),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
     session: AsyncSession = Depends(get_session),
 ) -> TenantResponse:
+    # Admins manage alert recipients and the time zone; renaming the
+    # workspace stays with owners (DESIGN.md §8).
+    if body.name is not None and ctx.role != TenantRole.OWNER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only an owner can rename the workspace",
+        )
     tenant = await service.update_tenant(
         session,
         ctx.tenant_id,
         name=body.name,
         notification_emails=body.notification_emails,
+        timezone=body.timezone,
     )
     return _tenant_response(tenant)
 

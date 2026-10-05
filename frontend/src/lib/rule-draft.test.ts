@@ -332,3 +332,10 @@ describe("validateDraft", () => {
     expect(flappingRisk(d)).toBe(false);
   });
 });
+
+describe("emptyDraft", () => {
+  it("starts schedules in the workspace time zone, UTC by default", () => {
+    expect(emptyDraft(DEV_A).when.timezone).toBe("UTC");
+    expect(emptyDraft(DEV_A, "Europe/Madrid").when.timezone).toBe("Europe/Madrid");
+  });
+});
