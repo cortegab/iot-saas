@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Cpu, KeyRound, Pencil, Plus, Power, SquareArrowOutUpRight, Trash2, Wrench } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
@@ -23,6 +23,8 @@ import { BulkBar, FilterChips, ListToolbar, type FilterChip } from "@/components
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
+import { DeviceEditor } from "@/components/devices/DeviceEditor";
+import { SplitView } from "@/components/editor/SplitView";
 import { ApiRequestError } from "@/lib/api-client";
 import { DEVICE_STATUS, deviceStatusKey, type DeviceStatusKey } from "@/lib/device-status";
 import { ageMinutes, timeAgo } from "@/lib/time-ago";
@@ -51,6 +53,18 @@ export default function DevicesPage() {
 
   const list = useListState({ status: "all", template: "all" }, { key: "name", dir: "asc" });
   const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // `?edit=<id>` docks the device editor beside the list (DESIGN.md §7).
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const editId = params.get("edit");
+  function setEditId(id: string | null) {
+    const next = new URLSearchParams(params.toString());
+    if (id) next.set("edit", id);
+    else next.delete("edit");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
   const [revealed, setRevealed] = useState<{ name: string; credential: DeviceCreateResponse["credential"] } | null>(null);
 
   const templateName = useMemo(() => {
@@ -208,7 +222,7 @@ export default function DevicesPage() {
     ];
     if (canWrite) {
       groups[0].push(
-        { label: "Edit", icon: <Pencil size={15} />, onClick: () => router.push(`/devices/${d.id}?tab=settings`) },
+        { label: "Edit", icon: <Pencil size={15} />, onClick: () => setEditId(d.id) },
         { label: "Get firmware", icon: <Wrench size={15} />, onClick: () => router.push(`/devices/${d.id}?tab=settings`) },
       );
       groups.push(
@@ -294,7 +308,23 @@ export default function DevicesPage() {
           readOnlyNote="Ask an admin to add the first device."
         />
       ) : (
-        <>
+        <SplitView
+          editorLabel="Edit device"
+          onClose={() => setEditId(null)}
+          editor={
+            editId
+              ? (mode) => (
+                  <DeviceEditor
+                    key={editId}
+                    deviceId={editId}
+                    mode={mode}
+                    onClose={() => setEditId(null)}
+                    expandHref={`/devices/${editId}/edit`}
+                  />
+                )
+              : null
+          }
+        >
           <KpiStrip
             ariaLabel="Filter by status"
             active={list.filters.status === "all" ? null : list.filters.status}
@@ -358,6 +388,7 @@ export default function DevicesPage() {
                 rowMenu={rowMenu}
                 rowMenuLabel={(d) => `Actions for ${d.name}`}
                 rowClassName={(d) => (d.status === "disabled" ? "[&>td]:opacity-60" : undefined)}
+                currentKey={editId}
               />
               <TableFooter
                 shown={filtered.length}
@@ -371,7 +402,7 @@ export default function DevicesPage() {
               />
             </div>
           )}
-        </>
+        </SplitView>
       )}
       {dialog}
     </>
