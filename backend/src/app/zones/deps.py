@@ -14,7 +14,7 @@ from app.zones.models import Zone
 async def get_zone_or_404(
     zone_id: uuid.UUID,
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> Zone:
     try:
         return await service.get_zone(session, ctx.tenant_id, zone_id)

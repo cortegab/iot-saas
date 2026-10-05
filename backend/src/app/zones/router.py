@@ -39,7 +39,7 @@ def _name_taken() -> HTTPException:
 @router.get("", response_model=list[ZoneResponse])
 async def list_zones(
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[ZoneResponse]:
     zones = await service.list_zones(session, ctx.tenant_id)
     counts = await devices_service.count_devices_by_zone(session, ctx.tenant_id)
@@ -50,7 +50,7 @@ async def list_zones(
 async def create_zone(
     body: ZoneCreateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> ZoneResponse:
     try:
         zone = await service.create_zone(session, ctx.tenant_id, body.name, body.notes)
@@ -64,7 +64,7 @@ async def create_zone(
 async def get_zone(
     zone: Zone = Depends(get_zone_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> ZoneResponse:
     counts = await devices_service.count_devices_by_zone(session, ctx.tenant_id)
     return _to_response(zone, counts.get(zone.id, 0))
@@ -75,7 +75,7 @@ async def update_zone(
     body: ZoneUpdateRequest,
     zone: Zone = Depends(get_zone_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> ZoneResponse:
     try:
         updated = await service.update_zone(
@@ -92,7 +92,7 @@ async def update_zone(
 async def delete_zone(
     zone: Zone = Depends(get_zone_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     try:
         await service.delete_zone(session, zone)

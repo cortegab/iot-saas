@@ -14,7 +14,7 @@ from app.tenants.deps import TenantContext, require_tenant_context
 async def get_catalog_entry_or_404(
     entry_id: uuid.UUID,
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceCatalogEntry:
     try:
         return await service.get_catalog_entry(session, ctx.tenant_id, entry_id)

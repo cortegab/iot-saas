@@ -239,6 +239,7 @@ async def update_catalog_entry(
     actuators: list[dict[str, Any]] | None,
     entry_status: str | None,
 ) -> DeviceCatalogEntry:
+    before_metrics, before_actuators = list(entry.metrics), list(entry.actuators)
     if name is not None:
         entry.name = name
     if metrics is not None:
@@ -249,7 +250,55 @@ async def update_catalog_entry(
         entry.actuators = _normalize_actuators(actuators, _keys_of(entry.actuators))
     if entry_status is not None:
         entry.status = entry_status
+    if entry.metrics != before_metrics or entry.actuators != before_actuators:
+        await _notify_template_changed(session, entry, before_metrics, before_actuators)
     return entry
+
+
+def _changed_count(before: list[dict[str, Any]], after: list[dict[str, Any]]) -> int:
+    """Keys added, removed or edited between two metric/actuator lists."""
+    old = {m.get("key"): m for m in before}
+    new = {m.get("key"): m for m in after}
+    return sum(1 for k in old.keys() | new.keys() if old.get(k) != new.get(k))
+
+
+async def _notify_template_changed(
+    session: AsyncSession,
+    entry: DeviceCatalogEntry,
+    before_metrics: list[dict[str, Any]],
+    before_actuators: list[dict[str, Any]],
+) -> None:
+    """An info row in the feed: what changed and how many devices it reaches
+    (DESIGN.md §8). Renames and status flips don't reach devices, so they
+    don't notify."""
+    # Local imports: devices.service imports this module (create_device).
+    from app.devices import service as devices_service
+    from app.notifications import service as notifications_service
+
+    metrics = _changed_count(before_metrics, list(entry.metrics))
+    actuators = _changed_count(before_actuators, list(entry.actuators))
+    parts = [
+        f"{n} {noun}{'' if n == 1 else 's'}"
+        for n, noun in ((metrics, "metric"), (actuators, "actuator"))
+        if n
+    ]
+    devices = len(
+        await devices_service.list_device_ids_for_catalog_entry(session, entry.tenant_id, entry.id)
+    )
+    reach = (
+        f"{devices} device{'' if devices == 1 else 's'} received the new profile."
+        if metrics and devices
+        else f"Used by {devices} device{'' if devices == 1 else 's'}."
+    )
+    await notifications_service.add_notification(
+        session,
+        entry.tenant_id,
+        f"{entry.name} updated",
+        severity="info",
+        kind="template_changed",
+        detail=f"Changed {' and '.join(parts)}. {reach}",
+        catalog_entry_id=entry.id,
+    )
 
 
 class KeyUsage(NamedTuple):

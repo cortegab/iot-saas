@@ -1,8 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, RotateCw } from "lucide-react";
+import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Button } from "@/components/ui/Button";
+import { useToast } from "@/components/ui/Toast";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -33,8 +38,30 @@ function detailSummary(detail: FailedActionResponse["detail"]): string {
 /** Tenant-wide "what delivery is broken right now" feed — webhooks/emails that
  * exhausted their retries, unresolvable actuator targets, etc. Refreshed live
  * by useRealtime's rule_execution messages. */
+const RETRYABLE = new Set(["webhook", "email"]);
+
 export function FailedActionsList() {
+  const api = useApi();
+  const toast = useToast();
+  const { can } = usePermissions();
+  const canRetry = can("rules.write");
+  const [retrying, setRetrying] = useState<string | null>(null);
   const { data, error, isLoading, mutate } = useApiSWR<FailedActionResponse[]>("/rules/failed-actions");
+
+  async function retry(a: FailedActionResponse) {
+    setRetrying(a.id);
+    try {
+      await api.post(`/rules/failed-actions/${a.id}/retry`);
+      // The new attempt lands in the background; a failure comes back as a
+      // fresh row (and a notification), success just clears this one.
+      await mutate();
+      toast({ tone: "info", title: "Retrying the delivery", detail: `${ACTION_TYPE_LABELS[a.action_type] ?? a.action_type} for ${a.rule_name ?? "the rule"}` });
+    } catch (err) {
+      toast({ tone: "error", title: "Couldn't retry", detail: err instanceof ApiRequestError ? err.message : undefined });
+    } finally {
+      setRetrying(null);
+    }
+  }
 
   if (error) {
     return (
@@ -97,6 +124,25 @@ export function FailedActionsList() {
         </span>
       ),
     },
+    ...(canRetry
+      ? [
+          {
+            id: "retry",
+            header: "Retry",
+            cell: (a: FailedActionResponse) =>
+              RETRYABLE.has(a.action_type) ? (
+                <Button size="sm" variant="secondary" disabled={retrying === a.id} onClick={() => void retry(a)}>
+                  <RotateCw aria-hidden size={13} />
+                  {retrying === a.id ? "Retrying…" : "Retry"}
+                </Button>
+              ) : (
+                <span className="text-xs text-ink-muted" title="A late actuator command could act on state that has moved on. The rule fires again when its condition holds.">
+                  Not retried
+                </span>
+              ),
+          },
+        ]
+      : []),
   ];
 
   return (

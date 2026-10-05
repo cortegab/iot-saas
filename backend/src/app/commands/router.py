@@ -39,7 +39,7 @@ def _to_response(command: Command) -> CommandResponse:
 @router.get("/commands", response_model=list[CommandResponse])
 async def list_commands(
     device: Device = Depends(get_device_or_404),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[CommandResponse]:
     commands = await service.list_commands(session, device.tenant_id, device.id)
     return [_to_response(c) for c in commands]
@@ -50,7 +50,7 @@ async def request_command(
     body: ManualCommandRequest,
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     # Deliberately not gated on connection_state: an offline device still
     # receives this via its retained desired-state topic on reconnect

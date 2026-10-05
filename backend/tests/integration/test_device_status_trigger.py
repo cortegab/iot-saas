@@ -244,3 +244,28 @@ async def test_condition_less_rule_fires_on_every_matching_transition(
 
     executions = (await admin_session.execute(select(RuleExecution))).scalars().all()
     assert len(executions) == 2
+
+
+async def test_going_offline_writes_a_critical_notification_once(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    from app.notifications.models import Notification
+
+    owner = await _register(client, "owner-ds-off@example.com", "AcmeDSOff")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    device = await _create_device(client, _auth_headers(owner, tenant_id))
+
+    # The first observation (offline, e.g. a retained LWT after a worker
+    # restart) is the baseline — no alert.
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=False)
+    assert (await admin_session.execute(select(Notification))).scalars().all() == []
+
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=True)
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=False)
+    rows = (await admin_session.execute(select(Notification))).scalars().all()
+    assert [(n.kind, n.severity) for n in rows] == [("device_offline", "critical")]
+    assert rows[0].message == f"{device['device']['slug']} went offline"
+    assert str(rows[0].device_id) == device["device"]["id"]
