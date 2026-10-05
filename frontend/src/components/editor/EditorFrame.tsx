@@ -42,6 +42,8 @@ export interface EditorFrameProps {
   sectionOf?: (path: string) => string;
   status: EditorStatus;
   readOnly?: boolean;
+  /** Replaces the read-only banner's text; `false` hides it. */
+  readOnlyNote?: ReactNode | false;
   saveLabel?: string;
   /** Runs the save; resolve `false` when validation stopped it. */
   onSave: () => Promise<boolean>;
@@ -99,6 +101,7 @@ export function EditorFrame({
   sectionOf = (p) => p.split(".")[0],
   status,
   readOnly = false,
+  readOnlyNote,
   saveLabel,
   onSave,
   onDiscard,
@@ -382,10 +385,10 @@ export function EditorFrame({
         mode === "page" ? "max-w-[980px] py-6 [grid-area:body] wb:pt-2" : "min-h-0 flex-1 overflow-auto px-5 pb-8 pt-5",
       )}
     >
-      {readOnly && (
+      {readOnly && readOnlyNote !== false && (
         <p className="flex items-center gap-2 rounded-md bg-accent-muted px-3.5 py-2.5 text-[13.5px] text-accent-strong">
           <Eye aria-hidden size={15} />
-          View only. Ask an admin to make changes.
+          {readOnlyNote ?? "View only. Ask an admin to make changes."}
         </p>
       )}
       {children}
