@@ -54,6 +54,8 @@ ALL_TABLES = (
     "rule_executions",
     "action_executions",
     "zones",
+    "invitations",
+    "password_reset_tokens",
 )
 
 

@@ -36,6 +36,21 @@ class MemberResponse(BaseModel):
     user_id: uuid.UUID
     email: str
     role: str
+    name: str | None = None
+    joined_at: datetime | None = None
+
+
+class InvitationCreateRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    role: TenantRole = TenantRole.VIEWER
+
+
+class InvitationResponse(BaseModel):
+    id: uuid.UUID
+    email: str
+    role: str
+    created_at: datetime
+    expires_at: datetime
 
 
 class AddMemberRequest(BaseModel):

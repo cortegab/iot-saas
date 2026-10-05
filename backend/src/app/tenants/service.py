@@ -1,14 +1,18 @@
 """Tenant creation and membership queries."""
 
+import hashlib
+import secrets
 import uuid
+from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 
-from sqlalchemy import select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import service as catalog_service
 from app.db import set_tenant_context
 from app.shared.slug import slugify
-from app.tenants.models import Tenant, TenantMembership, TenantRole
+from app.tenants.models import Invitation, Tenant, TenantMembership, TenantRole
 
 LEGACY_CATALOG_ENTRY_NAME = "Legacy / Uncategorized"
 
@@ -150,7 +154,9 @@ async def verify_membership(
     return result.scalar_one_or_none()
 
 
-async def list_members(session: AsyncSession, tenant_id: uuid.UUID) -> list[tuple[uuid.UUID, str]]:
+async def list_members(
+    session: AsyncSession, tenant_id: uuid.UUID
+) -> list[tuple[uuid.UUID, str, datetime]]:
     """List (user_id, role) for every member of the tenant currently in context.
 
     Relies on tenant_memberships' RLS tenant_id branch — the caller must have
@@ -160,11 +166,11 @@ async def list_members(session: AsyncSession, tenant_id: uuid.UUID) -> list[tupl
     app.auth.models.User directly.
     """
     result = await session.execute(
-        select(TenantMembership.user_id, TenantMembership.role).where(
+        select(TenantMembership.user_id, TenantMembership.role, TenantMembership.created_at).where(
             TenantMembership.tenant_id == tenant_id
         )
     )
-    return [(user_id, role) for user_id, role in result.all()]
+    return [(user_id, role, joined) for user_id, role, joined in result.all()]
 
 
 async def add_member(
@@ -177,21 +183,70 @@ async def add_member(
 
 
 async def change_role(
-    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, role: TenantRole
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    role: TenantRole,
+    actor_role: str,
 ) -> None:
-    result = await session.execute(
-        select(TenantMembership).where(
-            TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id
-        )
-    )
-    membership = result.scalar_one_or_none()
-    if membership is None:
-        raise NotAMemberError
+    """Only an owner grants Owner or changes an owner's role; nobody grants
+    above their own role; the last owner can't be demoted."""
+    membership = await _membership(session, tenant_id, user_id)
+    if membership.role == TenantRole.OWNER.value and actor_role != TenantRole.OWNER.value:
+        raise RoleEscalationError
+    assert_can_assign(actor_role, role)
+    if (
+        membership.role == TenantRole.OWNER.value
+        and role != TenantRole.OWNER
+        and await _owner_count(session, tenant_id) <= 1
+    ):
+        raise LastOwnerError
     membership.role = role.value
     await session.flush()
 
 
-async def remove_member(session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> None:
+async def remove_member(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, actor_role: str
+) -> None:
+    """Only an owner removes an owner; the last owner can't be removed (or
+    leave) — the workspace would be left without one."""
+    membership = await _membership(session, tenant_id, user_id)
+    if membership.role == TenantRole.OWNER.value:
+        if actor_role != TenantRole.OWNER.value:
+            raise RoleEscalationError
+        if await _owner_count(session, tenant_id) <= 1:
+            raise LastOwnerError
+    await session.delete(membership)
+    await session.flush()
+
+
+# ---- role guards (DESIGN.md §8 members; redesign-report P0) -----------------
+
+_RANK = {TenantRole.VIEWER.value: 0, TenantRole.ADMIN.value: 1, TenantRole.OWNER.value: 2}
+
+
+class RoleEscalationError(Exception):
+    """An actor tried to grant, change or remove a role above their own."""
+
+
+class LastOwnerError(Exception):
+    """The change would leave the workspace without an owner."""
+
+
+async def _owner_count(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    result = await session.execute(
+        select(func.count())
+        .select_from(TenantMembership)
+        .where(
+            TenantMembership.tenant_id == tenant_id, TenantMembership.role == TenantRole.OWNER.value
+        )
+    )
+    return int(result.scalar_one())
+
+
+async def _membership(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> TenantMembership:
     result = await session.execute(
         select(TenantMembership).where(
             TenantMembership.tenant_id == tenant_id, TenantMembership.user_id == user_id
@@ -200,5 +255,180 @@ async def remove_member(session: AsyncSession, tenant_id: uuid.UUID, user_id: uu
     membership = result.scalar_one_or_none()
     if membership is None:
         raise NotAMemberError
-    await session.delete(membership)
+    return membership
+
+
+def assert_can_assign(actor_role: str, role: TenantRole) -> None:
+    """Nobody can grant a role above their own; only an owner grants Owner."""
+    if _RANK[role.value] > _RANK[actor_role]:
+        raise RoleEscalationError
+
+
+# ---- invitations -------------------------------------------------------------
+
+INVITE_TTL = timedelta(days=7)
+
+
+class InvitationNotFoundError(Exception):
+    pass
+
+
+class InvitationUnusableError(Exception):
+    """Expired, revoked or already accepted."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+class AlreadyInvitedError(Exception):
+    pass
+
+
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def _new_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+async def list_invitations(session: AsyncSession, tenant_id: uuid.UUID) -> list[Invitation]:
+    """Pending (not accepted, not revoked) invitations, newest first."""
+    result = await session.execute(
+        select(Invitation)
+        .where(
+            Invitation.tenant_id == tenant_id,
+            Invitation.accepted_at.is_(None),
+            Invitation.revoked_at.is_(None),
+        )
+        .order_by(Invitation.created_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def create_invitation(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    email: str,
+    role: TenantRole,
+    invited_by: uuid.UUID,
+    existing_member_ids: set[uuid.UUID] | None = None,
+    invitee_id: uuid.UUID | None = None,
+) -> tuple[Invitation, str]:
+    """Returns the invitation and its one-time raw token (for the email link)."""
+    normalized = email.strip().lower()
+    if invitee_id is not None and existing_member_ids and invitee_id in existing_member_ids:
+        raise AlreadyAMemberError
+    pending = await session.execute(
+        select(Invitation.id).where(
+            Invitation.tenant_id == tenant_id,
+            func.lower(Invitation.email) == normalized,
+            Invitation.accepted_at.is_(None),
+            Invitation.revoked_at.is_(None),
+            Invitation.expires_at > datetime.now(UTC),
+        )
+    )
+    if pending.first() is not None:
+        raise AlreadyInvitedError
+    token = _new_token()
+    invitation = Invitation(
+        tenant_id=tenant_id,
+        email=normalized,
+        role=role.value,
+        token_hash=_token_hash(token),
+        invited_by=invited_by,
+        expires_at=datetime.now(UTC) + INVITE_TTL,
+    )
+    session.add(invitation)
+    await session.flush()
+    return invitation, token
+
+
+async def get_invitation(
+    session: AsyncSession, tenant_id: uuid.UUID, invitation_id: uuid.UUID
+) -> Invitation:
+    result = await session.execute(
+        select(Invitation).where(Invitation.tenant_id == tenant_id, Invitation.id == invitation_id)
+    )
+    invitation = result.scalar_one_or_none()
+    if (
+        invitation is None
+        or invitation.accepted_at is not None
+        or invitation.revoked_at is not None
+    ):
+        raise InvitationNotFoundError
+    return invitation
+
+
+async def renew_invitation(session: AsyncSession, invitation: Invitation) -> str:
+    """Resend: a fresh token and a fresh 7 days; the old link stops working."""
+    token = _new_token()
+    invitation.token_hash = _token_hash(token)
+    invitation.expires_at = datetime.now(UTC) + INVITE_TTL
+    await session.flush()
+    return token
+
+
+async def revoke_invitation(session: AsyncSession, invitation: Invitation) -> None:
+    invitation.revoked_at = datetime.now(UTC)
+    await session.flush()
+
+
+class InvitationPreview(NamedTuple):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    tenant_name: str
+    email: str
+    role: str
+    expires_at: datetime
+
+
+async def lookup_invitation(session: AsyncSession, token: str) -> InvitationPreview:
+    """Resolve a raw token without a tenant context (SECURITY DEFINER
+    lookup_invitation). Raises for unknown, expired, revoked or used links."""
+    row = (
+        (
+            await session.execute(
+                text(
+                    "SELECT id, tenant_id, tenant_name, email, role, expires_at, accepted_at, revoked_at "
+                    "FROM lookup_invitation(:h)"
+                ),
+                {"h": _token_hash(token)},
+            )
+        )
+        .mappings()
+        .first()
+    )
+    if row is None:
+        raise InvitationNotFoundError
+    if row["revoked_at"] is not None:
+        raise InvitationUnusableError("revoked")
+    if row["accepted_at"] is not None:
+        raise InvitationUnusableError("used")
+    if row["expires_at"] <= datetime.now(UTC):
+        raise InvitationUnusableError("expired")
+    return InvitationPreview(
+        id=row["id"],
+        tenant_id=row["tenant_id"],
+        tenant_name=row["tenant_name"],
+        email=row["email"],
+        role=row["role"],
+        expires_at=row["expires_at"],
+    )
+
+
+async def accept_invitation(
+    session: AsyncSession, preview: InvitationPreview, user_id: uuid.UUID
+) -> None:
+    """Join the tenant. The token authorized it, so the tenant context is set
+    here (the caller has none yet) before touching RLS-protected rows."""
+    await set_tenant_context(session, preview.tenant_id)
+    if await verify_membership(session, user_id, preview.tenant_id) is None:
+        session.add(
+            TenantMembership(tenant_id=preview.tenant_id, user_id=user_id, role=preview.role)
+        )
+    result = await session.execute(select(Invitation).where(Invitation.id == preview.id))
+    invitation = result.scalar_one()
+    invitation.accepted_at = datetime.now(UTC)
     await session.flush()
