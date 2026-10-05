@@ -235,7 +235,7 @@ export default function RulesPage() {
           description="Rules watch metrics and fire an action when a condition is met."
           action={
             isAdmin ? (
-              <Link href="/rules/new" className={buttonClassName({ variant: "ghost" })}>
+              <Link href="/rules/new" className={buttonClassName({ variant: "link" })}>
                 Add a rule →
               </Link>
             ) : undefined

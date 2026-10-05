@@ -119,7 +119,7 @@ export default function DashboardsPage() {
           description="Create one and add widgets for the devices you care about most."
           action={
             isAdmin ? (
-              <Link href="/dashboards/new" className={buttonClassName({ variant: "ghost" })}>
+              <Link href="/dashboards/new" className={buttonClassName({ variant: "link" })}>
                 Add a dashboard →
               </Link>
             ) : undefined

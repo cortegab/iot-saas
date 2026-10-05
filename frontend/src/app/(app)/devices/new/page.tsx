@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { mutate as revalidate } from "swr";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { SecretReveal } from "@/components/ui/SecretReveal";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -110,7 +111,6 @@ export default function NewDevicePage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<DeviceCreateResponse | null>(null);
-  const [copied, setCopied] = useState(false);
 
   // Default to the first entry (a fresh tenant's is always its auto-created
   // "Legacy / Uncategorized" one — devices/service.py — so this is never a
@@ -148,34 +148,14 @@ export default function NewDevicePage() {
       <div className="flex max-w-2xl flex-col gap-4">
         <h1 className="text-lg font-semibold text-ink">{created.device.name} created</h1>
 
-        <div className="rounded-xl border border-status-pending/40 bg-status-pending-surface p-4">
-          <p className="text-sm font-medium text-ink">
-            Copy this credential now — it will not be shown again.
-          </p>
-          <dl className="mt-3 flex flex-col gap-2 text-sm">
-            <div>
-              <dt className="text-ink-muted">Username</dt>
-              <dd className="font-mono text-ink">{created.credential.username}</dd>
-            </div>
-            <div>
-              <dt className="text-ink-muted">Password</dt>
-              <dd className="font-mono text-ink">{created.credential.password}</dd>
-            </div>
-          </dl>
-          <Button
-            type="button"
-            className="mt-3"
-            onClick={() => {
-              void navigator.clipboard
-                .writeText(
-                  `username: ${created.credential.username}\npassword: ${created.credential.password}`,
-                )
-                .then(() => setCopied(true));
-            }}
-          >
-            {copied ? "Copied" : "Copy credential"}
-          </Button>
-        </div>
+        <SecretReveal
+          fields={[
+            { label: "Username", value: created.credential.username },
+            { label: "Password", value: created.credential.password, secret: true },
+          ]}
+          copyValue={`username: ${created.credential.username}\npassword: ${created.credential.password}`}
+          copyLabel="Copy credential"
+        />
 
         <Link href={`/devices/${created.device.id}`} className="text-center text-sm text-accent">
           Continue to device →

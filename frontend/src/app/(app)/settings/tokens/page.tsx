@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { SecretReveal } from "@/components/ui/SecretReveal";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -104,7 +105,7 @@ function ApiKeyRow({ apiKey, onChanged }: { apiKey: ApiKeyResponse; onChanged: (
             {apiKey.revoked_at ? (
               <span className="text-xs text-status-error">Revoked</span>
             ) : (
-              <Button type="button" variant="destructive" disabled={busy} onClick={() => void revoke()}>
+              <Button type="button" variant="link-danger" disabled={busy} onClick={() => void revoke()}>
                 Revoke
               </Button>
             )}
@@ -126,7 +127,6 @@ export default function TokensSettingsPage() {
   const isAdmin = useIsAdmin();
   const { data: keys, error, isLoading, mutate } = useApiSWR<ApiKeyResponse[]>("/api-keys");
   const [revealed, setRevealed] = useState<ApiKeyCreateResponse | null>(null);
-  const [copied, setCopied] = useState(false);
 
   if (!isAdmin) {
     return <EmptyState title="Admins only" description="Ask an admin or owner to manage API keys." />;
@@ -144,33 +144,16 @@ export default function TokensSettingsPage() {
       )}
 
       {revealed ? (
-        // Shown once — mirrors the device-credential reveal in devices/new.
-        <div className="rounded-xl border border-status-pending/40 bg-status-pending-surface p-4">
-          <p className="text-sm font-medium text-ink">Copy this key now — it will not be shown again.</p>
-          <p className="mt-2 break-all font-mono text-sm text-ink">{revealed.key}</p>
-          <div className="mt-3 flex items-center gap-3">
-            <Button
-              type="button"
-              onClick={() => {
-                void navigator.clipboard.writeText(revealed.key).then(() => setCopied(true));
-              }}
-            >
-              {copied ? "Copied" : "Copy key"}
-            </Button>
-            <button
-              type="button"
-              disabled={!copied}
-              onClick={() => {
-                setRevealed(null);
-                setCopied(false);
-                void mutate();
-              }}
-              className="text-sm text-ink-muted disabled:opacity-50"
-            >
-              {copied ? "Done" : "Copy the key to continue"}
-            </button>
-          </div>
-        </div>
+        <SecretReveal
+          title="Your new API key"
+          fields={[{ label: "key", value: revealed.key }]}
+          copyLabel="Copy key"
+          requireAcknowledge
+          onDismiss={() => {
+            setRevealed(null);
+            void mutate();
+          }}
+        />
       ) : (
         <CreateApiKeyForm onCreated={setRevealed} />
       )}

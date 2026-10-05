@@ -104,7 +104,7 @@ function MemberRow({ member, isAdmin, onChanged }: { member: MemberResponse; isA
           <div className="flex items-center gap-3">
             <span className="text-xs uppercase tracking-wide text-ink-muted">{member.role}</span>
             {isAdmin && (
-              <Button type="button" variant="destructive" disabled={busy} onClick={() => void remove()}>
+              <Button type="button" variant="link-danger" disabled={busy} onClick={() => void remove()}>
                 Remove
               </Button>
             )}

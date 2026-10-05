@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { CONTROL_BASE, CONTROL_SIZE } from "@/components/ui/Input";
 
 export interface ComboboxOption {
   value: string;
@@ -38,7 +39,7 @@ export interface ComboboxProps {
   renderValue?: (value: string) => string;
 }
 
-const PANEL_CLASS = "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border bg-pop shadow-pop";
+const PANEL_CLASS = "fixed z-[85] flex flex-col overflow-hidden rounded-xl border border-border bg-pop shadow-pop";
 
 /** A select-only combobox with an inline filter (ARIA 1.2 "select-only
  * combobox" pattern). Borrows `DropdownMenu`'s portal + fixed-from-trigger-rect
@@ -163,10 +164,7 @@ export function Combobox({
         aria-controls={open ? listboxId : undefined}
         aria-label={ariaLabel}
         onClick={() => (open ? closePanel() : openPanel())}
-        className={cn(
-          "flex items-center justify-between gap-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-          className,
-        )}
+        className={cn(CONTROL_BASE, CONTROL_SIZE.default, "flex items-center justify-between gap-2 text-left", className)}
       >
         <span className={cn("truncate", !displayValue && "text-ink-muted")}>{displayValue || placeholder}</span>
         <ChevronsUpDown aria-hidden size={14} className="shrink-0 text-ink-muted" />
@@ -179,7 +177,7 @@ export function Combobox({
               type="button"
               aria-label="Close"
               onClick={closePanel}
-              className="fixed inset-0 z-40 cursor-default"
+              className="fixed inset-0 z-[84] cursor-default"
             />
             <div
               className={PANEL_CLASS}
@@ -200,7 +198,7 @@ export function Combobox({
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={onSearchKeyDown}
                 placeholder={searchPlaceholder}
-                className="border-b border-border bg-surface-raised px-3 py-2 text-sm text-ink focus:outline-none"
+                className="border-b border-border bg-input px-3 py-2.5 text-sm text-ink focus:outline-none"
               />
               <ul id={listboxId} role="listbox" className="overflow-y-auto py-1">
                 {flatOptions.length === 0 && (
@@ -212,7 +210,7 @@ export function Combobox({
                 )}
                 {filteredGroups.map((group) => (
                   <li key={group.label} role="presentation">
-                    <p className="px-3 pb-0.5 pt-2 font-mono text-xs uppercase tracking-wide text-ink-muted">
+                    <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
                       {group.label}
                     </p>
                     <ul role="presentation">
@@ -233,8 +231,8 @@ export function Combobox({
                               commit(option.value);
                             }}
                             className={cn(
-                              "flex cursor-pointer items-center justify-between gap-3 px-3 py-1.5 text-sm",
-                              isActive ? "bg-surface-raised text-ink" : "text-ink-muted",
+                              "mx-1 flex cursor-pointer items-center justify-between gap-3 rounded-md px-2.5 py-1.5 text-sm",
+                              isActive ? "bg-accent-muted text-ink" : "text-ink-muted",
                             )}
                           >
                             <span className="font-mono text-ink">{option.label}</span>

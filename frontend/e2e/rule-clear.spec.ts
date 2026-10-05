@@ -5,7 +5,7 @@ test("a clear notification is configured in the form, summarised, and persisted"
   ruleUnderTest,
 }) => {
   await page.goto(`/rules/${ruleUnderTest.id}`);
-  await page.getByRole("group", { name: "Editor view" }).getByRole("button", { name: "Form" }).click();
+  await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Form" }).click();
 
   await expect(page.getByText("When the condition clears")).toBeVisible();
   // The fixture's only action is a notification — there's no actuator to turn back.
