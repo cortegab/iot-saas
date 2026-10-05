@@ -14,6 +14,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
+import { Select } from "@/components/ui/Select";
 import { SwitchField } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { EditorFrame, EditorSection, type EditorMode } from "@/components/editor/EditorFrame";
@@ -26,14 +27,17 @@ import type { components } from "@/types/api";
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
+type ZoneResponse = components["schemas"]["ZoneResponse"];
 
 interface DeviceDraft {
   name: string;
   enabled: boolean;
+  zoneId: string;
 }
 
 const DIFF: DiffField<DeviceDraft>[] = [
   { label: "Name", get: (d) => d.name.trim() },
+  { label: "Zone", get: (d) => d.zoneId },
   { label: "Rule evaluation", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
 ];
 
@@ -71,9 +75,11 @@ export function DeviceEditor({
   const { data: device, error, mutate } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
   const { data: template } = useApiSWR<CatalogEntryResponse>(device ? `/catalog/${device.catalog_entry_id}` : null);
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
+  const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
+  const zoneName = useMemo(() => new Map((zones ?? []).map((z) => [z.id, z.name])), [zones]);
 
   const source = useMemo<DeviceDraft | null>(
-    () => (device ? { name: device.name, enabled: device.status === "active" } : null),
+    () => (device ? { name: device.name, enabled: device.status === "active", zoneId: device.zone_id ?? "" } : null),
     [device],
   );
   const editor = useRecordEditor({ source, validate });
@@ -94,6 +100,7 @@ export function DeviceEditor({
       const body: Record<string, unknown> = {};
       if (d.name.trim() !== device?.name) body.name = d.name.trim();
       if (d.enabled !== (device?.status === "active")) body.status = d.enabled ? "active" : "disabled";
+      if (d.zoneId !== (device?.zone_id ?? "")) body.zone_id = d.zoneId || null;
       try {
         await api.patch(`/devices/${deviceId}`, body);
       } catch (err) {
@@ -101,7 +108,8 @@ export function DeviceEditor({
         throw err;
       }
       await mutate();
-      toast({ title: "Device saved", detail: before ? changeSummary(diffLines(before, d, DIFF)) : undefined });
+      const named = (x: DeviceDraft) => ({ ...x, zoneId: x.zoneId ? (zoneName.get(x.zoneId) ?? "") : "" });
+      toast({ title: "Device saved", detail: before ? changeSummary(diffLines(named(before), named(d), DIFF)) : undefined });
     }).catch(() => false);
   }
 
@@ -194,6 +202,27 @@ export function DeviceEditor({
               onChange={(e) => editor.set({ ...d, name: e.target.value })}
               onBlur={() => editor.touch("identity.name")}
             />
+          </Field>
+          <Field
+            label="Zone"
+            optional
+            hint={
+              <>
+                Where it&apos;s installed.{" "}
+                <Link href="/zones" className="text-accent hover:underline">
+                  Manage zones
+                </Link>
+              </>
+            }
+          >
+            <Select value={d.zoneId} disabled={readOnly} onChange={(e) => editor.set({ ...d, zoneId: e.target.value })}>
+              <option value="">No zone</option>
+              {(zones ?? []).map((z) => (
+                <option key={z.id} value={z.id}>
+                  {z.name}
+                </option>
+              ))}
+            </Select>
           </Field>
           <div className="flex flex-col gap-2 rounded-md border border-border bg-canvas px-3.5 py-3">
             <span className="text-xs font-medium text-ink-muted">Template</span>
