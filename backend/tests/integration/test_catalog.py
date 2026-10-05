@@ -3,9 +3,12 @@ isolation, and the delete-blocked-while-in-use behavior — against the real
 FastAPI app and iot_test Postgres.
 """
 
+import json
 from typing import Any
 
 import httpx
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def _register(client: httpx.AsyncClient, email: str, tenant_name: str) -> dict[str, Any]:
@@ -302,3 +305,182 @@ async def test_viewer_can_list_but_not_create_catalog_entry(client: httpx.AsyncC
 
     create_resp = await client.post("/catalog", json={"name": "Nope"}, headers=viewer_headers)
     assert create_resp.status_code == 403
+
+
+# ---- demo G: key format, disabled templates, usage counts -------------------
+
+
+async def test_invalid_explicit_keys_are_refused(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "keys1@example.com", "Keys1")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    for bad in ["a/b", "temp+", "#", "with space", "$sys", "dot.ted", "x" * 65]:
+        resp = await client.post(
+            "/catalog", json={"name": "T", "metrics": [{"name": "m", "key": bad}]}, headers=headers
+        )
+        assert resp.status_code == 400, bad
+        assert "isn't valid" in resp.json()["detail"]
+    # Actuator keys are checked too.
+    resp = await client.post(
+        "/catalog",
+        json={"name": "T", "actuators": [{"name": "Fan", "key": "fan/1"}]},
+        headers=headers,
+    )
+    assert resp.status_code == 400
+    # Kebab-case, snake_case and an already-deployed device's mixed case are fine.
+    ok = await client.post(
+        "/catalog",
+        json={
+            "name": "T",
+            "metrics": [
+                {"name": "a", "key": "soil-moisture"},
+                {"name": "b", "key": "air_temp"},
+                {"name": "c", "key": "Temp2"},
+            ],
+        },
+        headers=headers,
+    )
+    assert ok.status_code == 201
+
+
+async def test_stored_legacy_key_is_grandfathered_on_update(
+    client: httpx.AsyncClient, admin_session: AsyncSession
+) -> None:
+    owner = await _register(client, "keys3@example.com", "Keys3")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    created = await client.post(
+        "/catalog", json={"name": "Old", "metrics": [{"name": "t", "key": "t"}]}, headers=headers
+    )
+    entry_id = created.json()["id"]
+    # A key written before validation existed.
+    await admin_session.execute(
+        text("UPDATE device_catalog_entries SET metrics = CAST(:m AS jsonb) WHERE id = :id"),
+        {"m": json.dumps([{"name": "Temp", "key": "room temp"}]), "id": entry_id},
+    )
+    await admin_session.commit()
+
+    keep = await client.patch(
+        f"/catalog/{entry_id}",
+        json={"name": "Old renamed", "metrics": [{"name": "Temp", "key": "room temp"}]},
+        headers=headers,
+    )
+    assert keep.status_code == 200, keep.text
+
+    new_bad = await client.patch(
+        f"/catalog/{entry_id}",
+        json={"metrics": [{"name": "Temp", "key": "room temp"}, {"name": "x", "key": "X/Y"}]},
+        headers=headers,
+    )
+    assert new_bad.status_code == 400
+
+
+async def test_disabled_template_cannot_be_used_for_new_devices(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "keys4@example.com", "Keys4")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    entry_id = (await client.post("/catalog", json={"name": "Retired"}, headers=headers)).json()[
+        "id"
+    ]
+    await client.patch(f"/catalog/{entry_id}", json={"status": "disabled"}, headers=headers)
+
+    resp = await client.post(
+        "/devices", json={"name": "New", "catalog_entry_id": entry_id}, headers=headers
+    )
+    assert resp.status_code == 409
+    assert "disabled" in resp.json()["detail"]
+
+    await client.patch(f"/catalog/{entry_id}", json={"status": "active"}, headers=headers)
+    resp = await client.post(
+        "/devices", json={"name": "New", "catalog_entry_id": entry_id}, headers=headers
+    )
+    assert resp.status_code == 201
+
+
+async def test_usage_counts_rules_and_widgets_per_key(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "keys5@example.com", "Keys5")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    entry = await client.post(
+        "/catalog",
+        json={
+            "name": "Climate",
+            "metrics": [
+                {"name": "Temperature", "key": "temperature"},
+                {"name": "Humidity", "key": "humidity"},
+            ],
+            "actuators": [{"name": "Fan", "key": "fan1"}],
+        },
+        headers=headers,
+    )
+    entry_id = entry.json()["id"]
+    device = await client.post(
+        "/devices", json={"name": "bay1", "catalog_entry_id": entry_id}, headers=headers
+    )
+    device_id = device.json()["device"]["id"]
+
+    rule = await client.post(
+        "/rules",
+        json={
+            "name": "Cool bay 1",
+            "condition": {
+                "kind": "leaf",
+                "device_id": device_id,
+                "metric": "temperature",
+                "operator": ">",
+                "rhs": {"source": "static", "value": 27.0},
+            },
+            "execution_policy": {"strategy": "edge", "for_duration": 10, "cooldown": 60},
+            "actions": [
+                {
+                    "type": "actuator_command",
+                    "device_id": device_id,
+                    "actuator": "fan1",
+                    "value": True,
+                }
+            ],
+        },
+        headers=headers,
+    )
+    assert rule.status_code == 201, rule.text
+
+    dash = await client.post("/dashboards", json={"name": "Overview"}, headers=headers)
+    layout = [
+        {
+            "id": "w1",
+            "type": "value_card",
+            "x": 0,
+            "y": 0,
+            "w": 3,
+            "h": 2,
+            "device_id": device_id,
+            "metric": "temperature",
+        },
+        {
+            "id": "w2",
+            "type": "trend_chart",
+            "x": 3,
+            "y": 0,
+            "w": 6,
+            "h": 2,
+            "device_id": device_id,
+            "metric": "temperature",
+        },
+        {
+            "id": "w3",
+            "type": "actuator_control",
+            "x": 0,
+            "y": 2,
+            "w": 4,
+            "h": 2,
+            "device_id": device_id,
+        },
+    ]
+    patched = await client.patch(
+        f"/dashboards/{dash.json()['id']}", json={"layout": layout}, headers=headers
+    )
+    assert patched.status_code == 200, patched.text
+
+    usage = await client.get(f"/catalog/{entry_id}/usage", headers=headers)
+    assert usage.status_code == 200
+    body = usage.json()
+    assert body["devices"] == 1
+    assert body["metrics"]["temperature"] == {"rules": 1, "widgets": 2}
+    assert body["metrics"]["humidity"] == {"rules": 0, "widgets": 0}
+    assert body["actuators"]["fan1"] == {"rules": 1, "widgets": 1}

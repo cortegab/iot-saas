@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Boxes, Copy, Cpu, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Boxes, Copy, Cpu, Pencil, Plus, Power, SquareArrowOutUpRight, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -20,6 +20,8 @@ import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/Lis
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
+import { TemplateEditor } from "@/components/catalog/TemplateEditor";
+import { SplitView } from "@/components/editor/SplitView";
 import { ApiRequestError } from "@/lib/api-client";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
@@ -53,6 +55,18 @@ export default function DeviceTemplatesPage() {
   const { confirm, dialog } = useConfirm();
   const { data: entries, error, isLoading, mutate } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const list = useListState({ status: "all" }, { key: "name", dir: "asc" });
+
+  // `?edit=<id>` docks the template editor beside the list (DESIGN.md §7).
+  const params = useSearchParams();
+  const pathname = usePathname();
+  const editId = params.get("edit");
+  function setEditId(id: string | null) {
+    const next = new URLSearchParams(params.toString());
+    if (id) next.set("edit", id);
+    else next.delete("edit");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   const counts = useMemo(() => {
     const c = { all: entries?.length ?? 0, active: 0, disabled: 0 };
@@ -158,7 +172,8 @@ export default function DeviceTemplatesPage() {
   const rowMenu = (e: CatalogEntryResponse): DropdownMenuItem[][] => {
     const groups: DropdownMenuItem[][] = [
       [
-        { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => router.push(`/templates/${e.id}`) },
+        { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => setEditId(e.id) },
+        { label: "Open full page", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/templates/${e.id}`) },
         { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${e.id}`) },
       ],
     ];
@@ -216,7 +231,23 @@ export default function DeviceTemplatesPage() {
           readOnlyNote="Ask an admin to create one."
         />
       ) : (
-        <>
+        <SplitView
+          editorLabel="Edit device template"
+          onClose={() => setEditId(null)}
+          editor={
+            editId
+              ? (mode) => (
+                  <TemplateEditor
+                    key={editId}
+                    entryId={editId}
+                    mode={mode}
+                    onClose={() => setEditId(null)}
+                    expandHref={`/templates/${editId}`}
+                  />
+                )
+              : null
+          }
+        >
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
@@ -244,10 +275,11 @@ export default function DeviceTemplatesPage() {
                 rowKey={(e) => e.id}
                 sort={list.sort}
                 onSort={list.toggleSort}
-                onRowClick={(e) => router.push(`/templates/${e.id}`)}
+                onRowClick={(e) => setEditId(e.id)}
                 rowMenu={rowMenu}
                 rowMenuLabel={(e) => `Actions for ${e.name}`}
                 rowClassName={(e) => (e.status === "disabled" ? "[&>td]:opacity-60" : undefined)}
+                currentKey={editId}
               />
               <TableFooter
                 shown={filtered.length}
@@ -261,7 +293,7 @@ export default function DeviceTemplatesPage() {
               />
             </div>
           )}
-        </>
+        </SplitView>
       )}
       {dialog}
     </>
