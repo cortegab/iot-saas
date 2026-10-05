@@ -34,7 +34,7 @@ export default function EditCatalogEntryPage() {
       <PageHeader
         title={entry.name}
         subtitle={entry.is_legacy ? "Legacy / Uncategorized" : undefined}
-        back={{ href: "/devices/templates", label: "Device Templates" }}
+        back={{ href: "/templates", label: "Device Templates" }}
       />
       <CatalogEntryForm mode="edit" initial={entry} />
     </div>

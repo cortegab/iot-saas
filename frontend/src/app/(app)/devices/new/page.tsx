@@ -195,7 +195,7 @@ export default function NewDevicePage() {
             </option>
           ))}
         </Select>
-        <Link href="/devices/templates" className="text-xs text-accent">
+        <Link href="/templates" className="text-xs text-accent">
           Manage templates →
         </Link>
       </label>

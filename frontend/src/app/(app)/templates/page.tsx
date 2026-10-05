@@ -84,7 +84,7 @@ export default function DeviceCatalogPage() {
       header: "Name",
       render: (e) => (
         <TableNameCell
-          href={`/devices/templates/${e.id}`}
+          href={`/templates/${e.id}`}
           name={e.name}
           trailing={e.is_legacy && <Badge tone="unknown" label="Legacy" className="ml-2" />}
           sublabel={summarizeShape(e)}
@@ -108,8 +108,8 @@ export default function DeviceCatalogPage() {
       render: (e) => {
         const items: DropdownMenuItem[][] = [
           [
-            { label: "Edit", onClick: () => router.push(`/devices/templates/${e.id}`) },
-            { label: "Duplicate", onClick: () => router.push(`/devices/templates/new?duplicate=${e.id}`) },
+            { label: "Edit", onClick: () => router.push(`/templates/${e.id}`) },
+            { label: "Duplicate", onClick: () => router.push(`/templates/new?duplicate=${e.id}`) },
           ],
           [{ label: "View Devices", onClick: () => router.push(`/devices?type=${e.id}`) }],
         ];
@@ -134,7 +134,7 @@ export default function DeviceCatalogPage() {
         subtitle="Define the metrics and actuators a device instantiates from."
         actions={
           isAdmin && (
-            <Link href="/devices/templates/new" className={buttonClassName()}>
+            <Link href="/templates/new" className={buttonClassName()}>
               Create Template
             </Link>
           )

@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { mutate } from "swr";
 import { apiClient, ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
 
@@ -127,6 +128,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const setCurrentTenantId = useCallback((tenantId: string) => {
     localStorage.setItem(TENANT_ID_KEY, tenantId);
+    // SWR keys are bare paths ("/devices"), not tenant-scoped: drop every cached
+    // response so nothing from the previous workspace renders. The (app) layout
+    // is keyed by tenant, so every hook remounts and refetches for the new one.
+    void mutate(() => true, undefined, { revalidate: false });
     setState((s) => ({ ...s, currentTenantId: tenantId }));
   }, []);
 

@@ -412,7 +412,7 @@ export function CatalogEntryForm({
           actuators: payloadActuators,
         });
         void revalidate("/catalog");
-        router.push(`/devices/templates/${created.id}`);
+        router.push(`/templates/${created.id}`);
       } else if (initial) {
         await api.patch(`/catalog/${initial.id}`, {
           name: name.trim(),
@@ -421,7 +421,7 @@ export function CatalogEntryForm({
           status,
         });
         void revalidate("/catalog");
-        router.push("/devices/templates");
+        router.push("/templates");
       }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Couldn't save this template.");
@@ -527,7 +527,7 @@ export function CatalogEntryForm({
         <Button type="submit" size="md" disabled={submitting}>
           {submitting ? "Saving…" : mode === "create" ? "Create template" : "Save changes"}
         </Button>
-        <Button type="button" variant="secondary" size="md" onClick={() => router.push("/devices/templates")}>
+        <Button type="button" variant="secondary" size="md" onClick={() => router.push("/templates")}>
           Cancel
         </Button>
       </div>
