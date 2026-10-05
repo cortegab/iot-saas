@@ -139,7 +139,7 @@ export function DropdownMenu({
               role={children ? undefined : "menu"}
               tabIndex={-1}
               style={align === "start" ? { top: coords.top, left: coords.left } : { top: coords.top, right: coords.right }}
-              className={cn("fixed z-50 rounded-xl border border-border bg-surface shadow-lg", panelClassName)}
+              className={cn("fixed z-50 rounded-xl border border-border bg-pop shadow-pop", panelClassName)}
             >
               {children ??
                 groups?.map((items, gi) => (

@@ -1,96 +1,113 @@
 @import "tailwindcss";
 
 /*
- * "Control Room" identity (redesign). Dark is the default theme (UX spec:
- * "dark mode first, light mode fully supported"); light is a full peer, toggled
- * by adding `.light` to <html> (see app/layout.tsx no-flash script + useTheme).
- * `@custom-variant dark` keeps Tailwind's `dark:` utilities keyed off that class.
+ * Design tokens — values from docs/design/DESIGN.md §3 (demo G identity). That
+ * file is binding: add or change a token there first, then here. Never
+ * hard-code a colour, radius or font in a component.
  *
- * Two accent roles, kept separate on purpose:
- *   --color-accent   brass  — UI chrome only (buttons, links, active nav/tab, focus, brand dot)
- *   --color-chart    #E8590C — data/instruments only (trend line+fill, gauge fills, readout
- *                              value, sparklines, the realtime "Live" dot). Never a background.
- * Semantic status (online/offline/pending) is its own system — always paired with a
- * dot/shape/label, never color alone.
+ * Light is the default theme; dark is a full peer, applied by `.dark` on <html>
+ * (see the no-flash script in app/layout.tsx and hooks/useTheme.ts).
+ *
+ * Two accent roles, kept apart:
+ *   --color-accent  indigo — UI chrome only (buttons, links, focus, active nav/tab, selection)
+ *   --color-chart   cyan   — data only (trend lines, readouts, sparklines, replay strips).
+ *                            Never a button or background.
+ * Status is never colour alone — always paired with a dot/shape and a word.
  */
-@custom-variant dark (&:where(:not(.light)));
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* ---- dark (default) ---- */
-  --color-canvas: #15161a;
-  --color-surface: #1d1f24;
-  --color-surface-raised: #25272e;
-  --color-border: #2e313a;
-  --color-panel-edge: rgba(255, 255, 255, 0.05); /* card top highlight → reads as a panel */
-  --color-ink: #eceef2;
-  --color-ink-muted: #9ba1ad;
+  /* ---- light (default) ---- */
+  --color-canvas: #f7f7f8;
+  --color-surface: #ffffff;
+  --color-surface-raised: #f2f2f5;
+  --color-border: #e3e3e8;
+  --color-border-soft: #eeeef2;
+  --color-ink: #15161a;
+  --color-ink-muted: #62646f;
 
-  --color-accent: #c9902b;         /* brass — controls */
-  --color-accent-strong: #f5c542;  /* hover / pressed / live */
-  --color-accent-muted: #2a2113;   /* subtle tinted fill (selected row, hover) */
-  --color-on-accent: #1a1206;      /* text/icon on a brass fill */
+  --color-accent: #4f46e5;
+  --color-accent-strong: #4338ca;
+  --color-accent-muted: #eef0ff;
+  --color-on-accent: #ffffff;
 
-  --color-chart: #e8590c;          /* data + instrument indicators */
-  --color-chart-grid: rgba(255, 255, 255, 0.06);
+  --color-chart: #0e7490;
+  --color-chart-grid: rgba(20, 20, 40, 0.07);
 
-  /* Semantic status — never color-alone; always with a dot/shape/label. */
-  --color-status-online: #3fb950;
-  --color-status-offline: #f85149;
-  --color-status-unknown: #9ba1ad;
-  --color-status-pending: #d29922;
-  --color-status-error: #f85149;
-  --color-status-error-surface: #2e1a20;
-  --color-status-pending-surface: #2c2415;
+  --color-status-online: #15803d;
+  --color-status-offline: #dc2626;
+  --color-status-pending: #b45309;
+  --color-status-unknown: #6b7280;
+  --color-status-error: #dc2626;
+  --color-status-error-surface: #fef2f2;
+  --color-status-pending-surface: #fffbeb;
+
+  --color-pop: #ffffff;
+  --color-scrim: rgba(17, 17, 30, 0.3);
+  --color-sidebar: #fbfbfc;
+  --color-row-hover: #f8f8fb;
+  --color-input: #ffffff;
+
+  --shadow-card: 0 1px 2px rgba(30, 30, 60, 0.05);
+  --shadow-pop: 0 24px 48px -16px rgba(30, 30, 60, 0.22), 0 2px 6px rgba(30, 30, 60, 0.08);
+
+  color-scheme: light;
+}
+
+:root.dark {
+  --color-canvas: #0f1014;
+  --color-surface: #16171c;
+  --color-surface-raised: #1e2027;
+  --color-border: #2a2c34;
+  --color-border-soft: #222329;
+  --color-ink: #ececf1;
+  --color-ink-muted: #9a9ca8;
+
+  --color-accent: #818cf8;
+  --color-accent-strong: #a5b4fc;
+  --color-accent-muted: #1f2040;
+  --color-on-accent: #0f1014;
+
+  --color-chart: #22d3ee;
+  --color-chart-grid: rgba(255, 255, 255, 0.07);
+
+  --color-status-online: #4ade80;
+  --color-status-offline: #f87171;
+  --color-status-pending: #fbbf24;
+  --color-status-unknown: #9ca3af;
+  --color-status-error: #f87171;
+  --color-status-error-surface: #2a1517;
+  --color-status-pending-surface: #2a2211;
+
+  --color-pop: #1a1b21;
+  --color-scrim: rgba(0, 0, 0, 0.58);
+  --color-sidebar: #121318;
+  --color-row-hover: #1a1b21;
+  --color-input: #121318;
+
+  --shadow-card: none;
+  --shadow-pop: 0 24px 48px -16px rgba(0, 0, 0, 0.7), 0 2px 6px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
 }
 
 /*
- * Layout rhythm conventions (not enforceable by Tailwind, so written down here
- * rather than left to drift page-by-page):
- *   - Page-level wrapper: `gap-6` between distinct sections; `gap-4` for a single
- *     flat list/section.
- *   - Section/group label ("DEVICES", "ASSIGN ROLES"): always
- *     `text-xs font-medium uppercase tracking-wide text-ink-muted`.
- *   - Content card: `Card` (components/ui/Card.tsx) — `rounded-xl` always
- *     (= --radius-xl, 8px in this identity); `padding="md"` (p-4) standalone,
- *     `padding="sm"` (p-3) dense. Radius never forks between the two.
- *   - Numbers that line up in a column get `tabular-nums` (auto inside the
- *     app shell for <table>/<dl>; add the utility elsewhere).
+ * Layout rhythm conventions (not enforceable by Tailwind, so written down here):
+ *   - Page-level wrapper: `gap-6` between distinct sections; `gap-4` for one flat list.
+ *   - Section headings: 15–16 px, weight 600 (DESIGN §3). Page titles 28–30 px, 600.
+ *   - Cards, tables, panels: `rounded-xl` (12 px). Controls: `rounded-md` (8 px) and
+ *     `h-control` (36 px). Large surfaces and dialogs: `rounded-2xl` (16 px).
+ *   - Numbers that line up get `tabular-nums` (automatic for <table>/<dl> in the app shell).
  */
 
-:root.light {
-  --color-canvas: #f2f1ee;         /* warm paper — not cream */
-  --color-surface: #ffffff;
-  --color-surface-raised: #f6f5f2;
-  --color-border: #e1e0db;
-  --color-panel-edge: #edebe6;
-  --color-ink: #1a1b1e;
-  --color-ink-muted: #5f6470;
-
-  --color-accent: #9a6e12;
-  --color-accent-strong: #b9841a;
-  --color-accent-muted: #f4ecdd;
-  --color-on-accent: #ffffff;
-
-  --color-chart: #d24f0a;
-  --color-chart-grid: rgba(0, 0, 0, 0.06);
-
-  --color-status-online: #1a7f37;
-  --color-status-offline: #cf222e;
-  --color-status-unknown: #5f6470;
-  --color-status-pending: #9a6700;
-  --color-status-error: #cf222e;
-  --color-status-error-surface: #fbe9ec;
-  --color-status-pending-surface: #f7eedd;
-}
-
-/* Runtime-swapped tokens: `inline` so utilities emit `var(--color-*)` and the
-   `.light` class flips them live. */
+/* Runtime-swapped tokens: `inline` so utilities emit `var(--…)` and the `.dark`
+   class flips them live. */
 @theme inline {
   --color-canvas: var(--color-canvas);
   --color-surface: var(--color-surface);
   --color-surface-raised: var(--color-surface-raised);
   --color-border: var(--color-border);
-  --color-panel-edge: var(--color-panel-edge);
+  --color-border-soft: var(--color-border-soft);
   --color-ink: var(--color-ink);
   --color-ink-muted: var(--color-ink-muted);
 
@@ -104,42 +121,74 @@
 
   --color-status-online: var(--color-status-online);
   --color-status-offline: var(--color-status-offline);
-  --color-status-unknown: var(--color-status-unknown);
   --color-status-pending: var(--color-status-pending);
+  --color-status-unknown: var(--color-status-unknown);
   --color-status-error: var(--color-status-error);
   --color-status-error-surface: var(--color-status-error-surface);
   --color-status-pending-surface: var(--color-status-pending-surface);
+
+  --color-pop: var(--color-pop);
+  --color-scrim: var(--color-scrim);
+  --color-sidebar: var(--color-sidebar);
+  --color-row-hover: var(--color-row-hover);
+  --color-input: var(--color-input);
+
+  --shadow-card: var(--shadow-card);
+  --shadow-pop: var(--shadow-pop);
 }
 
-/* Static identity tokens. Fonts are fed by next/font (app/layout.tsx) as
-   --ff-display / --ff-sans / --ff-mono on <html>; radius is tightened from
-   Tailwind's defaults so `rounded-xl` etc. shift app-wide with no component edits. */
+/* Static tokens. Fonts are fed by next/font (app/layout.tsx) as --ff-sans /
+   --ff-mono on <html>; Geist is both the display and the UI face. */
 @theme {
   --font-sans: var(--ff-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: var(--ff-mono), ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  --font-display: var(--ff-display), "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--ff-sans), ui-sans-serif, system-ui, sans-serif;
 
-  --radius-sm: 0.25rem;   /* 4px */
-  --radius-md: 0.375rem;  /* 6px */
-  --radius-lg: 0.4375rem; /* 7px */
-  --radius-xl: 0.5rem;    /* 8px  — was 12px; Card/panels */
-  --radius-2xl: 0.75rem;  /* 12px — was 16px */
+  --radius-sm: 0.375rem; /* 6px — small inner parts */
+  --radius-md: 0.5rem; /* 8px — controls */
+  --radius-lg: 0.625rem; /* 10px */
+  --radius-xl: 0.75rem; /* 12px — cards, tables, panels */
+  --radius-2xl: 1rem; /* 16px — large surfaces, dialogs */
+
+  --spacing-control: 2.25rem; /* 36px — h-control */
+  --spacing-cell: 0.75rem; /* 12px — p-cell */
+
+  --text-xs: 0.78125rem; /* 12.5px */
+  --text-xs--line-height: 1.4;
+  --text-sm: 0.875rem; /* 14px */
+  --text-sm--line-height: 1.45;
+}
+
+:root {
+  --fs-base: 14.5px;
+  --fs-sm: 14px;
+  --fs-xs: 12.5px;
 }
 
 body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
-/* Tabular figures wherever digits stack in a column. Scoped to the app shell so
-   the marketing pages (.mkt, their own world) are untouched. */
+/* One focus ring everywhere (DESIGN §12): 2px accent outline, 2px offset. */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Tabular figures wherever digits stack in a column. */
 .app-shell :is(table, dl) {
   font-variant-numeric: tabular-nums;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
@@ -159,9 +208,8 @@ body {
   border-bottom-color: var(--color-ink-muted);
 }
 
-/* uPlot ships one fixed color: the drag-select region (rgba(0,0,0,0.07)),
-   near-invisible on the dark ground. The `.uplot` prefix is needed to beat the
-   library's own `.u-select` rule, which loads in a later route CSS chunk. */
+/* uPlot ships one fixed colour: the drag-select region. The `.uplot` prefix is
+   needed to beat the library's own `.u-select` rule, which loads later. */
 .uplot .u-select {
   background: var(--color-ink-muted);
   opacity: 0.12;

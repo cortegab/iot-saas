@@ -8,8 +8,8 @@ export type Theme = "light" | "dark";
 const STORAGE_KEY = "iot-saas:theme";
 
 function systemTheme(): Theme {
-  if (typeof window === "undefined") return "dark";
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  if (typeof window === "undefined") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
 function readPreference(): ThemePreference {
@@ -23,7 +23,7 @@ function readPreference(): ThemePreference {
 }
 
 function applyTheme(theme: Theme): void {
-  document.documentElement.classList.toggle("light", theme === "light");
+  document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
 /**
@@ -36,13 +36,13 @@ function applyTheme(theme: Theme): void {
  *   would otherwise disagree with the server markup on it; never read
  *   `localStorage` in a render body.
  *
- * `setPreference` toggles the `.light` class in the event handler (not an
+ * `setPreference` toggles the `.dark` class in the event handler (not an
  * effect) so it stays idempotent and doesn't trigger a second uPlot rebuild
  * under React StrictMode's double-invoke.
  */
 export function useTheme() {
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
-  const [theme, setThemeState] = useState<Theme>("dark");
+  const [theme, setThemeState] = useState<Theme>("light");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -55,9 +55,9 @@ export function useTheme() {
   // Track the OS only while the preference is "system".
   useEffect(() => {
     if (preference !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const onChange = () => {
-      const next: Theme = mq.matches ? "light" : "dark";
+      const next: Theme = mq.matches ? "dark" : "light";
       applyTheme(next);
       setThemeState(next);
     };
