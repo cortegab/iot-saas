@@ -179,7 +179,8 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | Table | existing | See §6. |
 | **KPI strip** | NEW | 3–4 figures in one bordered strip above a list (e.g. online / offline / never connected). |
 | **Mini strip / sparkline** | NEW | 48-cell 24 h strip (true / unknown-hatched / fired) for rules. Sparkline for readings. Uses `--color-chart`, with accent for fire marks. |
-| Readout / Metric | existing | Live values in Geist, tabular-nums, unit in muted. Stale values dim. |
+| Readout / Metric | existing | Live values in Geist, tabular-nums, unit in muted. Stale values dim. A metric is named by its template **name** everywhere (readouts, chart pickers, legends, widget titles), with its wire key only when undeclared. Every surface formats a value the same way (`formatReading`): an on/off metric reads **On / Off** (capitalised, no unit), a number uses the template's decimals. |
+| **Trend chart** | existing | One component for the device page and the dashboard widget. A number is a line, with dashed rule thresholds. An **on/off metric** is a **step line** on an **Off / On** axis with a light wash under On, and has no threshold line. Once aggregated it stays on Off / On: a minute or hour shows On if the metric was On at any point in it. The state is carried forward only from a bucket that held one state, otherwise the line breaks until the next reading. Never ramps, never a "% of readings". Gauges take numbers only. |
 
 ---
 
@@ -244,6 +245,13 @@ editable side panel and no "Expand" toggle.
   doesn't redirect somewhere else.
 - **Delete blocked** with an explanation and links when the record is in use ("3 devices use this
   template"). A delete that is allowed confirms with the real consequence.
+- **One record menu, three places.** The list row ⋯, the peek ⋯ and the page ⋯ offer the same
+  actions with the same words. Menu items name only the action, because the record is implied:
+  **View devices**, **Duplicate**, **Enable / Disable**, **Delete…**. An ellipsis means a dialog or
+  confirm follows. **Delete…** is last, on its own, in the danger style. While the record is in use
+  it is still offered, with the usage count as its hint ("2 devices are in it"), and picking it
+  explains the block. A standalone button outside a menu (the device Settings danger zone) keeps
+  the noun: "Delete device…".
 - **Rename warnings** when a key is referenced ("`temperature` is used by 3 rules and 2 widgets").
 - Read-only mode for roles without edit rights shows a banner, disabled controls and no save bar.
 - **Deep links:** every record and every editor state has a URL (list, list + peek, full page,
@@ -565,3 +573,5 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-02 | §8 device page **Settings tab**: one settings page of stacked section cards (~760 px) — General (name, zone) · Rule evaluation · Template (read-only; a device keeps its template) · Connection (MQTT username, **one** "Connect and get firmware" action that states it issues a new credential, MQTT topics) · **Danger zone** last (red outline, Delete). The separate credential, firmware, delete and topics cards are gone. Inside a host page the editor's save bar floats within the column and appears only while there is something to save. |
 | 2026-10-02 | §8 device **connect flow** has 5 steps: Credential · **Options** (board ESP32 / ESP32-C3, Wi-Fi from a phone or typed, provisioning security 1 – PoP / 2 – SRP6a, connection, pins, a "The sketch includes" summary; no code) · **Flash** (download / copy, the preview collapsed, upload steps for the chosen board) · **Wi-Fi from your phone** (the ESP BLE Provisioning QR with Download / Print label, app steps; skipped when Wi-Fi is typed in) · Live check. The sketch contains only the chosen Wi-Fi mode. The QR is built from the device's own credential (docs/ble-provisioning.md), so it's only on this page and changes with every rotation. |
 | 2026-10-03 | §9.2 rule editor takes **demo A** (`docs/design/redesign/rules-demo-a-rail.html`): the template page's frame — section rail, canvas, 340 px right column, sticky save bar — shared by Form and Ladder, so switching views no longer reflows the page (Ladder's preview grid and full-width layout are gone; the inspector sits in the right column). The rail carries per-section validation: blocking issues (red) vs safety warnings (amber, never block). Saving stays on the rule (§7). §5 Switch: one rule for on/off controls — a Switch for every saved setting (Enabled / Disabled for a record's status, On / Off for options), a checkbox only for list selection and one-time choices; the rule editor's two clear options become Switches and the template's "Availability" becomes "Status". |
+| 2026-10-03 | §5 **Trend chart** row added, Readout row extended: on/off metrics are step lines on an Off / On axis on the device page and in dashboard widgets (they used to ramp between readings), with no threshold line; aggregated ranges show "On at any point in the minute/hour" and break the line where the state is unknown. A trend chart widget accepts on/off metrics, but a gauge takes only numbers. One value formatter everywhere ("On"/"Off", not "on"/"off") and template names, not wire keys, in chart pickers and legends. |
+| 2026-10-03 | §7 **one record menu, three places**: row ⋯, peek ⋯ and page ⋯ offer the same actions in the same words, naming the action only ("Delete…", not "Delete zone…" / "Delete device…"; "View devices", not "View its devices"). The zones list row menu gains Delete…, which it lacked. A blocked delete is still offered, with the usage count as its hint (zones now match templates). |

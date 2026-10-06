@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Cpu, Link2, Pencil, Trash2 } from "lucide-react";
+import { Cpu, Link2, Pencil } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
@@ -22,7 +22,7 @@ export function ZonePeek({ zone, offline, onClose }: { zone: ZoneResponse | unde
   const toast = useToast();
   const { can } = usePermissions();
   const canWrite = can("zones.write");
-  const { remove, dialog } = useDeleteZone(onClose);
+  const { menuItem, dialog } = useDeleteZone(onClose);
 
   if (!zone) return <PeekPlaceholder noun="zone" missing onClose={onClose} />;
 
@@ -37,14 +37,14 @@ export function ZonePeek({ zone, offline, onClose }: { zone: ZoneResponse | unde
 
   const menu: DropdownMenuItem[][] = [
     [
-      { label: "View its devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${zone.id}`) },
+      { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${zone.id}`) },
       {
         label: "Copy link",
         icon: <Link2 size={15} />,
         onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/zones/${zone.id}`).then(() => toast({ tone: "info", title: "Link copied" })),
       },
     ],
-    ...(canWrite ? [[{ label: "Delete zone…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(zone) }]] : []),
+    ...(canWrite ? [[menuItem(zone)]] : []),
   ];
 
   return (

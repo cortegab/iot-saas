@@ -24,6 +24,7 @@ import { CommandHistory } from "@/components/actuators/CommandHistory";
 import { leafPredicates } from "@/components/rules/RuleSummary";
 import { ApiRequestError } from "@/lib/api-client";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
+import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { getDeviceActuators } from "@/lib/device-actuators";
 import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
@@ -38,12 +39,6 @@ type ZoneResponse = components["schemas"]["ZoneResponse"];
 
 const TABS = ["overview", "controls", "rules", "settings"] as const;
 type DeviceTab = (typeof TABS)[number];
-
-function formatReading(value: number, meta?: CatalogMetric): string | number {
-  if (meta?.data_type === "bool") return value ? "On" : "Off";
-  if (meta?.decimals != null && Number.isFinite(value)) return value.toFixed(meta.decimals);
-  return value;
-}
 
 /** One readout per declared metric (demo G): value, unit, a gauge with the
  * rule threshold marked, and "Last value, X ago" once the device is offline
@@ -70,7 +65,7 @@ function Readouts({
         const reading = byMetric.get(id);
         const threshold = thresholds[id]?.[0]?.value;
         const span = threshold != null ? Math.max(Math.abs(threshold) * 0.4, 1) : 0;
-        const numeric = meta?.data_type !== "bool";
+        const numeric = !isBoolMetric(meta);
         const min = numeric ? (meta?.min ?? (threshold != null ? threshold - span : undefined)) : undefined;
         const max = numeric ? (meta?.max ?? (threshold != null ? threshold + span : undefined)) : undefined;
         return (
@@ -265,7 +260,7 @@ export default function DeviceDetailPage() {
                   }
                 />
               ) : (
-                <DeviceTrendChart deviceId={deviceId} thresholdsByMetric={thresholdsByMetric} />
+                <DeviceTrendChart deviceId={deviceId} metrics={metrics} thresholdsByMetric={thresholdsByMetric} />
               )}
             </Card>
           </div>
