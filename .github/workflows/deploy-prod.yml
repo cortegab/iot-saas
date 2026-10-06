@@ -52,12 +52,16 @@ jobs:
           # Re-render the generated nginx/emqx configs so a .template change in
           # this commit actually takes effect (both files are git-ignored).
           bash scripts/render-prod-config.sh
-          \$C exec -T api uv run alembic upgrade head
+          # Every \`exec\` gets </dev/null: this script reaches the VPS's bash on
+          # stdin, and \`docker compose exec\` forwards stdin, so without it the
+          # first exec swallows the rest of the script. The steps below then
+          # never run, yet the step still passes (nginx kept the old IPs: 502).
+          \$C exec -T api uv run alembic upgrade head </dev/null
           # \`up -d --build\` recreates api/frontend with NEW container IPs;
           # nginx caches the old ones at config-load time and would 502 every
           # proxied request until reloaded. This re-resolves the upstreams
           # (and picks up the re-rendered config above).
-          \$C exec -T nginx nginx -s reload
+          \$C exec -T nginx nginx -s reload </dev/null
           \$C ps
           EOF
 
