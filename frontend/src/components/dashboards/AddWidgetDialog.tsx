@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { WIDGET_LABEL, WIDTHS } from "@/components/dashboards/DashboardGrid";
 import { cn } from "@/lib/cn";
+import { isBoolMetric } from "@/lib/format-reading";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
@@ -17,10 +18,12 @@ type WidgetType = Widget["type"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
-const TYPES: { type: WidgetType; icon: typeof Activity; metric?: boolean; floatOnly?: boolean; range?: boolean; actuators?: boolean; w: number; h: number }[] = [
+// `numeric`: on/off metrics don't fit (a gauge has no meaning for On/Off);
+// value cards and trend charts take both — a trend draws On/Off as steps.
+const TYPES: { type: WidgetType; icon: typeof Activity; metric?: boolean; numeric?: boolean; range?: boolean; actuators?: boolean; w: number; h: number }[] = [
   { type: "value_card", icon: Activity, metric: true, w: 3, h: 2 },
-  { type: "trend_chart", icon: LineChart, metric: true, floatOnly: true, w: 8, h: 4 },
-  { type: "gauge", icon: Gauge, metric: true, floatOnly: true, range: true, w: 3, h: 3 },
+  { type: "trend_chart", icon: LineChart, metric: true, w: 8, h: 4 },
+  { type: "gauge", icon: Gauge, metric: true, numeric: true, range: true, w: 3, h: 3 },
   { type: "device_status", icon: Cpu, w: 3, h: 2 },
   { type: "actuator_control", icon: ToggleRight, actuators: true, w: 4, h: 3 },
 ];
@@ -50,14 +53,18 @@ export function AddWidgetDialog({
   const [width, setWidth] = useState(3);
   const spec = TYPES.find((t) => t.type === type)!;
   const tplOf = (d?: DeviceResponse) => templates.find((t) => t.id === d?.catalog_entry_id);
+  const metricsOf = (d?: DeviceResponse) => (tplOf(d)?.metrics ?? []).filter((m) => !spec.numeric || !isBoolMetric(m));
 
   const eligibleDevices = useMemo(
-    () => devices.filter((d) => !spec.actuators || (tplOf(d)?.actuators.length ?? 0) > 0),
+    () =>
+      devices.filter((d) =>
+        spec.actuators ? (tplOf(d)?.actuators.length ?? 0) > 0 : !spec.numeric || metricsOf(d).length > 0,
+      ),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [devices, templates, spec.actuators],
+    [devices, templates, spec.actuators, spec.numeric],
   );
   const device = eligibleDevices.find((d) => d.id === deviceId) ?? eligibleDevices[0];
-  const metrics = (tplOf(device)?.metrics ?? []).filter((m) => !spec.floatOnly || m.data_type !== "bool");
+  const metrics = metricsOf(device);
 
   // Keep the picks valid as the type or device changes.
   useEffect(() => {
@@ -79,9 +86,11 @@ export function AddWidgetDialog({
   const problem = !device
     ? spec.actuators
       ? "No device here has actuators."
-      : "Add a device first."
+      : spec.numeric && devices.length > 0
+        ? "No device here has a numeric metric. On/off metrics show as a Value card or a Trend chart."
+        : "Add a device first."
     : spec.metric && !metric
-      ? `${device.name} publishes no ${spec.floatOnly ? "numeric " : ""}metric to show.`
+      ? `${device.name}'s template declares no metric to show.`
       : spec.range && (min === "" || max === "" || Number.isNaN(Number(min)) || Number.isNaN(Number(max)))
         ? "Min and max must be numbers."
         : spec.range && Number(max) <= Number(min)

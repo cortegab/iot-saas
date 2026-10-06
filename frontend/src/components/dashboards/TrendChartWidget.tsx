@@ -9,7 +9,7 @@ export function TrendChartWidget({ deviceId, metric }: { deviceId: string; metri
   const { device, meta } = useWidgetDevice(deviceId, metric);
   return (
     <WidgetCard title={meta?.name ?? metric ?? "Trend"} subtitle={<DeviceLink device={device} />}>
-      {metric ? <TrendChart deviceId={deviceId} metric={metric} fillHeight /> : <EmptyState title="No metric configured" />}
+      {metric ? <TrendChart deviceId={deviceId} metric={metric} meta={meta} fillHeight /> : <EmptyState title="No metric configured" />}
     </WidgetCard>
   );
 }
