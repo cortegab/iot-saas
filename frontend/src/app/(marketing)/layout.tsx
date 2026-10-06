@@ -1,15 +1,14 @@
 import type { ReactNode } from "react";
 import "./marketing.css";
 
-/* The landing page uses the app's design tokens (docs/design/DESIGN.md) — fonts
- * come from the root layout (`--ff-*` on <html>), colours from `globals.css`.
- * `marketing.css` only carries this page's marketing-scale layout, scoped to
- * `.mkt` so it can't leak into the authenticated app. */
+/* The landing page uses the app's design tokens (docs/design/DESIGN.md §10);
+ * fonts come from the root layout, colours from `globals.css`. `.mkt` only
+ * scopes the ControlLoop instrument and the entrance motion (marketing.css). */
 
 export const metadata = {
-  title: "iodriven — sensors in, actuators out, under two seconds",
+  title: "iodriven — sensors in, decisions in memory, actuators out",
   description:
-    "A self-hostable IoT platform: ingest sensor telemetry over MQTT, run threshold and window rules in memory, and drive actuators, send notifications, or call webhooks — with flap protection built into every rule.",
+    "An IoT platform for MQTT devices: every rule is checked in memory the moment a reading arrives, and drives actuators, email, notifications or webhooks well inside two seconds. Cloud, dedicated or on-premise.",
 };
 
 export default function MarketingLayout({ children }: { children: ReactNode }) {
