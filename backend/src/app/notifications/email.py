@@ -18,6 +18,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from email.message import EmailMessage as _StdEmailMessage
+from email.utils import formataddr
 from typing import Protocol
 
 import aiosmtplib
@@ -55,6 +56,16 @@ class ConsoleEmailProvider:
         )
 
 
+def sender(config: Settings) -> str:
+    """The From header: "IO Driven Platform Alerts <alerts@…>", so inboxes
+    show a name rather than a bare address. formataddr quotes the name (and
+    encodes it if it isn't ASCII). An EMAIL_FROM that already carries a name
+    ("Name <a@b>"), or an empty EMAIL_FROM_NAME, is used as it is."""
+    if not config.email_from_name or "<" in config.email_from:
+        return config.email_from
+    return formataddr((config.email_from_name, config.email_from))
+
+
 class SmtpEmailProvider:
     def __init__(self, config: Settings) -> None:
         if not config.smtp_host:
@@ -65,7 +76,7 @@ class SmtpEmailProvider:
         self._username = config.smtp_username
         self._password = config.smtp_password.get_secret_value()
         self._use_tls = config.smtp_use_tls
-        self._from = config.email_from
+        self._from = sender(config)
 
     async def send(self, message: EmailMessage) -> None:
         msg = _StdEmailMessage()

@@ -106,6 +106,7 @@ services:
       CONTACT_EMAIL_TO: ${CONTACT_EMAIL_TO:-}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
       EMAIL_FROM: ${EMAIL_FROM:-alerts@example.com}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-IO Driven Platform Alerts}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
@@ -146,6 +147,7 @@ services:
       APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
       EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
       EMAIL_FROM: ${EMAIL_FROM:-alerts@example.com}
+      EMAIL_FROM_NAME: ${EMAIL_FROM_NAME:-IO Driven Platform Alerts}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USERNAME: ${SMTP_USERNAME:-}
