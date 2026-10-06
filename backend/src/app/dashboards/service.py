@@ -5,6 +5,7 @@ that's app-layer, not a second RLS predicate).
 """
 
 import uuid
+from collections import Counter
 from typing import Any
 
 from sqlalchemy import select
@@ -65,3 +66,27 @@ async def update_dashboard(
 
 async def delete_dashboard(session: AsyncSession, dashboard: Dashboard) -> None:
     await session.delete(dashboard)
+
+
+async def count_widget_usage(
+    session: AsyncSession, tenant_id: uuid.UUID, device_ids: list[uuid.UUID]
+) -> tuple[Counter[str], int]:
+    """Across every member's dashboards in the tenant: widgets per metric key
+    on `device_ids`, and the number of actuator-control widgets on them. Only
+    counts leave this function — never another member's dashboard content.
+    """
+    metric_widgets: Counter[str] = Counter()
+    actuator_widgets = 0
+    if not device_ids:
+        return metric_widgets, actuator_widgets
+    wanted = {str(d) for d in device_ids}
+    result = await session.execute(select(Dashboard.layout).where(Dashboard.tenant_id == tenant_id))
+    for layout in result.scalars().all():
+        for widget in layout or []:
+            if str(widget.get("device_id")) not in wanted:
+                continue
+            if widget.get("type") == "actuator_control":
+                actuator_widgets += 1
+            elif widget.get("metric"):
+                metric_widgets[str(widget["metric"])] += 1
+    return metric_widgets, actuator_widgets

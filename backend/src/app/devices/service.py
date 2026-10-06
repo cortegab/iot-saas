@@ -20,6 +20,7 @@ from app.catalog import service as catalog_service
 from app.db import set_tenant_context
 from app.devices.models import Device, DeviceStatus
 from app.shared.slug import slugify
+from app.zones import service as zones_service
 
 
 class DeviceNotFoundError(Exception):
@@ -72,7 +73,11 @@ def _generate_credential_secret() -> str:
 
 
 async def create_device(
-    session: AsyncSession, tenant_id: uuid.UUID, name: str, catalog_entry_id: uuid.UUID
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    name: str,
+    catalog_entry_id: uuid.UUID,
+    zone_id: uuid.UUID | None = None,
 ) -> tuple[Device, str]:
     """Create a device and return it with its one-time-shown credential secret.
 
@@ -80,7 +85,12 @@ async def create_device(
     doesn't belong to this tenant — same existence+ownership check the
     catalog module's own routes use, reused here rather than duplicated.
     """
-    await catalog_service.get_catalog_entry(session, tenant_id, catalog_entry_id)
+    entry = await catalog_service.get_catalog_entry(session, tenant_id, catalog_entry_id)
+    # Disabled templates can't be picked for new devices (DESIGN.md §8).
+    if entry.status == "disabled":
+        raise catalog_service.CatalogEntryDisabledError
+    if zone_id is not None:
+        await zones_service.get_zone(session, tenant_id, zone_id)
 
     slug = await _unique_slug(session, tenant_id, name)
     secret = _generate_credential_secret()
@@ -89,6 +99,7 @@ async def create_device(
         name=name,
         slug=slug,
         catalog_entry_id=catalog_entry_id,
+        zone_id=zone_id,
         token_hash=auth_service.hash_secret(secret),
         status=DeviceStatus.ACTIVE.value,
     )
@@ -119,6 +130,28 @@ async def count_devices_by_catalog_entry(
     return {catalog_entry_id: count for catalog_entry_id, count in result.all()}
 
 
+async def count_devices_by_zone(
+    session: AsyncSession, tenant_id: uuid.UUID
+) -> dict[uuid.UUID, int]:
+    result = await session.execute(
+        select(Device.zone_id, func.count(Device.id))
+        .where(Device.tenant_id == tenant_id, Device.zone_id.is_not(None))
+        .group_by(Device.zone_id)
+    )
+    return {zone_id: count for zone_id, count in result.all()}
+
+
+async def list_device_ids_for_catalog_entry(
+    session: AsyncSession, tenant_id: uuid.UUID, catalog_entry_id: uuid.UUID
+) -> list[uuid.UUID]:
+    result = await session.execute(
+        select(Device.id).where(
+            Device.tenant_id == tenant_id, Device.catalog_entry_id == catalog_entry_id
+        )
+    )
+    return list(result.scalars().all())
+
+
 async def get_device(session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID) -> Device:
     result = await session.execute(
         select(Device).where(Device.tenant_id == tenant_id, Device.id == device_id)
@@ -135,12 +168,18 @@ async def update_device(
     device_id: uuid.UUID,
     name: str | None,
     device_status: DeviceStatus | None,
+    zone_id: uuid.UUID | None = None,
+    zone_set: bool = False,
 ) -> Device:
     device = await get_device(session, tenant_id, device_id)
     if name is not None:
         device.name = name
     if device_status is not None:
         device.status = device_status.value
+    if zone_set:
+        if zone_id is not None:
+            await zones_service.get_zone(session, tenant_id, zone_id)
+        device.zone_id = zone_id
     await session.flush()
     return device
 
@@ -161,6 +200,9 @@ async def rotate_credential(
     secret = _generate_credential_secret()
     device.token_hash = auth_service.hash_secret(secret)
     await session.flush()
+    # A rotation usually precedes flashing freshly generated firmware —
+    # re-publish the retained config so it's waiting on that first connect.
+    catalog_service.request_config_publish(session, device.catalog_entry_id)
     return device, secret
 
 

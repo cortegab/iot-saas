@@ -1,461 +1,115 @@
 "use client";
 
-import { useParams, useSearchParams } from "next/navigation";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
-import { useApi } from "@/hooks/useApi";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Pencil, Plus, Zap } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { useAuthContext } from "@/lib/auth-context";
-import { Button } from "@/components/ui/Button";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Badge } from "@/components/ui/Badge";
+import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { ConnectionBadge } from "@/components/ui/ConnectionBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
-import { Input } from "@/components/ui/Input";
-import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Metric } from "@/components/ui/Metric";
+import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Readout } from "@/components/ui/Readout";
-import { Tabs, TabPanel } from "@/components/ui/Tabs";
+import { Tabs, TabPanel, type TabItem } from "@/components/ui/Tabs";
 import { DeviceTrendChart } from "@/components/chart/DeviceTrendChart";
 import type { ChartThreshold } from "@/components/chart/TrendChart";
 import { RuleList } from "@/components/rules/RuleList";
 import { ActuatorControl } from "@/components/actuators/ActuatorControl";
+import { DeviceEditor } from "@/components/devices/DeviceEditor";
 import { CommandHistory } from "@/components/actuators/CommandHistory";
 import { leafPredicates } from "@/components/rules/RuleSummary";
-import { buildSketch } from "@/lib/firmware-sketch";
 import { ApiRequestError } from "@/lib/api-client";
+import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
+import { formatReading, isBoolMetric } from "@/lib/format-reading";
+import { getDeviceActuators } from "@/lib/device-actuators";
+import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
-type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
-type CommandResponse = components["schemas"]["CommandResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
-type NotificationResponse = components["schemas"]["NotificationResponse"];
+type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-function timeAgo(iso: string | null): string {
-  if (!iso) return "never";
-  const minutes = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
+const TABS = ["overview", "controls", "rules", "settings"] as const;
+type DeviceTab = (typeof TABS)[number];
 
-function formatCommandValue(value: unknown): string {
-  if (typeof value === "boolean") return value ? "ON" : "OFF";
-  return String(value);
-}
-
-/** Live value shown with its catalog decimals honoured; the raw number
- * (with `toLocaleString`) when the metric declares none. */
-function formatReading(value: number, meta?: CatalogMetric): string | number {
-  if (meta?.decimals != null && Number.isFinite(value)) return value.toFixed(meta.decimals);
-  return value;
-}
-
-function CurrentReadings({
-  deviceId,
-  thresholdsByMetric,
-  metricMeta,
+/** One readout per declared metric (demo G): value, unit, a gauge with the
+ * rule threshold marked, and "Last value, X ago" once the device is offline
+ * — stale data is shown as stale, never as current. */
+function Readouts({
+  device,
+  metrics,
+  latest,
+  thresholds,
 }: {
-  deviceId: string;
-  thresholdsByMetric: Record<string, ChartThreshold[]>;
-  /** Catalog metric definitions keyed by wire id, for unit + decimals. */
-  metricMeta?: Map<string, CatalogMetric>;
+  device: DeviceResponse;
+  metrics: CatalogMetric[];
+  latest: TelemetryLatestResponse[];
+  thresholds: Record<string, ChartThreshold[]>;
 }) {
-  const { data, error, isLoading } = useApiSWR<TelemetryLatestResponse[]>(`/devices/${deviceId}/latest`);
-
-  if (isLoading) return <LoadingSkeleton rows={2} rowClassName="h-20" />;
-  if (error) return <ErrorState message="Couldn't load current readings." />;
-  if (!data || data.length === 0) {
-    return (
-      <EmptyState
-        title="No readings yet"
-        description="Once this device publishes telemetry, its latest values appear here."
-      />
-    );
-  }
-
-  const [primary, ...rest] = data;
-  const primaryMeta = metricMeta?.get(primary.metric);
-  const threshold = thresholdsByMetric[primary.metric]?.[0]?.value;
-  // No historical extent is fetched here — when a rule pins a threshold, show a
-  // window around it so "how close to the limit" reads at a glance.
-  const span = threshold != null ? Math.max(Math.abs(threshold) * 0.4, 1) : 0;
-
+  const byMetric = new Map(latest.map((l) => [l.metric, l]));
+  // Undeclared metrics a device still publishes (legacy templates) come after.
+  const ids = [...metrics.map((m) => wireId(m)), ...latest.map((l) => l.metric).filter((id) => !metrics.some((m) => wireId(m) === id))];
+  const stale = device.connection_state !== "online";
   return (
-    <div className="flex flex-col gap-3">
-      <Card>
-        <Readout
-          size="lg"
-          label={primary.metric}
-          value={formatReading(primary.value, primaryMeta)}
-          unit={primaryMeta?.unit ?? undefined}
-          stamp={`updated ${timeAgo(primary.time)}`}
-          threshold={threshold}
-          min={threshold != null ? threshold - span : undefined}
-          max={threshold != null ? threshold + span : undefined}
-        />
-      </Card>
-      {rest.length > 0 && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {rest.map((m) => {
-            const meta = metricMeta?.get(m.metric);
-            return (
-              <Metric
-                key={m.metric}
-                label={m.metric}
-                value={formatReading(m.value, meta)}
-                hint={meta?.unit ?? undefined}
-              />
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Read-only actuator states for the Overview tab — the Actuators tab has the
- * interactive controls; this is just "what's the state right now" at a glance,
- * derived the same way ActuatorControl finds its actuator list (rule actions). */
-function ActuatorStateSummary({ deviceId }: { deviceId: string }) {
-  const { data: rules, isLoading: rulesLoading } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
-  const { data: commands } = useApiSWR<CommandResponse[]>(`/devices/${deviceId}/commands`, {
-    refreshInterval: 20_000,
-  });
-
-  const actuators = useMemo(() => {
-    const set = new Set<string>();
-    for (const rule of rules ?? []) {
-      for (const raw of rule.actions) {
-        if (
-          raw.type === "actuator_command" &&
-          typeof raw.actuator === "string" &&
-          (raw.device_id == null || raw.device_id === deviceId)
-        ) {
-          set.add(raw.actuator);
-        }
-      }
-    }
-    return Array.from(set);
-  }, [rules, deviceId]);
-
-  if (rulesLoading) return <LoadingSkeleton rows={1} rowClassName="h-16" />;
-  if (actuators.length === 0) return null;
-
-  return (
-    <div className="flex flex-wrap gap-3">
-      {actuators.map((actuator) => {
-        const latest = commands?.find((c) => c.actuator === actuator);
+    <section aria-label="Latest readings" className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
+      {ids.map((id) => {
+        const meta = metrics.find((m) => wireId(m) === id);
+        const reading = byMetric.get(id);
+        const threshold = thresholds[id]?.[0]?.value;
+        const span = threshold != null ? Math.max(Math.abs(threshold) * 0.4, 1) : 0;
+        const numeric = !isBoolMetric(meta);
+        const min = numeric ? (meta?.min ?? (threshold != null ? threshold - span : undefined)) : undefined;
+        const max = numeric ? (meta?.max ?? (threshold != null ? threshold + span : undefined)) : undefined;
         return (
-          <Metric
-            key={actuator}
-            label={actuator}
-            value={latest ? formatCommandValue(latest.value) : "—"}
-            className="min-w-32"
+          <Readout
+            key={id}
+            label={meta?.name ?? id}
+            value={reading ? formatReading(reading.value, meta) : "—"}
+            unit={reading && numeric ? (meta?.unit ?? undefined) : undefined}
+            threshold={numeric ? threshold : undefined}
+            min={min}
+            max={max}
+            stale={!!reading && stale}
+            stamp={!reading ? "No data yet" : stale ? `Last value, ${timeAgo(reading.time)}` : `updated ${timeAgo(reading.time)}`}
           />
         );
       })}
-    </div>
+    </section>
   );
 }
-
-function RailCard({
-  title,
-  action,
-  children,
-}: {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <Card padding="sm">
-      <div className="mb-2 flex items-center justify-between">
-        <h3 className="font-mono text-xs font-medium uppercase tracking-wide text-ink-muted">{title}</h3>
-        {action}
-      </div>
-      {children}
-    </Card>
-  );
-}
-
-function DeviceStatusRail({ device }: { device: DeviceResponse }) {
-  const rows: [string, ReactNode][] = [
-    ["Connection", <ConnectionBadge key="c" state={device.connection_state} />],
-    ["State", <span key="s" className="capitalize">{device.status}</span>],
-    ["Last seen", <span key="l" className="font-mono">{timeAgo(device.last_seen_at)}</span>],
-    ["Added", <span key="a" className="font-mono">{new Date(device.created_at).toLocaleDateString()}</span>],
-    ["Slug", <span key="g" className="font-mono">{device.slug}</span>],
-  ];
-  return (
-    <RailCard title="Device status">
-      <dl className="flex flex-col text-sm">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex items-center justify-between gap-3 border-t border-border py-2 first:border-t-0">
-            <dt className="font-mono text-xs text-ink-muted">{k}</dt>
-            <dd className="text-right text-ink">{v}</dd>
-          </div>
-        ))}
-      </dl>
-    </RailCard>
-  );
-}
-
-function ActiveRulesRail({
-  rules,
-  onViewRules,
-}: {
-  rules: RuleResponse[] | undefined;
-  onViewRules: () => void;
-}) {
-  const active = (rules ?? []).filter((r) => r.enabled);
-  return (
-    <RailCard
-      title="Active rules"
-      action={
-        <button type="button" onClick={onViewRules} className="font-mono text-xs text-accent hover:underline">
-          Rules →
-        </button>
-      }
-    >
-      {active.length === 0 ? (
-        <p className="text-sm text-ink-muted">No rules are armed on this device.</p>
-      ) : (
-        <ul className="flex flex-col">
-          {active.map((rule) => (
-            <li
-              key={rule.id}
-              className="flex items-center gap-2 border-t border-border py-2 text-sm first:border-t-0"
-            >
-              <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-status-online" />
-              <Link href={`/rules/${rule.id}`} className="text-ink hover:text-accent">
-                {rule.name}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </RailCard>
-  );
-}
-
-function RecentAlertsRail({ deviceId }: { deviceId: string }) {
-  const { data } = useApiSWR<NotificationResponse[]>("/notifications", { refreshInterval: 30_000 });
-  const forDevice = (data ?? []).filter((n) => n.device_id === deviceId).slice(0, 5);
-
-  return (
-    <RailCard
-      title="Recent alerts"
-      action={
-        <Link href="/notifications" className="font-mono text-xs text-accent hover:underline">
-          All →
-        </Link>
-      }
-    >
-      {forDevice.length === 0 ? (
-        <p className="text-sm text-ink-muted">No alerts for this device yet.</p>
-      ) : (
-        <ul className="flex flex-col">
-          {forDevice.map((n) => (
-            <li key={n.id} className="flex gap-2 border-t border-border py-2 text-sm first:border-t-0">
-              <span
-                aria-hidden
-                className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${
-                  n.read_at == null ? "bg-status-pending" : "bg-border"
-                }`}
-              />
-              <div className="min-w-0">
-                <p className="text-ink">{n.message}</p>
-                <p className="font-mono text-xs text-ink-muted">{timeAgo(n.created_at)}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </RailCard>
-  );
-}
-
-function FieldRow({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div>
-      <span className="font-mono text-xs uppercase tracking-wide text-ink-muted">{label}</span>
-      <div className="mt-1">{children}</div>
-    </div>
-  );
-}
-
-function TopicRow({ label, topic }: { label: string; topic: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-surface-raised px-3 py-2">
-      <div className="min-w-0">
-        <p className="text-xs text-ink-muted">{label}</p>
-        <p className="truncate font-mono text-sm text-ink">{topic}</p>
-      </div>
-      <button
-        type="button"
-        onClick={() => void navigator.clipboard.writeText(topic).then(() => setCopied(true))}
-        className="shrink-0 font-mono text-xs text-accent"
-      >
-        {copied ? "Copied" : "Copy"}
-      </button>
-    </div>
-  );
-}
-
-// MQTT topics are built from slugs, not display names — a device's slug is
-// fixed at creation and never changes on rename, so this is the one place
-// that reliably answers "what do I actually publish to?" after onboarding.
-// One row per catalog-declared metric/actuator; a "Legacy" device (no
-// declarations) falls back to the generic placeholder pattern this page
-// showed before the catalog existed.
-function DeviceTopics({ device }: { device: DeviceResponse }) {
-  const { memberships, currentTenantId } = useAuthContext();
-  const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(`/catalog/${device.catalog_entry_id}`);
-  const tenantSlug = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_slug;
-
-  if (!tenantSlug) return null;
-
-  const subtree = `${tenantSlug}/${device.slug}`;
-  const metrics = catalogEntry?.metrics ?? [];
-  const actuators = catalogEntry?.actuators ?? [];
-
-  if (metrics.length === 0 && actuators.length === 0) {
-    return (
-      <div className="flex flex-col gap-2">
-        <p className="text-xs text-ink-muted">
-          <span className="font-mono">{subtree}/&lt;metric&gt;</span> — commands publish to{" "}
-          <span className="font-mono">{subtree}/cmd/&lt;actuator&gt;</span>
-        </p>
-        <TopicRow label="Topic prefix" topic={subtree} />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-2">
-      {metrics.map((m) => {
-        const id = wireId(m);
-        return <TopicRow key={`metric-${id}`} label={`Telemetry — ${m.name}`} topic={`${subtree}/${id}`} />;
-      })}
-      {actuators.map((a) => {
-        const id = wireId(a);
-        return (
-          <div key={`actuator-${id}`} className="flex flex-col gap-1">
-            <TopicRow label={`Command — ${a.name} (device subscribes)`} topic={`${subtree}/cmd/${id}`} />
-            <TopicRow
-              label={`Desired state — ${a.name} (device subscribes, retained)`}
-              topic={`${subtree}/state/${id}`}
-            />
-            <TopicRow
-              label={`Acknowledgement — ${a.name} (device publishes)`}
-              topic={`${subtree}/ack/${id}`}
-            />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-// On-demand onboarding code, catalog-driven — unlike devices/new/page.tsx's
-// FirmwareSketch, the credential is never available here (shown exactly once,
-// at creation/rotation, never retrievable afterward), so buildSketch is
-// called with credential: null and emits a placeholder instead.
-function OnboardingCode({ device }: { device: DeviceResponse }) {
-  const { memberships, currentTenantId } = useAuthContext();
-  const [open, setOpen] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(
-    open ? `/catalog/${device.catalog_entry_id}` : null,
-  );
-  const tenantSlug = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_slug;
-
-  if (!open) {
-    return (
-      <Button type="button" variant="ghost" onClick={() => setOpen(true)}>
-        Generate onboarding code
-      </Button>
-    );
-  }
-
-  const sketch = buildSketch({
-    tenantSlug: tenantSlug ?? "",
-    deviceSlug: device.slug,
-    host: typeof window !== "undefined" ? window.location.hostname : "YOUR_SERVER_HOST",
-    tls: typeof window !== "undefined" && window.location.protocol === "https:",
-    metrics: catalogEntry?.metrics ?? [],
-    actuators: catalogEntry?.actuators ?? [],
-    credential: null,
-  });
-
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="text-xs text-ink-muted">
-        Credentials aren&apos;t included — paste them in after rotating a credential above.
-      </p>
-      <pre className="max-h-80 overflow-auto rounded-md border border-border bg-surface-raised p-3 text-xs text-ink">
-        <code>{sketch}</code>
-      </pre>
-      <div className="flex gap-3">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={() => void navigator.clipboard.writeText(sketch).then(() => setCopied(true))}
-        >
-          {copied ? "Copied" : "Copy sketch"}
-        </Button>
-        <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
-          Close
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-const TABS = [
-  { id: "overview", label: "Overview" },
-  { id: "metrics", label: "Metrics" },
-  { id: "actuators", label: "Actuators" },
-  { id: "rules", label: "Rules" },
-  { id: "settings", label: "Settings" },
-];
 
 export default function DeviceDetailPage() {
-  const params = useParams<{ deviceId: string }>();
-  const deviceId = params.deviceId;
-  const searchParams = useSearchParams();
-  const api = useApi();
+  const { deviceId } = useParams<{ deviceId: string }>();
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const { can } = usePermissions();
+  const canWrite = can("devices.write");
 
-  const [tab, setTab] = useState(searchParams.get("tab") ?? "overview");
+  const tabParam = params.get("tab");
+  const tab: DeviceTab = (TABS as readonly string[]).includes(tabParam ?? "") ? (tabParam as DeviceTab) : "overview";
+  function setTab(next: string) {
+    const q = new URLSearchParams(params.toString());
+    if (next === "overview") q.delete("tab");
+    else q.set("tab", next);
+    const qs = q.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
 
   const { data: device, error, isLoading, mutate } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
-  // Same SWR key RuleList/ActuatorControl fetch — shared cache, one request.
   const { data: rules } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
-  // Same key CurrentReadings/DeviceTrendChart fetch — deduped. Lets the Overview
-  // tab show one "no readings" state instead of the readout and chart each
-  // rendering their own.
-  const { data: latest, isLoading: latestLoading } = useApiSWR<TelemetryLatestResponse[]>(
-    `/devices/${deviceId}/latest`,
-  );
-  const hasReadings = (latest?.length ?? 0) > 0;
-  // Same key DeviceTopics fetches — deduped. Gives readings their unit + decimals.
-  const { data: catalogEntry } = useApiSWR<CatalogEntryResponse>(
-    device ? `/catalog/${device.catalog_entry_id}` : null,
-  );
-  const metricMetaByWireId = useMemo(
-    () => new Map((catalogEntry?.metrics ?? []).map((m) => [wireId(m), m] as const)),
-    [catalogEntry],
-  );
+  const { data: latest, isLoading: latestLoading } = useApiSWR<TelemetryLatestResponse[]>(`/devices/${deviceId}/latest`);
+  const { data: template } = useApiSWR<CatalogEntryResponse>(device ? `/catalog/${device.catalog_entry_id}` : null);
+  const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
+  const actuators = useMemo(() => getDeviceActuators(template, rules, deviceId), [template, rules, deviceId]);
 
   const thresholdsByMetric = useMemo(() => {
     const map: Record<string, ChartThreshold[]> = {};
@@ -465,193 +119,185 @@ export default function DeviceDetailPage() {
         // A multi-device rule may read another device's metric — only this
         // device's leaves belong on this device's chart.
         if (leaf.device_id != null && leaf.device_id !== deviceId) continue;
-        (map[leaf.metric] ??= []).push({
-          value: leaf.threshold,
-          label: `${leaf.operator} ${leaf.threshold}`,
-        });
+        const rhs = leaf.rhs;
+        if (rhs?.source === "static") {
+          (map[leaf.metric] ??= []).push({ value: rhs.value, label: `${leaf.operator} ${rhs.value}` });
+        } else if (rhs?.source === "range") {
+          (map[leaf.metric] ??= []).push(
+            { value: rhs.low, label: `${leaf.operator} ${rhs.low}` },
+            { value: rhs.high, label: `${leaf.operator} ${rhs.high}` },
+          );
+        }
       }
     }
     return map;
   }, [rules, deviceId]);
 
-  const [renaming, setRenaming] = useState(false);
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [rotated, setRotated] = useState<DeviceCreateResponse["credential"] | null>(null);
+  // An old ?tab=metrics / ?tab=actuators link lands on its new home.
+  useEffect(() => {
+    if (tabParam === "metrics") setTab("overview");
+    if (tabParam === "actuators") setTab("controls");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabParam]);
 
   if (isLoading) return <LoadingSkeleton rows={5} rowClassName="h-14" />;
   if (error) {
-    return (
-      <ErrorState
-        message={error instanceof ApiRequestError ? error.message : "Couldn't load this device."}
-        onRetry={() => void mutate()}
-      />
-    );
+    if (error instanceof ApiRequestError && error.status === 404) {
+      return (
+        <EmptyState
+          title="This device doesn't exist"
+          description="It may have been deleted, or the link belongs to another workspace."
+          action={
+            <Link href="/devices" className={buttonClassName({ variant: "secondary" })}>
+              Back to devices
+            </Link>
+          }
+        />
+      );
+    }
+    return <ErrorState message={error instanceof ApiRequestError ? error.message : "Couldn't load this device."} onRetry={() => void mutate()} />;
   }
   if (!device) return null;
 
-  async function toggleStatus() {
-    setBusy(true);
-    setActionError(null);
-    try {
-      const next = device!.status === "active" ? "disabled" : "active";
-      await api.patch(`/devices/${deviceId}`, { status: next });
-      await mutate();
-    } catch (err) {
-      setActionError(err instanceof ApiRequestError ? err.message : "Couldn't update status.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const st = DEVICE_STATUS[deviceStatusKey(device)];
+  const zone = zones?.find((z) => z.id === device.zone_id);
+  const neverConnected = device.connection_state === "never_connected";
+  const metrics = template?.metrics ?? [];
+  const hasReadings = (latest?.length ?? 0) > 0;
 
-  async function saveName() {
-    setBusy(true);
-    setActionError(null);
-    try {
-      await api.patch(`/devices/${deviceId}`, { name });
-      await mutate();
-      setRenaming(false);
-    } catch (err) {
-      setActionError(err instanceof ApiRequestError ? err.message : "Couldn't rename device.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const tabs: TabItem[] = [
+    { id: "overview", label: "Overview" },
+    { id: "controls", label: "Controls", count: actuators.length },
+    { id: "rules", label: "Rules", count: rules?.length },
+    { id: "settings", label: "Settings" },
+  ];
 
-  async function rotateCredential() {
-    setBusy(true);
-    setActionError(null);
-    try {
-      const result = await api.post<DeviceCreateResponse>(`/devices/${deviceId}/rotate-credential`);
-      setRotated(result.credential);
-    } catch (err) {
-      setActionError(err instanceof ApiRequestError ? err.message : "Couldn't rotate credential.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const meta = [
+    zone && (
+      <span key="z">
+        Zone{" "}
+        <Link href={`/zones?peek=${zone.id}`} className="text-accent hover:underline">
+          {zone.name}
+        </Link>
+      </span>
+    ),
+    template && (
+      <span key="t">
+        Template{" "}
+        <Link href={`/templates?peek=${template.id}`} className="text-accent hover:underline">
+          {template.name}
+        </Link>
+      </span>
+    ),
+    <span key="s">
+      Last seen <b className="font-medium text-ink">{device.last_seen_at ? timeAgo(device.last_seen_at) : "never"}</b>
+    </span>,
+    device.fw_version && (
+      <span key="f">
+        Firmware <b className="font-medium text-ink">{device.fw_version}</b>
+      </span>
+    ),
+    device.rssi != null && (
+      <span key="r">
+        Signal <b className="font-medium text-ink">{device.rssi} dBm</b>
+      </span>
+    ),
+    device.battery_pct != null && (
+      <span key="b">
+        Battery <b className="font-medium text-ink">{device.battery_pct}%</b>
+      </span>
+    ),
+  ].filter(Boolean);
 
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        title={device.name}
         breadcrumbs={[{ href: "/devices", label: "Devices" }, { label: device.name }]}
-        actions={<ConnectionBadge state={device.connection_state} />}
+        title={device.name}
+        monoTitle
+        status={<Badge tone={st.tone} shape={st.shape} label={st.label} />}
+        meta={<div className="flex flex-wrap gap-x-4 gap-y-1">{meta}</div>}
+        actions={
+          canWrite ? (
+            <>
+              {neverConnected && (
+                <Link href={`/devices/${deviceId}/connect`} className={buttonClassName()}>
+                  <Zap aria-hidden size={15} />
+                  Connect device
+                </Link>
+              )}
+              {tab !== "settings" && (
+                <Button variant="secondary" onClick={() => setTab("settings")}>
+                  <Pencil aria-hidden size={15} />
+                  Edit device
+                </Button>
+              )}
+            </>
+          ) : undefined
+        }
       />
 
-      <Tabs tabs={TABS} active={tab} onChange={setTab} />
+      <Tabs tabs={tabs} active={tab} onChange={setTab} ariaLabel="Device sections" />
 
       <TabPanel id="overview" active={tab}>
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="flex flex-col gap-6">
-            {!latestLoading && !hasReadings ? (
-              <EmptyState
-                title="No readings yet"
-                description="Once this device publishes telemetry, its latest values and trend chart appear here."
-              />
-            ) : (
-              <>
-                <CurrentReadings
-                  deviceId={deviceId}
-                  thresholdsByMetric={thresholdsByMetric}
-                  metricMeta={metricMetaByWireId}
-                />
-                <DeviceTrendChart deviceId={deviceId} thresholdsByMetric={thresholdsByMetric} />
-              </>
-            )}
-            <ActuatorStateSummary deviceId={deviceId} />
-          </div>
+        {!latestLoading && !hasReadings && metrics.length === 0 ? (
+          <EmptyState title="No readings yet" description="Once this device publishes telemetry, its latest values and trend chart appear here." />
+        ) : (
           <div className="flex flex-col gap-4">
-            <DeviceStatusRail device={device} />
-            <ActiveRulesRail rules={rules} onViewRules={() => setTab("rules")} />
-            <RecentAlertsRail deviceId={deviceId} />
+            {latest && <Readouts device={device} metrics={metrics} latest={latest} thresholds={thresholdsByMetric} />}
+            <Card>
+              {!hasReadings && neverConnected ? (
+                <EmptyState
+                  title="Waiting for the first message"
+                  description="Flash the sketch and power the board. The chart starts the moment a reading arrives."
+                  action={
+                    canWrite ? (
+                      <Link href={`/devices/${deviceId}/connect`} className={buttonClassName()}>
+                        <Zap aria-hidden size={15} />
+                        Connect device
+                      </Link>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <DeviceTrendChart deviceId={deviceId} metrics={metrics} thresholdsByMetric={thresholdsByMetric} />
+              )}
+            </Card>
           </div>
-        </div>
+        )}
       </TabPanel>
 
-      <TabPanel id="metrics" active={tab}>
-        <DeviceTrendChart deviceId={deviceId} thresholdsByMetric={thresholdsByMetric} />
-      </TabPanel>
-
-      <TabPanel id="actuators" active={tab}>
+      <TabPanel id="controls" active={tab}>
         <div className="flex flex-col gap-4">
-          <ActuatorControl
-            deviceId={deviceId}
-            deviceOnline={device.connection_state === "online"}
-            catalogEntryId={device.catalog_entry_id}
-          />
+          <ActuatorControl deviceId={deviceId} deviceOnline={device.connection_state === "online"} catalogEntryId={device.catalog_entry_id} />
+          {device.connection_state !== "online" && actuators.length > 0 && (
+            <p className="text-[13px] text-ink-muted">
+              This device is offline. A command sent now becomes its desired state and is delivered when it reconnects, if still inside its TTL.
+            </p>
+          )}
           <CommandHistory deviceId={deviceId} />
         </div>
       </TabPanel>
 
       <TabPanel id="rules" active={tab}>
-        <RuleList deviceId={deviceId} />
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-[13px] text-ink-muted">Stale or missing data is unknown. It never fires or clears a rule.</p>
+            {can("rules.write") && (
+              <Link href={`/rules/new?device=${deviceId}`} className={buttonClassName({ variant: "secondary", size: "sm" })}>
+                <Plus aria-hidden size={14} />
+                New rule
+              </Link>
+            )}
+          </div>
+          <RuleList deviceId={deviceId} />
+        </div>
       </TabPanel>
 
       <TabPanel id="settings" active={tab}>
-        <Card className="flex flex-col gap-4">
-          {actionError && <ErrorState message={actionError} />}
-
-          <FieldRow label="Name">
-            {renaming ? (
-              <div className="flex flex-wrap gap-2">
-                <Input compact value={name} onChange={(e) => setName(e.target.value)} />
-                <Button disabled={busy} onClick={() => void saveName()}>
-                  Save
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setRenaming(false)}>
-                  Cancel
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-ink">{device.name}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  onClick={() => {
-                    setName(device.name);
-                    setRenaming(true);
-                  }}
-                >
-                  Rename
-                </Button>
-              </div>
-            )}
-          </FieldRow>
-
-          <FieldRow label="Status">
-            <div className="flex items-center gap-3">
-              <span className="text-sm capitalize text-ink">{device.status}</span>
-              <Button type="button" variant="ghost" disabled={busy} onClick={() => void toggleStatus()}>
-                {device.status === "active" ? "Disable" : "Enable"}
-              </Button>
-            </div>
-          </FieldRow>
-
-          <FieldRow label="Credential">
-            {rotated ? (
-              <div className="rounded-xl border border-status-pending/40 bg-status-pending-surface p-3 text-sm">
-                <p className="font-medium text-ink">Copy this now — it will not be shown again.</p>
-                <p className="mt-1 font-mono text-ink">{rotated.username}</p>
-                <p className="font-mono text-ink">{rotated.password}</p>
-              </div>
-            ) : (
-              <Button type="button" variant="ghost" disabled={busy} onClick={() => void rotateCredential()}>
-                Rotate credential
-              </Button>
-            )}
-          </FieldRow>
-
-          <FieldRow label="MQTT topics">
-            <DeviceTopics device={device} />
-          </FieldRow>
-
-          <FieldRow label="Onboarding code">
-            <OnboardingCode device={device} />
-          </FieldRow>
-        </Card>
+        {/* The one place a device is edited (DESIGN.md §7): General, rule evaluation,
+            template, connection and the danger zone, as stacked cards. */}
+        <DeviceEditor deviceId={deviceId} embedded />
       </TabPanel>
     </div>
   );

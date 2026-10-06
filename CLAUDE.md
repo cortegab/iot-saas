@@ -205,6 +205,14 @@ The platform stamps its own receive time for staleness math and never trusts thi
 **Device auth:** per-device tokens / API keys, **stored hashed** (argon2id), never in plaintext.
 MQTT credentials map 1:1 to a device; EMQX ACLs restrict each device to its own topic subtree.
 
+**BLE Wi-Fi provisioning** (device-side, before MQTT): sketches generated with "Set up from a
+phone" use **Espressif's unified provisioning** (Arduino `WiFiProv`), so the ESP BLE Provisioning
+app works today and the future app embeds Espressif's libraries. The service name is the device
+name; the QR carries the device's own MQTT credential (`pop` = password, plus `username` = device
+id for Security 2), so rotating the credential means a new sketch and a new QR. Security 1 (PoP)
+or 2 (SRP6a; salt/verifier computed in the browser) — details in `docs/ble-provisioning.md`. It is
+part of this shared contract: keep it in sync across variants, with boards already flashed in mind.
+
 Commits touching ingestion, rules, commands, or the telemetry schema are tagged `[core]` so they can
 be cross-checked against the other deployment variant.
 
@@ -260,6 +268,12 @@ policies are not optional tuning:
 on noisy sensor data will cycle a relay continuously and destroy hardware. Do not add a rule path
 that bypasses them.
 
+The schema above is the original flat shape; the live one is the multi-device tree in
+`docs/rule-engine-multi-device.md` (per-leaf `hysteresis`, `execution_policy`, `actions[]`). A
+rule may also carry **`clear_actions`**, which run once when a fired rule's condition becomes
+*known*-false again (after `execution_policy.clear_for_duration`), e.g. to turn an actuator back
+off. Stale or missing data is *unknown*, never false: it neither fires, re-arms, nor clears.
+
 ### The evaluator interface
 
 Every rule type implements the same protocol. This is the extension point for custom logic and
@@ -303,6 +317,7 @@ iot-saas/
 │  └─ src/types/api.ts       # GENERATED from OpenAPI — never edit by hand
 ├─ infra/                    # docker-compose.yml, nginx/, emqx/, backups/
 └─ docs/                     # firmware quickstart, API reference
+   └─ design/                # DESIGN.md (frontend design directives) + redesign/ reference demos
 ```
 
 **Module discipline.** FastAPI won't enforce structure, so this is the rule: every module under
@@ -356,11 +371,20 @@ files on the frontend and for MQTT topic segments.
 `frontend/src/types/api.ts` as a build artifact. A hand-edited API type is a bug waiting to happen —
 this codegen step is what replaces the type safety a single-language stack would have given you.
 
+**Frontend design** — `docs/design/DESIGN.md` is binding for the frontend's look, layout,
+components, interaction and wording; demo G (`docs/design/redesign/demo-g-full-site.html`) is the
+visual reference where it is silent. Precedence: §9 constraints > DESIGN.md > demo G > everything
+else (code comments such as the old "Control Room" notes, demos A–F, `PLAN.md` UI bullets, older
+notes). Design skills/plugins (`frontend-design`, `ui-ux-pro-max`) may help with technique, but
+their palettes, fonts and styles are **not** applied here — DESIGN.md's tokens and patterns win. To
+deviate, change DESIGN.md first (with a changelog entry), then the code.
+
 **Testing** — `pytest` unit tests for the rule evaluators (the highest-risk logic: thresholds,
 hysteresis, duration, cooldown) and for payload normalization. Integration test for the ingestion →
 rule → command path. Evaluators are pure and synchronous specifically so they are trivial to test
 exhaustively — take advantage of that. Also keep an explicit test proving one tenant cannot read
-another's rows, run against real RLS policies rather than mocks.
+another's rows, run against real RLS policies rather than mocks. Frontend E2E coverage
+(`frontend/e2e/`, Playwright) is separate and local-only — see §8.
 
 ---
 
@@ -449,6 +473,18 @@ to watch it.
 cd backend && uv run pytest && uv run ruff check . && uv run mypy src/app
 ```
 
+**Frontend E2E (Playwright)** — one-time setup, then run against the dev stack from §8:
+
+```bash
+cd frontend && npx playwright install chromium
+cp .env.test.example .env.test   # fill in a dev account's E2E_EMAIL / E2E_PASSWORD
+pnpm test:e2e
+```
+
+Specs live in `frontend/e2e/`. The suite creates and deletes its own fixture rule via the API
+(`frontend/e2e/fixtures.ts`) rather than depending on whatever rules happen to already exist. Local
+only — the repo has no test CI (§7 covers backend `pytest`; this is the frontend equivalent).
+
 ---
 
 ## 9. Constraints future changes must respect
@@ -477,3 +513,5 @@ These are not style preferences. Breaking one of these breaks a requirement.
     ingestion.
 12. **Device tokens and API keys are stored hashed.** No plaintext credentials, ever.
 13. **The restore runbook must stay tested.** A backup that has never been restored is not a backup.
+14. **Frontend UI follows `docs/design/DESIGN.md`.** No one-off styles, palettes or component
+    variants; one pattern per job.

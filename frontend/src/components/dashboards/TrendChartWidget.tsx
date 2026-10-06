@@ -1,31 +1,15 @@
 "use client";
 
-import { useApiSWR } from "@/hooks/useApiSWR";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { TrendChart } from "@/components/chart/TrendChart";
 import { WidgetCard } from "@/components/dashboards/WidgetCard";
-import type { components } from "@/types/api";
+import { DeviceLink, useWidgetDevice } from "@/components/dashboards/widget-common";
 
-type DeviceResponse = components["schemas"]["DeviceResponse"];
-
-export function TrendChartWidget({
-  deviceId,
-  metric,
-  onRemove,
-}: {
-  deviceId: string;
-  metric: string | null;
-  onRemove?: () => void;
-}) {
-  const { data: device } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
-
+export function TrendChartWidget({ deviceId, metric }: { deviceId: string; metric: string | null }) {
+  const { device, meta } = useWidgetDevice(deviceId, metric);
   return (
-    <WidgetCard title={device?.name ?? "Trend"} onRemove={onRemove}>
-      {metric ? (
-        <TrendChart deviceId={deviceId} metric={metric} fillHeight />
-      ) : (
-        <EmptyState title="No metric configured" />
-      )}
+    <WidgetCard title={meta?.name ?? metric ?? "Trend"} subtitle={<DeviceLink device={device} />}>
+      {metric ? <TrendChart deviceId={deviceId} metric={metric} meta={meta} fillHeight /> : <EmptyState title="No metric configured" />}
     </WidgetCard>
   );
 }

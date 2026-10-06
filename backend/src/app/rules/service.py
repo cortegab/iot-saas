@@ -4,44 +4,92 @@ rule_cache_loop in app/worker.py), the in-memory last-known-value cache
 multi-device conditions read from, and hot-path evaluation/dispatch.
 """
 
+import asyncio
+import copy
+import json
 import logging
 import uuid
-from datetime import datetime
-from typing import Any, NamedTuple
+from collections import Counter
+from collections.abc import Coroutine
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal, NamedTuple
+from zoneinfo import ZoneInfo
 
 import aiomqtt
-import httpx
+import redis.asyncio as redis
+from croniter import CroniterError, croniter
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.auth import service as auth_service
 from app.commands import service as commands_service
-from app.db import add_post_commit_callback
+from app.config import settings
+from app.db import add_post_commit_callback, set_tenant_context
+from app.health.service import derive_max_age
 from app.notifications import service as notifications_service
+from app.realtime import service as realtime_service
 from app.redis import redis_client
+from app.rules import executors
+from app.rules import versions as rule_versions
 from app.rules.evaluators import (
-    Evaluator,
+    CHANGE_OPERATORS,
+    DEFAULT_STALE_METRIC_AGE_SECONDS,
+    Edge,
     MetricSnapshot,
     MetricValue,
     RuleState,
     SignalKey,
     ThresholdEvaluator,
+    align_state_to_condition,
+    condition_fingerprint,
+    evaluate_condition,
+    explain_condition,
+    has_pending_timer,
     referenced_signals,
+    reset_latch,
+    rule_state_from_dict,
+    rule_state_to_dict,
 )
-from app.rules.models import Rule, RuleDevice, RuleDeviceRole, RuleType
+from app.rules.models import (
+    ActionExecution,
+    Rule,
+    RuleDevice,
+    RuleDeviceRole,
+    RuleExecution,
+    RuleType,
+    RuleVersion,
+)
+from app.rules.schemas import (
+    RuleHealth,
+    RuleSignalHealth,
+    SimulateActionPreview,
+    SimulateReplayResult,
+    SimulateReplayWindow,
+    SimulateRequest,
+    SimulateResponse,
+)
+from app.telemetry import service as telemetry_service
+from app.tenants import service as tenants_service
 
 log = logging.getLogger("rules")
 
 RULES_INVALIDATE_CHANNEL = "rules:invalidate"
+# One out-of-band evaluation of a single rule — carries {tenant_id, rule_id,
+# trigger_source}. Published by request_manual_run (POST /rules/{id}/run) and
+# by app.worker's schedule_loop; consumed by app.worker's manual_command_loop.
+RULES_MANUAL_CHANNEL = "rules:manual"
+# Redis set of rule ids currently latched (strategy "latch", fired, not yet
+# reset). Written by the worker, read by the API for RuleResponse.latched.
+RULES_LATCHED_REDIS_KEY = "rules:latched"
 
-# The one staleness bound this codebase used to hardcode twice (once here,
-# once as devices.device_offline_after_seconds — see evaluators.py's old
-# STALE_METRIC_AGE_SECONDS). Now the fallback for any (device, metric) signal
-# health_monitor_loop hasn't computed a catalog-derived bound for yet
-# (worker startup race, or no matching catalog metric) — see
-# reload_staleness_thresholds below and app.health.service's derivation.
-DEFAULT_STALE_METRIC_AGE_SECONDS = 90
+# Redis key holding the periodic JSON checkpoint of _rule_states (Phase 5) —
+# {rule_id: rule_state_to_dict(...)}. Written by app.worker's
+# rules_maintenance_loop, restored once at worker startup. Best-effort: a hard
+# crash between checkpoints loses up to one interval of armed/cooldown/hold
+# progress (CLAUDE.md §9 — no full state externalisation on a single host).
+RULE_STATE_REDIS_KEY = "rules:state"
 
-_THRESHOLD_EVALUATOR: Evaluator = ThresholdEvaluator()
+_THRESHOLD_EVALUATOR = ThresholdEvaluator()
 
 # Mirrors frontend/src/components/rules/RuleSummary.tsx's OPERATOR_WORDS —
 # keep the two in sync if either wording changes.
@@ -52,6 +100,13 @@ _OPERATOR_WORDS: dict[str, str] = {
     "<=": "falls to or below",
     "==": "equals",
     "!=": "is different from",
+    "between": "goes between",
+    "not_between": "goes outside",
+    "in": "is one of",
+    "not_in": "is none of",
+    "changed": "changes",
+    "increased": "increases",
+    "decreased": "decreases",
 }
 
 _DEFAULT_POLICY: dict[str, Any] = {
@@ -59,6 +114,7 @@ _DEFAULT_POLICY: dict[str, Any] = {
     "for_duration": 0,
     "cooldown": 0,
     "reset_condition": None,
+    "clear_for_duration": 0,
 }
 
 
@@ -77,11 +133,30 @@ def _leaf_signal_key(leaf: dict[str, Any]) -> SignalKey:
     return SignalKey(str(leaf["device_id"]), leaf["metric"])
 
 
+def _rhs_clause(leaf: dict[str, Any]) -> str:
+    """The right-hand-side phrase after the operator word, if any —
+    changed/increased/decreased take none (they compare a signal to its own
+    previous reading, nothing to name)."""
+    if leaf["operator"] in CHANGE_OPERATORS:
+        return ""
+    rhs = leaf.get("rhs") or {}
+    source = rhs.get("source")
+    if source == "static":
+        return f" {rhs['value']}"
+    if source == "metric":
+        return f" {rhs['metric']}"
+    if source == "range":
+        return f" {rhs['low']} and {rhs['high']}"
+    if source == "set":
+        return " " + ", ".join(str(v) for v in rhs.get("values", []))
+    return ""
+
+
 def _leaf_summary(leaf: dict[str, Any], snapshot: MetricSnapshot) -> str:
     op = _OPERATOR_WORDS.get(leaf["operator"], leaf["operator"])
     current = snapshot.get(_leaf_signal_key(leaf))
     current_clause = f" (currently {current.value})" if current is not None else ""
-    return f"{leaf['metric']} {op} {leaf['threshold']}{current_clause}"
+    return f"{leaf['metric']} {op}{_rhs_clause(leaf)}{current_clause}"
 
 
 def _condition_summary(condition: dict[str, Any], snapshot: MetricSnapshot) -> str:
@@ -95,19 +170,36 @@ def _plain_summary(condition: dict[str, Any]) -> str:
     """No snapshot — used to auto-name a rule created without an explicit name."""
     if condition["kind"] == "leaf":
         op = _OPERATOR_WORDS.get(condition["operator"], condition["operator"])
-        return f"{condition['metric']} {op} {condition['threshold']}"
+        return f"{condition['metric']} {op}{_rhs_clause(condition)}"
     joiner = " and " if condition["op"] == "AND" else " or "
     return joiner.join(_plain_summary(child) for child in condition["predicates"])
 
 
-def _auto_name(condition: dict[str, Any]) -> str:
+_TRIGGER_RULE_NAMES = {
+    "schedule": "Scheduled rule",
+    "manual": "Manual rule",
+    "device_status": "Device status rule",
+}
+
+
+def _auto_name(condition: dict[str, Any] | None, trigger: dict[str, Any] | None = None) -> str:
+    if condition is None:
+        return _TRIGGER_RULE_NAMES.get((trigger or {}).get("type", ""), "Rule")
     summary = _plain_summary(condition)
     summary = summary[0].upper() + summary[1:] if summary else "Rule"
     return summary[:200]
 
 
-def _default_message(rule: Rule, snapshot: MetricSnapshot) -> str:
-    return f"{_condition_summary(rule.condition, snapshot)}."
+def _default_message(rule: Rule, snapshot: MetricSnapshot, edge: Edge = "fire") -> str:
+    if edge == "clear" and rule.condition is not None:
+        return f"Cleared: {_condition_summary(rule.condition, snapshot)}."
+    if rule.condition is not None:
+        return f"{_condition_summary(rule.condition, snapshot)}."
+    trigger = rule.trigger or {}
+    if trigger.get("type") == "device_status":
+        verb = "connected" if trigger.get("transition") == "connected" else "disconnected"
+        return f"Device {verb}."
+    return f"{rule.name}."
 
 
 def _stamp_condition_device(node: dict[str, Any], device_id: uuid.UUID) -> dict[str, Any]:
@@ -122,7 +214,9 @@ def _stamp_condition_device(node: dict[str, Any], device_id: uuid.UUID) -> dict[
     }
 
 
-def _condition_leaves(node: dict[str, Any]) -> list[dict[str, Any]]:
+def _condition_leaves(node: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if node is None:
+        return []
     if node.get("kind") == "leaf":
         return [node]
     out: list[dict[str, Any]] = []
@@ -132,15 +226,26 @@ def _condition_leaves(node: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _rule_device_map(
-    condition: dict[str, Any], actions: list[dict[str, Any]]
+    condition: dict[str, Any] | None,
+    actions: list[dict[str, Any]],
+    trigger: dict[str, Any] | None = None,
+    clear_actions: list[dict[str, Any]] | None = None,
 ) -> dict[uuid.UUID, set[str]]:
-    """device_id -> {roles} the rule references, for the rule_devices table."""
+    """device_id -> {roles} the rule references, for the rule_devices table.
+    A device_status trigger's device counts as an input too — the rule
+    watches it even though no condition leaf need reference it (condition
+    may be None entirely)."""
     out: dict[uuid.UUID, set[str]] = {}
     for leaf in _condition_leaves(condition):
         did = leaf.get("device_id")
         if did:
             out.setdefault(uuid.UUID(str(did)), set()).add(RuleDeviceRole.INPUT.value)
-    for action in actions:
+        rhs = leaf.get("rhs") or {}
+        if rhs.get("source") == "metric" and rhs.get("device_id"):
+            out.setdefault(uuid.UUID(str(rhs["device_id"])), set()).add(RuleDeviceRole.INPUT.value)
+    if trigger and trigger.get("type") == "device_status" and trigger.get("device_id"):
+        out.setdefault(uuid.UUID(str(trigger["device_id"])), set()).add(RuleDeviceRole.INPUT.value)
+    for action in [*actions, *(clear_actions or [])]:
         if action.get("type") == "actuator_command" and action.get("device_id"):
             out.setdefault(uuid.UUID(str(action["device_id"])), set()).add(
                 RuleDeviceRole.TARGET.value
@@ -188,9 +293,48 @@ async def _sync_rule_devices(
     await session.flush()
 
 
-def _assert_leaves_have_device(condition: dict[str, Any]) -> None:
+def _assert_leaves_have_device(condition: dict[str, Any] | None) -> None:
     if any(not leaf.get("device_id") for leaf in _condition_leaves(condition)):
         raise RuleValidationError("every condition must name a device")
+
+
+def _validate_trigger(trigger: dict[str, Any]) -> None:
+    """Cron + timezone sanity for a schedule trigger — done here rather than a
+    Pydantic field_validator (this schema module has no such precedent).
+    Metric / manual triggers carry nothing to validate.
+    """
+    if trigger.get("type") != "schedule":
+        return
+    cron = trigger.get("cron", "")
+    if not croniter.is_valid(cron):
+        raise RuleValidationError(f"invalid cron expression: {cron!r}")
+    try:
+        ZoneInfo(trigger.get("timezone", "UTC"))
+    except (KeyError, ValueError) as exc:
+        raise RuleValidationError(f"invalid timezone: {trigger.get('timezone')!r}") from exc
+
+
+def _validate_clear_actions(trigger: dict[str, Any], clear_actions: list[dict[str, Any]]) -> None:
+    """A clear needs a condition that can go from true to known-false — a
+    schedule/manual run or a device_status event has no such transition."""
+    if clear_actions and (trigger or {}).get("type", "metric") != "metric":
+        raise RuleValidationError('clear actions are only supported for trigger.type "metric"')
+
+
+def _validate_latch(
+    trigger: dict[str, Any], policy: dict[str, Any], clear_actions: list[dict[str, Any]]
+) -> None:
+    """A latch holds after firing until reset — it only means something for a
+    stream of readings (an event trigger fires per event, see
+    evaluators.ThresholdEvaluator.evaluate_event), and it never "clears"."""
+    if (policy or {}).get("strategy") != "latch":
+        return
+    if (trigger or {}).get("type", "metric") != "metric":
+        raise RuleValidationError('strategy "latch" is only supported for trigger.type "metric"')
+    if clear_actions:
+        raise RuleValidationError(
+            'strategy "latch" cannot have clear actions — it holds until reset'
+        )
 
 
 async def _persist_rule(
@@ -200,14 +344,19 @@ async def _persist_rule(
     name: str,
     description: str | None,
     trigger: dict[str, Any],
-    condition: dict[str, Any],
+    condition: dict[str, Any] | None,
     execution_policy: dict[str, Any],
     actions: list[dict[str, Any]],
+    clear_actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
     enabled: bool,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     _assert_leaves_have_device(condition)
-    device_map = _rule_device_map(condition, actions)
+    _validate_trigger(trigger)
+    _validate_clear_actions(trigger, clear_actions)
+    _validate_latch(trigger, execution_policy, clear_actions)
+    device_map = _rule_device_map(condition, actions, trigger, clear_actions)
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
 
     rule = Rule(
@@ -219,12 +368,14 @@ async def _persist_rule(
         condition=condition,
         execution_policy=execution_policy,
         actions=actions,
+        clear_actions=clear_actions,
         editor_graph=editor_graph,
         enabled=enabled,
     )
     session.add(rule)
     await session.flush()
     await _sync_rule_devices(session, tenant_id, rule.id, device_map)
+    await rule_versions.record_version(session, rule, None, author_id)
     _publish_invalidation(session)
     return rule
 
@@ -236,23 +387,27 @@ async def create_rule_canonical(
     name: str,
     description: str | None,
     trigger: dict[str, Any],
-    condition: dict[str, Any],
+    condition: dict[str, Any] | None,
     execution_policy: dict[str, Any],
     actions: list[dict[str, Any]],
+    clear_actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
     enabled: bool,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     return await _persist_rule(
         session,
         tenant_id,
-        name=name or _auto_name(condition),
+        name=name or _auto_name(condition, trigger),
         description=description,
         trigger=trigger,
         condition=condition,
         execution_policy=execution_policy,
         actions=actions,
+        clear_actions=clear_actions,
         editor_graph=editor_graph,
         enabled=enabled,
+        author_id=author_id,
     )
 
 
@@ -268,6 +423,7 @@ async def create_device_rule(
     action: dict[str, Any] | None,
     actions: list[dict[str, Any]] | None,
     enabled: bool,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     """Backward-compatible single-device create (POST /devices/{id}/rules)."""
     stamped = _stamp_condition_device(condition, device_id)
@@ -295,8 +451,10 @@ async def create_device_rule(
         condition=stamped,
         execution_policy=policy,
         actions=stamped_actions,
+        clear_actions=[],
         editor_graph=None,
         enabled=enabled,
+        author_id=author_id,
     )
 
 
@@ -365,6 +523,48 @@ async def list_all_rules(session: AsyncSession, tenant_id: uuid.UUID) -> list[Ru
     return list(result.scalars().all())
 
 
+async def count_key_usage(
+    session: AsyncSession, tenant_id: uuid.UUID, device_ids: list[uuid.UUID]
+) -> tuple[Counter[str], Counter[str]]:
+    """How many rules read each metric key / command each actuator key on
+    any of `device_ids` — for the catalog editor's rename and delete
+    warnings. Each rule counts at most once per key. Read-only, API side.
+    """
+    metric_rules: Counter[str] = Counter()
+    actuator_rules: Counter[str] = Counter()
+    if not device_ids:
+        return metric_rules, actuator_rules
+    wanted = {str(d) for d in device_ids}
+    result = await session.execute(
+        select(Rule).where(
+            Rule.tenant_id == tenant_id,
+            Rule.id.in_(select(RuleDevice.rule_id).where(RuleDevice.device_id.in_(device_ids))),
+        )
+    )
+    for rule in result.scalars().unique().all():
+        metrics: set[str] = set()
+        for leaf in _condition_leaves(rule.condition):
+            if str(leaf.get("device_id")) in wanted and leaf.get("metric"):
+                metrics.add(str(leaf["metric"]))
+            rhs = leaf.get("rhs") or {}
+            if (
+                rhs.get("source") == "metric"
+                and str(rhs.get("device_id")) in wanted
+                and rhs.get("metric")
+            ):
+                metrics.add(str(rhs["metric"]))
+        actuators: set[str] = set()
+        for action in [*rule.actions, *(rule.clear_actions or [])]:
+            if action.get("type") != "actuator_command" or not action.get("actuator"):
+                continue
+            # An action without its own device_id targets the rule's device.
+            if action.get("device_id") is None or str(action["device_id"]) in wanted:
+                actuators.add(str(action["actuator"]))
+        metric_rules.update(metrics)
+        actuator_rules.update(actuators)
+    return metric_rules, actuator_rules
+
+
 async def update_rule(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -381,8 +581,11 @@ async def update_rule(
     for_duration: int | None,
     cooldown: int | None,
     action: dict[str, Any] | None,
+    clear_actions: list[dict[str, Any]] | None = None,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     rule = await get_rule(session, tenant_id, rule_id)
+    before = copy.deepcopy(rule_versions.snapshot_of(rule))
     # Fallback device for a legacy (device-less) leaf in an incoming
     # condition — the rule's current primary input device.
     existing_inputs = await session.execute(
@@ -397,6 +600,7 @@ async def update_rule(
     if description is not None:
         rule.description = description
     if trigger is not None:
+        _validate_trigger(trigger)
         rule.trigger = trigger
     if editor_graph is not None:
         rule.editor_graph = editor_graph
@@ -422,12 +626,20 @@ async def update_rule(
         rule.actions = actions
     elif action is not None:
         rule.actions = [action]
+    if clear_actions is not None:
+        rule.clear_actions = clear_actions
+
+    if rule.condition is None and (rule.trigger or {}).get("type", "metric") == "metric":
+        raise RuleValidationError('condition is required when trigger.type == "metric"')
 
     _assert_leaves_have_device(rule.condition)
-    device_map = _rule_device_map(rule.condition, rule.actions)
+    _validate_clear_actions(rule.trigger, rule.clear_actions)
+    _validate_latch(rule.trigger, rule.execution_policy, rule.clear_actions)
+    device_map = _rule_device_map(rule.condition, rule.actions, rule.trigger, rule.clear_actions)
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
     await session.flush()
     await _sync_rule_devices(session, tenant_id, rule.id, device_map)
+    await rule_versions.record_version(session, rule, before, author_id)
     _publish_invalidation(session)
     return rule
 
@@ -453,8 +665,67 @@ def _publish_invalidation(session: AsyncSession) -> None:
 
 # ---- Worker-side cache + hot path -------------------------------------------
 
+# Metric-triggered rules only, keyed by the signals their condition reads.
+# schedule/manual rules are deliberately NOT here — otherwise a scheduled rule
+# whose condition names a live metric would also fire on the metric hot path.
 _rule_cache: dict[SignalKey, list[Rule]] = {}
+# Every enabled rule by id — for the out-of-band (schedule/manual) run path,
+# which targets one rule and can't reach it through the signal-keyed cache.
+_rules_by_id: dict[uuid.UUID, Rule] = {}
+# Enabled rules with trigger.type == "schedule" — iterated by schedule_loop.
+_scheduled_rules: list[Rule] = []
+# Enabled rules with trigger.type == "device_status", keyed by the device
+# they watch — checked by run_device_status_rules on a connectivity flip.
+_device_status_rules: dict[uuid.UUID, list[Rule]] = {}
 _rule_states: dict[uuid.UUID, RuleState] = {}
+# condition_fingerprint per cached rule, computed once per cache reload so the
+# hot path never re-hashes a condition tree per reading.
+_rule_fingerprints: dict[uuid.UUID, str] = {}
+
+
+def _state_for(rule: Rule) -> RuleState:
+    state = _rule_states.setdefault(rule.id, RuleState())
+    fingerprint = _rule_fingerprints.get(rule.id)
+    if fingerprint is None:
+        fingerprint = condition_fingerprint(rule)
+        _rule_fingerprints[rule.id] = fingerprint
+    align_state_to_condition(state, fingerprint)
+    return state
+
+
+# A device's last-known connectivity, for detecting a genuine transition
+# (worker.py's _handle_status publishes a "device_health" event on *every*
+# status message, transition or not — this is what turns that into an edge
+# for the device_status trigger). Worker-only, in-memory, lost on restart —
+# the first observation after a restart just establishes the baseline (same
+# "don't cry wolf on restart" rule _rule_health_tracks already follows).
+_device_online_tracks: dict[uuid.UUID, bool] = {}
+
+
+def note_device_status(device_id: uuid.UUID, online: bool) -> bool:
+    """Record this device's connectivity; return True iff this is a genuine
+    flip from what was last recorded (not the first observation)."""
+    prev = _device_online_tracks.get(device_id)
+    _device_online_tracks[device_id] = online
+    return prev is not None and prev != online
+
+
+class _RuleHealthTrack(NamedTuple):
+    evaluatable: bool
+    last_alert_at: datetime | None
+
+
+# Per-rule "can it currently evaluate" tracking for the rule_health realtime
+# event (Phase 5, app.worker's rules_maintenance_loop). Worker-only, in-memory,
+# lost on restart — the first tick after a restart just re-establishes the
+# baseline (no transition, no alert).
+_rule_health_tracks: dict[uuid.UUID, _RuleHealthTrack] = {}
+_RULE_HEALTH_RENOTIFY_AFTER = timedelta(hours=1)
+
+# Deferred (webhook/email) delivery tasks — strong refs so asyncio can't GC a
+# task mid-flight; the semaphore bounds concurrency during an endpoint outage.
+_BACKGROUND_TASKS: set[asyncio.Task[None]] = set()
+_DEFERRED_SEMAPHORE = asyncio.Semaphore(100)
 
 # Last known value per (device_id, metric), updated unconditionally on every
 # telemetry message (pure dict write, zero I/O — stays in the hot-path
@@ -493,6 +764,9 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
         rows = result.mappings().all()
 
     new_cache: dict[SignalKey, list[Rule]] = {}
+    new_by_id: dict[uuid.UUID, Rule] = {}
+    new_scheduled: list[Rule] = []
+    new_device_status: dict[uuid.UUID, list[Rule]] = {}
     for row in rows:
         rule = Rule(
             id=row["id"],
@@ -504,14 +778,41 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
             condition=row["condition"],
             execution_policy=row["execution_policy"],
             actions=row["actions"],
+            clear_actions=row["clear_actions"] or [],
             editor_graph=row["editor_graph"],
             enabled=row["enabled"],
         )
-        for signal in referenced_signals(rule.condition):
-            new_cache.setdefault(signal, []).append(rule)
+        new_by_id[rule.id] = rule
+        trigger_type = (rule.trigger or {}).get("type", "metric")
+        if trigger_type == "schedule":
+            new_scheduled.append(rule)
+        elif trigger_type == "device_status":
+            watched = rule.trigger.get("device_id")
+            if watched:
+                new_device_status.setdefault(uuid.UUID(str(watched)), []).append(rule)
+        elif trigger_type != "manual":  # metric (or an unknown/legacy shape)
+            for signal in referenced_signals(rule.condition):
+                new_cache.setdefault(signal, []).append(rule)
     _rule_cache.clear()
     _rule_cache.update(new_cache)
-    log.info("rule cache reloaded: %d active rules", len(rows))
+    _device_status_rules.clear()
+    _device_status_rules.update(new_device_status)
+    _rules_by_id.clear()
+    _rules_by_id.update(new_by_id)
+    _rule_fingerprints.clear()
+    _rule_fingerprints.update({rid: condition_fingerprint(r) for rid, r in new_by_id.items()})
+    _scheduled_rules[:] = new_scheduled
+    log.info(
+        "rule cache reloaded: %d active (%d scheduled, %d device_status)",
+        len(rows),
+        len(new_scheduled),
+        sum(len(rs) for rs in new_device_status.values()),
+    )
+
+
+def scheduled_rules_snapshot() -> list[Rule]:
+    """A copy for app.worker's schedule_loop to iterate without racing a reload."""
+    return list(_scheduled_rules)
 
 
 def _snapshot_for_signals(signals: set[SignalKey]) -> MetricSnapshot:
@@ -545,8 +846,16 @@ async def evaluate_and_dispatch(
     """
     signal = SignalKey(str(device_id), metric)
     max_age = _staleness_thresholds.get(signal, DEFAULT_STALE_METRIC_AGE_SECONDS)
+    # Shift the outgoing value into previous_* (for changed/increased/
+    # decreased) before overwriting — a signal seen for the first time has no
+    # previous reading yet.
+    prior = _signal_value_cache.get(signal)
     _signal_value_cache[signal] = MetricValue(
-        value=value, timestamp=timestamp, max_age_seconds=max_age
+        value=value,
+        timestamp=timestamp,
+        max_age_seconds=max_age,
+        previous_value=prior.value if prior is not None else None,
+        previous_timestamp=prior.timestamp if prior is not None else None,
     )
 
     rules = _rule_cache.get(signal)
@@ -556,7 +865,7 @@ async def evaluate_and_dispatch(
     for rule in rules:
         needed = referenced_signals(rule.condition)
         snapshot = _snapshot_for_signals(needed)
-        state = _rule_states.setdefault(rule.id, RuleState())
+        state = _state_for(rule)
         try:
             firing = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, timestamp, state)
         except Exception:
@@ -572,9 +881,12 @@ async def evaluate_and_dispatch(
                 device_id,
                 tenant_slug,
                 device_slug,
+                metric,
+                value,
                 timestamp,
                 snapshot,
                 rule,
+                edge=firing.edge,
             )
         except Exception:
             log.exception("dispatch failed for rule %s", rule.id)
@@ -583,15 +895,19 @@ async def evaluate_and_dispatch(
 async def _resolve_target(
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
-    trigger_device_id: uuid.UUID,
-    trigger_tenant_slug: str,
-    trigger_device_slug: str,
+    trigger_device_id: uuid.UUID | None,
+    trigger_tenant_slug: str | None,
+    trigger_device_slug: str | None,
     action_device_id: str | None,
 ) -> tuple[uuid.UUID, str, str] | None:
     """(device_id, tenant_slug, device_slug) for an actuator action's target.
-    None (skip the action) if the target isn't a live device in this tenant.
+    None (skip the action) if the target isn't a live device in this tenant,
+    or the action names no device and the run has no triggering one.
     """
     if not action_device_id or str(action_device_id) == str(trigger_device_id):
+        if trigger_device_id is None or trigger_tenant_slug is None or trigger_device_slug is None:
+            log.warning("dropping actuator action with no target device")
+            return None
         return trigger_device_id, trigger_tenant_slug, trigger_device_slug
     async with factory() as session:
         result = await session.execute(
@@ -608,19 +924,67 @@ async def _resolve_target(
     return row["device_id"], row["tenant_slug"], row["device_slug"]
 
 
+class _ActionOutcome(NamedTuple):
+    """One inline action's dispatch result — actuator_command, the unconditional
+    notification row, an unknown action type, or a webhook/email that couldn't
+    be deferred (executor saturated). Collected in-memory during
+    _dispatch_actions and written to `action_executions` by _record_rule_execution."""
+
+    action_type: str
+    action_index: int | None
+    status: str  # "success" | "failed"
+    detail: dict[str, Any] | None
+    command_id: uuid.UUID | None
+
+
+class _DeferredAction(NamedTuple):
+    """A webhook or email action to run in a background task after the
+    execution record commits — so a slow/failing endpoint can't stall the
+    hot path, and can be retried with backoff."""
+
+    kind: str  # "webhook" | "email"
+    action_index: int | None
+    config: dict[str, Any]
+
+
+# Truncate any captured string field (URL, error message) before it lands in
+# action_executions.detail — cheap insurance against JSONB bloat on this
+# single-host deployment (CLAUDE.md §1).
+_DETAIL_STRING_MAX = 500
+
+
 async def _dispatch_actions(
     client: aiomqtt.Client,
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
-    device_id: uuid.UUID,
-    tenant_slug: str,
-    device_slug: str,
+    device_id: uuid.UUID | None,
+    tenant_slug: str | None,
+    device_slug: str | None,
+    metric: str | None,
+    value: float | None,
     timestamp: datetime,
     snapshot: MetricSnapshot,
     rule: Rule,
+    *,
+    trigger_source: str = "metric",
+    edge: Edge = "fire",
 ) -> None:
+    """Dispatch every configured action — `rule.actions` on a firing,
+    `rule.clear_actions` on a clear.
+
+    Actuator commands run INLINE, in today's order (the MQTT publish inside
+    dispatch_command happens before any bookkeeping — CLAUDE.md §9 constraint
+    1's <2s budget). Webhook/email actions are collected as descriptors and
+    handed to background tasks AFTER the execution record commits — one slow
+    or failing endpoint can no longer stall telemetry ingestion for every
+    device, and each gets bounded exponential-backoff retry.
+    """
     trigger_device_id = device_id
-    for action in rule.actions:
+    outcomes: list[_ActionOutcome] = []
+    deferred: list[_DeferredAction] = []
+    actions = rule.actions if edge == "fire" else (rule.clear_actions or [])
+
+    for action_index, action in enumerate(actions):
         action_type = action.get("type")
         try:
             if action_type == "actuator_command":
@@ -633,8 +997,18 @@ async def _dispatch_actions(
                     action.get("device_id"),
                 )
                 if target is None:
+                    outcomes.append(
+                        _ActionOutcome(
+                            "actuator_command",
+                            action_index,
+                            "failed",
+                            {"reason": "target_unresolvable", "device_id": action.get("device_id")},
+                            None,
+                        )
+                    )
                     continue
                 target_id, target_tenant_slug, target_device_slug = target
+                command_id = uuid.uuid4()
                 await commands_service.dispatch_command(
                     client,
                     factory,
@@ -646,26 +1020,1325 @@ async def _dispatch_actions(
                     target_device_slug,
                     actuator=action["actuator"],
                     value=action["value"],
+                    command_id=command_id,
+                )
+                outcomes.append(
+                    _ActionOutcome(
+                        "actuator_command",
+                        action_index,
+                        "success",
+                        {
+                            "actuator": action["actuator"],
+                            "value": action["value"],
+                            "device_id": str(target_id),
+                        },
+                        command_id,
+                    )
                 )
             elif action_type == "webhook":
-                async with httpx.AsyncClient(timeout=5) as http_client:
-                    await http_client.post(action["url"], json=action.get("body", {}))
+                deferred.append(_DeferredAction("webhook", action_index, dict(action)))
+            elif action_type == "email":
+                deferred.append(_DeferredAction("email", action_index, dict(action)))
             elif action_type != "notification":
                 log.warning("unknown action type %r for rule %s", action_type, rule.id)
-        except httpx.HTTPError as exc:
-            log.warning("webhook dispatch failed for rule %s: %s", rule.id, exc)
-        except Exception:
+                outcomes.append(
+                    _ActionOutcome(
+                        "unknown", action_index, "failed", {"action_type": action_type}, None
+                    )
+                )
+            # "notification"-type actions stay a no-op here — the platform row
+            # is written unconditionally below; the "email" channel (if any) is
+            # queued as a deferred action there.
+        except Exception as exc:
             log.exception("action %r failed for rule %s", action_type, rule.id)
+            outcomes.append(
+                _ActionOutcome(
+                    action_type or "unknown",
+                    action_index,
+                    "failed",
+                    {"error": str(exc)[:_DETAIL_STRING_MAX]},
+                    None,
+                )
+            )
 
-    # A notification row is written for every firing regardless of the rule's
-    # configured actions — this is what answers "did anything cross a
-    # threshold". A `notification`-type action supplies its own message;
-    # otherwise one is auto-generated.
-    notif = next((a for a in rule.actions if a.get("type") == "notification"), None)
-    message = notif["message"] if notif is not None else _default_message(rule, snapshot)
+    # A platform notification row is written for every firing regardless of the
+    # rule's configured actions — this is what answers "did anything cross a
+    # threshold". A `notification`-type action supplies its own message and may
+    # add the "email" channel; otherwise one message is auto-generated. A
+    # clear only notifies when its clear_actions ask for it — an automatic
+    # "LED turned off" row on every release would just be noise (the clear
+    # is still recorded in rule_executions).
+    notif_index, notif = next(
+        ((i, a) for i, a in enumerate(actions) if a.get("type") == "notification"),
+        (None, None),
+    )
+    if edge == "fire" or notif is not None:
+        message = notif["message"] if notif is not None else _default_message(rule, snapshot, edge)
+        try:
+            await notifications_service.create_notification(
+                factory,
+                tenant_id,
+                trigger_device_id,
+                rule.id,
+                message,
+                severity="warning" if edge == "fire" else "info",
+                kind="rule_fired" if edge == "fire" else "rule_cleared",
+            )
+            outcomes.append(
+                _ActionOutcome("notification", notif_index, "success", {"message": message}, None)
+            )
+        except Exception as exc:
+            log.exception("notification write failed for rule %s", rule.id)
+            outcomes.append(
+                _ActionOutcome(
+                    "notification",
+                    notif_index,
+                    "failed",
+                    {"message": message, "error": str(exc)[:_DETAIL_STRING_MAX]},
+                    None,
+                )
+            )
+        if notif is not None and "email" in (notif.get("channels") or ["platform"]):
+            deferred.append(
+                _DeferredAction(
+                    "email",
+                    notif_index,
+                    {"message": message, "rule_name": rule.name, "edge": edge},
+                )
+            )
+
+    # When the executor is saturated (a webhook/email outage backing everything
+    # up), record the deferred actions as failed inline rather than piling up
+    # unbounded background tasks.
+    to_spawn: list[_DeferredAction] = []
+    for descriptor in deferred:
+        if _DEFERRED_SEMAPHORE.locked():
+            outcomes.append(
+                _ActionOutcome(
+                    descriptor.kind,
+                    descriptor.action_index,
+                    "failed",
+                    {"reason": "executor_saturated"},
+                    None,
+                )
+            )
+        else:
+            to_spawn.append(descriptor)
+
+    # Own defensive try/except, separate from every one above — a history-write
+    # failure must never be conflated with, or able to break, actual dispatch.
+    execution_id: uuid.UUID | None = None
     try:
-        await notifications_service.create_notification(
-            factory, tenant_id, trigger_device_id, rule.id, message
+        execution_id = await _record_rule_execution(
+            factory,
+            tenant_id,
+            rule,
+            trigger_device_id,
+            metric,
+            value,
+            timestamp,
+            snapshot,
+            outcomes,
+            trigger_source,
+            edge,
         )
     except Exception:
-        log.exception("notification write failed for rule %s", rule.id)
+        log.exception("execution history write failed for rule %s", rule.id)
+
+    # After the actuator commands are out — never between arrival and dispatch.
+    # Only an evaluator firing latches; a manual "Run now" never touches state.
+    if (
+        edge == "fire"
+        and trigger_source == "metric"
+        and (rule.execution_policy or {}).get("strategy") == "latch"
+    ):
+        await _set_latched(tenant_id, rule.id, True)
+
+    # Spawn the deferred deliveries only after the parent rule_executions row
+    # has committed — each task INSERTs an action_executions row FK'd to it.
+    if execution_id is not None:
+        for descriptor in to_spawn:
+            _spawn_deferred(
+                _run_deferred_action(
+                    factory, tenant_id, rule.id, rule.name, execution_id, descriptor
+                )
+            )
+
+
+async def _record_rule_execution(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule: Rule,
+    trigger_device_id: uuid.UUID | None,
+    metric: str | None,
+    value: float | None,
+    fired_at: datetime,
+    snapshot: MetricSnapshot,
+    outcomes: list[_ActionOutcome],
+    trigger_source: str,
+    edge: Edge = "fire",
+) -> uuid.UUID:
+    """Writes the rule_executions row + the inline action_executions rows in
+    one transaction. Returns the execution id so _dispatch_actions can FK the
+    deferred (webhook/email) action rows to it."""
+    summary = _default_message(rule, snapshot, edge)
+    execution_id = uuid.uuid4()
+    async with factory() as session, session.begin():
+        await set_tenant_context(session, tenant_id)
+        session.add(
+            RuleExecution(
+                id=execution_id,
+                tenant_id=tenant_id,
+                rule_id=rule.id,
+                device_id=trigger_device_id,
+                metric=metric,
+                value=value,
+                trigger_source=trigger_source,
+                edge=edge,
+                fired_at=fired_at,
+                summary=summary,
+            )
+        )
+        await session.flush()
+        session.add_all(
+            [
+                ActionExecution(
+                    tenant_id=tenant_id,
+                    rule_execution_id=execution_id,
+                    action_type=o.action_type,
+                    action_index=o.action_index,
+                    status=o.status,
+                    detail=o.detail,
+                    command_id=o.command_id,
+                )
+                for o in outcomes
+            ]
+        )
+    await realtime_service.publish_event(
+        tenant_id, {"type": "rule_execution", "rule_id": str(rule.id), "id": str(execution_id)}
+    )
+    return execution_id
+
+
+# ---- Deferred action delivery (webhook / email, off the hot path) -----------
+
+
+def _spawn_deferred(coro: Coroutine[Any, Any, None]) -> None:
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+
+
+async def _resolve_email_recipients(
+    factory: async_sessionmaker[AsyncSession], tenant_id: uuid.UUID
+) -> list[str]:
+    """The tenant's explicit notification_emails, or (if unset) the emails of
+    every owner/admin member. Composed here rather than in tenants/service.py —
+    that module can't import auth/service (circular)."""
+    async with factory() as session:
+        await set_tenant_context(session, tenant_id)
+        tenant = await tenants_service.get_tenant(session, tenant_id)
+        if tenant.notification_emails:
+            return [str(e) for e in tenant.notification_emails]
+        member_ids = await tenants_service.list_member_ids_by_roles(
+            session, tenant_id, {"owner", "admin"}
+        )
+        emails = await auth_service.get_emails_by_user_ids(session, member_ids)
+    return list(emails.values())
+
+
+async def _write_deferred_result(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    execution_id: uuid.UUID,
+    descriptor: _DeferredAction,
+    status: str,
+    detail: dict[str, Any],
+) -> None:
+    async with factory() as session, session.begin():
+        await set_tenant_context(session, tenant_id)
+        session.add(
+            ActionExecution(
+                tenant_id=tenant_id,
+                rule_execution_id=execution_id,
+                action_type=descriptor.kind,
+                action_index=descriptor.action_index,
+                status=status,
+                detail=detail,
+                command_id=None,
+            )
+        )
+    await realtime_service.publish_event(
+        tenant_id, {"type": "rule_execution", "rule_id": str(rule_id), "id": str(execution_id)}
+    )
+
+
+_DELIVERY_LABEL = {"email": "Email", "webhook": "Webhook"}
+
+
+def _failure_reason(detail: dict[str, Any] | None) -> str:
+    detail = detail or {}
+    reason = detail.get("error") or detail.get("reason") or "unknown error"
+    if detail.get("status_code"):
+        reason = f"HTTP {detail['status_code']}: {reason}"
+    return str(reason).replace("_", " ")[:_DETAIL_STRING_MAX]
+
+
+async def _notify_delivery_failed(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    rule_name: str,
+    kind: str,
+    detail: dict[str, Any] | None,
+) -> None:
+    """A webhook/email that exhausted its retries surfaces in the feed, not
+    only in Rules → Failed deliveries. Its own try/except: the delivery row is
+    already written, and a feed write must never mask that."""
+    try:
+        await notifications_service.create_notification(
+            factory,
+            tenant_id,
+            None,
+            rule_id,
+            f'{_DELIVERY_LABEL.get(kind, kind.title())} delivery failed for "{rule_name}"',
+            severity="warning",
+            kind="delivery_failed",
+            detail=f"{_failure_reason(detail)}. Retry it from Rules → Failed deliveries.",
+        )
+    except Exception:
+        log.exception("delivery-failed notification write failed for rule %s", rule_id)
+
+
+async def _run_deferred_action(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    rule_name: str,
+    execution_id: uuid.UUID,
+    descriptor: _DeferredAction,
+) -> None:
+    """Background task: run a webhook/email with bounded retry, then append its
+    terminal action_executions row. Its own defensive try/except — a failure
+    here must never surface as an unhandled task exception.
+
+    Known gap (Phase 7 fixes it with a Redis-Streams dispatcher + DLQ): a
+    worker restart mid-retry loses the task, so no row is ever written for
+    that delivery.
+    """
+    try:
+        async with _DEFERRED_SEMAPHORE:
+            ctx = executors.ActionContext(tenant_id=tenant_id, rule_id=rule_id, rule_name=rule_name)
+            if descriptor.kind == "email":
+                # An explicit email action carries its own `to` (empty = the
+                # tenant's alert list); a notification's email channel never does.
+                explicit_to = [str(a) for a in descriptor.config.get("to") or []]
+                recipients = explicit_to or await _resolve_email_recipients(factory, tenant_id)
+                if not recipients:
+                    await _write_deferred_result(
+                        factory,
+                        tenant_id,
+                        rule_id,
+                        execution_id,
+                        descriptor,
+                        "failed",
+                        {"reason": "no_recipients"},
+                    )
+                    await _notify_delivery_failed(
+                        factory, tenant_id, rule_id, rule_name, "email", {"reason": "no_recipients"}
+                    )
+                    return
+                if descriptor.config.get("type") == "email":
+                    config: dict[str, Any] = {
+                        "to": recipients,
+                        "subject": descriptor.config["subject"],
+                        "body": descriptor.config["body"],
+                    }
+                else:
+                    label = "cleared" if descriptor.config.get("edge") == "clear" else "alert"
+                    config = {
+                        "to": recipients,
+                        "subject": f"[{rule_name}] {label}",
+                        "body": descriptor.config["message"],
+                    }
+            else:  # webhook
+                config = descriptor.config
+            result = await executors.execute_with_retry(descriptor.kind, config, ctx)
+            await _write_deferred_result(
+                factory,
+                tenant_id,
+                rule_id,
+                execution_id,
+                descriptor,
+                result.status,
+                result.detail,
+            )
+            if result.status == "failed":
+                await _notify_delivery_failed(
+                    factory, tenant_id, rule_id, rule_name, descriptor.kind, result.detail
+                )
+    except Exception:
+        log.exception("deferred %s action failed for rule %s", descriptor.kind, rule_id)
+
+
+class ActionExecutionRow(NamedTuple):
+    id: uuid.UUID
+    action_type: str
+    action_index: int | None
+    status: str
+    detail: dict[str, Any] | None
+    command_id: uuid.UUID | None
+    created_at: datetime
+
+
+class RuleExecutionRow(NamedTuple):
+    id: uuid.UUID
+    rule_id: uuid.UUID | None
+    device_id: uuid.UUID | None
+    device_name: str | None
+    metric: str | None
+    value: float | None
+    trigger_source: str
+    edge: str
+    fired_at: datetime
+    summary: str
+    created_at: datetime
+    actions: list[ActionExecutionRow]
+
+
+async def list_rule_executions(
+    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID, limit: int = 100
+) -> list[RuleExecutionRow]:
+    """Flat capped list, newest first — matches this codebase's only existing
+    pagination convention (commands/notifications' hardcoded .limit(N), no
+    offset/cursor anywhere). Device display name resolved via a raw text()
+    join, same reason list_rule_device_rows does — rules/ never imports
+    devices/models.py directly (CLAUDE.md §6).
+    """
+    result = await session.execute(
+        select(RuleExecution)
+        .where(RuleExecution.tenant_id == tenant_id, RuleExecution.rule_id == rule_id)
+        .order_by(RuleExecution.fired_at.desc())
+        .limit(limit)
+    )
+    executions = list(result.scalars().all())
+    if not executions:
+        return []
+
+    device_ids = {e.device_id for e in executions if e.device_id is not None}
+    device_names: dict[uuid.UUID, str] = {}
+    if device_ids:
+        device_rows = await session.execute(
+            text("SELECT id, name FROM devices WHERE tenant_id = :tenant_id AND id = ANY(:ids)"),
+            {"tenant_id": tenant_id, "ids": [str(d) for d in device_ids]},
+        )
+        device_names = {row["id"]: row["name"] for row in device_rows.mappings().all()}
+
+    execution_ids = [e.id for e in executions]
+    action_result = await session.execute(
+        select(ActionExecution).where(ActionExecution.rule_execution_id.in_(execution_ids))
+    )
+    actions_by_execution: dict[uuid.UUID, list[ActionExecutionRow]] = {}
+    for a in action_result.scalars().all():
+        actions_by_execution.setdefault(a.rule_execution_id, []).append(
+            ActionExecutionRow(
+                id=a.id,
+                action_type=a.action_type,
+                action_index=a.action_index,
+                status=a.status,
+                detail=a.detail,
+                command_id=a.command_id,
+                created_at=a.created_at,
+            )
+        )
+
+    return [
+        RuleExecutionRow(
+            id=e.id,
+            rule_id=e.rule_id,
+            device_id=e.device_id,
+            device_name=device_names.get(e.device_id) if e.device_id is not None else None,
+            metric=e.metric,
+            value=e.value,
+            trigger_source=e.trigger_source,
+            edge=e.edge,
+            fired_at=e.fired_at,
+            summary=e.summary,
+            created_at=e.created_at,
+            actions=actions_by_execution.get(e.id, []),
+        )
+        for e in executions
+    ]
+
+
+class FailedActionRow(NamedTuple):
+    id: uuid.UUID
+    rule_id: uuid.UUID | None
+    rule_name: str | None
+    action_type: str
+    action_index: int | None
+    detail: dict[str, Any] | None
+    summary: str
+    fired_at: datetime
+    created_at: datetime
+
+
+async def list_failed_actions(
+    session: AsyncSession, tenant_id: uuid.UUID, limit: int = 100
+) -> list[FailedActionRow]:
+    """Tenant-wide feed of failed deliveries (webhook/email that exhausted
+    retries, unresolvable actuator targets, etc.) — the operational "what is
+    broken right now" view. Uses ix_action_executions_failed. Rule name via a
+    raw text() join, same no-cross-module-import discipline as elsewhere here.
+    """
+    result = await session.execute(
+        text(
+            "SELECT ae.id, re.rule_id, r.name AS rule_name, ae.action_type, ae.action_index, "
+            "ae.detail, re.summary, re.fired_at, ae.created_at "
+            "FROM action_executions ae "
+            "JOIN rule_executions re ON re.id = ae.rule_execution_id "
+            "LEFT JOIN rules r ON r.id = re.rule_id "
+            "WHERE ae.tenant_id = :tenant_id AND ae.status = 'failed' AND ae.retried_at IS NULL "
+            "ORDER BY ae.created_at DESC LIMIT :limit"
+        ),
+        {"tenant_id": tenant_id, "limit": limit},
+    )
+    return [FailedActionRow(**row) for row in result.mappings().all()]
+
+
+class FailedActionNotFoundError(Exception):
+    pass
+
+
+class FailedActionNotRetryableError(Exception):
+    """Why a failed delivery can't be retried — the message is user-facing."""
+
+
+async def retry_failed_action(
+    session: AsyncSession, tenant_id: uuid.UUID, action_execution_id: uuid.UUID
+) -> None:
+    """Re-send one failed webhook/email delivery (Rules → Failed deliveries).
+
+    Off the hot path entirely: runs in the API process as a background task
+    after this request commits, through the same _run_deferred_action the
+    worker uses, appending its own action_executions row to the original
+    execution. Actuator commands are never retried — a command sent minutes
+    late can act on state that has moved on; the rule fires again when its
+    condition holds.
+
+    The action is taken from the rule as it is now (same index, same type);
+    if the rule changed so that action no longer exists, there's nothing
+    faithful to retry.
+    """
+    row = (
+        await session.execute(
+            select(ActionExecution, RuleExecution)
+            .join(RuleExecution, RuleExecution.id == ActionExecution.rule_execution_id)
+            .where(
+                ActionExecution.tenant_id == tenant_id,
+                ActionExecution.id == action_execution_id,
+                ActionExecution.status == "failed",
+            )
+        )
+    ).first()
+    if row is None:
+        raise FailedActionNotFoundError
+    failed, execution = row
+    if failed.retried_at is not None:
+        raise FailedActionNotRetryableError("This delivery was already retried.")
+    if failed.action_type not in ("webhook", "email"):
+        raise FailedActionNotRetryableError(
+            "Only webhook and email deliveries can be retried. Actuator commands aren't "
+            "resent late; the rule fires again when its condition holds."
+        )
+    rule = (
+        await session.execute(
+            select(Rule).where(Rule.tenant_id == tenant_id, Rule.id == execution.rule_id)
+        )
+    ).scalar_one_or_none()
+    actions = (
+        (rule.actions if execution.edge == "fire" else rule.clear_actions or []) if rule else []
+    )
+    index = failed.action_index
+    action = actions[index] if index is not None and 0 <= index < len(actions) else None
+    descriptor: _DeferredAction | None = None
+    if rule is not None and action is not None:
+        if failed.action_type == "webhook" and action.get("type") == "webhook":
+            descriptor = _DeferredAction("webhook", index, dict(action))
+        elif failed.action_type == "email" and action.get("type") == "email":
+            descriptor = _DeferredAction("email", index, dict(action))
+        elif (
+            failed.action_type == "email"
+            and action.get("type") == "notification"
+            and "email" in (action.get("channels") or [])
+        ):
+            descriptor = _DeferredAction(
+                "email",
+                index,
+                {
+                    "message": action.get("message", ""),
+                    "rule_name": rule.name,
+                    "edge": execution.edge,
+                },
+            )
+    if rule is None or descriptor is None:
+        raise FailedActionNotRetryableError(
+            "The rule changed since this failed, so the action no longer exists as it was."
+        )
+
+    failed.retried_at = datetime.now(UTC)
+    await session.flush()
+
+    # Same engine as this request (so the same role and RLS), not the
+    # worker's module factory.
+    factory = async_sessionmaker(session.bind, expire_on_commit=False)
+    rule_id, rule_name, execution_id = rule.id, rule.name, execution.id
+
+    async def _spawn() -> None:
+        _spawn_deferred(
+            _run_deferred_action(factory, tenant_id, rule_id, rule_name, execution_id, descriptor)
+        )
+
+    add_post_commit_callback(session, _spawn)
+
+
+# ---- Out-of-band runs: manual "Run now" + scheduled triggers ----------------
+
+
+async def request_manual_run(
+    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID
+) -> None:
+    """Publish a one-shot run request for app.worker's manual_command_loop.
+    No DB write, so — like commands.service.request_manual_command — no
+    add_post_commit_callback is needed (nothing to race against a commit)."""
+    await redis_client.publish(
+        RULES_MANUAL_CHANNEL,
+        json.dumps(
+            {"tenant_id": str(tenant_id), "rule_id": str(rule_id), "trigger_source": "manual"}
+        ),
+    )
+
+
+async def request_latch_reset(tenant_id: uuid.UUID, rule_id: uuid.UUID) -> None:
+    """Publish a reset request for app.worker — the rule's RuleState (and so
+    its armed flag) lives only in the worker process. Rides the manual-run
+    channel with trigger_source "reset"; see reset_rule_latch."""
+    await redis_client.publish(
+        RULES_MANUAL_CHANNEL,
+        json.dumps(
+            {"tenant_id": str(tenant_id), "rule_id": str(rule_id), "trigger_source": "reset"}
+        ),
+    )
+
+
+async def latched_rule_ids() -> set[uuid.UUID]:
+    """Rules currently latched (API side — RuleResponse.latched). A Redis
+    outage reads as "none latched" rather than failing the rules list."""
+    try:
+        members = await redis_client.smembers(RULES_LATCHED_REDIS_KEY)
+    except redis.RedisError:
+        log.warning("could not read latched rules from Redis", exc_info=True)
+        return set()
+    # decode_responses=True (app/redis.py), so members are already str.
+    return {uuid.UUID(str(m)) for m in members}
+
+
+async def _set_latched(tenant_id: uuid.UUID, rule_id: uuid.UUID, latched: bool) -> None:
+    try:
+        if latched:
+            await redis_client.sadd(RULES_LATCHED_REDIS_KEY, str(rule_id))
+        else:
+            await redis_client.srem(RULES_LATCHED_REDIS_KEY, str(rule_id))
+    except redis.RedisError:
+        log.warning("could not record latch state for rule %s", rule_id, exc_info=True)
+    await realtime_service.publish_event(
+        tenant_id, {"type": "rule_latched", "rule_id": str(rule_id), "latched": latched}
+    )
+
+
+async def reset_rule_latch(tenant_id: uuid.UUID, rule_id: uuid.UUID) -> None:
+    """Worker side of POST /rules/{id}/reset: re-arm the in-memory state and
+    clear the latched flag. A non-latch rule is ignored (the API rejects it
+    first; this guards a stale request racing an edit)."""
+    rule = _rules_by_id.get(rule_id)
+    if rule is None or rule.tenant_id != tenant_id:
+        log.warning("latch reset for unknown/mismatched rule %s", rule_id)
+        return
+    if (rule.execution_policy or {}).get("strategy") != "latch":
+        log.warning("latch reset for non-latch rule %s ignored", rule_id)
+        return
+    reset_latch(_state_for(rule))
+    await _set_latched(tenant_id, rule_id, False)
+
+
+def schedule_due(rule: Rule, now: datetime) -> bool:
+    """Whether `rule`'s cron matches `now` (a UTC datetime the caller has
+    truncated to the minute). Evaluated in the rule's own timezone. Returns
+    False, never raises, on a malformed cron/timezone (validated at write
+    time, but a hand-edited DB row could still be bad)."""
+    trigger = rule.trigger or {}
+    try:
+        tz = ZoneInfo(trigger.get("timezone", "UTC"))
+        return bool(croniter.match(trigger["cron"], now.astimezone(tz)))
+    except (CroniterError, ValueError, KeyError) as exc:
+        log.warning("bad schedule trigger on rule %s: %s", rule.id, exc)
+        return False
+
+
+_NO_TRIGGER_DEVICE: tuple[None, None, None] = (None, None, None)
+
+
+async def _resolve_rule_context(
+    factory: async_sessionmaker[AsyncSession], rule: Rule, *, device_id: uuid.UUID | None = None
+) -> tuple[uuid.UUID, str, str] | tuple[None, None, None] | None:
+    """The device to dispatch actuator actions against and record as the
+    execution's triggering device, as (device_id, tenant_slug, device_slug).
+    Defaults to the rule's primary input condition leaf's device, then to the
+    first actuator action's target; an explicit `device_id` overrides both
+    (device_status: the device whose connectivity changed, which a
+    condition-less — or condition-unrelated — rule has no leaf to derive it
+    from). A condition-less schedule/manual rule with no actuator action
+    (e.g. "email me every morning") has no device at all —
+    `_NO_TRIGGER_DEVICE`. None if the derived device is gone or disabled."""
+    if device_id is None:
+        candidates = [leaf.get("device_id") for leaf in _condition_leaves(rule.condition)]
+        candidates += [
+            action.get("device_id")
+            for action in rule.actions
+            if action.get("type") == "actuator_command"
+        ]
+        derived = next((c for c in candidates if c), None)
+        if derived is None:
+            return _NO_TRIGGER_DEVICE
+        device_id = uuid.UUID(str(derived))
+    async with factory() as session:
+        result = await session.execute(
+            text(
+                "SELECT device_id, tenant_id, tenant_slug, device_slug, status "
+                "FROM lookup_rule_dispatch_targets(:ids)"
+            ),
+            {"ids": [str(device_id)]},
+        )
+        row = result.mappings().first()
+    if row is None or row["tenant_id"] != rule.tenant_id or row["status"] != "active":
+        return None
+    return row["device_id"], row["tenant_slug"], row["device_slug"]
+
+
+async def run_rule_out_of_band(
+    client: aiomqtt.Client,
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    trigger_source: str,
+    *,
+    device_id: uuid.UUID | None = None,
+) -> None:
+    """Evaluate one rule outside the metric hot path (manual "Run now", a
+    schedule tick, or a device_status transition) and dispatch its actions if
+    the condition is currently met.
+
+    - `manual` bypasses for_duration / cooldown / armed (evaluate_condition) —
+      a "test it now" action, same trust tier as a manual actuator toggle.
+    - `schedule` and `device_status` are discrete events —
+      ThresholdEvaluator.evaluate_event: fire iff the condition holds now,
+      keeping cooldown and leaf hysteresis (flapping protection must not be
+      bypassable on an automated path — CLAUDE.md §9 constraint 7).
+    - `metric` (pending_timer_loop completing a hold or clear delay) keeps
+      the full ThresholdEvaluator.evaluate.
+
+    `device_id`, when given, is the device to dispatch against and record —
+    passed straight to `_resolve_rule_context` (device_status: the device
+    whose connectivity changed, not necessarily one any condition leaf names).
+    """
+    rule = _rules_by_id.get(rule_id)
+    if rule is None or rule.tenant_id != tenant_id:
+        log.warning("out-of-band run for unknown/mismatched rule %s", rule_id)
+        return
+
+    now = datetime.now(UTC)
+    snapshot = _snapshot_for_signals(referenced_signals(rule.condition))
+
+    edge: Edge = "fire"
+    if trigger_source == "manual":
+        if not evaluate_condition(rule.condition, snapshot, now):
+            return
+    else:
+        state = _state_for(rule)
+        if trigger_source in ("schedule", "device_status"):
+            firing = _THRESHOLD_EVALUATOR.evaluate_event(rule, snapshot, now, state)
+        else:
+            firing = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, now, state)
+        if firing is None:
+            return
+        edge = firing.edge
+
+    ctx = await _resolve_rule_context(factory, rule, device_id=device_id)
+    if ctx is None:
+        log.warning("out-of-band run: no usable device for rule %s", rule_id)
+        return
+    resolved_device_id, tenant_slug, device_slug = ctx
+    try:
+        await _dispatch_actions(
+            client,
+            factory,
+            tenant_id,
+            resolved_device_id,
+            tenant_slug,
+            device_slug,
+            None,
+            None,
+            now,
+            snapshot,
+            rule,
+            trigger_source=trigger_source,
+            edge=edge,
+        )
+    except Exception:
+        log.exception("out-of-band dispatch failed for rule %s", rule_id)
+
+
+def pending_timer_rules() -> list[Rule]:
+    """Metric-triggered rules with a for_duration hold or clear delay that
+    only a periodic re-evaluation can complete (see
+    evaluators.has_pending_timer) — polled by app.worker's pending_timer_loop,
+    which re-runs each through run_rule_out_of_band. In-memory only."""
+    out: list[Rule] = []
+    for rule in _rules_by_id.values():
+        if (rule.trigger or {}).get("type", "metric") != "metric":
+            continue
+        state = _rule_states.get(rule.id)
+        if state is not None and has_pending_timer(rule, state):
+            out.append(rule)
+    return out
+
+
+async def run_device_status_rules(
+    client: aiomqtt.Client,
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    online: bool,
+) -> None:
+    """Evaluate every enabled device_status rule watching `device_id` whose
+    configured transition matches this connectivity flip. Called from
+    worker.py's status/LWT branch only after note_device_status confirms a
+    genuine transition — off the telemetry hot path, so awaiting the full
+    out-of-band dispatch per matching rule here doesn't touch the
+    actuator-latency budget."""
+    transition = "connected" if online else "disconnected"
+    for rule in _device_status_rules.get(device_id, []):
+        if rule.tenant_id != tenant_id:
+            continue
+        if (rule.trigger or {}).get("transition") != transition:
+            continue
+        await run_rule_out_of_band(
+            client, factory, tenant_id, rule.id, "device_status", device_id=device_id
+        )
+
+
+# ---- Rule health (API-side, from the device_metric_health projection) ------
+
+
+def _max_age_for(catalog_metrics: Any, metric: str) -> int:
+    """The staleness bound for one metric, read out of its device-catalog
+    entry's `metrics` JSONB array. Fallback if the metric isn't in the catalog."""
+    for entry in catalog_metrics or []:
+        if isinstance(entry, dict) and entry.get("key") == metric:
+            return derive_max_age(
+                entry.get("publish", "periodic"), entry.get("publish_interval_seconds")
+            )
+    return DEFAULT_STALE_METRIC_AGE_SECONDS
+
+
+def _signal_health_from_row(row: Any, now: datetime) -> RuleSignalHealth:
+    device_id = uuid.UUID(str(row["device_id"]))
+    metric = row["metric"]
+    if row["device_name"] is None or row["device_status"] != "active":
+        return RuleSignalHealth(
+            device_id=device_id,
+            device_name=row["device_name"],
+            metric=metric,
+            state="missing",
+            last_value=None,
+            last_seen_at=None,
+            max_age_seconds=DEFAULT_STALE_METRIC_AGE_SECONDS,
+        )
+    max_age = _max_age_for(row["catalog_metrics"], metric)
+    last_seen_at: datetime | None = row["last_seen_at"]
+    if last_seen_at is None:
+        state: Literal["fresh", "stale", "missing"] = "missing"
+    elif (now - last_seen_at).total_seconds() > max_age:
+        state = "stale"
+    else:
+        state = "fresh"
+    return RuleSignalHealth(
+        device_id=device_id,
+        device_name=row["device_name"],
+        metric=metric,
+        state=state,
+        last_value=row["last_value"],
+        last_seen_at=last_seen_at,
+        max_age_seconds=max_age,
+    )
+
+
+async def compute_rule_health(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    rules: list[Rule],
+    *,
+    now: datetime | None = None,
+) -> dict[uuid.UUID, RuleHealth]:
+    """For each rule, the freshness of every (device, metric) its condition
+    reads — so the UI can show "can't currently evaluate" instead of a rule
+    silently failing its leaves closed. One batched query over the distinct
+    signal set; tenant-scoped by RLS on devices / device_metric_health.
+    """
+    now = now or datetime.now(UTC)
+    signals_by_rule: dict[uuid.UUID, list[SignalKey]] = {
+        rule.id: sorted(referenced_signals(rule.condition)) for rule in rules
+    }
+    distinct = sorted({s for sigs in signals_by_rule.values() for s in sigs})
+    by_signal: dict[SignalKey, RuleSignalHealth] = {}
+    if distinct:
+        result = await session.execute(
+            text(
+                "SELECT sig.device_id, sig.metric, d.name AS device_name, "
+                "       d.status AS device_status, c.metrics AS catalog_metrics, "
+                "       dmh.last_value, dmh.last_seen_at "
+                "FROM unnest(CAST(:device_ids AS uuid[]), CAST(:metrics AS text[])) "
+                "         AS sig(device_id, metric) "
+                "LEFT JOIN devices d ON d.id = sig.device_id AND d.tenant_id = :tenant_id "
+                "LEFT JOIN device_catalog_entries c ON c.id = d.catalog_entry_id "
+                "LEFT JOIN device_metric_health dmh "
+                "       ON dmh.device_id = sig.device_id AND dmh.metric = sig.metric"
+            ),
+            {
+                "device_ids": [s.device_id for s in distinct],
+                "metrics": [s.metric for s in distinct],
+                "tenant_id": str(tenant_id),
+            },
+        )
+        for row in result.mappings():
+            key = SignalKey(str(row["device_id"]), row["metric"])
+            by_signal[key] = _signal_health_from_row(row, now)
+
+    out: dict[uuid.UUID, RuleHealth] = {}
+    for rule in rules:
+        sigs = [
+            by_signal.get(
+                s,
+                RuleSignalHealth(
+                    device_id=uuid.UUID(s.device_id),
+                    device_name=None,
+                    metric=s.metric,
+                    state="missing",
+                    last_value=None,
+                    last_seen_at=None,
+                    max_age_seconds=DEFAULT_STALE_METRIC_AGE_SECONDS,
+                ),
+            )
+            for s in signals_by_rule[rule.id]
+        ]
+        out[rule.id] = RuleHealth(evaluatable=all(s.state == "fresh" for s in sigs), signals=sigs)
+    return out
+
+
+# ---- Simulate / dry-run ---------------------------------------------------
+
+
+def _action_summary(action: dict[str, Any]) -> str:
+    kind = action.get("type")
+    if kind == "actuator_command":
+        value = action.get("value")
+        shown = "ON" if value is True else "OFF" if value is False else value
+        return f"Set {action.get('actuator', '?')} to {shown}"
+    if kind == "notification":
+        channels = action.get("channels") or ["platform"]
+        return f"Send a {'/'.join(channels)} notification: {action.get('message', '')}".strip()
+    if kind == "webhook":
+        return f"POST {action.get('url', '?')}"
+    if kind == "email":
+        to = action.get("to") or []
+        recipients = ", ".join(str(a) for a in to) if to else "the tenant alert list"
+        return f"Email {recipients}: {action.get('subject', '')}".strip()
+    return f"Run {kind or 'unknown'} action"
+
+
+def _action_previews(actions: list[dict[str, Any]]) -> list[SimulateActionPreview]:
+    return [
+        SimulateActionPreview(
+            index=i, type=str(action.get("type", "unknown")), summary=_action_summary(action)
+        )
+        for i, action in enumerate(actions)
+    ]
+
+
+async def simulate_rule(
+    session: AsyncSession, tenant_id: uuid.UUID, rule: Rule, req: SimulateRequest
+) -> SimulateResponse:
+    """Evaluate `rule` against current values (or `req.overrides`, or a
+    `req.replay` window over stored telemetry) and report what would happen —
+    WITHOUT dispatching anything or writing a single row. Read-only: no
+    session.begin(), no _record_rule_execution, no publish_event.
+    """
+    now = datetime.now(UTC)
+    health = (await compute_rule_health(session, tenant_id, [rule], now=now))[rule.id]
+
+    if req.replay is not None:
+        replay = await _simulate_replay(session, rule, req.replay, health)
+        return SimulateResponse(
+            mode="replay",
+            evaluated_at=now,
+            would_fire=bool(replay.would_have_fired_at),
+            condition=None,
+            unavailable_signals=[],
+            actions=_action_previews(rule.actions),
+            clear_actions=_action_previews(rule.clear_actions or []),
+            replay=replay,
+        )
+
+    overrides = {(str(o.device_id), o.metric): o.value for o in req.overrides}
+    snapshot: MetricSnapshot = {}
+    unavailable: list[RuleSignalHealth] = []
+    for sig in health.signals:
+        key = SignalKey(str(sig.device_id), sig.metric)
+        override = overrides.get((str(sig.device_id), sig.metric))
+        if override is not None:
+            snapshot[key] = MetricValue(
+                value=override, timestamp=now, max_age_seconds=sig.max_age_seconds
+            )
+        elif sig.state == "fresh" and sig.last_value is not None and sig.last_seen_at is not None:
+            snapshot[key] = MetricValue(
+                value=sig.last_value,
+                timestamp=sig.last_seen_at,
+                max_age_seconds=sig.max_age_seconds,
+            )
+        else:
+            unavailable.append(sig)
+
+    # A condition-less device_status rule has nothing to walk — it's always
+    # true, matching ThresholdEvaluator/evaluate_condition's own None handling.
+    tree = explain_condition(rule.condition, snapshot, now) if rule.condition is not None else None
+    return SimulateResponse(
+        mode="live",
+        evaluated_at=now,
+        would_fire=True if tree is None else bool(tree["result"]),
+        condition=tree,
+        unavailable_signals=unavailable,
+        actions=_action_previews(rule.actions),
+        clear_actions=_action_previews(rule.clear_actions or []),
+        replay=None,
+    )
+
+
+async def _simulate_replay(
+    session: AsyncSession,
+    rule: Rule,
+    window: SimulateReplayWindow,
+    health: RuleHealth,
+) -> SimulateReplayResult:
+    if window.to <= window.from_:
+        raise RuleValidationError("replay window 'to' must be after 'from'")
+    span = window.to - window.from_
+    if span > timedelta(days=settings.simulate_replay_max_days):
+        raise RuleValidationError(
+            f"replay window must be {settings.simulate_replay_max_days} days or less"
+        )
+    resolution: Literal["raw", "1m"] = "raw" if span <= timedelta(hours=6) else "1m"
+
+    max_ages = {SignalKey(str(s.device_id), s.metric): s.max_age_seconds for s in health.signals}
+    events: list[tuple[datetime, SignalKey, float]] = []
+    for sig in max_ages:
+        data = await telemetry_service.get_range(
+            session,
+            rule.tenant_id,
+            uuid.UUID(sig.device_id),
+            sig.metric,
+            window.from_,
+            window.to,
+            resolution,
+        )
+        events.extend((point.time, sig, point.value) for point in data.points)
+    events.sort(key=lambda event: event[0])
+    truncated = len(events) > settings.simulate_replay_max_samples
+    events = events[: settings.simulate_replay_max_samples]
+
+    snapshot: MetricSnapshot = {}
+    state = RuleState()
+    fired_at: list[datetime] = []
+    cleared_at: list[datetime] = []
+    for timestamp, signal, value in events:
+        snapshot[signal] = MetricValue(
+            value=value,
+            timestamp=timestamp,
+            max_age_seconds=max_ages.get(signal, DEFAULT_STALE_METRIC_AGE_SECONDS),
+        )
+        firing = _THRESHOLD_EVALUATOR.evaluate(rule, snapshot, timestamp, state)
+        if firing is not None:
+            (cleared_at if firing.edge == "clear" else fired_at).append(timestamp)
+
+    return SimulateReplayResult(
+        resolution=resolution,
+        samples=len(events),
+        would_have_fired_at=fired_at,
+        would_have_cleared_at=cleared_at,
+        truncated=truncated,
+    )
+
+
+# ---- State durability: periodic Redis checkpoint of _rule_states ----------
+
+
+async def snapshot_rule_states() -> None:
+    """Write the current _rule_states to Redis so armed / cooldown /
+    for_duration / hysteresis-latch progress survives a normal worker restart.
+    Called on a timer by app.worker's rules_maintenance_loop and once more on
+    graceful shutdown. Best-effort — a Redis error is logged, not raised."""
+    payload = {str(rule_id): rule_state_to_dict(state) for rule_id, state in _rule_states.items()}
+    try:
+        await redis_client.set(RULE_STATE_REDIS_KEY, json.dumps(payload))
+    except redis.RedisError:
+        log.warning("rule state checkpoint write failed", exc_info=True)
+
+
+async def restore_rule_states() -> None:
+    """Load the checkpoint into _rule_states at worker startup — call AFTER
+    load_rule_cache so _rules_by_id is populated and states for rules deleted
+    while the worker was down are dropped."""
+    try:
+        raw = await redis_client.get(RULE_STATE_REDIS_KEY)
+    except redis.RedisError:
+        log.warning("rule state checkpoint read failed", exc_info=True)
+        return
+    if not raw:
+        return
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        log.warning("rule state checkpoint is not valid JSON; ignoring")
+        return
+
+    restored = 0
+    for rule_id_str, blob in (data or {}).items():
+        try:
+            rule_id = uuid.UUID(rule_id_str)
+        except ValueError:
+            continue
+        if rule_id not in _rules_by_id:
+            continue
+        _rule_states[rule_id] = rule_state_from_dict(blob)
+        restored += 1
+    log.info("restored %d rule states from checkpoint", restored)
+
+
+# ---- Rule health monitoring: the rule_health realtime event --------------
+
+
+def _rule_evaluatable_now(rule: Rule, now: datetime) -> tuple[bool, list[SignalKey]]:
+    """Worker-side "can this rule evaluate right now" — reads the same
+    _signal_value_cache the hot-path evaluator sees. Returns
+    (all_signals_fresh, the stale/missing ones)."""
+    bad: list[SignalKey] = []
+    for signal in referenced_signals(rule.condition):
+        metric_value = _signal_value_cache.get(signal)
+        if (
+            metric_value is None
+            or (now - metric_value.timestamp).total_seconds() > metric_value.max_age_seconds
+        ):
+            bad.append(signal)
+    return (not bad, sorted(bad))
+
+
+def _bad_signal_phrase(bad: list[SignalKey]) -> str:
+    metrics = sorted({signal.metric for signal in bad})
+    verb = "is" if len(metrics) == 1 else "are"
+    return f"{', '.join(metrics)} {verb} stale or not reporting"
+
+
+async def emit_rule_health_transitions(factory: async_sessionmaker[AsyncSession]) -> None:
+    """One pass over every enabled non-manual rule: when its "can evaluate"
+    state flips, publish a rule_health realtime event; on the flip to
+    un-evaluatable, also write one platform notification (debounced per rule).
+    The first pass after a worker restart only records the baseline — no
+    event, no alert — so a cold _signal_value_cache never cries wolf."""
+    now = datetime.now(UTC)
+    live_ids: set[uuid.UUID] = set()
+    for rule in list(_rules_by_id.values()):
+        if (rule.trigger or {}).get("type") == "manual":
+            continue
+        live_ids.add(rule.id)
+        evaluatable, bad = _rule_evaluatable_now(rule, now)
+        prev = _rule_health_tracks.get(rule.id)
+        if prev is None:
+            _rule_health_tracks[rule.id] = _RuleHealthTrack(evaluatable, None)
+            continue
+        if evaluatable == prev.evaluatable:
+            continue
+
+        await realtime_service.publish_event(
+            rule.tenant_id,
+            {"type": "rule_health", "rule_id": str(rule.id), "evaluatable": evaluatable},
+        )
+        alert_at = prev.last_alert_at
+        if not evaluatable and (
+            prev.last_alert_at is None or now - prev.last_alert_at > _RULE_HEALTH_RENOTIFY_AFTER
+        ):
+            await notifications_service.create_notification(
+                factory,
+                rule.tenant_id,
+                None,
+                rule.id,
+                f'Rule "{rule.name}" can\'t evaluate right now: {_bad_signal_phrase(bad)}.',
+                severity="warning",
+                kind="rule_health",
+            )
+            alert_at = now
+        _rule_health_tracks[rule.id] = _RuleHealthTrack(evaluatable, alert_at)
+
+    for gone in set(_rule_health_tracks) - live_ids:
+        del _rule_health_tracks[gone]
+
+
+# ---- Versions (API-side, DESIGN.md §9) ---------------------------------------
+
+
+async def list_rule_versions(
+    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID
+) -> list[tuple[RuleVersion, str | None]]:
+    """Newest first, each with its author's display name (or email)."""
+    rows = await rule_versions.list_versions(session, tenant_id, rule_id)
+    people = await auth_service.get_people_by_user_ids(
+        session, list({v.author_id for v in rows if v.author_id is not None})
+    )
+    out: list[tuple[RuleVersion, str | None]] = []
+    for v in rows:
+        person = people.get(v.author_id) if v.author_id is not None else None
+        out.append((v, (person[1] or person[0]) if person else None))
+    return out
+
+
+# ---- Activity for the rules list (API-side, DESIGN.md §5 Mini strip) ---------
+
+
+StripCell = Literal["idle", "true", "fired"]
+
+
+class RuleActivityRow(NamedTuple):
+    rule_id: uuid.UUID
+    cells: list[StripCell]
+    fired: int
+    last_fired_at: datetime | None
+
+
+async def rule_activity(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    hours: int = 24,
+    buckets: int = 48,
+    now: datetime | None = None,
+) -> list[RuleActivityRow]:
+    """Every rule's last `hours`, in `buckets` cells, from rule_executions.
+
+    A cell is "fired" when a firing landed in it. Rules with on-clear
+    actions record the clear edge too, so the span between a fire and its
+    clear is "true" (the condition held); for other rules nothing is known
+    between firings, so it stays "idle" — never guessed. Read-only, never on
+    the hot path.
+    """
+    end = now or datetime.now(UTC)
+    start = end - timedelta(hours=hours)
+    width = (end - start) / buckets
+    rules = (
+        await session.execute(
+            select(Rule.id, Rule.clear_actions).where(Rule.tenant_id == tenant_id)
+        )
+    ).all()
+    rows = (
+        await session.execute(
+            select(RuleExecution.rule_id, RuleExecution.fired_at, RuleExecution.edge)
+            .where(RuleExecution.tenant_id == tenant_id, RuleExecution.fired_at >= start)
+            .order_by(RuleExecution.fired_at)
+        )
+    ).all()
+    # Whether each clear-tracking rule was held when the window opened.
+    prior = (
+        await session.execute(
+            text(
+                # A window function, not DISTINCT ON: TimescaleDB's SkipScan
+                # rejects DISTINCT ON over this RLS-filtered table.
+                "SELECT rule_id, edge FROM ("
+                "  SELECT rule_id, edge, row_number() OVER ("
+                "    PARTITION BY rule_id ORDER BY fired_at DESC) AS rn"
+                "  FROM rule_executions"
+                "  WHERE tenant_id = :t AND fired_at < :start AND rule_id IS NOT NULL"
+                ") last WHERE rn = 1"
+            ),
+            {"t": tenant_id, "start": start},
+        )
+    ).all()
+    held_at_start = {r.rule_id for r in prior if r.edge == "fire"}
+    by_rule: dict[uuid.UUID, list[tuple[datetime, str]]] = {}
+    for r in rows:
+        if r.rule_id is not None:
+            by_rule.setdefault(r.rule_id, []).append((r.fired_at, r.edge))
+
+    def cell_of(t: datetime) -> int:
+        return min(buckets - 1, max(0, int((t - start) / width)))
+
+    out: list[RuleActivityRow] = []
+    for rule_id, clear_actions in rules:
+        events = by_rule.get(rule_id, [])
+        cells: list[StripCell] = ["idle"] * buckets
+        if clear_actions:
+            held_from: int | None = 0 if rule_id in held_at_start else None
+            for t, edge in events:
+                i = cell_of(t)
+                if edge == "fire" and held_from is None:
+                    held_from = i
+                elif edge == "clear" and held_from is not None:
+                    for j in range(held_from, i + 1):
+                        cells[j] = "true"
+                    held_from = None
+            if held_from is not None:
+                for j in range(held_from, buckets):
+                    cells[j] = "true"
+        fires = [t for t, edge in events if edge == "fire"]
+        for t in fires:
+            cells[cell_of(t)] = "fired"
+        out.append(RuleActivityRow(rule_id, cells, len(fires), fires[-1] if fires else None))
+    return out
+
+
+async def simulate_draft(
+    session: AsyncSession, tenant_id: uuid.UUID, body: dict[str, Any], req: SimulateRequest
+) -> SimulateResponse:
+    """Simulate a rule that isn't saved yet: the same validation as a save,
+    then simulate_rule on a transient Rule that is never added to the
+    session — nothing is written, nothing is dispatched. API-side only."""
+    condition = body.get("condition")
+    trigger = body["trigger"]
+    actions = body["actions"]
+    clear_actions = body.get("clear_actions") or []
+    policy = body["execution_policy"]
+    _assert_leaves_have_device(condition)
+    _validate_trigger(trigger)
+    _validate_clear_actions(trigger, clear_actions)
+    _validate_latch(trigger, policy, clear_actions)
+    device_map = _rule_device_map(condition, actions, trigger, clear_actions)
+    await _validate_devices_in_tenant(session, tenant_id, set(device_map))
+    draft = Rule(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        name=body.get("name") or "Draft",
+        trigger=trigger,
+        condition=condition,
+        execution_policy=policy,
+        actions=actions,
+        clear_actions=clear_actions,
+        enabled=True,
+    )
+    return await simulate_rule(session, tenant_id, draft, req)

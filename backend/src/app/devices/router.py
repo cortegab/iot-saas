@@ -29,6 +29,7 @@ from app.health.schemas import MetricHealthResponse
 from app.tenants import service as tenants_service
 from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import TenantRole
+from app.zones import service as zones_service
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -54,6 +55,7 @@ def _to_response(
         id=device.id,
         name=device.name,
         catalog_entry_id=device.catalog_entry_id,
+        zone_id=device.zone_id,
         slug=device.slug,
         status=device.status,
         last_seen_at=device.last_seen_at,
@@ -76,7 +78,7 @@ def _to_response(
 @router.get("", response_model=list[DeviceResponse])
 async def list_devices(
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[DeviceResponse]:
     devices = await service.list_devices(session, ctx.tenant_id)
     return [_to_response(d) for d in devices]
@@ -86,15 +88,22 @@ async def list_devices(
 async def create_device(
     body: DeviceCreateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceCreateResponse:
     try:
         device, secret = await service.create_device(
-            session, ctx.tenant_id, body.name, body.catalog_entry_id
+            session, ctx.tenant_id, body.name, body.catalog_entry_id, zone_id=body.zone_id
         )
+    except zones_service.ZoneNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found") from exc
     except catalog_service.CatalogEntryNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Catalog entry not found"
+        ) from exc
+    except catalog_service.CatalogEntryDisabledError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This device template is disabled. Enable it or pick another template.",
         ) from exc
     tenant_slug = await tenants_service.get_tenant_slug(session, ctx.tenant_id)
     return DeviceCreateResponse(
@@ -108,7 +117,7 @@ async def create_device(
 async def get_device(
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceResponse:
     metrics_health = await health_service.list_for_device(session, ctx.tenant_id, device.id)
     return _to_response(device, metrics_health)
@@ -119,9 +128,20 @@ async def update_device(
     body: DeviceUpdateRequest,
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceResponse:
-    updated = await service.update_device(session, ctx.tenant_id, device.id, body.name, body.status)
+    try:
+        updated = await service.update_device(
+            session,
+            ctx.tenant_id,
+            device.id,
+            body.name,
+            body.status,
+            zone_id=body.zone_id,
+            zone_set="zone_id" in body.model_fields_set,
+        )
+    except zones_service.ZoneNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found") from exc
     return _to_response(updated)
 
 
@@ -129,7 +149,7 @@ async def update_device(
 async def delete_device(
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     await service.delete_device(session, ctx.tenant_id, device.id)
 
@@ -138,7 +158,7 @@ async def delete_device(
 async def rotate_credential(
     device: Device = Depends(get_device_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceCreateResponse:
     updated, secret = await service.rotate_credential(session, ctx.tenant_id, device.id)
     tenant_slug = await tenants_service.get_tenant_slug(session, ctx.tenant_id)

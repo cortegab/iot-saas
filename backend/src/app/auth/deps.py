@@ -9,17 +9,9 @@ from app.auth.models import User
 from app.db import get_session, set_user_context
 
 
-async def get_current_user(
-    authorization: str | None = Header(default=None),
-    session: AsyncSession = Depends(get_session),
-) -> User:
-    if authorization is None or not authorization.startswith("Bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing or invalid authorization header",
-        )
-
-    token = authorization.removeprefix("Bearer ")
+async def authenticate_access_token(token: str, session: AsyncSession) -> User:
+    """A user's access token (JWT) → the active user, or 401. Shared with
+    tenants.deps.require_tenant_context, which also accepts API keys."""
     try:
         user_id = service.decode_access_token(token)
     except service.InvalidAccessTokenError as exc:
@@ -39,3 +31,17 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive"
         )
     return user
+
+
+async def get_current_user(
+    authorization: str | None = Header(default=None),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> User:
+    """A signed-in person only — API keys are refused here (401), which is
+    what keeps personal routes (dashboards, /auth/me, membership) key-free."""
+    if authorization is None or not authorization.startswith("Bearer "):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing or invalid authorization header",
+        )
+    return await authenticate_access_token(authorization.removeprefix("Bearer "), session)

@@ -15,16 +15,25 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from app.rules.evaluators import (
     Firing,
+    LeafState,
     MetricSnapshot,
     MetricValue,
     RuleState,
     SignalKey,
     ThresholdEvaluator,
+    align_state_to_condition,
+    condition_fingerprint,
+    has_pending_timer,
+    reset_latch,
+    rule_state_from_dict,
+    rule_state_to_dict,
 )
 from app.rules.models import Rule
+from app.rules.schemas import ConditionLeaf
 
 _EVALUATOR = ThresholdEvaluator()
 _BASE_TIME = datetime(2026, 1, 1, tzinfo=UTC)
@@ -39,12 +48,76 @@ def _leaf(
     metric: str = "temperature",
     device_id: str | None = None,
 ) -> dict[str, Any]:
+    """A leaf with a static rhs (`threshold`) — the pre-Phase-6 shape, still
+    the overwhelmingly common case. See _range_leaf/_set_leaf/_change_leaf/
+    _metric_rhs_leaf below for the newer operator families."""
     return {
         "kind": "leaf",
         "device_id": device_id or _DEVICE_A,
         "metric": metric,
         "operator": operator,
-        "threshold": threshold,
+        "rhs": {"source": "static", "value": threshold},
+        "hysteresis": hysteresis,
+    }
+
+
+def _range_leaf(
+    operator: str,
+    low: float,
+    high: float,
+    metric: str = "temperature",
+    device_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "kind": "leaf",
+        "device_id": device_id or _DEVICE_A,
+        "metric": metric,
+        "operator": operator,
+        "rhs": {"source": "range", "low": low, "high": high},
+        "hysteresis": 0.0,
+    }
+
+
+def _set_leaf(
+    operator: str, values: list[float], metric: str = "temperature", device_id: str | None = None
+) -> dict[str, Any]:
+    return {
+        "kind": "leaf",
+        "device_id": device_id or _DEVICE_A,
+        "metric": metric,
+        "operator": operator,
+        "rhs": {"source": "set", "values": values},
+        "hysteresis": 0.0,
+    }
+
+
+def _change_leaf(
+    operator: str, metric: str = "temperature", device_id: str | None = None
+) -> dict[str, Any]:
+    return {
+        "kind": "leaf",
+        "device_id": device_id or _DEVICE_A,
+        "metric": metric,
+        "operator": operator,
+        "rhs": None,
+        "hysteresis": 0.0,
+    }
+
+
+def _metric_rhs_leaf(
+    operator: str,
+    rhs_device_id: str,
+    rhs_metric: str,
+    hysteresis: float = 0.0,
+    metric: str = "temperature",
+    device_id: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "kind": "leaf",
+        "device_id": device_id or _DEVICE_A,
+        "metric": metric,
+        "operator": operator,
+        "rhs": {"source": "metric", "device_id": rhs_device_id, "metric": rhs_metric},
         "hysteresis": hysteresis,
     }
 
@@ -56,6 +129,8 @@ def _rule(
     strategy: str = "edge",
     reset_condition: dict[str, Any] | None = None,
     actions: list[dict[str, Any]] | None = None,
+    clear_actions: list[dict[str, Any]] | None = None,
+    clear_for_duration: int = 0,
 ) -> Rule:
     return Rule(
         id=uuid.uuid4(),
@@ -69,14 +144,19 @@ def _rule(
             "for_duration": for_duration,
             "cooldown": cooldown,
             "reset_condition": reset_condition,
+            "clear_for_duration": clear_for_duration,
         },
         actions=actions or [{"type": "actuator_command", "actuator": "fan1", "value": True}],
+        clear_actions=clear_actions or [],
         enabled=True,
     )
 
 
 def _at(
-    value: float, offset_seconds: float = 0, metric: str = "temperature", device_id: str | None = None
+    value: float,
+    offset_seconds: float = 0,
+    metric: str = "temperature",
+    device_id: str | None = None,
 ) -> tuple[MetricSnapshot, datetime]:
     """A single-signal snapshot plus the timestamp to evaluate "now" as."""
     now = _BASE_TIME + timedelta(seconds=offset_seconds)
@@ -361,7 +441,12 @@ def test_and_fires_only_when_both_predicates_true() -> None:
     state = RuleState()
 
     # Only temperature satisfied.
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 0), "humidity": (50.0, 0)}), state) is None
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 0), "humidity": (50.0, 0)}), state
+        )
+        is None
+    )
     # Both satisfied.
     action = _EVALUATOR.evaluate(
         rule, *_multi_at({"temperature": (35.0, 1), "humidity": (35.0, 1)}), state
@@ -379,7 +464,12 @@ def test_or_fires_when_either_predicate_true() -> None:
     state = RuleState()
 
     # Neither satisfied.
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (20.0, 0), "humidity": (50.0, 0)}), state) is None
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (20.0, 0), "humidity": (50.0, 0)}), state
+        )
+        is None
+    )
     # Only humidity satisfied — still fires under OR.
     action = _EVALUATOR.evaluate(
         rule, *_multi_at({"temperature": (20.0, 1), "humidity": (5.0, 1)}), state
@@ -412,9 +502,7 @@ def test_leaf_with_stale_snapshot_entry_is_unmet() -> None:
 def test_leaf_snapshot_entry_exactly_at_staleness_boundary_still_fresh() -> None:
     rule = _rule(_leaf(">", 30.0))
     state = RuleState()
-    snapshot = {
-        SignalKey(_DEVICE_A, "temperature"): MetricValue(value=35.0, timestamp=_BASE_TIME)
-    }
+    snapshot = {SignalKey(_DEVICE_A, "temperature"): MetricValue(value=35.0, timestamp=_BASE_TIME)}
     exactly_90s = _BASE_TIME + timedelta(seconds=90)
     action = _EVALUATOR.evaluate(rule, snapshot, exactly_90s, state)
     assert action is not None
@@ -489,13 +577,33 @@ def test_and_duration_and_cooldown_apply_to_combined_result_not_per_leaf() -> No
     state = RuleState()
 
     # temperature satisfied alone for a while — must not start the hold timer.
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 0), "humidity": (50.0, 0)}), state) is None
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 10), "humidity": (50.0, 10)}), state) is None
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 0), "humidity": (50.0, 0)}), state
+        )
+        is None
+    )
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 10), "humidity": (50.0, 10)}), state
+        )
+        is None
+    )
     assert state.condition_since is None
 
     # Now both true — the 5s hold starts from here, not from t=0.
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 11), "humidity": (35.0, 11)}), state) is None
-    assert _EVALUATOR.evaluate(rule, *_multi_at({"temperature": (35.0, 15), "humidity": (35.0, 15)}), state) is None
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 11), "humidity": (35.0, 11)}), state
+        )
+        is None
+    )
+    assert (
+        _EVALUATOR.evaluate(
+            rule, *_multi_at({"temperature": (35.0, 15), "humidity": (35.0, 15)}), state
+        )
+        is None
+    )
     action = _EVALUATOR.evaluate(
         rule, *_multi_at({"temperature": (35.0, 16), "humidity": (35.0, 16)}), state
     )
@@ -570,3 +678,584 @@ def test_reset_condition_holds_disarmed_until_reset_tree_true() -> None:
     assert _EVALUATOR.evaluate(rule, *_at(15.0, 3), state) is None
     assert state.armed is True
     assert _EVALUATOR.evaluate(rule, *_at(35.0, 4), state) is not None
+
+
+# ---- Three-valued evaluation: stale/missing data is unknown, not false -----
+
+
+def _stale_at(
+    value: float, reported_at: float, now_offset: float
+) -> tuple[MetricSnapshot, datetime]:
+    """A snapshot whose only reading was taken at `reported_at`, evaluated at
+    `now_offset` (past the default 90s max age)."""
+    snapshot = {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(
+            value=value, timestamp=_BASE_TIME + timedelta(seconds=reported_at)
+        )
+    }
+    return snapshot, _BASE_TIME + timedelta(seconds=now_offset)
+
+
+def test_stale_gap_inside_hysteresis_band_does_not_refire() -> None:
+    """Regression: a data gap used to read as "condition false", re-arming the
+    rule; a reading that came back still inside the hysteresis band (latched
+    true) then fired again without the value ever re-crossing the threshold.
+    """
+    rule = _rule(_leaf(">", 30.0, hysteresis=2.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(29.5, 1), state) is None  # in band, latched
+
+    assert _EVALUATOR.evaluate(rule, *_stale_at(29.5, 1, 200), state) is None
+    assert state.armed is False  # unknown must not re-arm
+
+    assert _EVALUATOR.evaluate(rule, *_at(29.5, 201), state) is None  # back, still in band
+    assert _EVALUATOR.evaluate(rule, *_at(27.9, 202), state) is None  # genuinely clears
+    assert state.armed is True
+    assert _EVALUATOR.evaluate(rule, *_at(30.5, 203), state) is not None
+
+
+def test_missing_signal_does_not_rearm() -> None:
+    rule = _rule(_leaf(">", 30.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, {}, _BASE_TIME + timedelta(seconds=1), state) is None
+    assert state.armed is False
+
+
+def test_stale_data_clears_the_for_duration_hold() -> None:
+    """Unknown can't count toward a hold either — the timer restarts."""
+    rule = _rule(_leaf(">", 30.0), for_duration=10)
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is None
+    assert _EVALUATOR.evaluate(rule, *_stale_at(35.0, 0, 100), state) is None
+    assert state.condition_since is None
+
+
+def _two_leaf(op: str) -> dict[str, Any]:
+    return {
+        "kind": "group",
+        "op": op,
+        "predicates": [_leaf(">", 30.0, metric="temperature"), _leaf("<", 40.0, metric="humidity")],
+    }
+
+
+def _temp_stale_humidity_fresh(humidity: float) -> tuple[MetricSnapshot, datetime]:
+    now = _BASE_TIME + timedelta(seconds=200)
+    return {
+        SignalKey(_DEVICE_A, "temperature"): MetricValue(35.0, _BASE_TIME),
+        SignalKey(_DEVICE_A, "humidity"): MetricValue(humidity, now),
+    }, now
+
+
+def _fire_both(rule: Rule, state: RuleState, humidity: float) -> None:
+    snapshot, now = _multi_at({"temperature": (35.0, 0), "humidity": (humidity, 0)})
+    assert _EVALUATOR.evaluate(rule, snapshot, now, state) is not None
+
+
+def test_and_with_stale_leaf_and_fresh_false_sibling_is_known_false() -> None:
+    rule = _rule(_two_leaf("AND"))
+    state = RuleState()
+    _fire_both(rule, state, humidity=35.0)
+    assert _EVALUATOR.evaluate(rule, *_temp_stale_humidity_fresh(50.0), state) is None
+    assert state.armed is True  # False AND unknown == False -> re-arms
+
+
+def test_and_with_stale_leaf_and_fresh_true_sibling_is_unknown() -> None:
+    rule = _rule(_two_leaf("AND"))
+    state = RuleState()
+    _fire_both(rule, state, humidity=35.0)
+    assert _EVALUATOR.evaluate(rule, *_temp_stale_humidity_fresh(35.0), state) is None
+    assert state.armed is False  # True AND unknown == unknown -> holds
+
+
+def test_or_with_stale_leaf_and_fresh_false_sibling_is_unknown() -> None:
+    rule = _rule(_two_leaf("OR"))
+    state = RuleState()
+    _fire_both(rule, state, humidity=50.0)
+    assert _EVALUATOR.evaluate(rule, *_temp_stale_humidity_fresh(50.0), state) is None
+    assert state.armed is False  # False OR unknown == unknown -> holds
+
+
+def test_or_with_stale_leaf_and_fresh_true_sibling_fires() -> None:
+    rule = _rule(_two_leaf("OR"))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_temp_stale_humidity_fresh(35.0), state) is not None
+
+
+def test_stale_reset_tree_does_not_rearm() -> None:
+    rule = _rule(_leaf(">", 30.0), strategy="reset_condition", reset_condition=_leaf("<", 20.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_stale_at(15.0, 0, 200), state) is None
+    assert state.armed is False
+
+
+# ---- Non-zero hysteresis under the other strategies -------------------------
+
+
+def test_continuous_strategy_keeps_refiring_inside_the_hysteresis_band() -> None:
+    """Under `continuous`, the latched (in-band) condition still counts as
+    true — it refires on cooldown until the value clears the margin."""
+    rule = _rule(_leaf(">", 30.0, hysteresis=2.0), strategy="continuous", cooldown=10)
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(29.0, 5), state) is None  # cooldown
+    assert _EVALUATOR.evaluate(rule, *_at(29.0, 11), state) is not None  # latched -> refires
+    assert _EVALUATOR.evaluate(rule, *_at(27.9, 12), state) is None  # clears the margin
+    assert _EVALUATOR.evaluate(rule, *_at(29.0, 30), state) is None  # below bare threshold
+    assert _EVALUATOR.evaluate(rule, *_at(30.5, 31), state) is not None
+
+
+def test_reset_condition_rearm_ignores_the_main_leaf_hysteresis() -> None:
+    rule = _rule(
+        _leaf(">", 30.0, hysteresis=2.0),
+        strategy="reset_condition",
+        reset_condition=_leaf("<", 20.0),
+    )
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(27.0, 1), state) is None  # main clears its margin...
+    assert state.armed is False  # ...but only the reset tree re-arms
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 2), state) is None
+    assert _EVALUATOR.evaluate(rule, *_at(15.0, 3), state) is None
+    assert state.armed is True
+    assert _EVALUATOR.evaluate(rule, *_at(31.0, 4), state) is not None
+
+
+# ---- Condition fingerprint: latch state must not survive a condition edit ---
+
+
+def test_edited_leaf_at_same_path_does_not_inherit_the_old_latch() -> None:
+    """Regression: LeafState is keyed by tree position, so editing a leaf in
+    place used to inherit the old leaf's latch — here a humidity reading that
+    never crossed the new threshold would have fired."""
+    original = _rule(_leaf(">", 30.0, hysteresis=5.0), for_duration=10)
+    edited = _rule(_leaf(">", 60.0, hysteresis=5.0, metric="humidity"), for_duration=10)
+    edited.id = original.id
+
+    def run(align: bool) -> Firing | None:
+        state = RuleState()
+        align_state_to_condition(state, condition_fingerprint(original))
+        _EVALUATOR.evaluate(original, *_at(35.0, 0), state)  # latched, holding
+        if align:
+            align_state_to_condition(state, condition_fingerprint(edited))
+        return _EVALUATOR.evaluate(edited, *_at(58.0, 11, metric="humidity"), state)
+
+    assert run(align=False) is not None  # the bug, reproduced without the fix
+    assert run(align=True) is None
+
+
+def test_align_keeps_episode_state_and_resets_latch_and_hold() -> None:
+    state = RuleState(
+        condition_since=_BASE_TIME,
+        armed=False,
+        last_fired_at=_BASE_TIME,
+        leaf_states={(): LeafState(latched_true=True)},
+        reset_leaf_states={(): LeafState(latched_true=True)},
+        condition_fingerprint="old",
+    )
+    align_state_to_condition(state, "new")
+    assert state.leaf_states == {}
+    assert state.reset_leaf_states == {}
+    assert state.condition_since is None
+    assert state.armed is False
+    assert state.last_fired_at == _BASE_TIME
+    assert state.condition_fingerprint == "new"
+
+
+@pytest.mark.parametrize("existing", [None, "same"])
+def test_align_is_a_no_op_for_matching_or_unset_fingerprint(existing: str | None) -> None:
+    state = RuleState(
+        condition_since=_BASE_TIME,
+        leaf_states={(): LeafState(latched_true=True)},
+        condition_fingerprint=existing,
+    )
+    align_state_to_condition(state, "same")
+    assert state.leaf_states[()].latched_true is True
+    assert state.condition_since == _BASE_TIME
+    assert state.condition_fingerprint == "same"
+
+
+def test_fingerprint_tracks_condition_and_reset_tree_only() -> None:
+    base = _rule(_leaf(">", 30.0))
+    same = _rule(_leaf(">", 30.0), cooldown=99)
+    new_threshold = _rule(_leaf(">", 31.0))
+    new_reset = _rule(
+        _leaf(">", 30.0), strategy="reset_condition", reset_condition=_leaf("<", 20.0)
+    )
+    assert condition_fingerprint(base) == condition_fingerprint(same)
+    assert condition_fingerprint(base) != condition_fingerprint(new_threshold)
+    assert condition_fingerprint(base) != condition_fingerprint(new_reset)
+
+
+def test_fingerprint_survives_the_checkpoint_round_trip() -> None:
+    state = RuleState(condition_fingerprint="abc")
+    assert rule_state_from_dict(rule_state_to_dict(state)).condition_fingerprint == "abc"
+    assert rule_state_from_dict({"armed": True}).condition_fingerprint is None
+
+
+# ---- Schema: hysteresis only where the evaluator latches on it -------------
+
+
+@pytest.mark.parametrize("operator", [">", ">=", "<", "<="])
+def test_schema_accepts_hysteresis_on_inequality_operators(operator: str) -> None:
+    ConditionLeaf.model_validate(
+        {
+            "metric": "t",
+            "operator": operator,
+            "rhs": {"source": "static", "value": 1},
+            "hysteresis": 2,
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "operator,rhs",
+    [
+        ("==", {"source": "static", "value": 1}),
+        ("!=", {"source": "static", "value": 1}),
+        ("between", {"source": "range", "low": 1, "high": 2}),
+        ("in", {"source": "set", "values": [1]}),
+        ("changed", None),
+    ],
+)
+def test_schema_rejects_hysteresis_where_it_would_be_ignored(
+    operator: str, rhs: dict[str, Any] | None
+) -> None:
+    body = {"metric": "t", "operator": operator, "rhs": rhs, "hysteresis": 2}
+    with pytest.raises(ValidationError, match="hysteresis only applies"):
+        ConditionLeaf.model_validate(body)
+    ConditionLeaf.model_validate({**body, "hysteresis": 0})
+
+
+# ---- On-clear actions -------------------------------------------------------
+
+_LED_OFF = [{"type": "actuator_command", "actuator": "led", "value": False}]
+_FAN_OFF = [{"type": "actuator_command", "actuator": "fan1", "value": False}]
+
+
+def _edge(
+    rule: Rule, snapshot_now: tuple[MetricSnapshot, datetime], state: RuleState
+) -> str | None:
+    firing = _EVALUATOR.evaluate(rule, *snapshot_now, state)
+    return None if firing is None else firing.edge
+
+
+def _switch_rule(**kwargs: Any) -> Rule:
+    return _rule(_leaf("==", 1.0, metric="switch"), clear_actions=_LED_OFF, **kwargs)
+
+
+def _sw(value: float, offset: float) -> tuple[MetricSnapshot, datetime]:
+    return _at(value, offset, metric="switch")
+
+
+def test_switch_press_fires_and_release_clears_once() -> None:
+    rule = _switch_rule()
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert state.active is True
+    assert _edge(rule, _sw(1, 1), state) is None
+    assert _edge(rule, _sw(0, 2), state) == "clear"
+    assert state.active is False
+    assert _edge(rule, _sw(0, 3), state) is None  # never a second clear
+    assert _edge(rule, _sw(1, 4), state) == "fire"  # next press is a new episode
+
+
+def test_firing_carries_edge() -> None:
+    rule = _switch_rule()
+    state = RuleState()
+    firing = _EVALUATOR.evaluate(rule, *_sw(1, 0), state)
+    assert firing == Firing(rule_id=rule.id, edge="fire")
+
+
+def test_no_clear_without_a_prior_fire() -> None:
+    rule = _switch_rule(for_duration=10)
+    state = RuleState()
+    assert _edge(rule, _sw(0, 0), state) is None
+    assert _edge(rule, _sw(1, 1), state) is None  # holding, not fired yet
+    assert _edge(rule, _sw(0, 2), state) is None  # released before the hold -> nothing to clear
+    assert state.active is False
+
+
+def test_rule_without_clear_actions_never_opens_an_episode() -> None:
+    rule = _rule(_leaf("==", 1.0, metric="switch"))
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert state.active is False
+    assert _edge(rule, _sw(0, 1), state) is None
+
+
+def test_removing_clear_actions_mid_episode_closes_it_silently() -> None:
+    state = RuleState()
+    assert _edge(_switch_rule(), _sw(1, 0), state) == "fire"
+    without = _rule(_leaf("==", 1.0, metric="switch"))
+    assert _edge(without, _sw(0, 1), state) is None
+    assert state.active is False
+
+
+def test_stale_signal_holds_last_state_and_never_clears() -> None:
+    rule = _switch_rule()
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    stale = {SignalKey(_DEVICE_A, "switch"): MetricValue(1.0, _BASE_TIME)}
+    assert _EVALUATOR.evaluate(rule, stale, _BASE_TIME + timedelta(seconds=500), state) is None
+    assert state.active is True  # LED stays on while we can't see the switch
+    assert _edge(rule, _sw(0, 501), state) == "clear"  # a real release still clears
+
+
+def test_clear_for_duration_holds_before_clearing() -> None:
+    rule = _switch_rule(clear_for_duration=10)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(0, 1), state) is None
+    assert state.clear_since == _BASE_TIME + timedelta(seconds=1)
+    assert _edge(rule, _sw(0, 10.9), state) is None
+    assert _edge(rule, _sw(0, 11), state) == "clear"
+
+
+def test_true_reading_cancels_a_pending_clear() -> None:
+    rule = _switch_rule(clear_for_duration=10, cooldown=60)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(0, 1), state) is None  # clear timer starts
+    assert _edge(rule, _sw(1, 3), state) is None  # pressed again (cooldown blocks a refire)
+    assert state.clear_since is None
+    assert state.active is True
+    assert _edge(rule, _sw(0, 4), state) is None  # timer restarts from here
+    assert _edge(rule, _sw(0, 13.9), state) is None
+    assert _edge(rule, _sw(0, 14), state) == "clear"
+
+
+def test_stale_resets_a_pending_clear_timer() -> None:
+    rule = _switch_rule(clear_for_duration=10)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(0, 1), state) is None
+    stale = {SignalKey(_DEVICE_A, "switch"): MetricValue(0.0, _BASE_TIME + timedelta(seconds=1))}
+    assert _EVALUATOR.evaluate(rule, stale, _BASE_TIME + timedelta(seconds=200), state) is None
+    assert state.clear_since is None
+    assert _edge(rule, _sw(0, 201), state) is None  # restarts, doesn't resume
+    assert _edge(rule, _sw(0, 211), state) == "clear"
+
+
+def test_cooldown_never_blocks_a_clear() -> None:
+    rule = _switch_rule(cooldown=60)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(0, 1), state) == "clear"
+
+
+def test_thermostat_band_fan_on_above_30_off_at_28() -> None:
+    rule = _rule(_leaf(">", 30.0, hysteresis=2.0), clear_actions=_FAN_OFF)
+    state = RuleState()
+    assert _edge(rule, _at(31.0, 0), state) == "fire"
+    assert _edge(rule, _at(29.5, 1), state) is None  # inside the band, fan stays on
+    assert _edge(rule, _at(27.9, 2), state) == "clear"  # past threshold - hysteresis
+    assert _edge(rule, _at(29.5, 3), state) is None
+    assert _edge(rule, _at(30.5, 4), state) == "fire"
+
+
+def test_heater_band_on_below_10_off_above_12() -> None:
+    heater_off = [{"type": "actuator_command", "actuator": "heater", "value": False}]
+    rule = _rule(_leaf("<", 10.0, hysteresis=2.0), clear_actions=heater_off)
+    state = RuleState()
+    assert _edge(rule, _at(9.0, 0), state) == "fire"
+    assert _edge(rule, _at(11.0, 1), state) is None
+    assert _edge(rule, _at(12.1, 2), state) == "clear"
+
+
+def test_zero_hysteresis_noisy_boundary_toggles_every_reading() -> None:
+    """Why RuleForm warns: with no hysteresis, no clear delay and no
+    cooldown, a sensor dithering around the threshold cycles the relay on
+    every reading. Cooldown bounds it (fires are gated, clears need a fire)."""
+    rule = _rule(_leaf(">", 30.0), clear_actions=_FAN_OFF)
+    state = RuleState()
+    edges = [_edge(rule, _at(v, i), state) for i, v in enumerate([30.1, 29.9, 30.1, 29.9])]
+    assert edges == ["fire", "clear", "fire", "clear"]
+
+    bounded = _rule(_leaf(">", 30.0), clear_actions=_FAN_OFF, cooldown=60)
+    state = RuleState()
+    edges = [_edge(bounded, _at(v, i), state) for i, v in enumerate([30.1, 29.9, 30.1, 29.9])]
+    assert edges == ["fire", "clear", None, None]
+
+
+def test_continuous_refires_then_clears_once() -> None:
+    rule = _switch_rule(strategy="continuous", cooldown=5)
+    state = RuleState()
+    assert _edge(rule, _sw(1, 0), state) == "fire"
+    assert _edge(rule, _sw(1, 6), state) == "fire"
+    assert _edge(rule, _sw(0, 7), state) == "clear"
+    assert _edge(rule, _sw(0, 8), state) is None
+
+
+def test_reset_condition_clears_on_condition_false_even_while_disarmed() -> None:
+    rule = _rule(
+        _leaf(">", 30.0),
+        strategy="reset_condition",
+        reset_condition=_leaf("<", 20.0),
+        clear_actions=_FAN_OFF,
+    )
+    state = RuleState()
+    assert _edge(rule, _at(35.0, 0), state) == "fire"
+    assert _edge(rule, _at(25.0, 1), state) == "clear"
+    assert state.armed is False  # re-arming is still the reset tree's job
+
+
+def test_and_clears_when_any_leaf_releases_even_with_a_stale_sibling() -> None:
+    rule = _rule(_two_leaf("AND"), clear_actions=_FAN_OFF)
+    state = RuleState()
+    _fire_both(rule, state, humidity=35.0)
+    assert _edge(rule, _temp_stale_humidity_fresh(50.0), state) == "clear"  # known false
+
+
+def test_or_holds_while_a_stale_leaf_could_still_be_true() -> None:
+    rule = _rule(_two_leaf("OR"), clear_actions=_FAN_OFF)
+    state = RuleState()
+    _fire_both(rule, state, humidity=50.0)
+    assert _edge(rule, _temp_stale_humidity_fresh(50.0), state) is None
+    assert state.active is True
+
+
+def test_condition_edit_keeps_the_episode_but_resets_the_clear_timer() -> None:
+    state = RuleState(active=True, clear_since=_BASE_TIME, condition_fingerprint="old")
+    align_state_to_condition(state, "new")
+    assert state.active is True
+    assert state.clear_since is None
+
+
+def test_clear_state_survives_the_checkpoint_round_trip() -> None:
+    state = RuleState(active=True, clear_since=_BASE_TIME)
+    restored = rule_state_from_dict(rule_state_to_dict(state))
+    assert restored.active is True
+    assert restored.clear_since == _BASE_TIME
+    legacy = rule_state_from_dict({"armed": True})
+    assert legacy.active is False
+    assert legacy.clear_since is None
+
+
+# ---- has_pending_timer: what pending_timer_loop re-evaluates ---------------
+
+
+def test_pending_timer_for_a_clear_delay() -> None:
+    rule = _switch_rule(clear_for_duration=10)
+    state = RuleState()
+    _EVALUATOR.evaluate(rule, *_sw(1, 0), state)
+    assert has_pending_timer(rule, state) is False
+    _EVALUATOR.evaluate(rule, *_sw(0, 1), state)
+    assert has_pending_timer(rule, state) is True
+    _EVALUATOR.evaluate(rule, *_sw(0, 11), state)
+    assert has_pending_timer(rule, state) is False
+
+
+def test_no_pending_timer_for_an_immediate_clear() -> None:
+    rule = _switch_rule()
+    state = RuleState(active=True, clear_since=_BASE_TIME)
+    assert has_pending_timer(rule, state) is False
+
+
+def test_pending_timer_for_a_for_duration_hold_until_it_fires() -> None:
+    rule = _rule(_leaf(">", 30.0), for_duration=10)
+    state = RuleState()
+    _EVALUATOR.evaluate(rule, *_at(35.0, 0), state)
+    assert has_pending_timer(rule, state) is True
+    # The clock alone completes the hold — no new reading needed.
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is None
+    assert _EVALUATOR.evaluate(rule, _at(35.0, 0)[0], _BASE_TIME + timedelta(seconds=10), state)
+    assert has_pending_timer(rule, state) is False
+
+
+def test_continuous_refire_stays_reading_driven() -> None:
+    rule = _rule(_leaf(">", 30.0), for_duration=5, strategy="continuous", cooldown=10)
+    state = RuleState()
+    _EVALUATOR.evaluate(rule, *_at(35.0, 0), state)
+    _EVALUATOR.evaluate(rule, *_at(35.0, 5), state)  # fires
+    _EVALUATOR.evaluate(rule, *_at(35.0, 6), state)  # re-armed, cooldown pending
+    assert has_pending_timer(rule, state) is False
+
+
+# ---- Latch: fire once, hold until reset ---------------------------------------
+
+
+def test_latch_does_not_rearm_when_condition_goes_false() -> None:
+    rule = _rule(_leaf(">", 30.0), strategy="latch")
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(10.0, 1), state) is None  # false — edge would re-arm
+    assert state.armed is False
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 2), state) is None  # still latched
+
+
+def test_reset_latch_rearms_and_restarts_the_hold() -> None:
+    rule = _rule(_leaf(">", 30.0), strategy="latch", for_duration=10)
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is None  # hold starts
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 10), state) is not None  # held -> fires
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 20), state) is None  # latched
+
+    assert reset_latch(state) is True
+    assert state.armed is True
+    # Still true after reset: re-latches only after a fresh full hold.
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 21), state) is None
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 31), state) is not None
+
+
+def test_reset_latch_on_an_armed_rule_reports_not_latched() -> None:
+    assert reset_latch(RuleState()) is False
+
+
+def test_latch_with_reset_condition_rearms_when_reset_tree_true() -> None:
+    rule = _rule(_leaf(">", 30.0), strategy="latch", reset_condition=_leaf("<", 20.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 0), state) is not None
+    assert _EVALUATOR.evaluate(rule, *_at(25.0, 1), state) is None
+    assert state.armed is False  # false but above the reset threshold
+    assert _EVALUATOR.evaluate(rule, *_at(15.0, 2), state) is None
+    assert state.armed is True
+    assert _EVALUATOR.evaluate(rule, *_at(35.0, 3), state) is not None
+
+
+# ---- Discrete events (schedule tick / device_status flip) -------------------
+
+
+def _event_rule(condition: dict[str, Any] | None, cooldown: int = 0, for_duration: int = 0) -> Rule:
+    rule = _rule(_leaf(">", 30.0), cooldown=cooldown, for_duration=for_duration)
+    rule.condition = condition
+    rule.trigger = {"type": "schedule", "cron": "0 8 * * *", "timezone": "UTC"}
+    return rule
+
+
+def test_condition_less_event_rule_fires_on_every_event() -> None:
+    rule = _event_rule(None)
+    state = RuleState()
+    for offset in (0, 86_400, 172_800):
+        assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME + timedelta(seconds=offset), state)
+
+
+def test_event_rule_with_condition_that_stays_true_fires_every_event() -> None:
+    rule = _event_rule(_leaf("<", 40.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate_event(rule, *_at(20.0, 0), state) is not None
+    assert _EVALUATOR.evaluate_event(rule, *_at(20.0, 60), state) is not None
+
+
+def test_event_rule_skips_when_condition_false_or_unknown() -> None:
+    rule = _event_rule(_leaf("<", 40.0))
+    state = RuleState()
+    assert _EVALUATOR.evaluate_event(rule, *_at(50.0, 0), state) is None
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME, state) is None  # no data
+
+
+def test_event_rule_respects_cooldown() -> None:
+    rule = _event_rule(None, cooldown=120)
+    state = RuleState()
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME, state) is not None
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME + timedelta(seconds=60), state) is None
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME + timedelta(seconds=120), state)
+
+
+def test_event_rule_ignores_for_duration() -> None:
+    # A stored for_duration (the old form default was 10s) must not swallow
+    # the first event of a schedule/device_status rule.
+    rule = _event_rule(None, for_duration=10)
+    assert _EVALUATOR.evaluate_event(rule, {}, _BASE_TIME, RuleState()) is not None

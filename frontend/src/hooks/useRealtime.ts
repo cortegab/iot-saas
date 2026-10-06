@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { mutate, useSWRConfig } from "swr";
 import { useAuth } from "@/hooks/useAuth";
 import { connectRealtime, type RealtimeMessage, type RealtimeStatus } from "@/lib/realtime";
+import { emitRealtime } from "@/lib/realtime-bus";
 import { applyDeviceHealth, appendPoint, markOnline, mergeLatest } from "@/lib/live-telemetry";
 import type { components } from "@/types/api";
 
@@ -57,24 +58,21 @@ export function useRealtime(): RealtimeStatus {
       return cacheRef.current.get(key)?.data != null;
     }
 
-    /** The `/devices/{id}/data?...` key whose window is on screen: same
-     * device+metric, the largest `from` (the chart re-anchors `from` to "now"
-     * every 15s, so older keys linger in the cache but aren't displayed). */
-    function liveChartKey(prefix: string): string | null {
-      let best: string | null = null;
-      let bestFrom = "";
+    /** Every cached TrendChart key for this device+metric — one per range
+     * shown anywhere (device page, dashboard widgets). Keys are stable per
+     * window (TrendChart.tsx), so each is either on screen or a cheap no-op. */
+    function chartKeys(prefix: string): { key: string; windowMs: number | undefined }[] {
+      const found: { key: string; windowMs: number | undefined }[] = [];
       for (const key of cacheRef.current.keys()) {
         if (typeof key !== "string" || !key.startsWith(prefix) || !hasData(key)) continue;
-        const from = new URLSearchParams(key.split("?")[1] ?? "").get("from") ?? "";
-        if (from > bestFrom) {
-          bestFrom = from;
-          best = key;
-        }
+        const windowMs = Number(new URLSearchParams(key.split("?")[1] ?? "").get("window"));
+        found.push({ key, windowMs: windowMs > 0 ? windowMs : undefined });
       }
-      return best;
+      return found;
     }
 
     function onMessage(message: RealtimeMessage) {
+      emitRealtime(message);
       if (
         message.type === "telemetry" &&
         message.device_id &&
@@ -99,11 +97,11 @@ export function useRealtime(): RealtimeStatus {
           void mutate<DeviceResponse>(deviceKey, markOnline(iso), { revalidate: false });
         }
 
-        const chartKey = liveChartKey(
-          `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}`,
-        );
-        if (chartKey) {
-          void mutate<TelemetryDataResponse>(chartKey, appendPoint(iso, value), {
+        // Trailing "&" so metric "temp" doesn't also match "temp2".
+        for (const { key, windowMs } of chartKeys(
+          `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}&`,
+        )) {
+          void mutate<TelemetryDataResponse>(key, appendPoint(iso, value, windowMs), {
             revalidate: false,
           });
         }
@@ -130,6 +128,12 @@ export function useRealtime(): RealtimeStatus {
         void mutate(`/devices/${message.device_id}/commands`);
       } else if (message.type === "notification") {
         void mutate("/notifications");
+      } else if (message.type === "rule_execution" && message.rule_id) {
+        void mutate(`/rules/${message.rule_id}/executions`);
+        void mutate("/rules/activity");
+      } else if ((message.type === "rule_health" || message.type === "rule_latched") && message.rule_id) {
+        void mutate("/rules");
+        void mutate(`/rules/${message.rule_id}`);
       }
     }
 

@@ -2,82 +2,143 @@
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Building2, ChevronRight } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
+import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
-import { ApiRequestError } from "@/lib/api-client";
+import { AuthCard } from "@/components/auth/AuthCard";
+import { PasswordInput } from "@/components/auth/PasswordInput";
+import { ApiRequestError, apiClient } from "@/lib/api-client";
+import { ROLE_LABEL, toRole } from "@/lib/permissions";
+import { safeNext } from "@/lib/safe-next";
+import type { components } from "@/types/api";
 
+type TokenPairResponse = components["schemas"]["TokenPairResponse"];
+
+/** Sign in (DESIGN.md §10). One generic error (never "no such email"),
+ * show/hide password, a Caps Lock hint once two attempts have failed, "Keep
+ * me signed in" (unchecked, the session ends with the browser), and a
+ * workspace choice when the account belongs to more than one. */
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { adoptSession } = useAuth();
   const router = useRouter();
+  const params = useSearchParams();
+  const next = safeNext(params.get("next"));
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [failures, setFailures] = useState(0);
+  const [capsOn, setCapsOn] = useState(false);
+  const [choosing, setChoosing] = useState<TokenPairResponse | null>(null);
+  const [keep, setKeep] = useState(true);
+
+  function enter(data: TokenPairResponse, tenantId?: string) {
+    adoptSession(data, tenantId, { keep });
+    router.replace(next);
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
-      router.replace("/devices");
+      const data = await apiClient.post<TokenPairResponse>("/auth/login", {}, { email, password });
+      // An explicit destination (an invite link, a deep link) wins; otherwise
+      // more than one workspace means asking which one.
+      if (data.memberships.length > 1 && !params.get("next")) setChoosing(data);
+      else enter(data);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");
+      setFailures((n) => n + 1);
+      setError(
+        err instanceof ApiRequestError && err.status === 401
+          ? "That email and password don't match. Check both and try again."
+          : "Couldn't sign in right now. Try again in a moment.",
+      );
     } finally {
       setSubmitting(false);
     }
   }
 
+  if (choosing) {
+    return (
+      <AuthCard title="Choose a workspace" description={`${email} belongs to ${choosing.memberships.length} workspaces.`}>
+        <ul aria-label="Workspaces" className="flex flex-col gap-2">
+          {choosing.memberships.map((m) => {
+            const role = toRole(m.role);
+            return (
+              <li key={m.tenant_id}>
+                <button
+                  type="button"
+                  onClick={() => enter(choosing, m.tenant_id)}
+                  className="flex w-full items-center gap-3 rounded-lg border border-border bg-canvas px-3.5 py-3 text-left hover:border-accent"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-accent-muted text-accent">
+                    <Building2 aria-hidden size={17} />
+                  </span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <strong className="truncate text-sm font-semibold text-ink">{m.tenant_name}</strong>
+                    <span className="text-[12.5px] text-ink-muted">{role ? ROLE_LABEL[role] : m.role}</span>
+                  </span>
+                  <ChevronRight aria-hidden size={16} className="text-ink-muted" />
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-[12.5px] text-ink-muted">Switch any time from the workspace menu at the top of the sidebar.</p>
+      </AuthCard>
+    );
+  }
+
   return (
-    <form
-      onSubmit={(e) => void handleSubmit(e)}
-      className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-6"
+    <AuthCard
+      title="Sign in"
+      description="Welcome back. Sign in to your iodriven workspace."
+      footer={
+        <>
+          New to iodriven?{" "}
+          <Link href="/register" className="font-medium text-accent hover:underline">
+            Create an account
+          </Link>
+        </>
+      }
     >
-      <div>
-        <h1 className="text-xl font-semibold text-ink">Log in</h1>
-        <p className="mt-1 text-sm text-ink-muted">Welcome back.</p>
-      </div>
-
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Email
-        <Input
-          type="email"
-          required
-          autoComplete="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </label>
-
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Password
-        <Input
-          type="password"
-          required
-          autoComplete="current-password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </label>
-
-      {error && (
-        <p role="alert" className="text-sm text-status-error">
-          {error}
-        </p>
-      )}
-
-      <Button type="submit" size="md" disabled={submitting}>
-        {submitting ? "Logging in…" : "Log in"}
-      </Button>
-
-      <p className="text-center text-sm text-ink-muted">
-        No account?{" "}
-        <Link href="/register" className="text-accent">
-          Register
-        </Link>
-      </p>
-    </form>
+      <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3.5">
+        {params.get("reset") === "1" && <Callout>Password changed. Sign in with the new one.</Callout>}
+        {error && (
+          <Callout tone="error">
+            <span role="alert">
+              <strong className="font-semibold">{error}</strong>
+              {failures >= 2 && <span className="block">Check Caps Lock, or reset your password.</span>}
+            </span>
+          </Callout>
+        )}
+        <Field label="Email">
+          <Input type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+        <Field
+          label="Password"
+          warning={failures >= 2 && capsOn ? "Caps Lock is on." : undefined}
+          action={
+            <Link href="/forgot-password" className="text-[12.5px] font-medium text-accent hover:underline">
+              Forgot password?
+            </Link>
+          }
+        >
+          <PasswordInput required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} onCapsLock={setCapsOn} />
+        </Field>
+        <label className="flex cursor-pointer items-start gap-2 text-sm text-ink">
+          <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} className="mt-[3px] accent-[var(--color-accent)]" />
+          Keep me signed in on this device
+        </label>
+        <Button type="submit" disabled={submitting} className="h-11 w-full text-[15px]">
+          {submitting ? "Signing in…" : "Sign in"}
+        </Button>
+      </form>
+    </AuthCard>
   );
 }

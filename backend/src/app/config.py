@@ -4,12 +4,17 @@ This is the single source of truth for connection details shared by the API
 server and the ingestion worker.
 """
 
+from typing import Literal
+
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # .env.local is gitignored and, if present, overrides .env — for real
+    # secrets that shouldn't join the tracked .env's dev-placeholder values
+    # (e.g. a real SMTP password; see backend/.env.local.example).
+    model_config = SettingsConfigDict(env_file=(".env", ".env.local"), extra="ignore")
 
     # PostgreSQL + TimescaleDB — admin/migration URL (role `iot`, superuser).
     # Read only by alembic/env.py. The running app never holds superuser credentials.
@@ -61,6 +66,42 @@ class Settings(BaseSettings):
     # Comma-separated. Defaults to the local Next.js dev server; prod sets this
     # to the real frontend origin(s) via CORS_ALLOW_ORIGINS in infra/.env.prod.
     cors_allow_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    # Notification email delivery (Phase 4). "console" logs the rendered email
+    # and sends nothing — the dev/test default, no SMTP server needed. "smtp"
+    # sends via aiosmtplib and requires smtp_host (app.notifications.email
+    # fails fast at startup if it's blank). A future provider (Resend/SES) is a
+    # drop-in behind the same EmailProvider protocol.
+    # Public URL of the web app — the base of links sent by email (member
+    # invitations, password resets).
+    app_base_url: str = "http://localhost:3000"
+    # Where the public contact form (POST /public/contact) sends enquiries.
+    # Empty = the form still answers, and the enquiry is only logged.
+    contact_email_to: str = ""
+    email_provider: Literal["console", "smtp"] = "console"
+    email_from: str = "alerts@example.com"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_use_tls: bool = True
+
+    # Rule maintenance loop (app/worker.py's rules_maintenance_loop, Phase 5):
+    # how often to checkpoint _rule_states to Redis and re-check every rule's
+    # "can it currently evaluate" state for the rule_health realtime event. A
+    # hard crash between ticks loses at most this much armed/cooldown/hold
+    # progress — best-effort, not full state externalisation (CLAUDE.md §9).
+    rules_maintenance_interval_seconds: int = 30
+    # app/worker.py's pending_timer_loop: how often to re-evaluate rules whose
+    # for_duration hold or clear delay is waiting on the clock, not a reading.
+    # Also the worst-case lateness of such a timer.
+    rules_pending_timer_interval_seconds: float = 1.0
+
+    # POST /rules/{id}/simulate replay-mode bounds (app/rules/service.py): the
+    # widest history window and the most telemetry points it will walk before
+    # returning truncated results.
+    simulate_replay_max_days: int = 7
+    simulate_replay_max_samples: int = 5000
 
     @property
     def cors_allow_origins_list(self) -> list[str]:

@@ -1,281 +1,305 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
+import { mutate as revalidate } from "swr";
+import { Check, ChevronDown, Copy, LayoutDashboard, LayoutGrid, List, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { useIsAdmin } from "@/hooks/useIsAdmin";
-import { Button } from "@/components/ui/Button";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Button, buttonClassName } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
+import { NameDialog } from "@/components/ui/NameDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Select } from "@/components/ui/Select";
+import { useToast } from "@/components/ui/Toast";
+import { AddWidgetDialog } from "@/components/dashboards/AddWidgetDialog";
+import { DashboardGrid, WIDGET_LABEL, WIDTHS } from "@/components/dashboards/DashboardGrid";
 import { ApiRequestError } from "@/lib/api-client";
-import { DashboardGrid } from "@/components/dashboards/DashboardGrid";
 import type { components } from "@/types/api";
 
 type DashboardResponse = components["schemas"]["DashboardResponse"];
 type Widget = components["schemas"]["Widget"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
-type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
-type WidgetType = Widget["type"];
+type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
-const WIDGET_TYPE_LABELS: Record<WidgetType, string> = {
-  value_card: "Value card",
-  trend_chart: "Trend chart",
-  device_status: "Device status",
-  actuator_control: "Actuator control",
-  gauge: "Gauge",
-};
+const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-function needsMetric(type: WidgetType): boolean {
-  return type === "value_card" || type === "trend_chart" || type === "gauge";
-}
-
-function needsRange(type: WidgetType): boolean {
-  return type === "gauge";
-}
-
-type NewWidget = Omit<Widget, "x" | "y">;
-
-function AddWidgetForm({ onAdd }: { onAdd: (widget: NewWidget) => void }) {
-  const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
-  const [type, setType] = useState<WidgetType>("value_card");
-  const [deviceId, setDeviceId] = useState("");
-  const [metric, setMetric] = useState("");
-  const [min, setMin] = useState("0");
-  const [max, setMax] = useState("100");
-
-  const { data: latest } = useApiSWR<TelemetryLatestResponse[]>(
-    deviceId ? `/devices/${deviceId}/latest` : null,
-  );
-
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    if (!deviceId) return;
-    onAdd({
-      id: crypto.randomUUID(),
-      type,
-      w: 4,
-      h: 4,
-      device_id: deviceId,
-      metric: needsMetric(type) ? metric || null : null,
-      min: needsRange(type) ? Number(min) : null,
-      max: needsRange(type) ? Number(max) : null,
-    });
-    setMetric("");
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-2 rounded-xl border border-border bg-surface p-4">
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Widget type
-        <Select value={type} onChange={(e) => setType(e.target.value as WidgetType)}>
-          {(Object.keys(WIDGET_TYPE_LABELS) as WidgetType[]).map((t) => (
-            <option key={t} value={t}>
-              {WIDGET_TYPE_LABELS[t]}
-            </option>
-          ))}
-        </Select>
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-ink-muted">
-        Device
-        <Select
-          required
-          value={deviceId}
-          onChange={(e) => {
-            setDeviceId(e.target.value);
-            setMetric("");
-          }}
-        >
-          <option value="" disabled>
-            Choose a device…
-          </option>
-          {devices?.map((d) => (
-            <option key={d.id} value={d.id}>
-              {d.name}
-            </option>
-          ))}
-        </Select>
-      </label>
-      {needsMetric(type) && (
-        <label className="flex flex-col gap-1 text-sm text-ink-muted">
-          Metric
-          <Select required value={metric} onChange={(e) => setMetric(e.target.value)} disabled={!deviceId}>
-            <option value="" disabled>
-              {deviceId ? "Choose a metric…" : "Pick a device first"}
-            </option>
-            {latest?.map((m) => (
-              <option key={m.metric} value={m.metric}>
-                {m.metric}
-              </option>
-            ))}
-          </Select>
-        </label>
-      )}
-      {needsRange(type) && (
-        <>
-          <label className="flex flex-col gap-1 text-sm text-ink-muted">
-            Min
-            <Input type="number" required value={min} onChange={(e) => setMin(e.target.value)} className="w-20" />
-          </label>
-          <label className="flex flex-col gap-1 text-sm text-ink-muted">
-            Max
-            <Input type="number" required value={max} onChange={(e) => setMax(e.target.value)} className="w-20" />
-          </label>
-        </>
-      )}
-      <Button type="submit" size="md">
-        Add widget
-      </Button>
-    </form>
-  );
-}
-
+/** A dashboard (DESIGN.md §8, demo G): personal, viewed by default, laid out
+ * in edit mode (`?edit=1`) where widgets move, resize, change width and
+ * leave with an Undo. Changes save as you go. */
 export default function DashboardDetailPage() {
-  const params = useParams<{ dashboardId: string }>();
-  const dashboardId = params.dashboardId;
+  const { dashboardId } = useParams<{ dashboardId: string }>();
   const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
   const api = useApi();
-  const isAdmin = useIsAdmin();
+  const toast = useToast();
   const { confirm, dialog } = useConfirm();
+  // Dashboards are personal: every member edits their own.
+  const canEdit = usePermissions().can("dashboards.write");
+  const editing = canEdit && params.get("edit") === "1";
 
-  const { data, error, isLoading } = useApiSWR<DashboardResponse>(`/dashboards/${dashboardId}`);
+  const { data, error, isLoading, mutate } = useApiSWR<DashboardResponse>(`/dashboards/${dashboardId}`);
+  const { data: all } = useApiSWR<DashboardResponse[]>("/dashboards");
+  const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
+  const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
 
   const [widgets, setWidgets] = useState<Widget[] | null>(null);
+  const [adding, setAdding] = useState(false);
   const [renaming, setRenaming] = useState(false);
-  const [name, setName] = useState("");
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
 
-  // Seed local editable state once per dashboard — not on every background
-  // SWR revalidation, so an in-progress drag/edit is never clobbered by a
-  // refetch of data we already have.
+  // Seed local state once per dashboard — not on every background SWR
+  // revalidation, so an in-progress drag is never clobbered by a refetch.
   useEffect(() => {
-    if (data) {
-      setWidgets((prev) => (prev === null ? data.layout : prev));
-      setName((prev) => (prev === "" ? data.name : prev));
-    }
+    if (data) setWidgets(data.layout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.id]);
 
+  const deviceCount = useMemo(() => new Set((widgets ?? []).map((w) => w.device_id)).size, [widgets]);
+
+  function setEditing(on: boolean) {
+    const q = new URLSearchParams(params.toString());
+    if (on) q.set("edit", "1");
+    else q.delete("edit");
+    const qs = q.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  }
+
   async function saveLayout(next: Widget[]) {
     setWidgets(next);
-    setSaveError(null);
     try {
       await api.patch(`/dashboards/${dashboardId}`, { layout: next });
+      void revalidate("/dashboards");
     } catch (err) {
-      setSaveError(err instanceof ApiRequestError ? err.message : "Couldn't save the layout.");
+      toast({ tone: "error", title: "Couldn't save the layout", detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
-  async function saveName() {
-    setSaveError(null);
-    try {
-      await api.patch(`/dashboards/${dashboardId}`, { name });
-      setRenaming(false);
-    } catch (err) {
-      setSaveError(err instanceof ApiRequestError ? err.message : "Couldn't rename this dashboard.");
-    }
+  function addWidget(w: Omit<Widget, "x" | "y">) {
+    if (!widgets) return;
+    // y must be a real number: JSON has no Infinity, and the API's Widget.y
+    // is an int, so "place at the bottom" is computed here.
+    const y = widgets.length === 0 ? 0 : Math.max(...widgets.map((x) => x.y + x.h));
+    void saveLayout([...widgets, { ...w, x: 0, y }]);
+    toast({ title: `${WIDGET_LABEL[w.type]} added`, detail: `${devices?.find((d) => d.id === w.device_id)?.name ?? ""}${w.metric ? ` · ${w.metric}` : ""}` });
   }
 
-  async function deleteDashboard() {
-    if (!data || !(await confirm(`Delete "${data.name}"? This cannot be undone.`))) return;
-    try {
-      await api.delete(`/dashboards/${dashboardId}`);
-      router.replace("/dashboards");
-    } catch (err) {
-      setSaveError(err instanceof ApiRequestError ? err.message : "Couldn't delete this dashboard.");
-    }
+  function removeWidget(id: string) {
+    if (!widgets) return;
+    const before = widgets;
+    const gone = widgets.find((w) => w.id === id);
+    void saveLayout(widgets.filter((w) => w.id !== id));
+    if (gone) toast({ title: `${WIDGET_LABEL[gone.type]} removed`, action: { label: "Undo", onClick: () => void saveLayout(before) } });
   }
 
-  if (isLoading || widgets === null) return <LoadingSkeleton rows={3} rowClassName="h-24" />;
-  if (error) {
-    return (
-      <ErrorState
-        message={error instanceof ApiRequestError ? error.message : "Couldn't load this dashboard."}
-      />
+  function cycleWidth(id: string) {
+    if (!widgets) return;
+    void saveLayout(
+      widgets.map((w) => {
+        if (w.id !== id) return w;
+        const i = WIDTHS.indexOf(w.w as (typeof WIDTHS)[number]);
+        const next = WIDTHS[(i + 1) % WIDTHS.length];
+        return { ...w, w: next, x: Math.min(w.x, 12 - next) };
+      }),
     );
   }
-  if (!data) return null;
+
+  async function rename(name: string) {
+    await api.patch(`/dashboards/${dashboardId}`, { name });
+    await mutate();
+    void revalidate("/dashboards");
+    toast({ title: "Dashboard renamed", detail: name });
+  }
+
+  async function duplicate(name: string) {
+    const copy = await api.post<DashboardResponse>("/dashboards", { name });
+    await api.patch(`/dashboards/${copy.id}`, { layout: (widgets ?? []).map((w) => ({ ...w, id: crypto.randomUUID() })) });
+    void revalidate("/dashboards");
+    toast({ title: "Dashboard duplicated", detail: name });
+    router.push(`/dashboards/${copy.id}`);
+  }
+
+  async function remove() {
+    if (!data || !widgets) return;
+    const ok = await confirm(`Its ${plural(widgets.length, "widget")} are removed. Devices, rules and data aren't affected.`, {
+      title: `Delete ${data.name}?`,
+      confirmLabel: "Delete dashboard",
+    });
+    if (!ok) return;
+    const snapshot = { name: data.name, layout: widgets };
+    try {
+      await api.delete(`/dashboards/${dashboardId}`);
+      void revalidate("/dashboards");
+      router.replace("/dashboards");
+      toast({
+        title: "Dashboard deleted",
+        action: {
+          label: "Undo",
+          onClick: () =>
+            void (async () => {
+              const back = await api.post<DashboardResponse>("/dashboards", { name: snapshot.name });
+              await api.patch(`/dashboards/${back.id}`, { layout: snapshot.layout });
+              void revalidate("/dashboards");
+              router.push(`/dashboards/${back.id}`);
+            })(),
+        },
+      });
+    } catch (err) {
+      toast({ tone: "error", title: "Couldn't delete the dashboard", detail: err instanceof ApiRequestError ? err.message : undefined });
+    }
+  }
+
+  // Errors first: a failed fetch never seeds `widgets`, so checking the
+  // loading state first would spin forever (the old 404 bug).
+  if (error) {
+    if (error instanceof ApiRequestError && error.status === 404) {
+      return (
+        <EmptyState
+          icon={<LayoutDashboard aria-hidden size={26} />}
+          title="This dashboard doesn't exist"
+          description="Dashboards are personal, so a teammate's link opens nothing for you."
+          action={
+            <Link href="/dashboards" className={buttonClassName({ variant: "secondary" })}>
+              All dashboards
+            </Link>
+          }
+        />
+      );
+    }
+    return <ErrorState title="Couldn't load this dashboard" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />;
+  }
+  if (isLoading || !data || widgets === null) return <LoadingSkeleton rows={3} rowClassName="h-24" />;
+
+  const switcher = (
+    <DropdownMenu
+      label="Switch dashboard"
+      align="start"
+      triggerClassName="inline-flex items-center gap-1.5 rounded-md text-left hover:text-accent"
+      trigger={
+        <>
+          {data.name}
+          <ChevronDown aria-hidden size={20} className="text-ink-muted" />
+        </>
+      }
+      groups={[
+        (all ?? []).map((d) => ({
+          label: d.name,
+          hint: plural(d.layout.length, "widget"),
+          icon: d.id === data.id ? <Check size={15} /> : <LayoutDashboard size={15} />,
+          onClick: () => router.push(`/dashboards/${d.id}`),
+        })),
+        [
+          { label: "All dashboards", icon: <List size={15} />, onClick: () => router.push("/dashboards") },
+          { label: "New dashboard…", icon: <Plus size={15} />, onClick: () => router.push("/dashboards/new") },
+        ],
+      ]}
+    />
+  );
 
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
-        back={{ href: "/dashboards", label: "Dashboards" }}
-        title={
-          renaming ? (
-            <span className="flex items-center gap-2 font-normal">
-              <Input compact value={name} onChange={(e) => setName(e.target.value)} className="text-lg" />
-              <Button type="button" onClick={() => void saveName()}>
-                Save
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setRenaming(false)}>
-                Cancel
-              </Button>
-            </span>
-          ) : (
-            <span className="flex items-center gap-3">
-              {data.name}
-              {isAdmin && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setName(data.name);
-                    setRenaming(true);
-                  }}
-                  className="text-sm font-normal text-accent"
-                >
-                  Rename
-                </button>
-              )}
-            </span>
-          )
-        }
+        title={switcher}
+        description={`${plural(widgets.length, "widget")} from ${plural(deviceCount, "device")} · only you see this dashboard`}
         actions={
-          isAdmin && (
-            <button type="button" onClick={() => void deleteDashboard()} className="text-sm text-status-error">
-              Delete dashboard
-            </button>
-          )
+          canEdit &&
+          (editing ? (
+            <>
+              <Button variant="secondary" onClick={() => setAdding(true)}>
+                <Plus aria-hidden size={15} />
+                Add widget
+              </Button>
+              <Button
+                onClick={() => {
+                  setEditing(false);
+                  toast({ title: "Layout saved" });
+                }}
+              >
+                <Check aria-hidden size={15} />
+                Done
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="secondary" onClick={() => setEditing(true)}>
+                <LayoutGrid aria-hidden size={15} />
+                Edit layout
+              </Button>
+              <DropdownMenu
+                label="More dashboard actions"
+                groups={[
+                  [
+                    { label: "Rename…", icon: <Pencil size={15} />, onClick: () => setRenaming(true) },
+                    { label: "Duplicate…", icon: <Copy size={15} />, onClick: () => setDuplicating(true) },
+                  ],
+                  [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }],
+                ]}
+              />
+            </>
+          ))
         }
       />
 
-      {saveError && <ErrorState message={saveError} />}
-
-      {isAdmin && (
-        <AddWidgetForm
-          onAdd={(widget) => {
-            // "Place at the bottom": react-grid-layout's own convention for this
-            // is y: Infinity, but that only works passed as a live JS object —
-            // JSON.stringify(Infinity) is `null`, which the backend's
-            // Widget.y: int rejects with a 422. Compute a real number instead.
-            const y = widgets.length === 0 ? 0 : Math.max(...widgets.map((w) => w.y + w.h));
-            void saveLayout([...widgets, { ...widget, x: 0, y }]);
-          }}
-        />
+      {editing && (
+        <p role="status" className="flex items-center gap-2 rounded-md border border-accent/40 bg-accent-muted px-3.5 py-2.5 text-[13.5px] text-ink">
+          <LayoutGrid aria-hidden size={15} className="shrink-0 text-accent" />
+          <span>
+            <strong>Editing layout.</strong> Drag widgets by their handle, resize from the corner, change their width, or remove them with ×. Changes save as
+            you go.
+          </span>
+        </p>
       )}
 
       {widgets.length === 0 ? (
         <EmptyState
-          title="This dashboard is empty"
-          description={
-            isAdmin
-              ? "Add your first widget above to start seeing live data here."
-              : "An admin hasn't added any widgets to this dashboard yet."
+          icon={<LayoutDashboard aria-hidden size={26} />}
+          title="No widgets yet"
+          description="Add value cards, trend charts, gauges, device status and controls."
+          action={
+            canEdit ? (
+              <Button onClick={() => (editing ? setAdding(true) : (setEditing(true), setAdding(true)))}>
+                <Plus aria-hidden size={14} />
+                Add widget
+              </Button>
+            ) : undefined
           }
         />
       ) : (
         <DashboardGrid
           widgets={widgets}
-          isAdmin={isAdmin}
+          editing={editing}
+          devices={devices}
+          templates={templates}
           onLayoutChange={(updated) => void saveLayout(updated)}
-          onRemoveWidget={(id) => void saveLayout(widgets.filter((w) => w.id !== id))}
+          onRemoveWidget={removeWidget}
+          onCycleWidth={cycleWidth}
         />
       )}
 
+      <AddWidgetDialog
+        open={adding}
+        onClose={() => setAdding(false)}
+        dashboardName={data.name}
+        devices={devices ?? []}
+        templates={templates ?? []}
+        onAdd={addWidget}
+      />
+      <NameDialog open={renaming} onClose={() => setRenaming(false)} title="Rename dashboard" initial={data.name} confirmLabel="Rename" onSubmit={rename} />
+      <NameDialog
+        open={duplicating}
+        onClose={() => setDuplicating(false)}
+        title="Duplicate dashboard"
+        description="Copies every widget and its position."
+        initial={`${data.name} copy`}
+        confirmLabel="Duplicate"
+        onSubmit={duplicate}
+      />
       {dialog}
     </div>
   );

@@ -13,7 +13,9 @@ connections/event-loop state across dozens of back-to-back tests that never
 needed a connection in the first place).
 """
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Coroutine
+from dataclasses import dataclass, field
+from typing import Any
 from unittest.mock import AsyncMock
 
 import httpx
@@ -45,10 +47,16 @@ ALL_TABLES = (
     "telemetry",
     "rules",
     "rule_devices",
+    "rule_versions",
     "commands",
     "dashboards",
     "notifications",
     "device_metric_health",
+    "rule_executions",
+    "action_executions",
+    "zones",
+    "invitations",
+    "password_reset_tokens",
 )
 
 
@@ -137,6 +145,76 @@ def _mock_redis_publish(monkeypatch: pytest.MonkeyPatch) -> AsyncMock:
     return mock
 
 
+@pytest.fixture(autouse=True)
+def redis_kv(monkeypatch: pytest.MonkeyPatch) -> dict[str, str]:
+    """In-memory stand-in for redis_client.set/get — the rule-state checkpoint
+    (Phase 5) is the only KV use. Same process-wide-singleton / event-loop
+    reason as the xadd/publish mocks above. A test can read/write the returned
+    dict directly to inspect or seed the checkpoint blob."""
+    store: dict[str, str] = {}
+
+    async def _set(key: str, value: str, **_kwargs: Any) -> bool:
+        store[key] = value
+        return True
+
+    async def _get(key: str) -> str | None:
+        return store.get(key)
+
+    monkeypatch.setattr("app.redis.redis_client.set", _set)
+    monkeypatch.setattr("app.redis.redis_client.get", _get)
+    return store
+
+
+@pytest.fixture(autouse=True)
+def redis_sets(monkeypatch: pytest.MonkeyPatch) -> dict[str, set[str]]:
+    """In-memory stand-in for redis_client.sadd/srem/smembers — the latched-
+    rules set (rules.service.RULES_LATCHED_REDIS_KEY), read on every rule
+    response. Same event-loop reason as redis_kv above."""
+    sets: dict[str, set[str]] = {}
+
+    async def _sadd(key: str, *members: str) -> int:
+        before = len(sets.setdefault(key, set()))
+        sets[key].update(members)
+        return len(sets[key]) - before
+
+    async def _srem(key: str, *members: str) -> int:
+        current = sets.get(key, set())
+        removed = len(current & set(members))
+        current.difference_update(members)
+        return removed
+
+    async def _smembers(key: str) -> set[str]:
+        return set(sets.get(key, set()))
+
+    monkeypatch.setattr("app.redis.redis_client.sadd", _sadd)
+    monkeypatch.setattr("app.redis.redis_client.srem", _srem)
+    monkeypatch.setattr("app.redis.redis_client.smembers", _smembers)
+    return sets
+
+
+@dataclass
+class DeferredActions:
+    """Collects the webhook/email delivery coroutines app.rules.service would
+    spawn as background tasks, so a test can run them synchronously."""
+
+    pending: list[Coroutine[Any, Any, None]] = field(default_factory=list)
+
+    async def drain(self) -> None:
+        while self.pending:
+            await self.pending.pop(0)
+
+
+@pytest.fixture
+def deferred_actions(monkeypatch: pytest.MonkeyPatch) -> DeferredActions:
+    from app.rules import executors
+    from app.rules import service as rules_service
+
+    box = DeferredActions()
+    monkeypatch.setattr(rules_service, "_spawn_deferred", box.pending.append)
+    monkeypatch.setattr(executors, "_sleep", AsyncMock())
+    return box
+
+
 @pytest_asyncio.fixture(autouse=True)
 async def clean_tables(admin_session: AsyncSession) -> AsyncGenerator[None, None]:
     """Truncate every app table after each test so tests never leak state into
@@ -148,3 +226,25 @@ async def clean_tables(admin_session: AsyncSession) -> AsyncGenerator[None, None
         text(f"TRUNCATE TABLE {', '.join(ALL_TABLES)} RESTART IDENTITY CASCADE")
     )
     await admin_session.commit()
+
+
+@pytest.fixture(autouse=True)
+def _reset_worker_rule_caches() -> Any:
+    """The worker-side module globals in app.rules.service (populated by
+    load_rule_cache and mutated by the hot path) are process-wide and NOT
+    rebuilt between tests the way the DB is truncated. Clear the mutable ones
+    after each test so rule-state / rule-health carry-over can't cross tests.
+    """
+    yield
+    from app.rules import service as rules_service
+
+    rules_service._rule_cache.clear()
+    rules_service._rules_by_id.clear()
+    rules_service._scheduled_rules.clear()
+    rules_service._device_status_rules.clear()
+    rules_service._device_online_tracks.clear()
+    rules_service._rule_states.clear()
+    rules_service._rule_fingerprints.clear()
+    rules_service._rule_health_tracks.clear()
+    rules_service._signal_value_cache.clear()
+    rules_service._staleness_thresholds.clear()

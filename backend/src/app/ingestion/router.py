@@ -57,7 +57,7 @@ async def _authenticate_device_basic(
 async def ingest(
     body: IngestRequest,
     authorization: str | None = Header(default=None),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> dict[str, str]:
     """HTTP REST ingest fallback (CLAUDE.md's device contract, §3's "HTTP REST
     ingest exists as a fallback"). Same device credentials as MQTT, same
@@ -67,7 +67,12 @@ async def ingest(
     device_id, record = await _authenticate_device_basic(authorization, session)
     payload = TelemetryPayload(value=body.value, timestamp=body.timestamp)
     await ingestion_service.record_telemetry_direct(
-        redis_client, record.tenant_id, device_id, body.metric, payload
+        redis_client,
+        record.tenant_id,
+        device_id,
+        body.metric,
+        payload,
+        ingestion_service.reading_time(payload),
     )
     return {"status": "accepted"}
 
@@ -79,7 +84,7 @@ async def ingest(
 )
 async def emqx_authenticate(
     body: EmqxAuthenticateRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> EmqxAuthenticateResponse:
     if body.username == settings.mqtt_worker_username:
         allowed = body.password == settings.mqtt_worker_password.get_secret_value()
@@ -100,12 +105,16 @@ async def emqx_authenticate(
     return EmqxAuthenticateResponse(result="allow")
 
 
-def _is_cmd_or_state_topic(topic: str) -> bool:
-    """{tenant}/{device}/cmd/{actuator} or {tenant}/{device}/state/{actuator}
-    (CLAUDE.md §4) — the worker's own publish rights, for command dispatch.
-    """
+def _is_worker_publish_topic(topic: str) -> bool:
+    """The worker's own publish rights (CLAUDE.md §4):
+    {tenant}/{device}/cmd/{actuator} and .../state/{actuator} for command
+    dispatch, and the retained {tenant}/{device}/config telemetry profile."""
     parts = topic.split("/")
-    return len(parts) == 4 and all(parts) and parts[2] in ("cmd", "state")
+    if not all(parts):
+        return False
+    if len(parts) == 4:
+        return parts[2] in ("cmd", "state")
+    return len(parts) == 3 and parts[2] == "config"
 
 
 @router.post(
@@ -115,20 +124,20 @@ def _is_cmd_or_state_topic(topic: str) -> bool:
 )
 async def emqx_authorize(
     body: EmqxAuthorizeRequest,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> EmqxAuthorizeResponse:
     if body.username == settings.mqtt_worker_username:
         # Subscribe across every tenant's telemetry + ack topics; publish only
-        # to cmd/state (command dispatch, app/commands/service.py). Never
-        # publish telemetry, never subscribe to cmd/state (it publishes those,
-        # doesn't need to read them back).
+        # to cmd/state (command dispatch, app/commands/service.py) and config
+        # (app/worker.py's _handle_config_publish). Never publish telemetry,
+        # never subscribe to what it publishes.
         if body.action == "subscribe":
             allowed = body.topic in (
                 ingestion_service.TELEMETRY_TOPIC_FILTER,
                 ingestion_service.ACK_TOPIC_FILTER,
             )
         elif body.action == "publish":
-            allowed = _is_cmd_or_state_topic(body.topic)
+            allowed = _is_worker_publish_topic(body.topic)
         else:
             allowed = False
         return EmqxAuthorizeResponse(result="allow" if allowed else "deny")

@@ -90,6 +90,86 @@ export interface paths {
         patch: operations["update_me_auth_me_patch"];
         trace?: never;
     };
+    "/auth/invitations/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Invitation
+         * @description Public: what the invite link is for (no tenant context yet).
+         */
+        get: operations["preview_invitation_auth_invitations__token__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/invitations/{token}/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept Invitation
+         * @description Join the invited workspace. A signed-in invitee (Bearer) must be the
+         *     invited email; otherwise a new account is created from `name`/`password`
+         *     — unless one already exists, in which case they must sign in first.
+         */
+        post: operations["accept_invitation_auth_invitations__token__accept_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/forgot-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forgot Password
+         * @description Always 202 with the same message — whether the email has an account is
+         *     never revealed. At most a few emails per address per 15 minutes.
+         */
+        post: operations["forgot_password_auth_forgot_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset Password */
+        post: operations["reset_password_auth_reset_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/mine": {
         parameters: {
             query?: never;
@@ -138,8 +218,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        /** Rename Current Tenant */
-        patch: operations["rename_current_tenant_tenants_current_patch"];
+        /** Update Current Tenant */
+        patch: operations["update_current_tenant_tenants_current_patch"];
         trace?: never;
     };
     "/tenants/members": {
@@ -178,6 +258,78 @@ export interface paths {
         patch: operations["change_member_role_tenants_members__user_id__patch"];
         trace?: never;
     };
+    "/tenants/leave": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Leave Tenant
+         * @description Any member can leave; the last owner can't.
+         */
+        post: operations["leave_tenant_tenants_leave_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Invitations */
+        get: operations["list_invitations_tenants_invitations_get"];
+        put?: never;
+        /** Create Invitation */
+        post: operations["create_invitation_tenants_invitations_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/invitations/{invitation_id}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resend Invitation */
+        post: operations["resend_invitation_tenants_invitations__invitation_id__resend_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/invitations/{invitation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Cancel Invitation */
+        delete: operations["cancel_invitation_tenants_invitations__invitation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/catalog": {
         parameters: {
             query?: never;
@@ -213,6 +365,23 @@ export interface paths {
         head?: never;
         /** Update Catalog Entry */
         patch: operations["update_catalog_entry_catalog__entry_id__patch"];
+        trace?: never;
+    };
+    "/catalog/{entry_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Catalog Usage */
+        get: operations["get_catalog_usage_catalog__entry_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/devices": {
@@ -431,6 +600,87 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rules/failed-actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Failed Actions */
+        get: operations["list_failed_actions_rules_failed_actions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate Draft
+         * @description Dry-run an unsaved draft (the editor's preview): replay over stored
+         *     telemetry or evaluate against live values. Writes nothing, dispatches
+         *     nothing, never touches the worker. Declared above /rules/{rule_id}.
+         */
+        post: operations["simulate_draft_rules_simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rules Activity
+         * @description Every rule's recent firings in buckets, for the list's mini strips.
+         *     Declared above GET /rules/{rule_id} so "activity" isn't read as an id.
+         */
+        get: operations["rules_activity_rules_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/failed-actions/{action_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Failed Action
+         * @description Re-send a failed webhook/email delivery in the background. The result
+         *     lands as a new attempt (and a fresh failed row if it fails again).
+         */
+        post: operations["retry_failed_action_rules_failed_actions__action_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rules/{rule_id}": {
         parameters: {
             query?: never;
@@ -448,6 +698,108 @@ export interface paths {
         head?: never;
         /** Update Rule */
         patch: operations["update_rule_rules__rule_id__patch"];
+        trace?: never;
+    };
+    "/rules/{rule_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Rule
+         * @description Manual "Run now" — publishes a one-shot run request; app.worker
+         *     evaluates the condition against the live signal cache and fires only if
+         *     it's currently met.
+         */
+        post: operations["run_rule_rules__rule_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/{rule_id}/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Rule
+         * @description Re-arm a latched rule (strategy "latch") — publishes a reset request;
+         *     app.worker re-arms the rule's in-memory state and clears `latched`.
+         */
+        post: operations["reset_rule_rules__rule_id__reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/{rule_id}/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate Rule
+         * @description Dry-run: evaluate the rule against current values (or overrides, or a
+         *     replay window) and report what would happen — writes nothing, dispatches
+         *     nothing. Any member may run it; there are no side effects.
+         */
+        post: operations["simulate_rule_rules__rule_id__simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/{rule_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Rule Versions
+         * @description Saved states, newest first. Membership is enough (read-side).
+         */
+        get: operations["list_rule_versions_rules__rule_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/{rule_id}/executions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Rule Executions */
+        get: operations["list_rule_executions_rules__rule_id__executions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/devices/{device_id}/commands": {
@@ -556,6 +908,114 @@ export interface paths {
         patch: operations["mark_read_notifications__notification_id__read_patch"];
         trace?: never;
     };
+    "/notifications/{notification_id}/unread": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mark Unread */
+        patch: operations["mark_unread_notifications__notification_id__unread_patch"];
+        trace?: never;
+    };
+    "/notifications/{notification_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss */
+        post: operations["dismiss_notifications__notification_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{notification_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore */
+        post: operations["restore_notifications__notification_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/zones": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Zones */
+        get: operations["list_zones_zones_get"];
+        put?: never;
+        /** Create Zone */
+        post: operations["create_zone_zones_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/zones/{zone_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Zone */
+        get: operations["get_zone_zones__zone_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Zone */
+        delete: operations["delete_zone_zones__zone_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Zone */
+        patch: operations["update_zone_zones__zone_id__patch"];
+        trace?: never;
+    };
+    "/public/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Contact
+         * @description The landing page's contact form. Emails the team; stores nothing.
+         */
+        post: operations["contact_public_contact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -594,6 +1054,44 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AcceptInvitationRequest
+         * @description Only for new accounts; a signed-in invitee sends an empty body.
+         */
+        AcceptInvitationRequest: {
+            /** Name */
+            name?: string | null;
+            /** Password */
+            password?: string | null;
+        };
+        /** ActionExecutionResponse */
+        ActionExecutionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Action Type */
+            action_type: string;
+            /** Action Index */
+            action_index: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "success" | "failed";
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            } | null;
+            /** Command Id */
+            command_id: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
         /** ActuatorCommandAction */
         ActuatorCommandAction: {
             /**
@@ -621,6 +1119,11 @@ export interface components {
             name: string;
             /** @default viewer */
             role: components["schemas"]["TenantRole"];
+            /**
+             * Expires In Days
+             * @default 90
+             */
+            expires_in_days: number | null;
         };
         /** ApiKeyCreateResponse */
         ApiKeyCreateResponse: {
@@ -653,6 +1156,8 @@ export interface components {
             last_used_at: string | null;
             /** Revoked At */
             revoked_at: string | null;
+            /** Expires At */
+            expires_at: string | null;
         };
         /** CatalogActuator */
         CatalogActuator: {
@@ -757,6 +1262,23 @@ export interface components {
             /** Publish Deadband */
             publish_deadband?: number | null;
         };
+        /**
+         * CatalogUsageResponse
+         * @description Per-key usage across the devices built from an entry — drives the
+         *     editor's rename/remove warnings and key locks.
+         */
+        CatalogUsageResponse: {
+            /** Devices */
+            devices: number;
+            /** Metrics */
+            metrics: {
+                [key: string]: components["schemas"]["KeyUsageResponse"];
+            };
+            /** Actuators */
+            actuators: {
+                [key: string]: components["schemas"]["KeyUsageResponse"];
+            };
+        };
         /** ChangeRoleRequest */
         ChangeRoleRequest: {
             role: components["schemas"]["TenantRole"];
@@ -839,13 +1361,39 @@ export interface components {
             metric: string;
             /** Operator */
             operator: string;
-            /** Threshold */
-            threshold: number;
+            /** Rhs */
+            rhs?: (components["schemas"]["StaticRhs"] | components["schemas"]["RangeRhs"] | components["schemas"]["SetRhs"] | components["schemas"]["MetricRhs"]) | null;
             /**
              * Hysteresis
              * @default 0
              */
             hysteresis: number;
+        };
+        /** ContactRequest */
+        ContactRequest: {
+            /** Name */
+            name: string;
+            /** Email */
+            email: string;
+            /** Company */
+            company?: string | null;
+            /**
+             * Deployment
+             * @default not_sure
+             * @enum {string}
+             */
+            deployment: "cloud" | "dedicated" | "on_prem" | "not_sure";
+            /** Devices */
+            devices?: string | null;
+            /** Message */
+            message: string;
+            /** Website */
+            website?: string | null;
+        };
+        /** ContactResponse */
+        ContactResponse: {
+            /** Detail */
+            detail: string;
         };
         /** DashboardCreateRequest */
         DashboardCreateRequest: {
@@ -890,6 +1438,8 @@ export interface components {
              * Format: uuid
              */
             catalog_entry_id: string;
+            /** Zone Id */
+            zone_id?: string | null;
         };
         /** DeviceCreateResponse */
         DeviceCreateResponse: {
@@ -923,6 +1473,8 @@ export interface components {
              * Format: uuid
              */
             catalog_entry_id: string;
+            /** Zone Id */
+            zone_id?: string | null;
             /** Slug */
             slug: string;
             /** Status */
@@ -975,9 +1527,9 @@ export interface components {
              */
             cooldown: number;
             /** Action */
-            action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"]) | null;
+            action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"]) | null;
             /** Actions */
-            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[] | null;
+            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[] | null;
             /**
              * Enabled
              * @default true
@@ -989,11 +1541,56 @@ export interface components {
          * @enum {string}
          */
         DeviceStatus: "active" | "disabled";
+        /** DeviceStatusTrigger */
+        DeviceStatusTrigger: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "device_status";
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /**
+             * Transition
+             * @enum {string}
+             */
+            transition: "connected" | "disconnected";
+        };
         /** DeviceUpdateRequest */
         DeviceUpdateRequest: {
             /** Name */
             name?: string | null;
             status?: components["schemas"]["DeviceStatus"] | null;
+            /** Zone Id */
+            zone_id?: string | null;
+        };
+        /**
+         * DraftSimulateRequest
+         * @description Simulate an unsaved draft (the editor's live preview): the rule body
+         *     as it would be created, plus the usual overrides / replay window.
+         */
+        DraftSimulateRequest: {
+            /** Overrides */
+            overrides?: components["schemas"]["SignalOverride"][];
+            replay?: components["schemas"]["SimulateReplayWindow"] | null;
+            rule: components["schemas"]["RuleCreateRequest"];
+        };
+        /** EmailAction */
+        EmailAction: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "email";
+            /** To */
+            to?: string[];
+            /** Subject */
+            subject: string;
+            /** Body */
+            body: string;
         };
         /** EmqxAuthenticateRequest */
         EmqxAuthenticateRequest: {
@@ -1033,7 +1630,7 @@ export interface components {
              * @default edge
              * @enum {string}
              */
-            strategy: "edge" | "continuous" | "reset_condition";
+            strategy: "edge" | "continuous" | "reset_condition" | "latch";
             /**
              * For Duration
              * @default 0
@@ -1046,6 +1643,11 @@ export interface components {
             cooldown: number;
             /** Reset Condition */
             reset_condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
+            /**
+             * Clear For Duration
+             * @default 0
+             */
+            clear_for_duration: number;
         };
         /** ExecutionPolicy */
         "ExecutionPolicy-Output": {
@@ -1054,7 +1656,7 @@ export interface components {
              * @default edge
              * @enum {string}
              */
-            strategy: "edge" | "continuous" | "reset_condition";
+            strategy: "edge" | "continuous" | "reset_condition" | "latch";
             /**
              * For Duration
              * @default 0
@@ -1067,6 +1669,52 @@ export interface components {
             cooldown: number;
             /** Reset Condition */
             reset_condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"]) | null;
+            /**
+             * Clear For Duration
+             * @default 0
+             */
+            clear_for_duration: number;
+        };
+        /**
+         * FailedActionResponse
+         * @description One failed delivery attempt across the whole tenant — the
+         *     /rules/failed-actions operational feed.
+         */
+        FailedActionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Rule Id */
+            rule_id: string | null;
+            /** Rule Name */
+            rule_name: string | null;
+            /** Action Type */
+            action_type: string;
+            /** Action Index */
+            action_index: number | null;
+            /** Detail */
+            detail: {
+                [key: string]: unknown;
+            } | null;
+            /** Summary */
+            summary: string;
+            /**
+             * Fired At
+             * Format: date-time
+             */
+            fired_at: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ForgotPasswordRequest */
+        ForgotPasswordRequest: {
+            /** Email */
+            email: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1085,6 +1733,61 @@ export interface components {
             value: number;
             /** Timestamp */
             timestamp?: number | null;
+        };
+        /** InvitationCreateRequest */
+        InvitationCreateRequest: {
+            /** Email */
+            email: string;
+            /** @default viewer */
+            role: components["schemas"]["TenantRole"];
+        };
+        /**
+         * InvitationPreviewResponse
+         * @description What the accept page shows before joining.
+         */
+        InvitationPreviewResponse: {
+            /** Tenant Name */
+            tenant_name: string;
+            /** Email */
+            email: string;
+            /** Role */
+            role: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Account Exists */
+            account_exists: boolean;
+        };
+        /** InvitationResponse */
+        InvitationResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Email */
+            email: string;
+            /** Role */
+            role: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /** KeyUsageResponse */
+        KeyUsageResponse: {
+            /** Rules */
+            rules: number;
+            /** Widgets */
+            widgets: number;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -1105,6 +1808,14 @@ export interface components {
             /** Value */
             value: boolean | number | string;
         };
+        /** ManualTrigger */
+        ManualTrigger: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "manual";
+        };
         /** MemberResponse */
         MemberResponse: {
             /**
@@ -1116,6 +1827,10 @@ export interface components {
             email: string;
             /** Role */
             role: string;
+            /** Name */
+            name?: string | null;
+            /** Joined At */
+            joined_at?: string | null;
         };
         /** MembershipSummary */
         MembershipSummary: {
@@ -1140,6 +1855,24 @@ export interface components {
             /** Last Seen At */
             last_seen_at: string | null;
         };
+        /**
+         * MetricRhs
+         * @description Compare against another signal's live value instead of a static number.
+         */
+        MetricRhs: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "metric";
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Metric */
+            metric: string;
+        };
         /** MetricTrigger */
         MetricTrigger: {
             /**
@@ -1157,6 +1890,8 @@ export interface components {
             type: "notification";
             /** Message */
             message: string;
+            /** Channels */
+            channels?: ("platform" | "email")[];
         };
         /** NotificationResponse */
         NotificationResponse: {
@@ -1169,8 +1904,22 @@ export interface components {
             device_id: string | null;
             /** Rule Id */
             rule_id: string | null;
+            /** Catalog Entry Id */
+            catalog_entry_id: string | null;
             /** Message */
             message: string;
+            /** Detail */
+            detail: string | null;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "info" | "warning" | "critical";
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "rule_fired" | "rule_cleared" | "rule_health" | "device_offline" | "delivery_failed" | "template_changed";
             /**
              * Created At
              * Format: date-time
@@ -1178,6 +1927,23 @@ export interface components {
             created_at: string;
             /** Read At */
             read_at: string | null;
+            /** Dismissed At */
+            dismissed_at: string | null;
+        };
+        /**
+         * RangeRhs
+         * @description `between`/`not_between`'s two-sided bound.
+         */
+        RangeRhs: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "range";
+            /** Low */
+            low: number;
+            /** High */
+            high: number;
         };
         /** RefreshRequest */
         RefreshRequest: {
@@ -1195,6 +1961,45 @@ export interface components {
             /** Name */
             name?: string | null;
         };
+        /** ResetPasswordRequest */
+        ResetPasswordRequest: {
+            /** Token */
+            token: string;
+            /** Password */
+            password: string;
+        };
+        /** RetryConfig */
+        RetryConfig: {
+            /**
+             * Max Attempts
+             * @default 4
+             */
+            max_attempts: number;
+            /**
+             * Timeout S
+             * @default 5
+             */
+            timeout_s: number;
+        };
+        /**
+         * RuleActivityResponse
+         * @description One rule's recent activity for the list's mini strip (DESIGN.md §5):
+         *     `cells` oldest → newest, each "fired" (a firing landed in it), "true"
+         *     (inside a fire → clear span; only rules that record clears), or "idle".
+         */
+        RuleActivityResponse: {
+            /**
+             * Rule Id
+             * Format: uuid
+             */
+            rule_id: string;
+            /** Cells */
+            cells: ("idle" | "true" | "fired")[];
+            /** Fired */
+            fired: number;
+            /** Last Fired At */
+            last_fired_at: string | null;
+        };
         /**
          * RuleCreateRequest
          * @description Canonical multi-device create — POST /rules.
@@ -1205,12 +2010,14 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Trigger */
-            trigger?: components["schemas"]["MetricTrigger"];
+            trigger?: components["schemas"]["MetricTrigger"] | components["schemas"]["ScheduleTrigger"] | components["schemas"]["ManualTrigger"] | components["schemas"]["DeviceStatusTrigger"];
             /** Condition */
-            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"];
+            condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"];
             /** Actions */
-            actions: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[];
+            actions: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[];
+            /** Clear Actions */
+            clear_actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[];
             /** Editor Graph */
             editor_graph?: {
                 [key: string]: unknown;
@@ -1236,6 +2043,52 @@ export interface components {
             /** Device Name */
             device_name?: string | null;
         };
+        /** RuleExecutionResponse */
+        RuleExecutionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Rule Id */
+            rule_id: string | null;
+            /** Device Id */
+            device_id: string | null;
+            /** Device Name */
+            device_name: string | null;
+            /** Metric */
+            metric: string | null;
+            /** Value */
+            value: number | null;
+            /** Trigger Source */
+            trigger_source: string;
+            /**
+             * Edge
+             * @enum {string}
+             */
+            edge: "fire" | "clear";
+            /**
+             * Fired At
+             * Format: date-time
+             */
+            fired_at: string;
+            /** Summary */
+            summary: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Actions */
+            actions: components["schemas"]["ActionExecutionResponse"][];
+        };
+        /** RuleHealth */
+        RuleHealth: {
+            /** Evaluatable */
+            evaluatable: boolean;
+            /** Signals */
+            signals: components["schemas"]["RuleSignalHealth"][];
+        };
         /** RuleResponse */
         RuleResponse: {
             /**
@@ -1254,10 +2107,14 @@ export interface components {
                 [key: string]: unknown;
             };
             /** Condition */
-            condition: components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"];
+            condition: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Output"]) | null;
             execution_policy: components["schemas"]["ExecutionPolicy-Output"];
             /** Actions */
             actions: {
+                [key: string]: unknown;
+            }[];
+            /** Clear Actions */
+            clear_actions: {
                 [key: string]: unknown;
             }[];
             /** Devices */
@@ -1269,6 +2126,12 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            health: components["schemas"]["RuleHealth"];
+            /**
+             * Latched
+             * @default false
+             */
+            latched: boolean;
             /** Action */
             action: {
                 [key: string]: unknown;
@@ -1278,6 +2141,33 @@ export interface components {
             /** Cooldown */
             cooldown: number;
         };
+        /**
+         * RuleSignalHealth
+         * @description The freshness of one `(device, metric)` a rule reads — computed from
+         *     device_metric_health + the catalog publish profile (Phase 5).
+         */
+        RuleSignalHealth: {
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Device Name */
+            device_name: string | null;
+            /** Metric */
+            metric: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "fresh" | "stale" | "missing";
+            /** Last Value */
+            last_value: number | null;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Max Age Seconds */
+            max_age_seconds: number;
+        };
         /** RuleUpdateRequest */
         RuleUpdateRequest: {
             /** Name */
@@ -1285,12 +2175,14 @@ export interface components {
             /** Description */
             description?: string | null;
             /** Trigger */
-            trigger?: components["schemas"]["MetricTrigger"] | null;
+            trigger?: (components["schemas"]["MetricTrigger"] | components["schemas"]["ScheduleTrigger"] | components["schemas"]["ManualTrigger"] | components["schemas"]["DeviceStatusTrigger"]) | null;
             /** Condition */
             condition?: (components["schemas"]["ConditionLeaf"] | components["schemas"]["ConditionGroup-Input"]) | null;
             execution_policy?: components["schemas"]["ExecutionPolicy-Input"] | null;
             /** Actions */
-            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"])[] | null;
+            actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[] | null;
+            /** Clear Actions */
+            clear_actions?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"])[] | null;
             /** Editor Graph */
             editor_graph?: {
                 [key: string]: unknown;
@@ -1302,7 +2194,159 @@ export interface components {
             /** Cooldown */
             cooldown?: number | null;
             /** Action */
-            action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"]) | null;
+            action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"]) | null;
+        };
+        /**
+         * RuleVersionResponse
+         * @description One saved state of a rule (DESIGN.md §9 Versions). `snapshot` holds
+         *     the rule's definition as saved, for the editor's client-side Restore.
+         */
+        RuleVersionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: number;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /** Change Lines */
+            change_lines: string[];
+            /** Author Id */
+            author_id: string | null;
+            /** Author */
+            author: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+        };
+        /** ScheduleTrigger */
+        ScheduleTrigger: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "schedule";
+            /** Cron */
+            cron: string;
+            /**
+             * Timezone
+             * @default UTC
+             */
+            timezone: string;
+        };
+        /**
+         * SetRhs
+         * @description `in`/`not_in`'s membership list.
+         */
+        SetRhs: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "set";
+            /** Values */
+            values: number[];
+        };
+        /** SignalOverride */
+        SignalOverride: {
+            /**
+             * Device Id
+             * Format: uuid
+             */
+            device_id: string;
+            /** Metric */
+            metric: string;
+            /** Value */
+            value: number;
+        };
+        /** SimulateActionPreview */
+        SimulateActionPreview: {
+            /** Index */
+            index: number;
+            /** Type */
+            type: string;
+            /** Summary */
+            summary: string;
+        };
+        /** SimulateReplayResult */
+        SimulateReplayResult: {
+            /**
+             * Resolution
+             * @enum {string}
+             */
+            resolution: "raw" | "1m";
+            /** Samples */
+            samples: number;
+            /** Would Have Fired At */
+            would_have_fired_at: string[];
+            /** Would Have Cleared At */
+            would_have_cleared_at?: string[];
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** SimulateReplayWindow */
+        SimulateReplayWindow: {
+            /**
+             * From
+             * Format: date-time
+             */
+            from: string;
+            /**
+             * To
+             * Format: date-time
+             */
+            to: string;
+        };
+        /** SimulateRequest */
+        SimulateRequest: {
+            /** Overrides */
+            overrides?: components["schemas"]["SignalOverride"][];
+            replay?: components["schemas"]["SimulateReplayWindow"] | null;
+        };
+        /** SimulateResponse */
+        SimulateResponse: {
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "live" | "replay";
+            /**
+             * Evaluated At
+             * Format: date-time
+             */
+            evaluated_at: string;
+            /** Would Fire */
+            would_fire: boolean;
+            /** Condition */
+            condition: {
+                [key: string]: unknown;
+            } | null;
+            /** Unavailable Signals */
+            unavailable_signals: components["schemas"]["RuleSignalHealth"][];
+            /** Actions */
+            actions: components["schemas"]["SimulateActionPreview"][];
+            /** Clear Actions */
+            clear_actions?: components["schemas"]["SimulateActionPreview"][];
+            replay: components["schemas"]["SimulateReplayResult"] | null;
+        };
+        /**
+         * StaticRhs
+         * @description A fixed number to compare against — the pre-Phase-6 `threshold` shape.
+         */
+        StaticRhs: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            source: "static";
+            /** Value */
+            value: number;
         };
         /** TelemetryDataPoint */
         TelemetryDataPoint: {
@@ -1351,6 +2395,10 @@ export interface components {
             name: string;
             /** Slug */
             slug: string;
+            /** Notification Emails */
+            notification_emails: string[];
+            /** Timezone */
+            timezone: string;
             /**
              * Created At
              * Format: date-time
@@ -1369,7 +2417,11 @@ export interface components {
         /** TenantUpdateRequest */
         TenantUpdateRequest: {
             /** Name */
-            name: string;
+            name?: string | null;
+            /** Notification Emails */
+            notification_emails?: string[] | null;
+            /** Timezone */
+            timezone?: string | null;
         };
         /** TokenPairResponse */
         TokenPairResponse: {
@@ -1433,6 +2485,9 @@ export interface components {
             body?: {
                 [key: string]: unknown;
             };
+            retry?: components["schemas"]["RetryConfig"] | null;
+            /** Timeout S */
+            timeout_s?: number | null;
         };
         /**
          * Widget
@@ -1468,6 +2523,44 @@ export interface components {
             min?: number | null;
             /** Max */
             max?: number | null;
+        };
+        /** ZoneCreateRequest */
+        ZoneCreateRequest: {
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+        };
+        /** ZoneResponse */
+        ZoneResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string | null;
+            /** Device Count */
+            device_count: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ZoneUpdateRequest */
+        ZoneUpdateRequest: {
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
         };
     };
     responses: never;
@@ -1674,6 +2767,140 @@ export interface operations {
             };
         };
     };
+    preview_invitation_auth_invitations__token__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    accept_invitation_auth_invitations__token__accept_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcceptInvitationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenPairResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forgot_password_auth_forgot_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_password_auth_reset_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_mine_tenants_mine_get: {
         parameters: {
             query?: never;
@@ -1743,9 +2970,9 @@ export interface operations {
     get_current_tenant_tenants_current_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -1772,12 +2999,12 @@ export interface operations {
             };
         };
     };
-    rename_current_tenant_tenants_current_patch: {
+    update_current_tenant_tenants_current_patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -1811,9 +3038,9 @@ export interface operations {
     list_members_tenants_members_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -1843,9 +3070,9 @@ export interface operations {
     add_member_tenants_members_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -1879,9 +3106,9 @@ export interface operations {
     remove_member_tenants_members__user_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 user_id: string;
@@ -1911,9 +3138,9 @@ export interface operations {
     change_member_role_tenants_members__user_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 user_id: string;
@@ -1946,12 +3173,176 @@ export interface operations {
             };
         };
     };
+    leave_tenant_tenants_leave_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_invitations_tenants_invitations_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_invitation_tenants_invitations_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvitationCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resend_invitation_tenants_invitations__invitation_id__resend_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                invitation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_invitation_tenants_invitations__invitation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                invitation_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_catalog_entries_catalog_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -1981,9 +3372,9 @@ export interface operations {
     create_catalog_entry_catalog_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2017,9 +3408,9 @@ export interface operations {
     get_catalog_entry_catalog__entry_id__get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 entry_id: string;
@@ -2051,9 +3442,9 @@ export interface operations {
     delete_catalog_entry_catalog__entry_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 entry_id: string;
@@ -2083,9 +3474,9 @@ export interface operations {
     update_catalog_entry_catalog__entry_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 entry_id: string;
@@ -2118,12 +3509,46 @@ export interface operations {
             };
         };
     };
+    get_catalog_usage_catalog__entry_id__usage_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                entry_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogUsageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_devices_devices_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2153,9 +3578,9 @@ export interface operations {
     create_device_devices_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2189,9 +3614,9 @@ export interface operations {
     get_device_devices__device_id__get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2223,9 +3648,9 @@ export interface operations {
     delete_device_devices__device_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2255,9 +3680,9 @@ export interface operations {
     update_device_devices__device_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2293,9 +3718,9 @@ export interface operations {
     rotate_credential_devices__device_id__rotate_credential_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2327,9 +3752,9 @@ export interface operations {
     list_api_keys_api_keys_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2359,9 +3784,9 @@ export interface operations {
     create_api_key_api_keys_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2395,9 +3820,9 @@ export interface operations {
     revoke_api_key_api_keys__key_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 key_id: string;
@@ -2427,9 +3852,9 @@ export interface operations {
     latest_devices__device_id__latest_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2466,9 +3891,9 @@ export interface operations {
                 to?: string | null;
                 resolution?: string;
             };
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2607,9 +4032,9 @@ export interface operations {
     list_rules_devices__device_id__rules_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2641,9 +4066,9 @@ export interface operations {
     create_device_rule_devices__device_id__rules_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2679,9 +4104,9 @@ export interface operations {
     list_all_rules_rules_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2711,9 +4136,9 @@ export interface operations {
     create_rule_rules_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2744,12 +4169,149 @@ export interface operations {
             };
         };
     };
+    list_failed_actions_rules_failed_actions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FailedActionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate_draft_rules_simulate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftSimulateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rules_activity_rules_activity_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+                buckets?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleActivityResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retry_failed_action_rules_failed_actions__action_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                action_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_rule_rules__rule_id__get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -2781,9 +4343,9 @@ export interface operations {
     delete_rule_rules__rule_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -2813,9 +4375,9 @@ export interface operations {
     update_rule_rules__rule_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 rule_id: string;
@@ -2848,12 +4410,186 @@ export interface operations {
             };
         };
     };
+    run_rule_rules__rule_id__run_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_rule_rules__rule_id__reset_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate_rule_rules__rule_id__simulate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimulateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_rule_versions_rules__rule_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleVersionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_rule_executions_rules__rule_id__executions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleExecutionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_commands_devices__device_id__commands_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2885,9 +4621,9 @@ export interface operations {
     request_command_devices__device_id__commands_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 device_id: string;
@@ -2923,9 +4659,9 @@ export interface operations {
     list_dashboards_dashboards_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2955,9 +4691,9 @@ export interface operations {
     create_dashboard_dashboards_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -2991,9 +4727,9 @@ export interface operations {
     get_dashboard_dashboards__dashboard_id__get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 dashboard_id: string;
@@ -3025,9 +4761,9 @@ export interface operations {
     delete_dashboard_dashboards__dashboard_id__delete: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 dashboard_id: string;
@@ -3057,9 +4793,9 @@ export interface operations {
     update_dashboard_dashboards__dashboard_id__patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 dashboard_id: string;
@@ -3095,9 +4831,9 @@ export interface operations {
     list_notifications_notifications_get: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3127,9 +4863,9 @@ export interface operations {
     mark_all_read_notifications_read_post: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path?: never;
             cookie?: never;
@@ -3159,9 +4895,9 @@ export interface operations {
     mark_read_notifications__notification_id__read_patch: {
         parameters: {
             query?: never;
-            header: {
-                "X-Tenant-Id": string;
+            header?: {
                 authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
             };
             path: {
                 notification_id: string;
@@ -3177,6 +4913,313 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_unread_notifications__notification_id__unread_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_notifications__notification_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_notifications__notification_id__restore_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                notification_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_zones_zones_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoneResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_zone_zones_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZoneCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoneResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_zone_zones__zone_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                zone_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoneResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_zone_zones__zone_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                zone_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_zone_zones__zone_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                zone_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZoneUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZoneResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    contact_public_contact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             /** @description Validation Error */

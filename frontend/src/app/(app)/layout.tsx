@@ -1,37 +1,28 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRealtime } from "@/hooks/useRealtime";
-import { PrimaryNav } from "@/components/nav/PrimaryNav";
-import { RealtimeStatusBadge } from "@/components/nav/RealtimeStatusBadge";
-import { GlobalHeader } from "@/components/nav/GlobalHeader";
-import { SidebarContext } from "@/components/nav/sidebar-context";
+import { Sheet } from "@/components/ui/Sheet";
+import { AppSidebar } from "@/components/shell/AppSidebar";
+import { CommandPalette } from "@/components/shell/CommandPalette";
+import { NoWorkspace } from "@/components/shell/NoWorkspace";
+import { ShellContext } from "@/components/shell/shell-context";
 import { cn } from "@/lib/cn";
 
-const SIDEBAR_COLLAPSED_KEY = "iot-saas:sidebar_collapsed";
-
+/** The app shell (DESIGN.md §4): a 256px sticky sidebar, and below 1100px a
+ * drawer behind a menu button. The content column is 1120px wide, or 1520px
+ * for pages that call `useWideContent()`. */
 export default function AppLayout({ children }: { children: ReactNode }) {
-  const { status, currentTenantId } = useAuth();
-  const realtimeStatus = useRealtime();
+  const { status, currentTenantId, memberships } = useAuth();
+  const realtime = useRealtime();
   const router = useRouter();
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    if (localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1") setCollapsed(true);
-  }, []);
-
-  function toggleCollapsed() {
-    setCollapsed((c) => {
-      const next = !c;
-      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
-      return next;
-    });
-  }
+  const [navOpen, setNavOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [wide, setWide] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.replace("/login");
@@ -39,18 +30,28 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   // Close the mobile drawer whenever navigation happens.
   useEffect(() => {
-    setMobileOpen(false);
+    setNavOpen(false);
   }, [pathname]);
 
-  // Don't let the page behind the drawer scroll on mobile.
+  // ⌘K / Ctrl+K anywhere opens the palette.
   useEffect(() => {
-    if (!mobileOpen) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [mobileOpen]);
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setNavOpen(false);
+        setPaletteOpen(true);
+      }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
+
+  const openPalette = useCallback(() => {
+    setNavOpen(false);
+    setPaletteOpen(true);
+  }, []);
+  const openNav = useCallback(() => setNavOpen(true), []);
+  const shell = useMemo(() => ({ openPalette, openNav, setWide }), [openPalette, openNav]);
 
   if (status === "loading") {
     return <div className="flex min-h-screen items-center justify-center text-ink-muted">Loading…</div>;
@@ -58,65 +59,61 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   // Unauthenticated: the effect above is already redirecting; render nothing to
   // avoid a flash of app chrome with no valid session behind it.
-  if (status !== "authenticated" || !currentTenantId) return null;
+  if (status !== "authenticated") return null;
+  if (!currentTenantId) return <NoWorkspace />;
 
-  // On mobile the drawer is always full-width with labels; `collapsed` only
-  // governs the desktop rail.
-  const railCollapsed = collapsed && !mobileOpen;
+  const workspaceName = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_name ?? "";
 
   return (
-    <SidebarContext.Provider value={{ mobileOpen, setMobileOpen }}>
-      <div className="app-shell flex min-h-screen">
-        {mobileOpen && (
-          <button
-            type="button"
-            aria-label="Close navigation"
-            onClick={() => setMobileOpen(false)}
-            className="fixed inset-0 z-30 bg-canvas/70 md:hidden"
-          />
-        )}
-
+    <ShellContext.Provider value={shell}>
+      {/* Keyed by tenant: switching workspace remounts every hook so nothing
+          from the previous workspace survives (see setCurrentTenantId). */}
+      <div key={currentTenantId} className="app-shell grid min-h-screen shell:grid-cols-[256px_minmax(0,1fr)]">
         <aside
-          className={cn(
-            "fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col justify-between overflow-y-auto border-r border-border bg-surface transition-transform duration-200 md:static md:z-auto md:translate-x-0 md:transition-[width]",
-            mobileOpen ? "translate-x-0" : "-translate-x-full",
-            railCollapsed ? "md:w-16" : "md:w-56",
-          )}
+          aria-label="Primary"
+          className="sticky top-0 z-[60] hidden h-screen overflow-y-auto border-r border-border bg-sidebar shell:block"
         >
-          <div>
-            <div className={cn("flex p-2", railCollapsed ? "justify-center" : "justify-between")}>
-              <button
-                type="button"
-                onClick={toggleCollapsed}
-                aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-                className="hidden rounded-md p-1.5 text-ink-muted hover:bg-surface-raised hover:text-ink md:block"
-              >
-                {collapsed ? <PanelLeftOpen aria-hidden size={18} /> : <PanelLeftClose aria-hidden size={18} />}
-              </button>
-              <button
-                type="button"
-                onClick={() => setMobileOpen(false)}
-                aria-label="Close navigation"
-                className="rounded-md p-1.5 text-ink-muted hover:bg-surface-raised hover:text-ink md:hidden"
-              >
-                <X aria-hidden size={18} />
-              </button>
-            </div>
-            <PrimaryNav collapsed={railCollapsed} />
-          </div>
-          {!railCollapsed && (
-            <div className="border-t border-border p-2">
-              <RealtimeStatusBadge status={realtimeStatus} />
-            </div>
-          )}
+          <AppSidebar realtime={realtime} />
         </aside>
 
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          <GlobalHeader />
-          <main className="flex-1 overflow-auto p-4 md:p-6">{children}</main>
+        <Sheet open={navOpen} onClose={() => setNavOpen(false)} label="Navigation" side="left" widthClassName="w-[280px] bg-sidebar">
+          <AppSidebar realtime={realtime} />
+        </Sheet>
+
+        <div className="flex min-w-0 flex-col">
+          <div className="sticky top-[env(safe-area-inset-top,0px)] z-20 flex items-center gap-2.5 border-b border-border bg-surface px-4 py-2.5 shell:hidden">
+            <button
+              type="button"
+              onClick={openNav}
+              aria-label="Open navigation"
+              aria-expanded={navOpen}
+              className="grid h-[42px] w-[42px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink"
+            >
+              <Menu aria-hidden size={18} />
+            </button>
+            <strong className="flex-1 truncate text-sm font-semibold text-ink">{workspaceName}</strong>
+            <button
+              type="button"
+              onClick={openPalette}
+              aria-label="Search"
+              className="grid h-[42px] w-[42px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink"
+            >
+              <Search aria-hidden size={18} />
+            </button>
+          </div>
+
+          <main
+            id="content"
+            className={cn(
+              "mx-auto flex w-full flex-col gap-[22px] px-4 pb-[110px] pt-[22px] transition-[max-width] duration-200 md:px-10 md:pt-9",
+              wide ? "max-w-[1520px]" : "max-w-[1120px]",
+            )}
+          >
+            {children}
+          </main>
         </div>
       </div>
-    </SidebarContext.Provider>
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+    </ShellContext.Provider>
   );
 }

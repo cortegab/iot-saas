@@ -5,21 +5,26 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { TrendChart, type ChartThreshold } from "@/components/chart/TrendChart";
+import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
+type CatalogMetric = components["schemas"]["CatalogMetric"];
 
 /**
  * Only offers metrics this device has actually reported (UX_UI_Description.md
  * §3: never a chart shell for a metric that's never arrived). Reuses the same
  * SWR key CurrentReadings fetches on the device page — same cache entry, no
- * extra request.
+ * extra request. Metrics are named as in the readouts above (the template's
+ * name, the wire key only for an undeclared one).
  */
 export function DeviceTrendChart({
   deviceId,
+  metrics = [],
   thresholdsByMetric = {},
 }: {
   deviceId: string;
+  metrics?: CatalogMetric[];
   thresholdsByMetric?: Record<string, ChartThreshold[]>;
 }) {
   const { data, isLoading } = useApiSWR<TelemetryLatestResponse[]>(`/devices/${deviceId}/latest`);
@@ -41,6 +46,7 @@ export function DeviceTrendChart({
   }
 
   const activeMetric = selected ?? data[0].metric;
+  const metaOf = (id: string) => metrics.find((m) => wireId(m) === id);
 
   return (
     <div className="flex flex-col gap-3">
@@ -52,18 +58,23 @@ export function DeviceTrendChart({
               type="button"
               aria-pressed={activeMetric === m.metric}
               onClick={() => setSelected(m.metric)}
-              className={`rounded-md border px-2.5 py-1 font-mono text-xs font-medium transition-colors duration-150 ${
+              className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors duration-150 ${
                 activeMetric === m.metric
                   ? "border-accent bg-accent text-on-accent"
                   : "border-border text-ink-muted hover:bg-surface-raised hover:text-ink"
               }`}
             >
-              {m.metric}
+              {metaOf(m.metric)?.name ?? m.metric}
             </button>
           ))}
         </div>
       )}
-      <TrendChart deviceId={deviceId} metric={activeMetric} thresholds={thresholdsByMetric[activeMetric]} />
+      <TrendChart
+        deviceId={deviceId}
+        metric={activeMetric}
+        meta={metaOf(activeMetric)}
+        thresholds={thresholdsByMetric[activeMetric]}
+      />
     </div>
   );
 }

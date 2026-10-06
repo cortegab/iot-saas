@@ -7,16 +7,14 @@ export interface TableColumn<T> {
   header: string;
   render: (row: T) => ReactNode;
   className?: string;
+  /** Right-aligns the column (numbers). */
+  numeric?: boolean;
 }
 
-/** Generic list table — replaces one-off `<ul>`/`<li>` card lists where a
- * scannable, filterable row layout fits better (devices, device types).
- * Presentational only: sorting/filtering stays with the caller.
- *
- * Reads as a panel: a `bg-surface` card with a tinted header strip and a
- * divider between every row, so it sits on the page rather than dissolving
- * into the canvas. Rows tint on hover whether or not they're clickable —
- * every list's first cell is a link, so it's a scannability aid either way. */
+/** Simple presentational table in the DESIGN.md §6 anatomy (sentence-case
+ * 40px header, `p-cell` rows, soft dividers, hover tint). Catalog lists use
+ * the full `DataTable` kit (sorting, selection, cards on phones); this one is
+ * for small embedded tables. */
 export function Table<T>({
   columns,
   rows,
@@ -29,12 +27,19 @@ export function Table<T>({
   onRowClick?: (row: T) => void;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border border-t-panel-edge bg-surface">
-      <table className="w-full text-left text-sm">
-        <thead className="border-b border-border bg-surface-raised font-mono text-xs uppercase tracking-wide text-ink-muted">
+    <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-card">
+      <table className="w-full border-collapse text-left text-sm tabular-nums">
+        <thead>
           <tr>
             {columns.map((col) => (
-              <th key={col.header} className={`px-3 py-2.5 font-medium ${col.className ?? ""}`}>
+              <th
+                key={col.header}
+                className={cn(
+                  "h-10 whitespace-nowrap border-b border-border bg-surface px-3 text-xs font-medium text-ink-muted",
+                  col.numeric && "text-right",
+                  col.className,
+                )}
+              >
                 {col.header}
               </th>
             ))}
@@ -46,12 +51,15 @@ export function Table<T>({
               key={rowKey(row)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}
               className={cn(
-                "border-t border-border transition-colors duration-100 first:border-t-0 hover:bg-accent-muted",
+                "border-b border-border-soft transition-colors duration-100 last:border-b-0 hover:bg-row-hover",
                 onRowClick && "cursor-pointer",
               )}
             >
               {columns.map((col) => (
-                <td key={col.header} className={`px-3 py-2.5 text-ink ${col.className ?? ""}`}>
+                <td
+                  key={col.header}
+                  className={cn("px-3 py-cell align-middle text-ink", col.numeric && "text-right", col.className)}
+                >
                   {col.render(row)}
                 </td>
               ))}

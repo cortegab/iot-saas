@@ -21,6 +21,8 @@ from app.catalog.schemas import (
     CatalogEntryResponse,
     CatalogEntryUpdateRequest,
     CatalogMetric,
+    CatalogUsageResponse,
+    KeyUsageResponse,
 )
 from app.db import get_session
 from app.devices import service as devices_service
@@ -28,6 +30,23 @@ from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import TenantRole
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
+
+
+def _key_error(exc: Exception) -> HTTPException:
+    """Maps the service's key-validation errors to a readable 400."""
+    if isinstance(exc, service.DuplicateKeyError):
+        detail = f"Duplicate key: {exc}"
+    elif isinstance(exc, service.ReservedMetricKeyError):
+        detail = f"'{exc}' is a reserved metric key"
+    else:
+        detail = (
+            f"Key '{exc}' isn't valid. Use letters, digits, - and _ only "
+            "(no spaces, / + # or a leading $), up to 64 characters."
+        )
+    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+_KEY_ERRORS = (service.DuplicateKeyError, service.ReservedMetricKeyError, service.InvalidKeyError)
 
 
 def _to_response(entry: DeviceCatalogEntry, device_count: int = 0) -> CatalogEntryResponse:
@@ -47,7 +66,7 @@ def _to_response(entry: DeviceCatalogEntry, device_count: int = 0) -> CatalogEnt
 @router.get("", response_model=list[CatalogEntryResponse])
 async def list_catalog_entries(
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[CatalogEntryResponse]:
     entries = await service.list_catalog_entries(session, ctx.tenant_id)
     counts = await devices_service.count_devices_by_catalog_entry(session, ctx.tenant_id)
@@ -58,7 +77,7 @@ async def list_catalog_entries(
 async def create_catalog_entry(
     body: CatalogEntryCreateRequest,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> CatalogEntryResponse:
     try:
         entry = await service.create_catalog_entry(
@@ -68,16 +87,8 @@ async def create_catalog_entry(
             [m.model_dump(mode="json") for m in body.metrics],
             [a.model_dump(mode="json") for a in body.actuators],
         )
-    except service.DuplicateKeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Duplicate key: {exc}",
-        ) from exc
-    except service.ReservedMetricKeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"'{exc}' is a reserved metric key",
-        ) from exc
+    except _KEY_ERRORS as exc:
+        raise _key_error(exc) from exc
     return _to_response(entry)
 
 
@@ -85,10 +96,29 @@ async def create_catalog_entry(
 async def get_catalog_entry(
     entry: DeviceCatalogEntry = Depends(get_catalog_entry_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> CatalogEntryResponse:
     counts = await devices_service.count_devices_by_catalog_entry(session, ctx.tenant_id)
     return _to_response(entry, counts.get(entry.id, 0))
+
+
+@router.get("/{entry_id}/usage", response_model=CatalogUsageResponse)
+async def get_catalog_usage(
+    entry: DeviceCatalogEntry = Depends(get_catalog_entry_or_404),
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> CatalogUsageResponse:
+    usage = await service.get_catalog_usage(session, ctx.tenant_id, entry)
+    return CatalogUsageResponse(
+        devices=usage.devices,
+        metrics={
+            k: KeyUsageResponse(rules=u.rules, widgets=u.widgets) for k, u in usage.metrics.items()
+        },
+        actuators={
+            k: KeyUsageResponse(rules=u.rules, widgets=u.widgets)
+            for k, u in usage.actuators.items()
+        },
+    )
 
 
 @router.patch("/{entry_id}", response_model=CatalogEntryResponse)
@@ -96,7 +126,7 @@ async def update_catalog_entry(
     body: CatalogEntryUpdateRequest,
     entry: DeviceCatalogEntry = Depends(get_catalog_entry_or_404),
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> CatalogEntryResponse:
     metrics = (
         [m.model_dump(mode="json") for m in body.metrics] if body.metrics is not None else None
@@ -108,16 +138,8 @@ async def update_catalog_entry(
         updated = await service.update_catalog_entry(
             session, entry, body.name, metrics, actuators, body.status
         )
-    except service.DuplicateKeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Duplicate key: {exc}",
-        ) from exc
-    except service.ReservedMetricKeyError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"'{exc}' is a reserved metric key",
-        ) from exc
+    except _KEY_ERRORS as exc:
+        raise _key_error(exc) from exc
     await session.flush()
     await session.refresh(updated)
     counts = await devices_service.count_devices_by_catalog_entry(session, ctx.tenant_id)
@@ -128,7 +150,7 @@ async def update_catalog_entry(
 async def delete_catalog_entry(
     entry_id: uuid.UUID,
     ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     try:
         await service.delete_catalog_entry(session, ctx.tenant_id, entry_id)
