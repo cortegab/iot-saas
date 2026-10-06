@@ -29,7 +29,7 @@ export function Tabs({
   ariaLabel?: string;
 }) {
   return (
-    <div role="tablist" aria-label={ariaLabel} className="flex flex-wrap gap-1 border-b border-border">
+    <div role="tablist" aria-label={ariaLabel} className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]">
       {tabs.map((tab) => {
         const selected = !tab.disabled && tab.id === active;
         return (
