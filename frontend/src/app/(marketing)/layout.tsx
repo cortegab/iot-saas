@@ -2,8 +2,8 @@ import type { ReactNode } from "react";
 import "./marketing.css";
 
 /* The landing page uses the app's design tokens (docs/design/DESIGN.md §10);
- * fonts come from the root layout, colours from `globals.css`. `.mkt` only
- * scopes the ControlLoop instrument and the entrance motion (marketing.css). */
+ * fonts come from the root layout, colours from `globals.css`. `.mkt` scopes
+ * the entrance motion (marketing.css). */
 
 export const metadata = {
   title: "iodriven — sensors in, decisions in memory, actuators out",

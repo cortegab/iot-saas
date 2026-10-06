@@ -30,6 +30,7 @@ import {
   ActionFields,
   AddActionMenu,
   ContactFields,
+  FieldRow,
   NumberSafetyField,
   SECTION_LABEL,
   SectionCard,
@@ -309,7 +310,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
           )}
         </>
       )}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <FieldRow wide="sm:grid-cols-2">
         {reading && (
           <NumberSafetyField
             label="Hold time (s)"
@@ -326,7 +327,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
           onChange={(cooldown) => update({ ...draft, cooldown })}
           min={reading ? 30 : 0}
         />
-      </div>
+      </FieldRow>
       {clearing && <ClearFields draft={draft} update={update} />}
     </div>
   );
