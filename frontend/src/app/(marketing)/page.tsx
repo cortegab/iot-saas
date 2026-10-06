@@ -5,13 +5,15 @@ import { ControlLoopLog } from "@/components/marketing/ControlLoopLog";
 import { Deployment } from "@/components/marketing/Deployment";
 import { EnterButton } from "@/components/marketing/EnterButton";
 import { NetworkCanvas } from "@/components/marketing/NetworkCanvas";
+import { OnboardingSection } from "@/components/marketing/OnboardingSection";
 import { ProductTour } from "@/components/marketing/ProductTour";
+import { Steps } from "@/components/marketing/Steps";
 import { nightButtonClassName } from "@/components/marketing/night";
 import { cn } from "@/lib/cn";
 
 /* iodriven.tech landing (DESIGN.md §10, demo G): a night nav and hero over
- * the network · product tour · how it works · safety · onboarding (the
- * control-loop log) · security and operations · deployment (Talk to us) ·
+ * the network · product tour · how it works (with the control-loop log) ·
+ * safety · onboarding (the journey figure) · security and operations · deployment (Talk to us) ·
  * FAQ · a night close and footer. There is no public demo workspace, so G's
  * "Open the demo" becomes "Sign in" / "Talk to us". */
 
@@ -47,21 +49,6 @@ function Section({ id, eyebrow, title, note, alt, children }: { id: string; eyeb
         <div className="mt-8">{children}</div>
       </div>
     </section>
-  );
-}
-
-/** Numbered step cards (G .steps4): "01" in mono accent above each step. */
-function Steps({ steps, vertical }: { steps: [string, string][]; vertical?: boolean }) {
-  return (
-    <ol className={cn("grid gap-4", vertical ? "grid-cols-1" : "sm:grid-cols-2 lg:grid-cols-4")}>
-      {steps.map(([t, d], i) => (
-        <li key={t} className={cn("flex flex-col gap-1.5 rounded-xl border border-border p-[18px] text-sm", vertical ? "bg-surface" : "bg-canvas")}>
-          <span className="font-mono text-[12px] font-semibold text-accent">{String(i + 1).padStart(2, "0")}</span>
-          <b className="text-[16px] text-ink">{t}</b>
-          <span className="leading-[1.55] text-ink-muted">{d}</span>
-        </li>
-      ))}
-    </ol>
   );
 }
 
@@ -142,7 +129,8 @@ export default function LandingPage() {
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <EnterButton />
-            <a href="#deployment" className={nightButtonClassName()}>
+            {/* Below sm the header can't fit both; the hero's Talk to us is right below. */}
+            <a href="#deployment" className={cn(nightButtonClassName(), "max-sm:hidden")}>
               Talk to us
             </a>
           </div>
@@ -193,7 +181,7 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <Section id="tour" eyebrow="Product" title="Everything an operator needs, nothing they have to babysit.">
+        <Section id="tour" eyebrow="Product" title="Everything an operator needs, running without supervision.">
           <ProductTour />
         </Section>
 
@@ -228,6 +216,13 @@ export default function LandingPage() {
                 </div>
               </div>
             </div>
+          </div>
+          <div className="mt-8 grid items-center gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            <ControlLoopLog />
+            <p className="max-w-[52ch] text-[15px] leading-relaxed text-ink-muted">
+              <b className="font-semibold text-ink">One rule&apos;s life on the hot path:</b> a reading crosses the threshold, the rule holds, fires, and the actuator
+              acknowledges. All in memory, before anything is written to disk.
+            </p>
           </div>
           <div className="mt-8">
             <Steps
@@ -273,30 +268,10 @@ export default function LandingPage() {
           </div>
         </Section>
 
-        {/* G .s-split: steps on the left, the control loop beside them. */}
+        {/* G .s-split: steps on the left, the journey figure beside them. */}
         <section id="onboarding" className="scroll-mt-16 border-y border-border bg-surface py-16 md:py-[88px]">
-          <div className={cn(INNER, "grid items-start gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]")}>
-            <div>
-              <Heading eyebrow="Onboarding" title="From sign-up to live data in ten minutes." />
-              <div className="mt-8">
-                <Steps
-                  vertical
-                  steps={[
-                    ["Create a workspace", "The tenant is provisioned in the same step. Invite your team as Admins or Viewers."],
-                    ["Define a device template", "The metrics it reports, the actuators it drives, units and ranges."],
-                    ["Copy the generated sketch", "Topics, TLS and the device's credential are already filled in. Wi-Fi can be provisioned over BLE."],
-                    ["Flash it", "The connect page turns green as the board reports in, and any armed rule is already watching."],
-                  ]}
-                />
-              </div>
-            </div>
-            <div className="flex flex-col gap-3 lg:sticky lg:top-[90px]">
-              <ControlLoopLog />
-              <p className="text-[13.5px] leading-relaxed text-ink-muted">
-                What happens after step 4: a reading crosses the threshold, the rule holds, fires, and the actuator acknowledges. All in memory, before anything is
-                written to disk.
-              </p>
-            </div>
+          <div className={INNER}>
+            <OnboardingSection heading={<Heading eyebrow="Onboarding" title="From sign-up to live data in ten minutes." />} />
           </div>
         </section>
 
