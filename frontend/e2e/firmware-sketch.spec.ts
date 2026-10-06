@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { expect, type APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 import { test as withLogin } from "./fixtures";
 
 const API_URL = process.env.E2E_API_URL ?? "http://localhost:8000";
-const PROV_SERVICE_UUID = "6e1f0001-7c3a-4b8e-9d2f-5a4b3c2d1e0f";
+// The retired custom GATT service: no sketch may carry it any more.
+const OLD_GATT_UUID = "6e1f0001-7c3a-4b8e-9d2f-5a4b3c2d1e0f";
 
 async function apiHeaders(request: APIRequestContext) {
   const res = await request.post(`${API_URL}/auth/login`, {
@@ -33,37 +34,109 @@ const test = withLogin.extend<{ throwawayDevice: { id: string; name: string } }>
   },
 });
 
-test("connect flow: create the credential, then the sketch embeds it", async ({ page, throwawayDevice }) => {
-  await page.goto(`/devices/${throwawayDevice.id}/connect`);
-  // Never connected → no confirm; the button creates the first credential.
-  await page.getByRole("button", { name: "Create credential" }).click();
-
+/** Reads the one-time credential and continues to Options; returns the password. */
+async function storeCredential(page: Page, deviceId: string): Promise<string> {
   const reveal = page.getByRole("region", { name: "One-time secret" });
-  await expect(reveal.getByText(throwawayDevice.id, { exact: true })).toBeVisible();
+  await expect(reveal.getByText(deviceId, { exact: true })).toBeVisible();
   await reveal.getByRole("button", { name: "Show" }).click();
   const password = (await reveal.locator("dd").nth(1).innerText()).trim();
   expect(password.length).toBeGreaterThan(10);
   await reveal.getByLabel("I've stored it").check();
   await reveal.getByRole("button", { name: "Continue" }).click();
+  return password;
+}
 
-  // Step 2: the preview masks the password but carries everything else.
+/** A step in the connect flow's step rail. */
+const stepButton = (page: Page, name: RegExp) => page.getByRole("list", { name: "Steps" }).getByRole("button", { name });
+
+/** The QR payload, as Copy payload puts it on the clipboard. */
+async function qrPayload(page: Page): Promise<Record<string, unknown>> {
+  await page.getByRole("button", { name: "Copy payload" }).click();
+  return JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
+}
+
+test("connect flow: phone provisioning with a QR from the credential, or typed Wi-Fi with no BLE at all", async ({ page, context, throwawayDevice }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto(`/devices/${throwawayDevice.id}/connect`);
+  // Never connected → no confirm; the button creates the first credential.
+  await page.getByRole("button", { name: "Create credential" }).click();
+  const password = await storeCredential(page, throwawayDevice.id);
+
+  // Options: no code here; defaults are a phone and Security 2.
+  await expect(page.getByRole("heading", { name: "Options" })).toBeVisible();
+  await expect(page.getByLabel("Generated sketch")).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: /2 – SRP6a/ })).toBeChecked();
+  await page.getByRole("button", { name: "Continue" }).click();
+
+  // Flash: download, plus a collapsed preview that masks the password.
+  await expect(page.getByRole("heading", { name: "Flash" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Download .*\.ino/ })).toBeEnabled({ timeout: 10_000 });
   const sketch = page.getByLabel("Generated sketch");
+  await expect(sketch).toBeHidden();
+  await page.getByText("Preview the sketch").click();
   await expect(sketch).toContainText(`MQTT_USERNAME = "${throwawayDevice.id}"`);
   await expect(sketch).toContainText('MQTT_PASSWORD = "••••••••"');
   await expect(sketch).not.toContainText(password);
-  await expect(sketch).toContainText(PROV_SERVICE_UUID);
-  await expect(sketch).toContainText("setBufferSize(1024)");
-  await expect(sketch).toContainText("TOPIC_STATUS, 1, true");
+  await expect(sketch).toContainText("NETWORK_PROV_SECURITY_2, (const char*)&SEC2_PARAMS");
+  await expect(sketch).toContainText("SEC2_VERIFIER");
+  await expect(sketch).not.toContainText(OLD_GATT_UUID);
+  await page.getByRole("button", { name: "Continue" }).click();
 
+  // Wi-Fi from your phone: the QR is the device name + its credential.
+  await expect(page.getByRole("heading", { name: "Wi-Fi from your phone" })).toBeVisible();
+  await expect(page.getByRole("img", { name: `Provisioning QR for ${throwawayDevice.name}` })).toBeVisible();
+  expect(await qrPayload(page)).toEqual({
+    ver: "v1",
+    name: throwawayDevice.name,
+    username: throwawayDevice.id,
+    pop: password,
+    transport: "ble",
+    network: "wifi",
+    security: 2,
+  });
+
+  // Security 1: no username, the password is the PoP.
+  await stepButton(page, /Options/).click();
+  await page.getByRole("radio", { name: /1 – PoP/ }).check();
+  await stepButton(page, /From your phone/).click();
+  expect(await qrPayload(page)).toEqual({ ver: "v1", name: throwawayDevice.name, pop: password, transport: "ble", network: "wifi", security: 1 });
+
+  // Typed Wi-Fi: no provisioning in the sketch, and step 4 is skipped.
+  await stepButton(page, /Options/).click();
   await page.getByRole("radio", { name: /Type it into the sketch/ }).check();
   await page.getByLabel("Network (2.4 GHz)").fill("bench-net");
-  await expect(sketch).toContainText('DEV_WIFI_SSID = "bench-net"');
-
   await page.getByRole("button", { name: "Continue" }).click();
-  await expect(page.getByRole("heading", { name: "Flash and Wi-Fi" })).toBeVisible();
+  await page.getByText("Preview the sketch").click();
+  await expect(sketch).toContainText('WIFI_SSID = "bench-net"');
+  await expect(sketch).not.toContainText("WiFiProv");
+  await expect(sketch).not.toContainText("Huge APP");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("heading", { name: "Live check" })).toBeVisible();
   await expect(page.getByText("Reached the broker")).toBeVisible();
+});
+
+test("rotating the credential makes a new QR", async ({ page, context, throwawayDevice, request }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  // Pretend the board has connected once, so Rotate asks first.
+  await page.goto(`/devices/${throwawayDevice.id}/connect`);
+  await page.getByRole("button", { name: "Create credential" }).click();
+  const first = await storeCredential(page, throwawayDevice.id);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  const before = await qrPayload(page);
+  expect(before.pop).toBe(first);
+
+  // A new credential (as a reflash would need) means a new QR.
+  const rotated = await request.post(`${API_URL}/devices/${throwawayDevice.id}/rotate-credential`, { headers: await apiHeaders(request) });
+  expect(rotated.ok()).toBeTruthy();
+  await page.goto(`/devices/${throwawayDevice.id}/connect`);
+  await page.getByRole("button", { name: "Create credential" }).click();
+  const second = await storeCredential(page, throwawayDevice.id);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
+  const after = await qrPayload(page);
+  expect(after.pop).toBe(second);
+  expect(after.pop).not.toBe(before.pop);
 });
 
 test("adding a device hands its credential straight to the connect flow", async ({ page, request }) => {
@@ -108,7 +181,7 @@ test("live check turns green as the board reports in", async ({ page, request })
     created.credential.password = (await reveal.locator("dd").nth(1).innerText()).trim();
     await reveal.getByLabel("I've stored it").check();
     await reveal.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("button", { name: "Live check" }).click();
+    await stepButton(page, /Live check/).click();
 
     const broker = page.getByRole("listitem").filter({ hasText: "Reached the broker" });
     const reading = page.getByRole("listitem").filter({ hasText: "First reading: Temperature" });
