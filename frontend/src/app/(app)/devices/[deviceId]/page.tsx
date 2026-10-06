@@ -1,30 +1,25 @@
 "use client";
 
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
-import { mutate as revalidate } from "swr";
-import { Cpu, KeyRound, Pencil, Plus, Power, Trash2, Zap } from "lucide-react";
-import { useApi } from "@/hooks/useApi";
+import { Pencil, Plus, Zap } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { useAuthContext } from "@/lib/auth-context";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { CopyField } from "@/components/ui/SecretReveal";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Readout } from "@/components/ui/Readout";
 import { Tabs, TabPanel, type TabItem } from "@/components/ui/Tabs";
-import { useToast } from "@/components/ui/Toast";
 import { DeviceTrendChart } from "@/components/chart/DeviceTrendChart";
 import type { ChartThreshold } from "@/components/chart/TrendChart";
 import { RuleList } from "@/components/rules/RuleList";
 import { ActuatorControl } from "@/components/actuators/ActuatorControl";
+import { DeviceEditor } from "@/components/devices/DeviceEditor";
 import { CommandHistory } from "@/components/actuators/CommandHistory";
 import { leafPredicates } from "@/components/rules/RuleSummary";
 import { ApiRequestError } from "@/lib/api-client";
@@ -96,56 +91,11 @@ function Readouts({
   );
 }
 
-/** MQTT topics are built from slugs, not display names — a device's slug is
- * fixed at creation, so this answers "what do I actually publish to?". */
-function DeviceTopics({ device, template }: { device: DeviceResponse; template?: CatalogEntryResponse }) {
-  const { memberships, currentTenantId } = useAuthContext();
-  const tenantSlug = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_slug;
-  if (!tenantSlug) return null;
-  const subtree = `${tenantSlug}/${device.slug}`;
-  const rows: [string, string][] = [
-    ...(template?.metrics ?? []).map((m): [string, string] => [`Telemetry · ${m.name}`, `${subtree}/${wireId(m)}`]),
-    ...(template?.actuators ?? []).flatMap((a): [string, string][] => [
-      [`Command · ${a.name}`, `${subtree}/cmd/${wireId(a)}`],
-      [`Desired state · ${a.name} (retained)`, `${subtree}/state/${wireId(a)}`],
-      [`Acknowledgement · ${a.name}`, `${subtree}/ack/${wireId(a)}`],
-    ]),
-    ["Health (retained, last will)", `${subtree}/status`],
-  ];
-  return (
-    <dl className="flex flex-col gap-2">
-      {rows.map(([label, topic]) => (
-        <div key={topic} className="flex flex-col gap-1">
-          <dt className="text-xs text-ink-muted">{label}</dt>
-          <dd>
-            <CopyField value={topic} label="topic" />
-          </dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-function SettingRow({ title, body, action }: { title: string; body: ReactNode; action: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border py-3 first:border-t-0 first:pt-0">
-      <div className="min-w-0 max-w-[52ch]">
-        <p className="text-sm font-medium text-ink">{title}</p>
-        <p className="text-[13px] text-ink-muted">{body}</p>
-      </div>
-      {action}
-    </div>
-  );
-}
-
 export default function DeviceDetailPage() {
   const { deviceId } = useParams<{ deviceId: string }>();
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const api = useApi();
-  const toast = useToast();
-  const { confirm, dialog } = useConfirm();
   const { can } = usePermissions();
   const canWrite = can("devices.write");
 
@@ -220,34 +170,6 @@ export default function DeviceDetailPage() {
   const metrics = template?.metrics ?? [];
   const hasReadings = (latest?.length ?? 0) > 0;
 
-  async function toggleStatus() {
-    const next = device!.status === "active" ? "disabled" : "active";
-    try {
-      await api.patch(`/devices/${deviceId}`, { status: next });
-      await mutate();
-      void revalidate("/devices");
-      toast({ title: next === "active" ? `${device!.name} enabled` : `${device!.name} disabled` });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't update the device", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
-  }
-
-  async function remove() {
-    const ok = await confirm("Its credential stops working and its telemetry history is removed.", {
-      title: `Delete ${device!.name}?`,
-      confirmLabel: "Delete device",
-    });
-    if (!ok) return;
-    try {
-      await api.delete(`/devices/${deviceId}`);
-      void revalidate("/devices");
-      toast({ title: `${device!.name} deleted` });
-      router.push("/devices");
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete the device", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
-  }
-
   const tabs: TabItem[] = [
     { id: "overview", label: "Overview" },
     { id: "controls", label: "Controls", count: actuators.length },
@@ -259,7 +181,7 @@ export default function DeviceDetailPage() {
     zone && (
       <span key="z">
         Zone{" "}
-        <Link href={`/zones?edit=${zone.id}`} className="text-accent hover:underline">
+        <Link href={`/zones?peek=${zone.id}`} className="text-accent hover:underline">
           {zone.name}
         </Link>
       </span>
@@ -267,7 +189,7 @@ export default function DeviceDetailPage() {
     template && (
       <span key="t">
         Template{" "}
-        <Link href={`/templates?edit=${template.id}`} className="text-accent hover:underline">
+        <Link href={`/templates?peek=${template.id}`} className="text-accent hover:underline">
           {template.name}
         </Link>
       </span>
@@ -309,10 +231,12 @@ export default function DeviceDetailPage() {
                   Connect device
                 </Link>
               )}
-              <Link href={`/devices?edit=${deviceId}`} className={buttonClassName({ variant: "secondary" })}>
-                <Pencil aria-hidden size={15} />
-                Edit device
-              </Link>
+              {tab !== "settings" && (
+                <Button variant="secondary" onClick={() => setTab("settings")}>
+                  <Pencil aria-hidden size={15} />
+                  Edit device
+                </Button>
+              )}
             </>
           ) : undefined
         }
@@ -376,70 +300,10 @@ export default function DeviceDetailPage() {
       </TabPanel>
 
       <TabPanel id="settings" active={tab}>
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card>
-            <h2 className="mb-3 text-base font-semibold text-ink">Credentials and firmware</h2>
-            <SettingRow
-              title="Device credential"
-              body={
-                <>
-                  MQTT username <code className="font-mono">{device.id}</code>. Stored as an argon2id hash, so a new one is shown once.
-                </>
-              }
-              action={
-                canWrite ? (
-                  <Link href={`/devices/${deviceId}/connect`} className={buttonClassName({ variant: "secondary" })}>
-                    <KeyRound aria-hidden size={14} />
-                    Rotate credential
-                  </Link>
-                ) : null
-              }
-            />
-            <SettingRow
-              title="Firmware"
-              body="A ready-to-flash sketch for this device, built from its template. Getting it rotates the credential."
-              action={
-                canWrite ? (
-                  <Link href={`/devices/${deviceId}/connect`} className={buttonClassName({ variant: "secondary" })}>
-                    <Cpu aria-hidden size={14} />
-                    Get firmware
-                  </Link>
-                ) : null
-              }
-            />
-          </Card>
-          {canWrite && (
-            <Card>
-              <h2 className="mb-3 text-base font-semibold text-ink">Manage device</h2>
-              <SettingRow
-                title={device.status === "active" ? "Disable device" : "Enable device"}
-                body={device.status === "active" ? "Rules stop evaluating it. Telemetry is still stored." : "Rules evaluate it again from the next reading."}
-                action={
-                  <Button variant="secondary" onClick={() => void toggleStatus()}>
-                    <Power aria-hidden size={14} />
-                    {device.status === "active" ? "Disable" : "Enable"}
-                  </Button>
-                }
-              />
-              <SettingRow
-                title="Delete device"
-                body="Revokes its credential and removes its telemetry history."
-                action={
-                  <Button variant="danger" onClick={() => void remove()}>
-                    <Trash2 aria-hidden size={14} />
-                    Delete…
-                  </Button>
-                }
-              />
-            </Card>
-          )}
-          <Card className="lg:col-span-2">
-            <h2 className="mb-3 text-base font-semibold text-ink">MQTT topics</h2>
-            <DeviceTopics device={device} template={template} />
-          </Card>
-        </div>
+        {/* The one place a device is edited (DESIGN.md §7): General, rule evaluation,
+            template, connection and the danger zone, as stacked cards. */}
+        <DeviceEditor deviceId={deviceId} embedded />
       </TabPanel>
-      {dialog}
     </div>
   );
 }

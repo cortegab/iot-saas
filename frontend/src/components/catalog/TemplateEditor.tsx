@@ -64,18 +64,12 @@ const CONTROL_LABEL = { bool: "On/off switch", float: "Level (number)", string: 
 export function TemplateEditor({
   entryId,
   duplicateOf,
-  mode,
-  onClose,
-  expandHref,
-  dockHref,
+  mode = "page",
 }: {
   /** null = new template. */
   entryId: string | null;
   duplicateOf?: string | null;
-  mode: EditorMode;
-  onClose?: () => void;
-  expandHref?: string;
-  dockHref?: string;
+  mode?: EditorMode;
 }) {
   const api = useApi();
   const router = useRouter();
@@ -99,15 +93,11 @@ export function TemplateEditor({
   const otherNames = useMemo(() => (all ?? []).filter((e) => e.id !== entryId).map((e) => e.name), [all, entryId]);
   const validate = useCallback((d: TemplateDraft) => validateTemplate(d, { otherNames, usage }), [otherNames, usage]);
   const editor = useRecordEditor({ source: initial, isNew, validate });
-  const { confirmLeave, dialog: guardDialog } = useUnsavedGuard(editor.dirty, entry?.name ?? "this template");
+  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, entry?.name ?? "this template");
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [allOpen, setAllOpen] = useState<{ metrics: boolean | null; actuators: boolean | null }>({ metrics: null, actuators: null });
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
-
-  const close = useCallback(async () => {
-    if (await confirmLeave()) onClose?.();
-  }, [confirmLeave, onClose]);
 
   if (error) {
     return (
@@ -180,7 +170,7 @@ export function TemplateEditor({
             if (!draft.enabled) await api.patch(`/catalog/${created.id}`, { status: "disabled" });
             void revalidate("/catalog");
             toast({ title: "Template created", detail: `${created.name} is ${draft.enabled ? "available in Add device" : "disabled"}.` });
-            router.replace(mode === "page" ? `/templates/${created.id}` : `/templates?edit=${created.id}`);
+            router.replace(`/templates/${created.id}`);
           } else {
             await api.patch(`/catalog/${entryId}`, {
               ...body,
@@ -367,9 +357,6 @@ export function TemplateEditor({
         saveLabel={isNew ? "Create template" : "Save"}
         onSave={onSave}
         onDiscard={editor.discard}
-        onClose={onClose ? () => void close() : undefined}
-        expandHref={expandHref}
-        dockHref={dockHref}
         headerActions={
           !isNew && !readOnly ? (
             <Button variant="secondary" size="sm" className="max-md:hidden" onClick={() => router.push(`/templates/new?duplicate=${entryId}`)}>

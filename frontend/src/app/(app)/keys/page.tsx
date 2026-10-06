@@ -1,60 +1,44 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Ban, Copy, Eye, KeyRound, Lock, Plus } from "lucide-react";
-import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { Dialog } from "@/components/ui/Dialog";
+import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { SecretReveal } from "@/components/ui/SecretReveal";
 import { useToast } from "@/components/ui/Toast";
 import { DataTable, NameCell, type DataColumn } from "@/components/list/DataTable";
 import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/ListToolbar";
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
-import { SplitView } from "@/components/editor/SplitView";
-import { KeyEditor } from "@/components/keys/KeyEditor";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
+import { KeyPeek } from "@/components/keys/KeyPeek";
+import { useRevokeKey } from "@/components/keys/useRevokeKey";
+import { usePeek } from "@/components/list/usePeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { KEY_STATUS_LABEL, KEY_STATUS_TONE, keyStatus, type ApiKey } from "@/lib/api-key-status";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, timeAgo } from "@/lib/time-ago";
-import type { components } from "@/types/api";
-
-type ApiKeyCreateResponse = components["schemas"]["ApiKeyCreateResponse"];
 
 /** API keys (DESIGN.md §6/§8): Key · Role · Last used · Expires · Status.
- * Created once with a one-time secret, then read-only until revoked. */
+ * A row peeks; keys are created on /keys/new (the one-time secret) and are
+ * read-only on /keys/{id} until revoked. */
 export default function KeysPage() {
-  const api = useApi();
   const router = useRouter();
-  const pathname = usePathname();
-  const params = useSearchParams();
   const toast = useToast();
-  const { confirm, dialog } = useConfirm();
+  const { revoke, dialog } = useRevokeKey();
   const { can } = usePermissions();
   const canManage = can("keys.manage");
   const { data: keys, error, isLoading, mutate } = useApiSWR<ApiKey[]>(canManage ? "/api-keys" : null);
   const list = useListState({ show: "active" }, { key: "created", dir: "desc" });
-  const [secret, setSecret] = useState<ApiKeyCreateResponse | null>(null);
-
-  const editId = params.get("edit");
-  function setEditId(id: string | null) {
-    const next = new URLSearchParams(params.toString());
-    if (id) next.set("edit", id);
-    else next.delete("edit");
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
 
   const counts = useMemo(() => {
     const c = { active: 0, inactive: 0, all: keys?.length ?? 0 };
@@ -74,26 +58,24 @@ export default function KeysPage() {
   }, [keys, list.filters.show, list.q, list.sort]);
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
 
-  async function revoke(k: ApiKey) {
-    const ok = await confirm(
-      <>
-        Requests using <code className="font-mono">{k.key_prefix}…</code> fail from now on. Last used{" "}
-        {k.last_used_at ? timeAgo(k.last_used_at) : "never"}.
-      </>,
-      { title: `Revoke ${k.name}?`, confirmLabel: "Revoke key" },
-    );
-    if (!ok) return;
-    try {
-      await api.delete(`/api-keys/${k.id}`);
-      await mutate();
-      toast({ title: "Key revoked", detail: k.name });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't revoke the key", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
-  }
+  const peek = usePeek({ rows: pageRows, rowKey: (k) => k.id, pageHref: (id) => `/keys/${id}`, newHref: "/keys/new" });
 
   const columns: DataColumn<ApiKey>[] = [
-    { id: "name", header: "Key", sortable: true, cell: (k) => <NameCell name={k.name} sub={<span className="font-mono">{k.key_prefix}…</span>} /> },
+    {
+      id: "name",
+      header: "Key",
+      sortable: true,
+      cell: (k) => (
+        <NameCell
+          name={
+            <Link href={`/keys/${k.id}`} className="hover:underline hover:underline-offset-[3px]">
+              {k.name}
+            </Link>
+          }
+          sub={<span className="font-mono">{k.key_prefix}…</span>}
+        />
+      ),
+    },
     {
       id: "role",
       header: "Role",
@@ -116,7 +98,7 @@ export default function KeysPage() {
 
   const rowMenu = (k: ApiKey): DropdownMenuItem[][] => [
     [
-      { label: "Open", icon: <Eye size={15} />, onClick: () => setEditId(k.id) },
+      { label: "Open", icon: <Eye size={15} />, onClick: () => router.push(`/keys/${k.id}`) },
       {
         label: "Copy prefix",
         icon: <Copy size={15} />,
@@ -142,10 +124,10 @@ export default function KeysPage() {
   const chips: FilterChip[] = list.q ? [{ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") }] : [];
   const total = keys?.length ?? 0;
   const newButton = (
-    <Button onClick={() => setEditId("new")}>
+    <Link href="/keys/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
       New API key
-    </Button>
+    </Link>
   );
 
   return (
@@ -156,23 +138,13 @@ export default function KeysPage() {
       ) : isLoading || !keys ? (
         <TableSkeleton rows={3} columns={5} />
       ) : (
-        <SplitView
-          editorLabel={editId === "new" ? "New API key" : "API key"}
-          onClose={() => setEditId(null)}
-          editor={
-            editId
-              ? (mode) => (
-                  <KeyEditor
-                    key={editId}
-                    keyId={editId === "new" ? null : editId}
-                    mode={mode}
-                    onClose={() => setEditId(null)}
-                    onCreated={(result) => {
-                      setSecret(result);
-                      setEditId(result.api_key.id);
-                    }}
-                  />
-                )
+        <ListWithPeek
+          label="API key"
+          onClose={peek.close}
+          nav={peek.nav}
+          peek={
+            peek.peekId
+              ? <KeyPeek apiKey={keys.find((k) => k.id === peek.peekId)} onClose={peek.close} />
               : null
           }
         >
@@ -212,10 +184,11 @@ export default function KeysPage() {
                     rowKey={(k) => k.id}
                     sort={list.sort}
                     onSort={list.toggleSort}
-                    onRowClick={(k) => setEditId(k.id)}
+                    onRowClick={peek.onRowClick}
+                    onRowEnter={peek.onRowEnter}
                     rowMenu={rowMenu}
                     rowMenuLabel={(k) => `Actions for ${k.name}`}
-                    currentKey={editId}
+                    currentKey={peek.peekId}
                     rowClassName={(k) => (keyStatus(k) === "active" ? undefined : "opacity-60")}
                   />
                   <TableFooter
@@ -232,22 +205,8 @@ export default function KeysPage() {
               )}
             </>
           )}
-        </SplitView>
+        </ListWithPeek>
       )}
-      <Dialog open={secret != null} onClose={() => undefined} title="Your new API key">
-        {secret && (
-          <SecretReveal
-            fields={[{ label: "API key", value: secret.key, secret: true }]}
-            title={
-              <>
-                Copy it now. We store only a hash, so <strong>{secret.api_key.name}</strong> can&apos;t be shown again.
-              </>
-            }
-            requireAcknowledge
-            onDismiss={() => setSecret(null)}
-          />
-        )}
-      </Dialog>
       {dialog}
     </>
   );

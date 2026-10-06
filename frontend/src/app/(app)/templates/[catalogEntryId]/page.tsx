@@ -14,8 +14,8 @@ export default function TemplatePage() {
   const { data: entry } = useApiSWR<CatalogEntryResponse>(`/catalog/${catalogEntryId}`);
   return (
     <>
-      <Breadcrumbs crumbs={[{ label: "Device templates", href: "/templates" }, { label: entry?.name ?? "Template" }]} />
-      <TemplateEditor key={catalogEntryId} entryId={catalogEntryId} mode="page" dockHref={`/templates?edit=${catalogEntryId}`} />
+      <Breadcrumbs crumbs={[{ label: "Device templates", href: `/templates?peek=${catalogEntryId}` }, { label: entry?.name ?? "Template" }]} />
+      <TemplateEditor key={catalogEntryId} entryId={catalogEntryId} />
     </>
   );
 }

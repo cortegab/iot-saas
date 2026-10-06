@@ -26,6 +26,9 @@ import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { LadderOverview } from "@/components/rules/ladder/LadderOverview";
+import { RulePeek } from "@/components/rules/RulePeek";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
+import { usePeek } from "@/components/list/usePeek";
 import { RulesTabs } from "@/components/rules/RulesTabs";
 import { ApiRequestError } from "@/lib/api-client";
 import { actionsText, ruleStateKey, sharedActuators, triggerText, type RuleStateKey } from "@/lib/rule-text";
@@ -103,6 +106,8 @@ export default function RulesPage() {
   }, [rules, list.filters, list.q, list.sort]);
 
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
+  // A row peeks (DESIGN.md §7); a rule is edited on /rules/{id}.
+  const peek = usePeek({ rows: pageRows, rowKey: (r) => r.id, pageHref: (id) => `/rules/${id}`, newHref: "/rules/new" });
 
   // A rule's device pages cache their rules under `/devices/{id}/rules`.
   function afterChange(rule: RuleResponse) {
@@ -124,18 +129,21 @@ export default function RulesPage() {
     }
   }
 
-  async function remove(rule: RuleResponse) {
+  /** Resolves true once the rule is deleted. */
+  async function remove(rule: RuleResponse): Promise<boolean> {
     const ok = await confirm(
       "It stops evaluating immediately. Actuators keep their current state. This can't be undone; to pause it instead, disable it.",
       { title: `Delete ${rule.name}?`, confirmLabel: "Delete rule" },
     );
-    if (!ok) return;
+    if (!ok) return false;
     try {
       await api.delete(`/rules/${rule.id}`);
       afterChange(rule);
       toast({ title: `${rule.name} deleted` });
+      return true;
     } catch (err) {
       toast({ tone: "error", title: "Couldn't delete the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
+      return false;
     }
   }
 
@@ -315,6 +323,25 @@ export default function RulesPage() {
           ) : list.filters.view === "ladder" ? (
             <LadderOverview rules={filtered} />
           ) : (
+            <ListWithPeek
+              label="Rule"
+              onClose={peek.close}
+              nav={peek.nav}
+              peek={
+                peek.peekId
+                  ? (
+                      <RulePeek
+                        rule={rules.find((r) => r.id === peek.peekId)}
+                        activity={activityByRule.get(peek.peekId!)}
+                        shares={shared.get(peek.peekId!)}
+                        onClose={peek.close}
+                        onToggle={(r) => void setEnabled(r, !r.enabled)}
+                        onDelete={(r) => void remove(r).then((gone) => gone && peek.close())}
+                      />
+                    )
+                  : null
+              }
+            >
             <div className="flex flex-col gap-2">
               <DataTable
                 label="Rules"
@@ -323,7 +350,9 @@ export default function RulesPage() {
                 rowKey={(r) => r.id}
                 sort={list.sort}
                 onSort={list.toggleSort}
-                onRowClick={(r) => router.push(`/rules/${r.id}`)}
+                onRowClick={peek.onRowClick}
+                onRowEnter={peek.onRowEnter}
+                currentKey={peek.peekId}
                 rowMenu={rowMenu}
                 rowMenuLabel={(r) => `Actions for ${r.name}`}
                 rowClassName={(r) => (r.enabled ? undefined : "[&>td]:opacity-60")}
@@ -339,6 +368,7 @@ export default function RulesPage() {
                 onPageSize={list.setPageSize}
               />
             </div>
+            </ListWithPeek>
           )}
         </>
       )}

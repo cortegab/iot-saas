@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Boxes, Copy, Cpu, Pencil, Plus, Power, SquareArrowOutUpRight, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Boxes, Copy, Cpu, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -20,8 +20,9 @@ import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/Lis
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
-import { TemplateEditor } from "@/components/catalog/TemplateEditor";
-import { SplitView } from "@/components/editor/SplitView";
+import { TemplatePeek } from "@/components/catalog/TemplatePeek";
+import { usePeek } from "@/components/list/usePeek";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
@@ -56,17 +57,6 @@ export default function DeviceTemplatesPage() {
   const { data: entries, error, isLoading, mutate } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const list = useListState({ status: "all" }, { key: "name", dir: "asc" });
 
-  // `?edit=<id>` docks the template editor beside the list (DESIGN.md §7).
-  const params = useSearchParams();
-  const pathname = usePathname();
-  const editId = params.get("edit");
-  function setEditId(id: string | null) {
-    const next = new URLSearchParams(params.toString());
-    if (id) next.set("edit", id);
-    else next.delete("edit");
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }
 
   const counts = useMemo(() => {
     const c = { all: entries?.length ?? 0, active: 0, disabled: 0 };
@@ -88,6 +78,8 @@ export default function DeviceTemplatesPage() {
   }, [entries, list.filters, list.q, list.sort]);
 
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
+  // A row peeks (DESIGN.md §7); a template is edited on /templates/{id}.
+  const peek = usePeek({ rows: pageRows, rowKey: (e) => e.id, pageHref: (id) => `/templates/${id}`, newHref: "/templates/new" });
 
   async function setEnabled(e: CatalogEntryResponse, enabled: boolean) {
     try {
@@ -102,7 +94,8 @@ export default function DeviceTemplatesPage() {
     }
   }
 
-  async function remove(e: CatalogEntryResponse) {
+  /** Resolves true once the template is deleted. */
+  async function remove(e: CatalogEntryResponse): Promise<boolean> {
     // DESIGN.md §7: delete is blocked, with an explanation and a way out, while in use.
     if (e.device_count > 0) {
       const n = e.device_count;
@@ -111,22 +104,24 @@ export default function DeviceTemplatesPage() {
         `${plural(n, "device uses", "devices use")} this template, so it can't be deleted. Move ${n > 1 ? "them" : "it"} to another template or delete ${n > 1 ? "them" : "it"} first${disable ? ", or disable the template so it can't be picked for new devices" : ""}.`,
         { title: `${e.name} is in use`, confirmLabel: disable ? "Disable instead" : "View devices", cancelLabel: "Close", danger: false },
       );
-      if (!go) return;
+      if (!go) return false;
       if (disable) await setEnabled(e, false);
       else router.push(`/devices?template=${e.id}`);
-      return;
+      return false;
     }
     const ok = await confirm("No devices use it. This can't be undone.", {
       title: `Delete ${e.name}?`,
       confirmLabel: "Delete template",
     });
-    if (!ok) return;
+    if (!ok) return false;
     try {
       await api.delete(`/catalog/${e.id}`);
       await mutate();
       toast({ title: `${e.name} deleted` });
+      return true;
     } catch (err) {
       toast({ tone: "error", title: "Couldn't delete the template", detail: err instanceof ApiRequestError ? err.message : undefined });
+      return false;
     }
   }
 
@@ -172,8 +167,7 @@ export default function DeviceTemplatesPage() {
   const rowMenu = (e: CatalogEntryResponse): DropdownMenuItem[][] => {
     const groups: DropdownMenuItem[][] = [
       [
-        { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => setEditId(e.id) },
-        { label: "Open full page", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/templates/${e.id}`) },
+        { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => router.push(`/templates/${e.id}`) },
         { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${e.id}`) },
       ],
     ];
@@ -231,18 +225,18 @@ export default function DeviceTemplatesPage() {
           readOnlyNote="Ask an admin to create one."
         />
       ) : (
-        <SplitView
-          editorLabel="Edit device template"
-          onClose={() => setEditId(null)}
-          editor={
-            editId
-              ? (mode) => (
-                  <TemplateEditor
-                    key={editId}
-                    entryId={editId}
-                    mode={mode}
-                    onClose={() => setEditId(null)}
-                    expandHref={`/templates/${editId}`}
+        <ListWithPeek
+          label="Device template"
+          onClose={peek.close}
+          nav={peek.nav}
+          peek={
+            peek.peekId
+              ? (
+                  <TemplatePeek
+                    entry={entries.find((e) => e.id === peek.peekId)}
+                    onClose={peek.close}
+                    onToggle={(e) => void setEnabled(e, e.status !== "active")}
+                    onDelete={(e) => void remove(e).then((gone) => gone && peek.close())}
                   />
                 )
               : null
@@ -275,11 +269,12 @@ export default function DeviceTemplatesPage() {
                 rowKey={(e) => e.id}
                 sort={list.sort}
                 onSort={list.toggleSort}
-                onRowClick={(e) => setEditId(e.id)}
+                onRowClick={peek.onRowClick}
+                onRowEnter={peek.onRowEnter}
                 rowMenu={rowMenu}
                 rowMenuLabel={(e) => `Actions for ${e.name}`}
                 rowClassName={(e) => (e.status === "disabled" ? "[&>td]:opacity-60" : undefined)}
-                currentKey={editId}
+                currentKey={peek.peekId}
               />
               <TableFooter
                 shown={filtered.length}
@@ -293,7 +288,7 @@ export default function DeviceTemplatesPage() {
               />
             </div>
           )}
-        </SplitView>
+        </ListWithPeek>
       )}
       {dialog}
     </>
