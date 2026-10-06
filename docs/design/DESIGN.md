@@ -323,7 +323,8 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
   - **Validation:** blocking = incomplete trigger, conditions or actions, a clear notification with no
     message, a name over 200 characters; Save goes to the first one. Safety warnings (hold < 5 s,
     interval < 30 s, no hysteresis on a hardware rule) show while typing and in the checks, and never
-    block a save.
+    block a save. In the Checks card a blocking problem is a red ✕ and a safety warning the amber
+    circled "!" the rail uses; never a red ✕ for something that only warns.
   - Saving keeps you on the rule; a new rule opens on its own page.
 - **Tabs:** **Logic · Activity**. There is no Simulate tab; simulating is part of the preview.
 - **Form / Ladder** is a segmented control; Ladder is tagged "expert". The choice is remembered per
@@ -580,3 +581,4 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-03 | §5 **Trend chart** row added, Readout row extended: on/off metrics are step lines on an Off / On axis on the device page and in dashboard widgets (they used to ramp between readings), with no threshold line; aggregated ranges show "On at any point in the minute/hour" and break the line where the state is unknown. A trend chart widget accepts on/off metrics, but a gauge takes only numbers. One value formatter everywhere ("On"/"Off", not "on"/"off") and template names, not wire keys, in chart pickers and legends. |
 | 2026-10-03 | §7 **one record menu, three places**: row ⋯, peek ⋯ and page ⋯ offer the same actions in the same words, naming the action only ("Delete…", not "Delete zone…" / "Delete device…"; "View devices", not "View its devices"). The zones list row menu gains Delete…, which it lacked. A blocked delete is still offered, with the usage count as its hint (zones now match templates). |
 | 2026-10-06 | §10 landing: the Product title drops "babysit" ("Everything an operator needs, running without supervision."). Onboarding gets a **journey figure** that illustrates its own four steps (workspace · template · sketch · device online) and highlights the step it shows; the **control-loop log**, which shows what happens after onboarding, moves to How it works as the hot path in action. Step 3 says Wi-Fi is set up from a phone with a QR code (Espressif provisioning), not "over BLE". |
+| 2026-10-06 | §9.2 Checks card: a safety check that isn't met (hold < 5 s, interval < 30 s, no hysteresis on a hardware rule) shows the **amber circled "!"**, the rail's warning mark, instead of the red ✕, which is kept for problems that block saving (incomplete conditions or actions). Screen readers hear "warning" or "needs fixing". |
