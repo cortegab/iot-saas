@@ -14,6 +14,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { KpiStrip } from "@/components/ui/KpiStrip";
+import { MiniStrip, type StripCell } from "@/components/ui/MiniStrip";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -25,12 +26,16 @@ import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { LadderOverview } from "@/components/rules/ladder/LadderOverview";
+import { RulePeek } from "@/components/rules/RulePeek";
+import { ListWithPeek } from "@/components/list/ListWithPeek";
+import { usePeek } from "@/components/list/usePeek";
 import { RulesTabs } from "@/components/rules/RulesTabs";
 import { ApiRequestError } from "@/lib/api-client";
 import { actionsText, ruleStateKey, sharedActuators, triggerText, type RuleStateKey } from "@/lib/rule-text";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
+type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
 
 const STATE: Record<RuleStateKey, { label: string; tone: "online" | "pending" | "unknown"; shape: "solid" | "square" }> = {
   armed: { label: "Armed", tone: "online", shape: "solid" },
@@ -67,6 +72,9 @@ export default function RulesPage() {
   const list = useListState({ state: "all", device: "all", view: "list" }, { key: "name", dir: "asc" });
 
   const shared = useMemo(() => sharedActuators(rules ?? []), [rules]);
+  // The mini strips; rule_execution frames revalidate rules, this follows.
+  const { data: activity } = useApiSWR<RuleActivityResponse[]>("/rules/activity", { refreshInterval: 60_000 });
+  const activityByRule = useMemo(() => new Map((activity ?? []).map((a) => [a.rule_id, a])), [activity]);
 
   const deviceOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -98,6 +106,8 @@ export default function RulesPage() {
   }, [rules, list.filters, list.q, list.sort]);
 
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
+  // A row peeks (DESIGN.md §7); a rule is edited on /rules/{id}.
+  const peek = usePeek({ rows: pageRows, rowKey: (r) => r.id, pageHref: (id) => `/rules/${id}`, newHref: "/rules/new" });
 
   // A rule's device pages cache their rules under `/devices/{id}/rules`.
   function afterChange(rule: RuleResponse) {
@@ -119,18 +129,21 @@ export default function RulesPage() {
     }
   }
 
-  async function remove(rule: RuleResponse) {
+  /** Resolves true once the rule is deleted. */
+  async function remove(rule: RuleResponse): Promise<boolean> {
     const ok = await confirm(
       "It stops evaluating immediately. Actuators keep their current state. This can't be undone; to pause it instead, disable it.",
       { title: `Delete ${rule.name}?`, confirmLabel: "Delete rule" },
     );
-    if (!ok) return;
+    if (!ok) return false;
     try {
       await api.delete(`/rules/${rule.id}`);
       afterChange(rule);
       toast({ title: `${rule.name} deleted` });
+      return true;
     } catch (err) {
       toast({ tone: "error", title: "Couldn't delete the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
+      return false;
     }
   }
 
@@ -170,6 +183,27 @@ export default function RulesPage() {
       cell: (r) => <code className="font-mono text-xs text-ink">{triggerText(r)}</code>,
     },
     { id: "action", header: "Then", hideOnPhone: true, cell: (r) => <span className="text-ink">{actionsText(r.actions)}</span> },
+    {
+      id: "activity",
+      header: "Last 24 h",
+      hideOnPhone: true,
+      cell: (r) => {
+        // Schedule rules fire on their schedule; the strip would say nothing.
+        if (r.trigger.type === "schedule") return <span className="text-xs text-ink-muted">{triggerText(r)}</span>;
+        const a = activityByRule.get(r.id);
+        if (!a) return <span className="text-xs text-ink-muted">—</span>;
+        // The current cell shows today's health: stale inputs are unknown
+        // (hatched), never "idle".
+        const cells: StripCell[] = [...a.cells];
+        if (r.enabled && !r.health.evaluatable && cells.length > 0 && cells[cells.length - 1] === "idle") cells[cells.length - 1] = "unknown";
+        return (
+          <span className="flex flex-col gap-1">
+            <MiniStrip cells={cells} label={`Fired ${a.fired} time${a.fired === 1 ? "" : "s"} in 24 h`} />
+            <span className="text-[11.5px] text-ink-muted">{a.fired ? `fired ${a.fired}× in 24 h` : "quiet in 24 h"}</span>
+          </span>
+        );
+      },
+    },
     {
       id: "state",
       header: "State",
@@ -289,6 +323,25 @@ export default function RulesPage() {
           ) : list.filters.view === "ladder" ? (
             <LadderOverview rules={filtered} />
           ) : (
+            <ListWithPeek
+              label="Rule"
+              onClose={peek.close}
+              nav={peek.nav}
+              peek={
+                peek.peekId
+                  ? (
+                      <RulePeek
+                        rule={rules.find((r) => r.id === peek.peekId)}
+                        activity={activityByRule.get(peek.peekId!)}
+                        shares={shared.get(peek.peekId!)}
+                        onClose={peek.close}
+                        onToggle={(r) => void setEnabled(r, !r.enabled)}
+                        onDelete={(r) => void remove(r).then((gone) => gone && peek.close())}
+                      />
+                    )
+                  : null
+              }
+            >
             <div className="flex flex-col gap-2">
               <DataTable
                 label="Rules"
@@ -297,7 +350,9 @@ export default function RulesPage() {
                 rowKey={(r) => r.id}
                 sort={list.sort}
                 onSort={list.toggleSort}
-                onRowClick={(r) => router.push(`/rules/${r.id}`)}
+                onRowClick={peek.onRowClick}
+                onRowEnter={peek.onRowEnter}
+                currentKey={peek.peekId}
                 rowMenu={rowMenu}
                 rowMenuLabel={(r) => `Actions for ${r.name}`}
                 rowClassName={(r) => (r.enabled ? undefined : "[&>td]:opacity-60")}
@@ -313,6 +368,7 @@ export default function RulesPage() {
                 onPageSize={list.setPageSize}
               />
             </div>
+            </ListWithPeek>
           )}
         </>
       )}

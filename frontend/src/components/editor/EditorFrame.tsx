@@ -1,9 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import Link from "next/link";
-import { AlertCircle, Check, Eye, Maximize2, PanelRight, X } from "lucide-react";
-import { Button, IconButton, buttonClassName } from "@/components/ui/Button";
+import { AlertCircle, Check, Eye, X } from "lucide-react";
+import { Button, IconButton } from "@/components/ui/Button";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
@@ -49,12 +48,12 @@ export interface EditorFrameProps {
   onSave: () => Promise<boolean>;
   onDiscard: () => void;
   onClose?: () => void;
-  /** Dock/drawer: link to the full page. Page: link back beside the list. */
-  expandHref?: string;
-  dockHref?: string;
   menu?: DropdownMenuItem[][];
   /** Extra header buttons (e.g. Duplicate). */
   headerActions?: ReactNode;
+  /** Page mode inside another page (a record page's Settings tab): no title
+   * block, menu or rail — the host page has them; fields and save bar only. */
+  headless?: boolean;
   children: ReactNode;
 }
 
@@ -64,18 +63,32 @@ export function EditorSection({
   title,
   lead,
   actions,
+  card = false,
+  tone,
   children,
 }: {
   id: string;
   title: ReactNode;
   lead?: ReactNode;
   actions?: ReactNode;
+  /** A bordered card (stacked settings, e.g. a device's Settings tab). */
+  card?: boolean;
+  /** "danger": the red-outlined Danger zone, always last. */
+  tone?: "danger";
   children: ReactNode;
 }) {
   return (
-    <section id={`ps-${id}`} data-editor-section={id} className="flex scroll-mt-6 flex-col gap-3">
+    <section
+      id={`ps-${id}`}
+      data-editor-section={id}
+      className={cn(
+        "flex scroll-mt-6 flex-col gap-3",
+        card && "rounded-xl border border-border bg-surface p-5 shadow-card",
+        tone === "danger" && "border-status-error/45",
+      )}
+    >
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{title}</h3>
+        <h3 className={cn("text-[15px] font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{title}</h3>
         {actions}
       </div>
       {lead && <p className="-mt-1.5 max-w-[64ch] text-[13.5px] text-ink-muted">{lead}</p>}
@@ -106,10 +119,9 @@ export function EditorFrame({
   onSave,
   onDiscard,
   onClose,
-  expandHref,
-  dockHref,
   menu,
   headerActions,
+  headless = false,
   children,
 }: EditorFrameProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -229,10 +241,10 @@ export function EditorFrame({
     </>
   );
 
-  const showRail = mode === "page" && sections.length > 1;
-  const showJump = sections.length > 1;
+  const showRail = mode === "page" && !headless && sections.length > 1;
+  const showJump = !headless && sections.length > 1;
 
-  const head = (
+  const head = headless ? null : (
     <div
       className={cn(
         "flex shrink-0 items-start gap-2.5 max-md:flex-col max-md:items-stretch",
@@ -259,22 +271,6 @@ export function EditorFrame({
       <div className="flex shrink-0 items-center gap-1 max-md:order-first max-md:justify-end">
         {headerActions}
         {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
-        {mode !== "page" && expandHref && (
-          <Link
-            href={expandHref}
-            aria-label="Expand to full page"
-            title="Expand to full page"
-            className="hidden h-[30px] w-[30px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink shell:inline-grid"
-          >
-            <Maximize2 aria-hidden size={16} />
-          </Link>
-        )}
-        {mode === "page" && dockHref && (
-          <Link href={dockHref} className={cn(buttonClassName({ variant: "secondary", size: "sm" }), "hidden shell:inline-flex")}>
-            <PanelRight aria-hidden size={14} />
-            Show beside list
-          </Link>
-        )}
         {onClose && (
           <IconButton aria-label={`Close ${noun} editor`} onClick={onClose}>
             <X size={18} />
@@ -381,8 +377,12 @@ export function EditorFrame({
       ref={bodyRef}
       className={cn(
         // @container: editor bodies lay out by their own width (dock vs page).
-        "@container flex flex-col gap-7",
-        mode === "page" ? "max-w-[980px] py-6 [grid-area:body] wb:pt-2" : "min-h-0 flex-1 overflow-auto px-5 pb-8 pt-5",
+        "@container flex flex-col",
+        headless
+          ? "max-w-[760px] gap-4 pb-4"
+          : mode === "page"
+            ? "max-w-[980px] gap-7 py-6 [grid-area:body] wb:pt-2"
+            : "min-h-0 flex-1 gap-7 overflow-auto px-5 pb-8 pt-5",
       )}
     >
       {readOnly && readOnlyNote !== false && (
@@ -395,11 +395,16 @@ export function EditorFrame({
     </div>
   );
 
-  const foot = !readOnly && (
+  // Inside a host page the bar only appears when there is something to save.
+  const showFoot = !readOnly && (!headless || status.dirty || status.saving || issues > 0);
+  const foot = showFoot && (
     <div
       className={cn(
         "flex shrink-0 flex-wrap items-center gap-2.5 border-t border-border",
-        mode === "page"
+        // Inside a host page (a Settings tab): a floating bar within the column.
+        headless
+          ? "sticky bottom-3 z-[6] max-w-[760px] rounded-xl border bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-[10px] motion-safe:animate-[toastin_.15s_ease-out]"
+          : mode === "page"
           ? "sticky bottom-0 z-[6] -mx-4 bg-surface/92 px-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-[10px] [grid-area:foot] md:-mx-10 md:px-10"
           : "bg-surface px-5 py-3",
       )}
@@ -435,7 +440,8 @@ export function EditorFrame({
       <div
         ref={rootRef}
         className={cn(
-          "-mb-[110px] flex flex-col",
+          "flex flex-col",
+          !headless && "-mb-[110px]",
           showRail && "wb:grid wb:grid-cols-[230px_minmax(0,1fr)] wb:items-start wb:gap-x-9 wb:[grid-template-areas:'head_head''rail_body''foot_foot']",
         )}
       >

@@ -12,7 +12,7 @@ are still accepted).
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -26,14 +26,17 @@ from app.rules.schemas import (
     ActionExecutionResponse,
     ConditionNode,
     DeviceRuleCreateRequest,
+    DraftSimulateRequest,
     ExecutionPolicy,
     FailedActionResponse,
+    RuleActivityResponse,
     RuleCreateRequest,
     RuleDeviceRef,
     RuleExecutionResponse,
     RuleHealth,
     RuleResponse,
     RuleUpdateRequest,
+    RuleVersionResponse,
     SimulateRequest,
     SimulateResponse,
 )
@@ -149,6 +152,7 @@ async def create_rule(
             clear_actions=[a.model_dump(mode="json") for a in body.clear_actions],
             editor_graph=body.editor_graph,
             enabled=body.enabled,
+            author_id=ctx.user_id,
         )
     except service.RuleValidationError as exc:
         raise HTTPException(
@@ -182,6 +186,7 @@ async def create_device_rule(
                 else None
             ),
             enabled=body.enabled,
+            author_id=ctx.user_id,
         )
     except service.RuleValidationError as exc:
         raise HTTPException(
@@ -212,6 +217,49 @@ async def list_failed_actions(
             created_at=row.created_at,
         )
         for row in rows
+    ]
+
+
+@router.post("/rules/simulate", response_model=SimulateResponse)
+async def simulate_draft(
+    body: DraftSimulateRequest,
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> SimulateResponse:
+    """Dry-run an unsaved draft (the editor's preview): replay over stored
+    telemetry or evaluate against live values. Writes nothing, dispatches
+    nothing, never touches the worker. Declared above /rules/{rule_id}."""
+    try:
+        return await service.simulate_draft(
+            session,
+            ctx.tenant_id,
+            body.rule.model_dump(mode="json"),
+            SimulateRequest(overrides=body.overrides, replay=body.replay),
+        )
+    except service.RuleValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
+        ) from exc
+
+
+@router.get("/rules/activity", response_model=list[RuleActivityResponse])
+async def rules_activity(
+    hours: int = Query(default=24, ge=1, le=168),
+    buckets: int = Query(default=48, ge=4, le=168),
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> list[RuleActivityResponse]:
+    """Every rule's recent firings in buckets, for the list's mini strips.
+    Declared above GET /rules/{rule_id} so "activity" isn't read as an id."""
+    rows = await service.rule_activity(session, ctx.tenant_id, hours=hours, buckets=buckets)
+    return [
+        RuleActivityResponse(
+            rule_id=r.rule_id,
+            cells=r.cells,
+            fired=r.fired,
+            last_fired_at=r.last_fired_at,
+        )
+        for r in rows
     ]
 
 
@@ -280,6 +328,28 @@ async def simulate_rule(
         return await service.simulate_rule(session, ctx.tenant_id, rule, body)
     except service.RuleValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/rules/{rule_id}/versions", response_model=list[RuleVersionResponse])
+async def list_rule_versions(
+    rule: Rule = Depends(get_rule_or_404),
+    ctx: TenantContext = Depends(require_tenant_context),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> list[RuleVersionResponse]:
+    """Saved states, newest first. Membership is enough (read-side)."""
+    rows = await service.list_rule_versions(session, ctx.tenant_id, rule.id)
+    return [
+        RuleVersionResponse(
+            id=v.id,
+            version=v.version,
+            snapshot=v.snapshot,
+            change_lines=list(v.change_lines),
+            author_id=v.author_id,
+            author=author,
+            created_at=v.created_at,
+        )
+        for v, author in rows
+    ]
 
 
 @router.get("/rules/{rule_id}/executions", response_model=list[RuleExecutionResponse])
@@ -357,6 +427,7 @@ async def update_rule(
                 if body.clear_actions is not None
                 else None
             ),
+            author_id=ctx.user_id,
         )
     except service.RuleValidationError as exc:
         raise HTTPException(

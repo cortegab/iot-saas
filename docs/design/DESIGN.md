@@ -148,10 +148,10 @@ font in a component.** If you need a value that has no token, add the token here
 - The logo links to Dashboards, which is the first nav item.
 - **Page header**: breadcrumbs, an overline and status pill where relevant, an H1, a one-line
   description, a meta row, and actions on the right. The primary action is rightmost.
-- **Content column**: max 1120 px, and 1520 px for wide views (list with docked editor, dashboards).
+- **Content column**: max 1120 px, and 1520 px for wide views (dashboards, the rule workbench). A
+  list never changes width: its peek opens as a drawer over it.
   Padding is 36 px top, 40 px sides and 110 px bottom so the save bar never covers content.
-- **Below 1100 px** the sidebar becomes a drawer behind a menu button, and docked editors become
-  drawers.
+- **Below 1100 px** the sidebar becomes a drawer behind a menu button.
 
 ---
 
@@ -173,7 +173,7 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | Callout | existing | `info` (accent-muted), `warning` (pending surface), `error` (error surface). Dismissible for tips only. |
 | **Toast** | NEW | Bottom-right, stacked. Title plus a detail line; save toasts carry the **change summary** ("2 changes: Schedule: … → …"). |
 | ConfirmDialog | existing | For destructive actions and guards. Title states the action; the body states the consequence with real numbers; the danger button repeats the verb. |
-| **Sheet / Drawer** | NEW | Right-side editor on narrow screens; mobile nav. Scrim + focus trap + Esc. |
+| **Sheet / Drawer** | NEW | The record peek at every width (560 px, full height); mobile nav. Scrim + focus trap + Esc. |
 | **CopyField / SecretReveal** | NEW | One component for every one-time secret (device token, API key). It replaces the four copies in the devices and tokens pages. Shown once, with a copy button and a "won't be shown again" warning. |
 | EmptyState / ErrorState / LoadingSkeleton | existing | Every list and panel has all three. Empty explains why and offers the primary action. Error and empty never render together. |
 | Table | existing | See §6. |
@@ -199,7 +199,9 @@ gets restyled to the tokens. **NEW** means it has to be created.
    - A name cell with a secondary line.
    - Status pill, right-aligned numbers, and a row actions menu (⋯).
    - Bulk-select checkbox column where bulk actions exist.
-   - Hover highlight; clicking a row opens the record.
+   - Hover highlight; clicking a row opens its **read-only peek** in a drawer over the list (§7).
+     The name is a link to the record's page. Enter on a focused row peeks it; Enter again opens the
+     page.
 5. **Table footer**: pagination and page size.
 6. States: loading skeleton rows · empty (first-use) · no results (with "Clear filters") · error with a retry.
 
@@ -223,9 +225,11 @@ three presentations.
 
 | Presentation | When |
 |---|---|
-| **Docked panel** beside the list | Default for quick edits from a list, ≥ 1100 px |
-| **Drawer** (Sheet) | Same editor, narrow screens |
-| **Full page** | Complex records (rules, device templates) or on request ("Expand"); deep-linkable |
+| **Peek**: a drawer over the list, at every width | **Looking only.** Key facts, status, the next step (Edit / Open) and a ⋯ menu. No fields, no save bar. `?peek=<id>`. The drawer blocks the list, so browsing happens inside it: ‹ › with "n of N", and ↑/↓ while focus is in the drawer. Closing returns focus to the row last shown. |
+| **Full page** | **Every create and edit**, for every record: `/x/new`, `/x/{id}` (a device: its page's Settings tab). Deep-linkable. |
+
+One place to look and one place to change each record; "New" goes where "Edit" goes. There is no
+editable side panel and no "Expand" toggle.
 
 **Shared chrome (all three presentations):**
 - A title ("Edit rule", "New device template") and a record menu (⋯: Duplicate, Delete).
@@ -242,8 +246,8 @@ three presentations.
   template"). A delete that is allowed confirms with the real consequence.
 - **Rename warnings** when a key is referenced ("`temperature` is used by 3 rules and 2 widgets").
 - Read-only mode for roles without edit rights shows a banner, disabled controls and no save bar.
-- **Deep links:** every record and every editor state has a URL (list, list + docked editor, full
-  page, section).
+- **Deep links:** every record and every editor state has a URL (list, list + peek, full page,
+  section). The page's breadcrumb returns to the list with that record peeked.
 
 ---
 
@@ -403,11 +407,18 @@ path (CLAUDE.md §9.1).
 
 ## 10. Public pages
 
-- **Login:** a branded background (network canvas), never an empty page. A centred card with the
-  form, and clear error and loading states.
+- **Night surfaces:** the landing nav, hero, closing band and footer, and the sign-in brand panel,
+  are dark in both themes (the static `night` tokens in `globals.css`). Over them sits the shared
+  network canvas: devices in zones around the broker ("RULES · IN MEMORY"), readings in, commands out.
+- **Login:** G's split screen. On the left, a night brand panel: the network, a line about the
+  product, example reading chips, and the design figures (no live-looking statistics). On the
+  right, the card. Below `lg` the panel becomes a band above the card. The card has "Forgot
+  password?" on the password label row, **Keep me signed in on this device** (unchecked, the
+  session ends with the browser), clear error and loading states.
 - **Landing** (`(marketing)`, same tokens and fonts as the app):
-  - A text-only hero over the network canvas.
-  - The **control-loop card** lives in the Onboarding section.
+  - A text-only night hero over the network canvas, KPIs on a hairline row.
+  - The **control-loop card** lives in the Onboarding section: G's log of one rule's life (in · rule
+    · cmd · ack · clear), beside the onboarding steps.
   - A **Deployment** section: Cloud (shared) · Dedicated cloud · On-premise, plus an edge-connector
     note (CLAUDE.md §3).
   - An **in-page contact form**.
@@ -524,3 +535,17 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-09-30 | §8 API keys: a key is `Authorization: Bearer iot_…` and names its own workspace, so `X-Tenant-Id` is optional (it must match when sent). Keys are Viewer or Admin only, default to a 90-day expiry, and work on tenant data routes. They never work on members, invitations, key management or personal dashboards. The list adds an **Expired** status next to G's Active / Revoked, and the quick filter is Active / Revoked or expired / All. Expiry and join dates show as calendar dates ("30 Oct 2026"), not times. |
 | 2026-09-30 | §8 workspace settings: one page on the editor chrome (sections Workspace / Alert recipients / Time / Your account / Leave) with a single save bar. As in G, **admins** edit alert recipients and the time zone; only an owner renames. G's °C/°F select is dropped (time zone only). The time zone is the default for new rule schedules; each schedule keeps its own zone, and other times still show in the viewer's local zone. G's disabled "Delete workspace" row is left out until deletion exists. Your own name moved here from the old profile card, and the theme toggle stays in the sidebar footer. A signed-in person with no workspace sees a "Create a workspace" screen instead of a blank page. |
 | 2026-10-01 | §8 notifications: each row carries a **severity** (critical / warning / info, shown as the icon) and a **kind**. New sources: *device went offline* (critical, only on a real flip, so a worker restart doesn't re-alert), *delivery failed* (warning, after a webhook or email exhausts its retries), *template updated* (info, only when metrics or actuators change, with how many devices it reaches). The row menu offers Mark as read / unread and Dismiss with Undo; dismissed rows leave the feed for everyone. **Retry** on Rules → Failed deliveries covers webhook and email only. A late actuator command could act on state that has moved on, so those rows say "Not retried" and the rule fires again when its condition holds. A retry re-sends the rule's current action at the same position and is refused if the rule has changed since. |
+| 2026-10-01 | §8 device page and connect flow: the device page follows G (header meta row, Overview / Controls / Rules / Settings); the old right-hand rail (status, active rules, recent alerts) is dropped in favour of the header meta and the Rules tab. Readouts show *Last value, X ago* in the warning tone once a device is offline. Connect (`/devices/[id]/connect`) offers the **ESP32 DevKit only**; G's ESP32-S3 option waits until the sketch has an S3 pin map. The live check's "Received its profile" line is left out because the platform gets no signal when a device reads its retained config. Adding a device goes straight to Connect with the new credential carried over in memory (nothing stored), so it is never rotated twice. |
+| 2026-10-01 | §8 dashboards: react-grid-layout stays (free placement and resize, beyond G's ordered flow). Widgets move only in **Edit layout** (`?edit=1`): drag by the handle, resize from the corner, cycle width (3, 4, 6, 8, 12 of 12), remove with Undo; changes save as you go. Below 640 px the widgets stack in one column in reading order, and that view is never saved, so a phone can't rewrite the desktop layout. Every member edits their own dashboards. A widget whose device was deleted, or whose metric left the template, says so instead of rendering empty. |
+| 2026-10-01 | §9 versions: every rule save that changes behaviour (name, description, enabled, trigger, condition, behaviour and timings, actions, on-clear actions) becomes a numbered version, with plain change lines ("Cooldown: 1 min → 2 min"), the author, and the time. Ladder layout moves are not versions. A rule page **Versions** tab lists them newest first. **Restore** loads an older version into the editor as an unsaved draft, with a banner, and saving it becomes the newest version; nothing is rewritten in place. |
+| 2026-10-01 | §5/§6 rules list mini strip: **Last 24 h** is 48 half-hour cells built from recorded firings. A cell is *fired* when a firing landed in it, and *true* across fire → clear for rules with on-clear actions (only those record the clear). It is otherwise *idle*: nothing is guessed between firings. *Unknown* (hatched) marks only the current cell, when the rule can't evaluate now, because past data staleness isn't recorded. |
+| 2026-10-01 | §9 workbench: the rule page tabs are **Logic · Activity** (Activity = recent firings, then Versions; the old Simulate tab is gone because the preview simulates). The form sits beside a sticky 340 px preview, which stacks below 1200 px; under Ladder the preview cards form a grid. The preview cards are replay, would send, dry run, checks, other rules on these actuators, and try other values. They use `POST /rules/simulate` with the unsaved draft, which writes and sends nothing. Checks hold hardware rules to a hold of at least 5 s, an interval of at least 30 s, and hysteresis above 0. They warn rather than block saving, so existing rules stay editable. New rules start from recipe cards for a chosen device, or Start blank, and show step numbers 1 When · 2 Then · 3 Safety · 4 Name. The Ladder toggle carries an "expert" tag. |
+| 2026-10-01 | §9.3/§9.5/§9.8: the rule summary is the **editable sentence**. Chips cover each reading (operator and value), the hold time, and each on/off actuator, edited in a popover with Apply / Cancel; Esc returns focus to the chip. Range, set and comparison conditions, schedules and non-boolean actuators offer *Open full condition*. The clear clause reads as plain text. Schedules use the SchedulePicker with TimezoneSelect (no cron field by default), and version history words schedules the same way ("every day at 08:00 (Europe/Madrid)"; unusual crons stay as cron). Saving an enabled rule asks for confirmation; the toast lists the version's change lines. Reset latch shows the current readings and a dry run's verdict on whether it would fire again right away. |
+| 2026-10-01 | §10 landing: rebuilt in G's order (nav · hero over the network canvas with KPIs · product tour · how it works · safety · onboarding with the ControlLoop · security and operations · deployment · FAQ · close · footer). There is no public demo workspace, so every "Open the demo" becomes **Talk to us** or **Sign in** ("Open console" when signed in). The tour's screens are illustrations built from the app's own components with fixture data, and they are inert. Deployment's Talk to us is a dialog that emails CONTACT_EMAIL_TO through POST /public/contact. It stores nothing, has a honeypot, and allows 5 messages per address per hour. With CONTACT_EMAIL_TO empty, enquiries are only logged. |
+| 2026-10-01 | §10 sign-in: every account page (sign in, register, forgot/reset password, invitation) sits on the landing's network canvas with the card centred, as §10 asks; this replaces G's split layout. The password field has Show / Hide and keeps "Password" as its accessible name. A Caps Lock hint appears only after two failed attempts. There is one generic error and never "no such email". An account in more than one workspace chooses one after signing in, unless a ?next= link already says where to go. |
+| 2026-10-01 | §10 fidelity pass, superseding the centred sign-in above: the account pages use **G's split screen** (night brand panel beside the card), and the landing takes G's night nav, hero, close and footer, mono eyebrows, numbered step cards, two-column FAQ and the control-loop **log** (replacing the threshold-scope instrument). The canvas is G's broker picture for both. The brand panel shows the design figures (< 2 s, < 500 ms, 500–1,000 devices) instead of G's ticking demo statistics, which would read as live data. "Keep me signed in" is real: unchecked, the refresh token goes to sessionStorage. §9 rule page: G's header (breadcrumbs, state and last firing, consequence line, Duplicate, ⋮ with Run now and Delete, close), the sentence in an accent box, and the ladder's properties in an inspector beside the rung. A duplicate starts disabled. |
+| 2026-10-02 | §8 dashboards: **New dashboard** and **Edit details** use the docked editor beside the list (`?edit=new` / `?edit=<id>`), like zones and every other catalog, instead of G's name dialog — one pattern per job. The editor holds the name only (widgets stay on the grid) and links to Open and Edit layout / Add widgets. A row still opens the dashboard. **Duplicate** copies every widget into "Name copy" and docks it for renaming. Renaming from the dashboard page itself keeps its in-place dialog. |
+| 2026-10-02 | §6/§7 **Peek everywhere** (user decision, supersedes the docked-editor default and the dashboards entry above): a quick-edit panel beside a full-page edit of the same record was confusing. List panels are now read-only **peeks** (`?peek=<id>`, ↑/↓ to move, Enter to open), and every create and edit is a full page: `/zones/new`, `/zones/{id}`, `/members/invite`, `/members/{id}`, `/keys/new` (shows the one-time secret, then the key page), `/keys/{id}`, `/dashboards/new` (then Edit layout). A device is edited in its page's **Settings tab**; `/devices/{id}/edit` redirects there. Old `?edit=` links redirect to the matching page. With a peek open, the rules list drops its When/Then columns, which the peek repeats. |
+| 2026-10-02 | §4/§5/§7 the peek is a **drawer at every width** (user decision after review), not docked beside the list on wide screens. Reasons: one pattern at every size; a full-height pane instead of a short floating card; no layout shift (a docked peek widened the content column from 1120 to 1520 px, moving the header and search). The cost, a modal that blocks the list, is offset by browsing inside it: ‹ › with "n of N", ↑/↓, and focus returning to the row last shown. Dashboards keep the peek on row click, like every list. |
+| 2026-10-02 | §8 device page **Settings tab**: one settings page of stacked section cards (~760 px) — General (name, zone) · Rule evaluation · Template (read-only; a device keeps its template) · Connection (MQTT username, **one** "Connect and get firmware" action that states it issues a new credential, MQTT topics) · **Danger zone** last (red outline, Delete). The separate credential, firmware, delete and topics cards are gone. Inside a host page the editor's save bar floats within the column and appears only while there is something to save. |
+| 2026-10-02 | §8 device **connect flow** has 5 steps: Credential · **Options** (board ESP32 / ESP32-C3, Wi-Fi from a phone or typed, provisioning security 1 – PoP / 2 – SRP6a, connection, pins, a "The sketch includes" summary; no code) · **Flash** (download / copy, the preview collapsed, upload steps for the chosen board) · **Wi-Fi from your phone** (the ESP BLE Provisioning QR with Download / Print label, app steps; skipped when Wi-Fi is typed in) · Live check. The sketch contains only the chosen Wi-Fi mode. The QR is built from the device's own credential (docs/ble-provisioning.md), so it's only on this page and changes with every rotation. |

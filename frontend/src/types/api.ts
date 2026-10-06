@@ -617,6 +617,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rules/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate Draft
+         * @description Dry-run an unsaved draft (the editor's preview): replay over stored
+         *     telemetry or evaluate against live values. Writes nothing, dispatches
+         *     nothing, never touches the worker. Declared above /rules/{rule_id}.
+         */
+        post: operations["simulate_draft_rules_simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/activity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Rules Activity
+         * @description Every rule's recent firings in buckets, for the list's mini strips.
+         *     Declared above GET /rules/{rule_id} so "activity" isn't read as an id.
+         */
+        get: operations["rules_activity_rules_activity_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rules/failed-actions/{action_id}/retry": {
         parameters: {
             query?: never;
@@ -716,6 +759,26 @@ export interface paths {
          *     nothing. Any member may run it; there are no side effects.
          */
         post: operations["simulate_rule_rules__rule_id__simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/{rule_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Rule Versions
+         * @description Saved states, newest first. Membership is enough (read-side).
+         */
+        get: operations["list_rule_versions_rules__rule_id__versions_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -931,6 +994,26 @@ export interface paths {
         head?: never;
         /** Update Zone */
         patch: operations["update_zone_zones__zone_id__patch"];
+        trace?: never;
+    };
+    "/public/contact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Contact
+         * @description The landing page's contact form. Emails the team; stores nothing.
+         */
+        post: operations["contact_public_contact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/": {
@@ -1286,6 +1369,32 @@ export interface components {
              */
             hysteresis: number;
         };
+        /** ContactRequest */
+        ContactRequest: {
+            /** Name */
+            name: string;
+            /** Email */
+            email: string;
+            /** Company */
+            company?: string | null;
+            /**
+             * Deployment
+             * @default not_sure
+             * @enum {string}
+             */
+            deployment: "cloud" | "dedicated" | "on_prem" | "not_sure";
+            /** Devices */
+            devices?: string | null;
+            /** Message */
+            message: string;
+            /** Website */
+            website?: string | null;
+        };
+        /** ContactResponse */
+        ContactResponse: {
+            /** Detail */
+            detail: string;
+        };
         /** DashboardCreateRequest */
         DashboardCreateRequest: {
             /** Name */
@@ -1457,6 +1566,17 @@ export interface components {
             status?: components["schemas"]["DeviceStatus"] | null;
             /** Zone Id */
             zone_id?: string | null;
+        };
+        /**
+         * DraftSimulateRequest
+         * @description Simulate an unsaved draft (the editor's live preview): the rule body
+         *     as it would be created, plus the usual overrides / replay window.
+         */
+        DraftSimulateRequest: {
+            /** Overrides */
+            overrides?: components["schemas"]["SignalOverride"][];
+            replay?: components["schemas"]["SimulateReplayWindow"] | null;
+            rule: components["schemas"]["RuleCreateRequest"];
         };
         /** EmailAction */
         EmailAction: {
@@ -1862,6 +1982,25 @@ export interface components {
             timeout_s: number;
         };
         /**
+         * RuleActivityResponse
+         * @description One rule's recent activity for the list's mini strip (DESIGN.md §5):
+         *     `cells` oldest → newest, each "fired" (a firing landed in it), "true"
+         *     (inside a fire → clear span; only rules that record clears), or "idle".
+         */
+        RuleActivityResponse: {
+            /**
+             * Rule Id
+             * Format: uuid
+             */
+            rule_id: string;
+            /** Cells */
+            cells: ("idle" | "true" | "fired")[];
+            /** Fired */
+            fired: number;
+            /** Last Fired At */
+            last_fired_at: string | null;
+        };
+        /**
          * RuleCreateRequest
          * @description Canonical multi-device create — POST /rules.
          */
@@ -2056,6 +2195,35 @@ export interface components {
             cooldown?: number | null;
             /** Action */
             action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"]) | null;
+        };
+        /**
+         * RuleVersionResponse
+         * @description One saved state of a rule (DESIGN.md §9 Versions). `snapshot` holds
+         *     the rule's definition as saved, for the editor's client-side Restore.
+         */
+        RuleVersionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: number;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /** Change Lines */
+            change_lines: string[];
+            /** Author Id */
+            author_id: string | null;
+            /** Author */
+            author: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** ScheduleTrigger */
         ScheduleTrigger: {
@@ -4033,6 +4201,77 @@ export interface operations {
             };
         };
     };
+    simulate_draft_rules_simulate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftSimulateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rules_activity_rules_activity_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+                buckets?: number;
+            };
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleActivityResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     retry_failed_action_rules_failed_actions__action_id__retry_post: {
         parameters: {
             query?: never;
@@ -4264,6 +4503,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SimulateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_rule_versions_rules__rule_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleVersionResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -4914,6 +5187,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ZoneResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    contact_public_contact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContactRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             /** @description Validation Error */

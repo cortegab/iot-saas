@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { ancestry } from "@/lib/ladder-layout";
 import {
@@ -20,121 +19,57 @@ import {
   type RuleDraft,
 } from "@/lib/rule-draft";
 import { BehaviourFields, lastDevice } from "@/components/rules/editor/FormMode";
-import {
-  ActionFields,
-  AddActionMenu,
-  ContactFields,
-  SECTION_LABEL,
-  WhenFields,
-  actionLabel,
-} from "@/components/rules/editor/fields";
+import { ActionFields, AddActionMenu, CompactFields, ContactFields, WhenFields, actionLabel } from "@/components/rules/editor/fields";
 import type { RuleCatalog } from "@/components/rules/editor/useRuleCatalog";
 import { LadderRung, type LadderSelection } from "./LadderRung";
 
 type Update = (next: RuleDraft) => void;
 
-const BLOCK_WORDS: Record<Combinator, string> = {
-  AND: "Series block — all must be true (AND)",
-  OR: "Parallel block — any can be true (OR)",
+const BLOCK_HINT: Record<Combinator, string> = {
+  AND: "Series: every element must be true (AND).",
+  OR: "Parallel: any one branch is enough (OR).",
 };
 
-function nodeCrumb(node: DraftNode): string {
-  return node.kind === "contact" ? "Contact" : node.op === "AND" ? "Series" : "Parallel";
-}
-
-function NodeInspector({
-  id,
-  draft,
-  catalog,
-  update,
-  select,
-}: {
-  id: string;
-  draft: RuleDraft;
-  catalog: RuleCatalog;
-  update: Update;
-  select: (s: LadderSelection) => void;
-}) {
-  const node = findNode(draft.condition, id);
-  if (!node) return null;
-  const path = ancestry(draft.condition, id);
-  const setCondition = (condition: DraftNode | null) => update({ ...draft, condition });
-
-  function add(op: Combinator) {
-    const fresh = emptyContact(lastDevice(draft));
-    setCondition(insertBeside(draft.condition, id, fresh, op));
-    select({ kind: "node", id: fresh.id });
-  }
-
+/** "Rung › Series › Parallel" — the blocks enclosing an element (demo G's
+ * inspector breadcrumb); each enclosing block is a button that selects it. */
+function Crumb({ draft, id, leaf, select }: { draft: RuleDraft; id?: string; leaf?: string; select: (s: LadderSelection) => void }) {
+  const self = id ? findNode(draft.condition, id) : null;
+  const blocks = (id ? ancestry(draft.condition, id) : []).filter((p) => p.kind === "group" && p.id !== id);
+  const word = (n: DraftNode) => (n.kind === "group" && n.op === "OR" ? "Parallel" : "Series");
   return (
-    <div className="flex flex-col gap-4">
-      {path.length > 1 && (
-        <nav aria-label="Enclosing blocks" className="flex flex-wrap items-center gap-1 text-xs">
-          {path.map((p, i) => (
-            <span key={p.id} className="flex items-center gap-1">
-              {i > 0 && <span className="text-ink-muted">›</span>}
-              <button
-                type="button"
-                onClick={() => select({ kind: "node", id: p.id })}
-                aria-current={p.id === id ? "true" : undefined}
-                className={
-                  p.id === id
-                    ? "rounded bg-accent-muted px-1.5 py-0.5 font-medium text-accent"
-                    : "rounded px-1.5 py-0.5 text-ink-muted hover:text-ink"
-                }
-              >
-                {nodeCrumb(p)}
-              </button>
-            </span>
-          ))}
-        </nav>
+    <nav aria-label="Where this sits" className="flex flex-wrap items-center gap-1 font-mono text-[12px] text-ink-muted">
+      <button type="button" onClick={() => select(null)} className="hover:text-ink">
+        Rung
+      </button>
+      {blocks.map((b) => (
+        <span key={b.id} className="flex items-center gap-1">
+          <span aria-hidden>›</span>
+          <button type="button" onClick={() => select({ kind: "node", id: b.id })} className="hover:text-ink">
+            {word(b)}
+          </button>
+        </span>
+      ))}
+      {self?.kind === "group" && (
+        <span className="flex items-center gap-1">
+          <span aria-hidden>›</span>
+          <span className="text-ink">{word(self)}</span>
+        </span>
       )}
-
-      {node.kind === "contact" ? (
-        <ContactFields
-          contact={node}
-          catalog={catalog}
-          onChange={(patch) => setCondition(updateContact(draft.condition, id, patch))}
-        />
-      ) : (
-        <div className="flex flex-col gap-2">
-          <span className="text-sm text-ink">{BLOCK_WORDS[node.op]}</span>
-          <SegmentedControl
-            ariaLabel="Block type"
-            value={node.op}
-            onChange={(op) => setCondition(setGroupOp(draft.condition, id, op))}
-            options={[
-              { value: "AND", label: "Series (AND)" },
-              { value: "OR", label: "Parallel (OR)" },
-            ]}
-          />
-        </div>
+      {leaf && (
+        <span className="flex items-center gap-1">
+          <span aria-hidden>›</span>
+          <span className="text-ink">{leaf}</span>
+        </span>
       )}
-
-      <div className="flex flex-wrap gap-1.5 border-t border-border pt-3">
-        <Button type="button" variant="secondary" onClick={() => add("AND")}>
-          + In series (AND) after this
-        </Button>
-        <Button type="button" variant="secondary" onClick={() => add("OR")}>
-          + In parallel (OR) below this
-        </Button>
-        <Button
-          type="button"
-          variant="link"
-          className="ml-auto text-xs"
-          onClick={() => {
-            setCondition(removeNode(draft.condition, id));
-            select(null);
-          }}
-        >
-          <Trash2 size={13} aria-hidden /> Remove {node.kind === "contact" ? "contact" : "block"}
-        </Button>
-      </div>
-    </div>
+    </nav>
   );
 }
 
-function Inspector({
+function Title({ children }: { children: string }) {
+  return <h3 className="text-[15px] font-semibold text-ink">{children}</h3>;
+}
+
+function InspectorBody({
   selection,
   draft,
   catalog,
@@ -147,27 +82,42 @@ function Inspector({
   update: Update;
   select: (s: LadderSelection) => void;
 }) {
+  const setCondition = (condition: DraftNode | null) => update({ ...draft, condition });
+
   if (selection === null) {
     return (
-      <p className="text-sm text-ink-muted">
-        Select anything on the rung to edit it — the trigger on the rail, a contact, the hold timer,
-        or an action coil. Use <strong>+</strong> to add a contact at the end or another action.
-      </p>
+      <>
+        <Title>Rule</Title>
+        <p className="text-[13px] text-ink-muted">
+          Select the trigger, a contact, a block, the timer or a coil on the rung to edit it. Use <strong>+</strong> to add a contact at the end or another coil.
+        </p>
+      </>
     );
   }
   if (selection.kind === "when") {
-    return <WhenFields when={draft.when} catalog={catalog} onChange={(when) => update({ ...draft, when })} />;
+    return (
+      <>
+        <Crumb draft={draft} leaf="Trigger" select={select} />
+        <Title>Trigger</Title>
+        <WhenFields when={draft.when} catalog={catalog} onChange={(when) => update({ ...draft, when })} />
+      </>
+    );
   }
   if (selection.kind === "timing") {
-    return <BehaviourFields draft={draft} update={update} />;
-  }
-  if (selection.kind === "node") {
-    return <NodeInspector id={selection.id} draft={draft} catalog={catalog} update={update} select={select} />;
+    return (
+      <>
+        <Crumb draft={draft} leaf="Timer" select={select} />
+        <Title>Behaviour</Title>
+        <BehaviourFields draft={draft} update={update} />
+      </>
+    );
   }
   if (selection.kind === "add-action") {
     return (
-      <div className="flex flex-col gap-2">
-        <span className="text-sm text-ink">Add an action — it runs in parallel with the others.</span>
+      <>
+        <Crumb draft={draft} leaf="Coil" select={select} />
+        <Title>New coil</Title>
+        <p className="text-[13px] text-ink-muted">It runs together with the other coils when the rule fires.</p>
         <AddActionMenu
           onAdd={(kind) => {
             const action = emptyAction(kind, lastDevice(draft));
@@ -175,7 +125,72 @@ function Inspector({
             select({ kind: "action", id: action.id });
           }}
         />
+      </>
+    );
+  }
+  if (selection.kind === "node") {
+    const id = selection.id;
+    const node = findNode(draft.condition, id);
+    if (!node) return null;
+    const add = (op: Combinator) => {
+      const fresh = emptyContact(lastDevice(draft));
+      setCondition(insertBeside(draft.condition, id, fresh, op));
+      select({ kind: "node", id: fresh.id });
+    };
+    const remove = () => {
+      setCondition(removeNode(draft.condition, id));
+      select(null);
+    };
+    const addButtons = (
+      <div className="flex flex-wrap gap-1.5">
+        <Button type="button" size="sm" variant="secondary" onClick={() => add("AND")}>
+          Add in series
+        </Button>
+        <Button type="button" size="sm" variant="secondary" onClick={() => add("OR")}>
+          Add in parallel
+        </Button>
       </div>
+    );
+    if (node.kind === "contact") {
+      return (
+        <>
+          <Crumb draft={draft} id={id} leaf="Contact" select={select} />
+          <Title>Contact</Title>
+          <ContactFields contact={node} catalog={catalog} onChange={(patch) => setCondition(updateContact(draft.condition, id, patch))} />
+          {addButtons}
+          <div>
+            <Button type="button" size="sm" variant="link-danger" onClick={remove}>
+              <Trash2 size={13} aria-hidden /> Remove
+            </Button>
+          </div>
+        </>
+      );
+    }
+    return (
+      <>
+        <Crumb draft={draft} id={id} select={select} />
+        <Title>{node.op === "AND" ? "Series block" : "Parallel block"}</Title>
+        <SegmentedControl
+          ariaLabel="Block type"
+          value={node.op}
+          onChange={(op) => setCondition(setGroupOp(draft.condition, id, op))}
+          options={[
+            { value: "AND", label: "Series: all true" },
+            { value: "OR", label: "Parallel: any true" },
+          ]}
+        />
+        <p className="text-[13px] text-ink-muted">
+          {BLOCK_HINT[node.op]} {node.children.length} elements; changing the type keeps every contact.
+        </p>
+        {addButtons}
+        {node.id !== draft.condition?.id && (
+          <div>
+            <Button type="button" size="sm" variant="link-danger" onClick={remove}>
+              <Trash2 size={13} aria-hidden /> Remove block
+            </Button>
+          </div>
+        )}
+      </>
     );
   }
   const index = draft.actions.findIndex((a) => a.id === selection.id);
@@ -183,42 +198,31 @@ function Inspector({
   if (!action) return null;
   const canRemove = draft.actions.length > 1 || draft.preserved.actions.length > 0;
   return (
-    <div className="flex flex-col gap-4">
+    <>
+      <Crumb draft={draft} leaf="Coil" select={select} />
+      <Title>{actionLabel(action, catalog).title}</Title>
       <ActionFields
         action={action}
         catalog={catalog}
         clearing={canClear(draft)}
         onChange={(next) => update({ ...draft, actions: draft.actions.map((a, j) => (j === index ? next : a)) })}
       />
-      <div className="flex border-t border-border pt-3">
+      <div>
         <Button
           type="button"
-          variant="link"
-          className="ml-auto text-xs"
+          size="sm"
+          variant="link-danger"
           disabled={!canRemove}
           onClick={() => {
             update({ ...draft, actions: draft.actions.filter((_, j) => j !== index) });
             select(null);
           }}
         >
-          <Trash2 size={13} aria-hidden /> Remove action
+          <Trash2 size={13} aria-hidden /> Remove coil
         </Button>
       </div>
-    </div>
+    </>
   );
-}
-
-function inspectorTitle(selection: LadderSelection, draft: RuleDraft, catalog: RuleCatalog): string {
-  if (selection === null) return "Inspector";
-  if (selection.kind === "when") return "When";
-  if (selection.kind === "timing") return "Behaviour & timing";
-  if (selection.kind === "add-action") return "New action";
-  if (selection.kind === "node") {
-    const node = findNode(draft.condition, selection.id);
-    return node?.kind === "group" ? "Block" : "Contact";
-  }
-  const action = draft.actions.find((a) => a.id === selection.id);
-  return action ? `Action · ${actionLabel(action, catalog).title}` : "Action";
 }
 
 const LEGEND: { glyph: string; text: string }[] = [
@@ -229,6 +233,8 @@ const LEGEND: { glyph: string; text: string }[] = [
   { glyph: "(S)", text: "latched until reset" },
 ];
 
+/** Ladder view (DESIGN.md §9, demo G): the rung on the left and the
+ * selected element's properties in an inspector on the right. */
 export function LadderMode({ draft, catalog, update }: { draft: RuleDraft; catalog: RuleCatalog; update: Update }) {
   const [selection, setSelection] = useState<LadderSelection>(null);
 
@@ -253,43 +259,28 @@ export function LadderMode({ draft, catalog, update }: { draft: RuleDraft; catal
   }
 
   return (
-    <>
-      <Card padding="md">
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className={SECTION_LABEL}>Rung</h2>
-            <Button type="button" variant="link" className="ml-auto text-xs" onClick={() => setSelection({ kind: "when" })}>
-              When…
-            </Button>
-            <Button type="button" variant="link" className="text-xs" onClick={() => setSelection({ kind: "timing" })}>
-              Behaviour & timing…
-            </Button>
-          </div>
-          <div className="-mx-1 overflow-x-auto px-1 pb-1">
-            <LadderRung
-              draft={draft}
-              catalog={catalog}
-              selection={live}
-              onSelect={setSelection}
-              onAddSeriesAtEnd={addSeriesAtEnd}
-              ariaLabel="Rule rung editor"
-            />
-          </div>
-          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
-            {LEGEND.map((l) => (
-              <li key={l.glyph}>
-                <span className="font-mono text-ink">{l.glyph}</span> {l.text}
-              </li>
-            ))}
-          </ul>
+    <div className="grid items-start gap-x-4 gap-y-3 lg:grid-cols-[minmax(0,1fr)_310px]">
+      <div className="flex min-w-0 flex-col gap-2">
+        <div className="overflow-x-auto rounded-xl border border-border bg-surface bg-[radial-gradient(var(--color-border)_1px,transparent_1px)] p-4 shadow-card [background-size:14px_14px]">
+          <LadderRung draft={draft} catalog={catalog} selection={live} onSelect={setSelection} onAddSeriesAtEnd={addSeriesAtEnd} ariaLabel="Rule rung editor" />
         </div>
-      </Card>
-      <Card padding="md">
-        <div className="flex flex-col gap-4">
-          <h2 className={SECTION_LABEL}>{inspectorTitle(live, draft, catalog)}</h2>
-          <Inspector selection={live} draft={draft} catalog={catalog} update={update} select={setSelection} />
-        </div>
-      </Card>
-    </>
+        <p className="text-[13px] text-ink-muted">
+          Series contacts must all be true; parallel branches need any one. Select an element to edit it. The ladder and the form edit the same rule.
+        </p>
+        <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
+          {LEGEND.map((l) => (
+            <li key={l.glyph}>
+              <span className="font-mono text-ink">{l.glyph}</span> {l.text}
+            </li>
+          ))}
+        </ul>
+      </div>
+      {/* A 310px panel: every field takes its own row, as in demo G. */}
+      <aside aria-label="Inspector" className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-canvas p-4 lg:sticky lg:top-4">
+        <CompactFields.Provider value={true}>
+          <InspectorBody selection={live} draft={draft} catalog={catalog} update={update} select={setSelection} />
+        </CompactFields.Provider>
+      </aside>
+    </div>
   );
 }

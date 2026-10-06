@@ -30,6 +30,7 @@ import {
   ActionFields,
   AddActionMenu,
   ContactFields,
+  FieldRow,
   NumberSafetyField,
   SECTION_LABEL,
   SectionCard,
@@ -227,6 +228,7 @@ function ThenSection({ draft, catalog, update }: { draft: RuleDraft; catalog: Ru
   return (
     <SectionCard
       title="Then"
+      step={2}
       aside={draft.actions.length > 1 && <span className="text-xs text-ink-muted">All run together</span>}
     >
       {draft.actions.map((action, i) => {
@@ -270,7 +272,7 @@ function ThenSection({ draft, catalog, update }: { draft: RuleDraft; catalog: Ru
 
 export function BehaviourSection({ draft, update }: { draft: RuleDraft; update: Update }) {
   return (
-    <SectionCard title={isReadingRule(draft) ? "Behaviour" : "Repeat protection"}>
+    <SectionCard title={isReadingRule(draft) ? "Safety and behaviour" : "Repeat protection"} step={3}>
       <BehaviourFields draft={draft} update={update} />
     </SectionCard>
   );
@@ -308,7 +310,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
           )}
         </>
       )}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <FieldRow wide="sm:grid-cols-2">
         {reading && (
           <NumberSafetyField
             label="Hold time (s)"
@@ -325,7 +327,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
           onChange={(cooldown) => update({ ...draft, cooldown })}
           min={reading ? 30 : 0}
         />
-      </div>
+      </FieldRow>
       {clearing && <ClearFields draft={draft} update={update} />}
     </div>
   );
@@ -388,7 +390,7 @@ function ClearFields({ draft, update }: { draft: RuleDraft; update: Update }) {
 export function FormMode({ draft, catalog, update }: { draft: RuleDraft; catalog: RuleCatalog; update: Update }) {
   return (
     <>
-      <SectionCard title="When">
+      <SectionCard title="When" step={1}>
         <WhenFields when={draft.when} catalog={catalog} onChange={(when) => update({ ...draft, when })} />
       </SectionCard>
       <ConditionSection draft={draft} catalog={catalog} update={update} />

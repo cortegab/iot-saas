@@ -11,7 +11,9 @@
  * - a retained `status` snapshot with an MQTT Last-Will of `online:false`,
  *   which is what the platform's online/offline state is driven by — the
  *   only liveness signal an actuator-only device has;
- * - BLE Wi-Fi provisioning (docs/ble-provisioning.md) when no Wi-Fi is stored.
+ * - Wi-Fi from a phone with Espressif provisioning — the ESP BLE Provisioning
+ *   app scans the QR the dashboard shows (docs/ble-provisioning.md) — or typed
+ *   into the sketch for a bench test. Only the chosen one is in the sketch.
  *
  * Both call sites pass the real credential: devices/new has it from creation,
  * and the device page's "Generate" rotates the credential first (it's stored
@@ -28,23 +30,46 @@ const PLACEHOLDER_METRIC: SketchMetric = { name: "temperature", key: null };
 const CREDENTIAL_PLACEHOLDER = "<paste your device credential here>";
 const FW_VERSION = "1.0.0";
 
-// Fixed platform-wide GATT UUIDs — the contract with the provisioning app
-// (docs/ble-provisioning.md). Never change them without updating that doc and
-// every app build that talks to already-flashed boards.
-export const PROV_SERVICE_UUID = "6e1f0001-7c3a-4b8e-9d2f-5a4b3c2d1e0f";
-const PROV_UUIDS = {
-  ssid: "6e1f0002-7c3a-4b8e-9d2f-5a4b3c2d1e0f",
-  password: "6e1f0003-7c3a-4b8e-9d2f-5a4b3c2d1e0f",
-  control: "6e1f0004-7c3a-4b8e-9d2f-5a4b3c2d1e0f",
-  status: "6e1f0005-7c3a-4b8e-9d2f-5a4b3c2d1e0f",
-  info: "6e1f0006-7c3a-4b8e-9d2f-5a4b3c2d1e0f",
-};
+export type SketchBoard = "esp32" | "esp32c3";
 
-// Default GPIOs, handed out in order — inputs and outputs from separate pools
-// so a generated sketch never wires two things to one pin. Every one is a
-// plain GPIO on an ESP32 DevKit (no strapping/flash pins).
-const INPUT_PINS = [4, 5, 13, 14, 16, 17, 18, 19];
-const OUTPUT_PINS = [2, 23, 22, 21, 27, 26, 25, 33];
+/** What differs per board: the Arduino IDE settings, the provisioning-reset button, the BLE
+ * memory handler WiFiProv frees after provisioning, and the GPIOs handed out —
+ * inputs and outputs from separate pools so a generated sketch never wires two
+ * things to one pin. No strapping, flash or USB pins. */
+export const BOARDS: Record<
+  SketchBoard,
+  { label: string; arduinoBoard: string; ideSettings: string[]; resetPin: number; resetButton: string; bleHandler: string; inputs: number[]; outputs: number[] }
+> = {
+  esp32: {
+    label: "ESP32 DevKit",
+    arduinoBoard: "ESP32 Dev Module",
+    ideSettings: [],
+    // A button between GPIO 19 and GND: on the header of both the 30- and the
+    // 38-pin DevKit (GPIO 0, the BOOT button, isn't on the 30-pin header).
+    resetPin: 19,
+    resetButton: "the button on GPIO 19 (wired to GND)",
+    bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BTDM",
+    // Broken out on both the 30- and 38-pin DevKits. Left out: the reset button
+    // (19), strapping pins 0, 2 (onboard LED), 5, 12, 15; UART0 1/3; flash 6–11; and
+    // input-only 34–39 (no pull-ups; keep them for analog sensors on ADC1).
+    inputs: [4, 13, 14, 16, 17, 18],
+    // Quiet at boot, so relays don't click on power-up. 21/22 are the default
+    // I2C pins (SDA/SCL), so they're handed out last.
+    outputs: [23, 27, 26, 25, 33, 32, 21, 22],
+  },
+  esp32c3: {
+    label: "ESP32-C3",
+    arduinoBoard: "ESP32C3 Dev Module",
+    ideSettings: ["USB CDC On Boot: Enabled", "Flash Mode: DIO"],
+    resetPin: 9,
+    resetButton: "BOOT",
+    bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BLE",
+    // Strapping pins 2, 8, 9 and USB pins 18, 19 are left out; 20/21 (UART0)
+    // are free with USB CDC on boot and go last.
+    inputs: [4, 5, 6, 7, 10],
+    outputs: [3, 1, 0, 20, 21],
+  },
+};
 
 // Let's Encrypt's current root, fetched verbatim from
 // https://letsencrypt.org/certs/isrgrootx1.pem (expires 2035-06-04). Prod's
@@ -95,8 +120,11 @@ export type SketchActuator = WireNamed & Partial<Pick<CatalogActuator, "value_ty
 export interface SketchInfo {
   tenantSlug: string;
   deviceSlug: string;
-  /** Advertised over BLE while provisioning, so the app can list the board. */
+  /** The device's name; also what the phone app lists while provisioning
+   * (made BLE-safe by provName). */
   deviceName: string;
+  /** The board the sketch targets. Default "esp32". */
+  board?: SketchBoard;
   host: string;
   /** Whether the dashboard itself is being served over HTTPS. Prod's broker
    * is TLS-only on 8883 with a real Let's Encrypt cert; local dev is
@@ -108,6 +136,83 @@ export interface SketchInfo {
   metrics: SketchMetric[];
   actuators: SketchActuator[];
   credential: SketchCredential | null;
+  /** Wi-Fi typed into the sketch (a bench-test shortcut; readable from the
+   * binary). Omitted → the board is provisioned from a phone. */
+  wifi?: { ssid: string; password: string };
+  /** Phone provisioning security (ignored with `wifi`). Default level 1.
+   * Level 2 needs the SRP6a salt/verifier from lib/srp6a; without them the
+   * sketch carries a placeholder and isn't ready to flash. */
+  provisioning?: { security: 1 } | { security: 2; salt?: Uint8Array; verifier?: Uint8Array };
+  /** GPIO overrides keyed "m:<metric id>" (bool inputs) / "a:<actuator id>"
+   * (outputs); anything not given uses defaultPins(). */
+  pins?: Record<string, number>;
+}
+
+/** Every GPIO the pickers offer for a board — its input and output pools. */
+export function pinChoices(board: SketchBoard = "esp32"): number[] {
+  const b = BOARDS[board];
+  return [...new Set([...b.inputs, ...b.outputs])].sort((x, y) => x - y);
+}
+
+/** Pins handed out in order: bool metrics from the input pool, non-string
+ * actuators from the output pool, so the defaults never clash. */
+export function defaultPins(metrics: SketchMetric[], actuators: SketchActuator[], board: SketchBoard = "esp32"): Record<string, number> {
+  const { inputs, outputs } = BOARDS[board];
+  const out: Record<string, number> = {};
+  let i = 0;
+  let o = 0;
+  for (const m of metrics) if (m.data_type === "bool") out[`m:${wireId(m)}`] = inputs[i++] ?? 0;
+  for (const a of actuators) if ((a.value_type ?? "bool") !== "string") out[`a:${wireId(a)}`] = outputs[o++] ?? 0;
+  return out;
+}
+
+/** The name the phone app lists: the device name in printable ASCII (accents
+ * dropped), at most 29 bytes — the BLE limit. The sketch's PROV_NAME and the
+ * QR's "name" both come from here, so they always match. */
+export function provName(deviceName: string): string {
+  const ascii = deviceName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7e]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (ascii || "iot-device").slice(0, 29).trim();
+}
+
+/** The QR payload the ESP BLE Provisioning app scans (docs/ble-provisioning.md).
+ * `security` is always explicit: the app assumes 2 when it's missing. */
+export function provisioningPayload(p: { name: string; username: string; password: string; security: 1 | 2 }): string {
+  const body =
+    p.security === 2
+      ? { ver: "v1", name: p.name, username: p.username, pop: p.password, transport: "ble", network: "wifi", security: 2 }
+      : { ver: "v1", name: p.name, pop: p.password, transport: "ble", network: "wifi", security: 1 };
+  return JSON.stringify(body);
+}
+
+/** A byte array as a C initializer body, 16 per line. */
+function cBytes(bytes: Uint8Array): string {
+  const hex = Array.from(bytes, (b) => "0x" + b.toString(16).padStart(2, "0"));
+  const lines: string[] = [];
+  for (let i = 0; i < hex.length; i += 16) lines.push("  " + hex.slice(i, i + 16).join(", "));
+  return lines.join(",\n");
+}
+
+/** Every GPIO an ESP32 DevKit picker offers (pinChoices("esp32")). */
+export const PIN_CHOICES: readonly number[] = pinChoices("esp32");
+
+/** Keys whose pin is shared with another key, with the reason to show. */
+export function pinClashes(pins: Record<string, number>): Record<string, string> {
+  const byPin = new Map<number, string[]>();
+  for (const [key, pin] of Object.entries(pins)) byPin.set(pin, [...(byPin.get(pin) ?? []), key]);
+  const out: Record<string, string> = {};
+  for (const [pin, keys] of byPin) {
+    if (keys.length < 2) continue;
+    for (const k of keys) {
+      const others = keys.filter((x) => x !== k).map((x) => x.slice(2));
+      out[k] = `GPIO ${pin} is also used by ${others.join(", ")}.`;
+    }
+  }
+  return out;
 }
 
 function toIdentifier(name: string): string {
@@ -131,60 +236,60 @@ export function buildSketch(info: SketchInfo): string {
     info.metrics.length > 0 ? info.metrics : actuators.length > 0 ? [] : [PLACEHOLDER_METRIC];
   const hasMetrics = metrics.length > 0;
   const subtree = `${tenantSlug}/${deviceSlug}`;
-  const bleName = cText((info.deviceName || deviceSlug).slice(0, 20));
+  const boardKey: SketchBoard = info.board ?? "esp32";
+  const board = BOARDS[boardKey];
+  const isC3 = boardKey === "esp32c3";
+  // Phone provisioning unless Wi-Fi is typed into the sketch.
+  const phone = !info.wifi;
+  const prov = info.provisioning ?? { security: 1 as const };
+  const bleName = cText(provName(info.deviceName || deviceSlug));
 
   const username = info.credential?.username ?? CREDENTIAL_PLACEHOLDER;
   const password = info.credential?.password ?? CREDENTIAL_PLACEHOLDER;
 
-  let nextInput = 0;
-  let nextOutput = 0;
-  const takePin = (pool: number[], index: number) => pool[index] ?? 0;
+  const pins = { ...defaultPins(metrics, actuators, boardKey), ...(info.pins ?? {}) };
 
   const metricRows = metrics.map((m) => {
     const id = toIdentifier(wireId(m));
     const isBool = m.data_type === "bool";
-    const pin = isBool ? takePin(INPUT_PINS, nextInput++) : null;
+    const pin = isBool ? (pins[`m:${wireId(m)}`] ?? 0) : null;
     return { m, id, isBool, pin, pinConst: `${id.toUpperCase()}_PIN` };
   });
   const actuatorRows = actuators.map((a) => {
     const id = toIdentifier(wireId(a));
     const type = a.value_type ?? "bool";
-    const pin = type === "string" ? null : takePin(OUTPUT_PINS, nextOutput++);
+    const pin = type === "string" ? null : (pins[`a:${wireId(a)}`] ?? 0);
     return { a, id, type, pin, pinConst: `${id.toUpperCase()}_PIN` };
   });
 
   // ---- sections -----------------------------------------------------------
 
-  const header = `// Generated for device "${cText(info.deviceName || deviceSlug)}" (${subtree}).
+  const ideLines = [
+    `Board: "${board.arduinoBoard}"`,
+    ...board.ideSettings,
+    ...(phone ? ['Partition Scheme: "Huge APP (3MB No OTA/1MB SPIFFS)" (BLE + Wi-Fi don\'t fit the default)'] : []),
+  ];
+  const header = `// Generated for device "${cText(info.deviceName || deviceSlug)}" (${subtree}), ${board.label}.
 //
 // Libraries (Arduino Library Manager): PubSubClient by Nick O'Leary, ArduinoJson
-// by Benoit Blanchon. Board: "ESP32 Dev Module".
-// Tools > Partition Scheme > "Huge APP (3MB No OTA/1MB SPIFFS)" — BLE + Wi-Fi
-// don't fit the default 1.2MB app partition.
+// by Benoit Blanchon. ESP32 board package by Espressif, version 3.x.
+// Arduino IDE > Tools:
+${ideLines.map((l) => `//   ${l}`).join("\n")}
 //
-// First boot: with no Wi-Fi stored, the board starts BLE provisioning and waits
-// for the SSID/password (docs/ble-provisioning.md). Once connected they are
-// kept in flash. To provision again, re-upload with Tools > "Erase All Flash
-// Before Sketch Upload" enabled.`;
+${
+  phone
+    ? `// Wi-Fi: set it from a phone. On first boot the board advertises as
+// "${bleName}"; scan the QR on the dashboard with the ESP BLE Provisioning app
+// (Security ${prov.security}). The Wi-Fi is kept in flash. To set a new one, hold
+// ${board.resetButton} for 5 seconds while the board is running.`
+    : `// Wi-Fi: typed into this sketch (bench test). It's readable from the binary.`
+}`;
 
   const includes = `#include <WiFi.h>
-${tls ? "#include <WiFiClientSecure.h>\n" : ""}#include <Preferences.h>
-#include <PubSubClient.h>
-#include <ArduinoJson.h>
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
-#include <BLESecurity.h>`;
+${tls ? "#include <WiFiClientSecure.h>\n" : ""}${phone ? "#include <WiFiProv.h>\n" : ""}#include <PubSubClient.h>
+#include <ArduinoJson.h>`;
 
   const settingsBlock = `const char* FW_VERSION = "${FW_VERSION}";
-const char* BLE_DEVICE_NAME = "${bleName}";
-
-// Development shortcut: if set, these are used (and saved) when no Wi-Fi has
-// been provisioned yet, skipping BLE. Leave empty to provision over BLE.
-const char* DEV_WIFI_SSID = "";
-const char* DEV_WIFI_PASSWORD = "";
-
 ${
   tls
     ? `// MQTT broker — this dashboard's own host. The dashboard is served over HTTPS,
@@ -223,178 +328,121 @@ const unsigned long WIFI_CONNECT_TIMEOUT_MS = 20000;`;
       .map((r) => `const int ${r.pinConst} = ${r.pin};  // output for "${cText(r.a.name)}"`),
   ].join("\n");
 
-  const bleBlock = `// ---- BLE Wi-Fi provisioning (docs/ble-provisioning.md) ----------------------
-#define PROV_SERVICE_UUID "${PROV_SERVICE_UUID}"
-#define PROV_SSID_UUID "${PROV_UUIDS.ssid}"
-#define PROV_PASSWORD_UUID "${PROV_UUIDS.password}"
-#define PROV_CONTROL_UUID "${PROV_UUIDS.control}"
-#define PROV_STATUS_UUID "${PROV_UUIDS.status}"
-#define PROV_INFO_UUID "${PROV_UUIDS.info}"
+  const c3Power = isC3
+    ? `
+// ESP32-C3 boards (the Super Mini especially) fail to authenticate or run hot
+// at full TX power; 8.5 dBm is plenty for a nearby access point.
+const wifi_power_t TX_POWER = WIFI_POWER_8_5dBm;`
+    : "";
+  const c3PowerCase = isC3 ? `
+    case ARDUINO_EVENT_WIFI_STA_START:
+      WiFi.setTxPower(TX_POWER);
+      break;` : "";
 
-bool provisioningMode = false;
-volatile bool provApplyRequested = false;
-String provSsid;
-String provPassword;
-BLECharacteristic* provStatusChar = nullptr;
+  const wifiBlock = phone
+    ? `// ---- Wi-Fi from a phone: Espressif provisioning (docs/ble-provisioning.md) ----
+// Keep the Bluetooth controller's RAM reserved, or BLE provisioning crashes at boot.
+extern "C" bool btInUse() { return true; }
 
-void setProvStatus(const char* state, const char* reason) {
-  char json[96];
-  snprintf(json, sizeof(json), "{\\"state\\":\\"%s\\",\\"reason\\":\\"%s\\"}", state, reason);
-  Serial.print("[PROV] status ");
-  Serial.println(json);
-  if (provStatusChar != nullptr) {
-    provStatusChar->setValue(json);
-    provStatusChar->notify();
+// The name the ESP BLE Provisioning app lists; the dashboard's QR carries it.
+const char* PROV_NAME = "${bleName}";
+${
+  prov.security === 2
+    ? `// Security 2 (SRP6a): the app proves it knows the device's password; the board
+// keeps only this salt and verifier for it (username MQTT_USERNAME).
+static const char SEC2_SALT[] = {
+${prov.salt ? cBytes(prov.salt) : "  0x00 /* computed by the dashboard when you download the sketch */"}
+};
+static const char SEC2_VERIFIER[] = {
+${prov.verifier ? cBytes(prov.verifier) : "  0x00 /* computed by the dashboard when you download the sketch */"}
+};
+static network_prov_security2_params_t SEC2_PARAMS = {SEC2_SALT, sizeof(SEC2_SALT), SEC2_VERIFIER, sizeof(SEC2_VERIFIER)};`
+    : `// Security 1: the proof of possession is the device's password (MQTT_PASSWORD).`
+}
+const int RESET_PIN = ${board.resetPin};  // hold 5 s while running: provision again
+const unsigned long RESET_HOLD_MS = 5000;${c3Power}
+
+void onWifiEvent(arduino_event_t* e) {
+  switch (e->event_id) {
+    case ARDUINO_EVENT_PROV_START:
+      Serial.print("[PROV] no Wi-Fi stored, advertising over BLE as ");
+      Serial.println(PROV_NAME);
+      break;
+    case ARDUINO_EVENT_PROV_CRED_RECV:
+      Serial.println("[PROV] Wi-Fi received from the app");
+      break;
+    case ARDUINO_EVENT_PROV_CRED_FAIL:
+      Serial.println("[PROV] couldn't join that network; check the password and send it again");
+      break;
+    case ARDUINO_EVENT_PROV_CRED_SUCCESS:
+      Serial.println("[PROV] Wi-Fi saved");
+      break;
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      Serial.print("[WIFI] connected, IP: ");
+      Serial.println(WiFi.localIP());
+      break;${c3PowerCase}
+    default:
+      break;
   }
 }
 
-// getValue() is std::string on ESP32 core 2.x and String on 3.x — c_str()
-// works on both.
-class ProvSsidCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* c) override {
-    String v = c->getValue().c_str();
-    if (v.length() == 0 || v.length() > 32) {
-      setProvStatus("failed", "invalid_ssid");
-      return;
-    }
-    provSsid = v;
-  }
-};
-
-class ProvPasswordCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* c) override {
-    String v = c->getValue().c_str();
-    if (v.length() > 64) {
-      setProvStatus("failed", "invalid_password");
-      return;
-    }
-    provPassword = v;
-  }
-};
-
-class ProvControlCallbacks : public BLECharacteristicCallbacks {
-  void onWrite(BLECharacteristic* c) override {
-    String v = c->getValue().c_str();
-    // 0x01 = apply. The connect attempt runs in loop(), never in a BLE callback.
-    if (v.length() >= 1 && (uint8_t)v[0] == 0x01) provApplyRequested = true;
-  }
-};
-
-BLECharacteristic* addProvCharacteristic(BLEService* service, const char* uuid, uint32_t props) {
-  BLECharacteristic* c = service->createCharacteristic(uuid, props);
-  // Writes need an encrypted (bonded) link, so the Wi-Fi password never
-  // crosses the air in the clear.
-  c->setAccessPermissions(ESP_GATT_PERM_READ_ENCRYPTED | ESP_GATT_PERM_WRITE_ENCRYPTED);
-  return c;
+// Connects with the Wi-Fi stored in flash, or starts BLE provisioning if there
+// is none. Returns at once; loop() waits for the connection.
+void provisioningBegin() {
+  WiFi.onEvent(onWifiEvent);
+  WiFiProv.beginProvision(NETWORK_PROV_SCHEME_BLE, ${board.bleHandler},
+                          ${prov.security === 2 ? "NETWORK_PROV_SECURITY_2, (const char*)&SEC2_PARAMS" : "NETWORK_PROV_SECURITY_1, MQTT_PASSWORD"},
+                          PROV_NAME, NULL, NULL, false);
 }
 
-void startProvisioning() {
-  provisioningMode = true;
-  Serial.print("[PROV] no Wi-Fi stored, advertising over BLE as ");
-  Serial.println(BLE_DEVICE_NAME);
-
-  BLEDevice::init(BLE_DEVICE_NAME);
-  // The encrypted-only characteristic permissions below make the phone pair on
-  // first access; these settings make that pairing bonded Secure Connections.
-  BLESecurity* security = new BLESecurity();
-  security->setAuthenticationMode(ESP_LE_AUTH_REQ_SC_BOND);
-  security->setCapability(ESP_IO_CAP_NONE);
-  security->setInitEncryptionKey(ESP_BLE_ENC_KEY_MASK | ESP_BLE_ID_KEY_MASK);
-
-  BLEServer* server = BLEDevice::createServer();
-  BLEService* service = server->createService(PROV_SERVICE_UUID);
-
-  addProvCharacteristic(service, PROV_SSID_UUID, BLECharacteristic::PROPERTY_WRITE)
-      ->setCallbacks(new ProvSsidCallbacks());
-  addProvCharacteristic(service, PROV_PASSWORD_UUID, BLECharacteristic::PROPERTY_WRITE)
-      ->setCallbacks(new ProvPasswordCallbacks());
-  addProvCharacteristic(service, PROV_CONTROL_UUID, BLECharacteristic::PROPERTY_WRITE)
-      ->setCallbacks(new ProvControlCallbacks());
-  provStatusChar = addProvCharacteristic(
-      service, PROV_STATUS_UUID, BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY);
-  provStatusChar->addDescriptor(new BLE2902());
-
-  BLECharacteristic* infoChar =
-      addProvCharacteristic(service, PROV_INFO_UUID, BLECharacteristic::PROPERTY_READ);
-  char info[192];
-  snprintf(info, sizeof(info), "{\\"device_id\\":\\"%s\\",\\"topic_prefix\\":\\"${subtree}\\",\\"fw_version\\":\\"%s\\"}",
-           MQTT_USERNAME, FW_VERSION);
-  infoChar->setValue(info);
-
-  service->start();
-  BLEAdvertising* advertising = BLEDevice::getAdvertising();
-  advertising->addServiceUUID(PROV_SERVICE_UUID);
-  advertising->setScanResponse(true);
-  BLEDevice::startAdvertising();
-  setProvStatus("idle", "");
-}
-
-void loopProvisioning() {
-  if (!provApplyRequested) {
-    delay(50);
+// Hold the reset button (RESET_PIN to GND) for 5 seconds while running: forget
+// the Wi-Fi and provision again.
+// (Holding it while powering up would start the bootloader instead.)
+unsigned long resetDownSince = 0;
+void watchProvisioningReset() {
+  if (digitalRead(RESET_PIN) != LOW) {
+    resetDownSince = 0;
     return;
   }
-  provApplyRequested = false;
-  if (provSsid.length() == 0) {
-    setProvStatus("failed", "missing_ssid");
-    return;
-  }
-  setProvStatus("connecting", "");
-  if (tryConnectWifi(provSsid, provPassword)) {
-    saveWifi(provSsid, provPassword);
-    setProvStatus("connected", "");
-    delay(1000);  // let the notification reach the app before rebooting
+  if (resetDownSince == 0) resetDownSince = millis();
+  if (millis() - resetDownSince >= RESET_HOLD_MS) {
+    Serial.println("[PROV] reset button held: forgetting Wi-Fi and restarting");
+    WiFi.disconnect(false, true);  // erase the stored network only
+    delay(100);
     ESP.restart();
   }
-  WiFi.disconnect(true);
-  setProvStatus("failed", "wifi_connect_failed");
-}`;
-
-  const wifiBlock = `// ---- Wi-Fi (credentials live in flash, written by BLE provisioning) --------
-Preferences prefs;
-String wifiSsid;
-String wifiPassword;
-
-void saveWifi(const String& ssid, const String& password) {
-  prefs.begin("iot", false);
-  prefs.putString("ssid", ssid);
-  prefs.putString("pass", password);
-  prefs.end();
 }
 
-bool loadWifi() {
-  prefs.begin("iot", true);
-  wifiSsid = prefs.getString("ssid", "");
-  wifiPassword = prefs.getString("pass", "");
-  prefs.end();
-  if (wifiSsid.length() == 0 && strlen(DEV_WIFI_SSID) > 0) {
-    wifiSsid = DEV_WIFI_SSID;
-    wifiPassword = DEV_WIFI_PASSWORD;
-    saveWifi(wifiSsid, wifiPassword);
-  }
-  return wifiSsid.length() > 0;
-}
-
-bool tryConnectWifi(const String& ssid, const String& password) {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid.c_str(), password.c_str());
-  unsigned long start = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS) {
+// MQTT waits here while the Wi-Fi is down; WiFiProv reconnects on its own.
+void connectWifi() {
+  while (WiFi.status() != WL_CONNECTED) {
+    watchProvisioningReset();
     delay(250);
   }
-  return WiFi.status() == WL_CONNECTED;
+}`
+    : `// ---- Wi-Fi typed into the sketch (bench test) --------------------------------
+const char* WIFI_SSID = "${cText(info.wifi?.ssid ?? "")}";
+const char* WIFI_PASSWORD = "${cText(info.wifi?.password ?? "")}";${c3Power}
+${isC3 ? `
+void onWifiEvent(arduino_event_t* e) {
+  if (e->event_id == ARDUINO_EVENT_WIFI_STA_START) WiFi.setTxPower(TX_POWER);
 }
-
+` : ""}
 void connectWifi() {
-  while (true) {
-    Serial.print("[WiFi] connecting to ");
-    Serial.println(wifiSsid);
-    if (tryConnectWifi(wifiSsid, wifiPassword)) break;
-    Serial.println("[WiFi] failed, retrying");
-    WiFi.disconnect(true);
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print("[WIFI] connecting to ");
+    Serial.println(WIFI_SSID);
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    unsigned long start = millis();
+    while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_CONNECT_TIMEOUT_MS) delay(250);
+    if (WiFi.status() != WL_CONNECTED) {
+      Serial.println("[WIFI] failed, retrying");
+      WiFi.disconnect(true);
+    }
   }
   WiFi.setAutoReconnect(true);
-  Serial.print("[WiFi] connected, IP: ");
+  Serial.print("[WIFI] connected, IP: ");
   Serial.println(WiFi.localIP());
 }`;
 
@@ -678,23 +726,30 @@ ${actuatorRows
   const setupLoop = `void setup() {
   Serial.begin(115200);
 ${pinModes ? `${pinModes}\n` : ""}
-  if (!loadWifi()) {
-    startProvisioning();
-    return;
-  }
-  connectWifi();
-${tls ? "  netClient.setCACert(ROOT_CA);\n" : ""}  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+${
+  phone
+    ? `${isC3 ? '  esp_log_level_set("protocomm_nimble", ESP_LOG_NONE);\n' : ""}  pinMode(RESET_PIN, INPUT_PULLUP);
+  provisioningBegin();
+`
+    : `${isC3 ? "  WiFi.onEvent(onWifiEvent);\n" : ""}  connectWifi();
+`
+}${tls ? "  netClient.setCACert(ROOT_CA);\n" : ""}  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
   // The retained config message doesn't fit PubSubClient's default 256 bytes.
   mqttClient.setBufferSize(1024);
   mqttClient.setCallback(mqttCallback);
 }
 
 void loop() {
-  if (provisioningMode) {
-    loopProvisioning();
+${
+  phone
+    ? `  watchProvisioningReset();
+  if (WiFi.status() != WL_CONNECTED) {
+    delay(100);  // provisioning, or (re)connecting to the stored Wi-Fi
     return;
   }
-  if (!mqttClient.connected()) connectMqtt();
+`
+    : ""
+}  if (!mqttClient.connected()) connectMqtt();
   mqttClient.loop();
 ${hasMetrics ? "  publishMetrics();\n" : ""}  if (millis() - lastStatusMs >= STATUS_INTERVAL_MS) publishStatus();
   delay(20);
@@ -706,12 +761,9 @@ ${hasMetrics ? "  publishMetrics();\n" : ""}  if (millis() - lastStatusMs >= STA
     settingsBlock,
     pinsBlock,
     // Forward declarations: the BLE and MQTT sections call across each other.
-    `bool tryConnectWifi(const String& ssid, const String& password);
-void saveWifi(const String& ssid, const String& password);
-void connectWifi();
+    `void connectWifi();
 extern PubSubClient mqttClient;`,
     wifiBlock,
-    bleBlock,
     metricsBlock,
     actuatorHandlers,
     callbackBlock,

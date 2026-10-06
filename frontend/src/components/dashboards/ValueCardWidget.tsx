@@ -1,50 +1,33 @@
 "use client";
 
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { ConnectionBadge } from "@/components/ui/ConnectionBadge";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Readout } from "@/components/ui/Readout";
 import { WidgetCard } from "@/components/dashboards/WidgetCard";
+import { DeviceLink, useWidgetDevice, WidgetFoot } from "@/components/dashboards/widget-common";
 import type { components } from "@/types/api";
 
-type DeviceResponse = components["schemas"]["DeviceResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 
-export function ValueCardWidget({
-  deviceId,
-  metric,
-  onRemove,
-}: {
-  deviceId: string;
-  metric: string | null;
-  onRemove?: () => void;
-}) {
-  const { data: device } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
-  // A fallback, not the primary freshness mechanism — useRealtime revalidates
-  // this same key the moment a telemetry message for this device arrives.
-  const { data: latest, isLoading } = useApiSWR<TelemetryLatestResponse[]>(
-    `/devices/${deviceId}/latest`,
-    { refreshInterval: 20_000 },
-  );
-
+export function ValueCardWidget({ deviceId, metric }: { deviceId: string; metric: string | null }) {
+  const { device, meta, stale } = useWidgetDevice(deviceId, metric);
+  // A fallback, not the primary freshness mechanism — useRealtime applies
+  // telemetry frames to this same key the moment they arrive.
+  const { data: latest, isLoading } = useApiSWR<TelemetryLatestResponse[]>(`/devices/${deviceId}/latest`, { refreshInterval: 20_000 });
   const reading = latest?.find((r) => r.metric === metric);
+  const isBool = meta?.data_type === "bool";
+  let value: string | number = "—";
+  if (reading) value = isBool ? (reading.value ? "on" : "off") : meta?.decimals != null ? reading.value.toFixed(meta.decimals) : reading.value;
 
   return (
-    <WidgetCard title={device?.name ?? "Value"} onRemove={onRemove}>
-      <div className="flex h-full flex-col justify-between">
+    <WidgetCard title={meta?.name ?? metric ?? "Value"} subtitle={<DeviceLink device={device} />}>
+      <div className="flex h-full flex-col justify-between gap-1">
         {isLoading ? (
           <LoadingSkeleton rows={1} rowClassName="h-10" />
-        ) : !metric || !reading ? (
-          <EmptyState title="No reading yet" description={metric ? undefined : "No metric configured."} />
         ) : (
-          <Readout label={metric} value={reading.value} size="lg" />
+          <Readout value={value} unit={reading && !isBool ? (meta?.unit ?? undefined) : undefined} size="lg" stale={stale && !!reading} framed={false} />
         )}
-        {device && (
-          <div className="mt-2">
-            <ConnectionBadge state={device.connection_state} />
-          </div>
-        )}
+        {reading ? <WidgetFoot stale={stale} time={reading.time} /> : <span className="text-[11.5px] text-ink-muted">No data yet</span>}
       </div>
     </WidgetCard>
   );

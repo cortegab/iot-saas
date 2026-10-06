@@ -205,10 +205,13 @@ The platform stamps its own receive time for staleness math and never trusts thi
 **Device auth:** per-device tokens / API keys, **stored hashed** (argon2id), never in plaintext.
 MQTT credentials map 1:1 to a device; EMQX ACLs restrict each device to its own topic subtree.
 
-**BLE Wi-Fi provisioning** (device-side, before MQTT): generated sketches with no stored Wi-Fi
-expose a GATT service for a provisioning app — UUIDs, payloads, and the encrypted-link requirement
-are in `docs/ble-provisioning.md`. It is part of this shared contract: keep it in sync across
-variants, and never change the UUIDs without planning for boards already flashed.
+**BLE Wi-Fi provisioning** (device-side, before MQTT): sketches generated with "Set up from a
+phone" use **Espressif's unified provisioning** (Arduino `WiFiProv`), so the ESP BLE Provisioning
+app works today and the future app embeds Espressif's libraries. The service name is the device
+name; the QR carries the device's own MQTT credential (`pop` = password, plus `username` = device
+id for Security 2), so rotating the credential means a new sketch and a new QR. Security 1 (PoP)
+or 2 (SRP6a; salt/verifier computed in the browser) — details in `docs/ble-provisioning.md`. It is
+part of this shared contract: keep it in sync across variants, with boards already flashed in mind.
 
 Commits touching ingestion, rules, commands, or the telemetry schema are tagged `[core]` so they can
 be cross-checked against the other deployment variant.

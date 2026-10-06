@@ -2,28 +2,17 @@
 
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
+import { nightButtonClassName } from "./night";
 
-/** The landing page's primary action. An already-signed-in visitor lands here
- * too (e.g. from a bookmark) — send them to the console instead of a login form
- * they don't need. The label follows the destination so the button never lies
- * about what it does. */
-export function EnterButton({
-  variant = "primary",
-  className,
-}: {
-  variant?: "primary" | "ghost";
-  className?: string;
-}) {
+/** The landing page's sign-in action, on the night surfaces. A visitor who is
+ * already signed in gets "Open console" instead of a login form they don't
+ * need — the label always says where it goes. */
+export function EnterButton({ size = "md" }: { size?: "md" | "lg" }) {
   const { status } = useAuth();
   const authenticated = status === "authenticated";
-
   return (
-    <Link
-      href={authenticated ? "/devices" : "/login"}
-      className={`mkt-btn ${variant === "ghost" ? "mkt-btn--ghost" : ""} ${className ?? ""}`.trim()}
-    >
-      {authenticated ? "Open console" : "Log in"}
-      <span aria-hidden="true">→</span>
+    <Link href={authenticated ? "/devices" : "/login"} className={nightButtonClassName({ kind: "ghost", size })}>
+      {authenticated ? "Open console" : "Sign in"}
     </Link>
   );
 }

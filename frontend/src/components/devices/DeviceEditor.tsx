@@ -1,13 +1,15 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { KeyRound, SquareArrowOutUpRight, Trash2 } from "lucide-react";
+import { Cpu, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Tag } from "@/components/ui/Badge";
+import { Button, buttonClassName } from "@/components/ui/Button";
+import { CopyField } from "@/components/ui/SecretReveal";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -17,12 +19,13 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Select } from "@/components/ui/Select";
 import { SwitchField } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
-import { EditorFrame, EditorSection, type EditorMode } from "@/components/editor/EditorFrame";
+import { EditorFrame, EditorSection } from "@/components/editor/EditorFrame";
 import { useRecordEditor, type Validation } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
 import type { components } from "@/types/api";
+import { DeviceTopics } from "./DeviceTopics";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -50,21 +53,10 @@ function validate(d: DeviceDraft): Validation {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** Edit a device's name and rule evaluation (DESIGN.md §7/§8). Zone and
- * template change join once the backend accepts them. */
-export function DeviceEditor({
-  deviceId,
-  mode,
-  onClose,
-  expandHref,
-  dockHref,
-}: {
-  deviceId: string;
-  mode: EditorMode;
-  onClose?: () => void;
-  expandHref?: string;
-  dockHref?: string;
-}) {
+/** Edit a device's name, zone and rule evaluation (DESIGN.md §7/§8). It
+ * lives in the device page's Settings tab (`embedded`: the page has the
+ * title and record menu); the devices list only peeks. */
+export function DeviceEditor({ deviceId, embedded = false }: { deviceId: string; embedded?: boolean }) {
   const api = useApi();
   const router = useRouter();
   const toast = useToast();
@@ -83,16 +75,12 @@ export function DeviceEditor({
     [device],
   );
   const editor = useRecordEditor({ source, validate });
-  const { confirmLeave, dialog: guardDialog } = useUnsavedGuard(editor.dirty, device ? device.name : "this device");
+  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, device ? device.name : "this device");
 
   const ruleCount = useMemo(
     () => (rules ?? []).filter((r) => r.devices.some((d) => d.device_id === deviceId)).length,
     [rules, deviceId],
   );
-
-  const close = useCallback(async () => {
-    if (await confirmLeave()) onClose?.();
-  }, [confirmLeave, onClose]);
 
   async function onSave(): Promise<boolean> {
     const before = editor.original;
@@ -160,11 +148,13 @@ export function DeviceEditor({
   const consequence = d.enabled
     ? `Saving applies immediately.${ruleCount ? ` ${plural(ruleCount, "rule")} use${ruleCount === 1 ? "s" : ""} this device.` : ""}`
     : `Saving stops rule evaluation for this device and refuses its connections. ${ruleCount ? `${plural(ruleCount, "rule")} stop evaluating it. ` : ""}Its history is kept.`;
+  const card = embedded;
 
   return (
     <>
       <EditorFrame
-        mode={mode}
+        mode="page"
+        headless={embedded}
         noun="device"
         title={d.name.trim() || device.name}
         eyebrow={
@@ -174,27 +164,16 @@ export function DeviceEditor({
         }
         consequence={consequence}
         sections={[
-          { id: "identity", label: "Identity", description: "Name and template" },
-          { id: "status", label: "Status", description: "Whether rules evaluate it" },
+          { id: "general", label: "General", description: "Name and zone" },
+          { id: "status", label: "Rule evaluation", description: "Whether rules evaluate it" },
         ]}
+        sectionOf={(p) => (p.startsWith("identity") ? "general" : p.split(".")[0])}
         status={editor}
         readOnly={readOnly}
         onSave={onSave}
         onDiscard={editor.discard}
-        onClose={onClose ? () => void close() : undefined}
-        expandHref={expandHref}
-        dockHref={dockHref}
-        menu={[
-          [
-            { label: "Open device page", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/devices/${device.id}`) },
-            ...(readOnly
-              ? []
-              : [{ label: "Credentials and firmware", icon: <KeyRound size={15} />, onClick: () => router.push(`/devices/${device.id}?tab=settings`) }]),
-          ],
-          ...(readOnly ? [] : [[{ label: "Delete device…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]]),
-        ]}
       >
-        <EditorSection id="identity" title="Identity">
+        <EditorSection id="general" title="General" card={card}>
           <Field label="Name" error={editor.errorFor("identity.name")} hint="Shown in lists, dashboards and alerts.">
             <Input
               value={d.name}
@@ -224,31 +203,11 @@ export function DeviceEditor({
               ))}
             </Select>
           </Field>
-          <div className="flex flex-col gap-2 rounded-md border border-border bg-canvas px-3.5 py-3">
-            <span className="text-xs font-medium text-ink-muted">Template</span>
-            {template ? (
-              <>
-                <Link href={`/templates/${template.id}`} className="text-sm font-medium text-ink hover:text-accent hover:underline">
-                  {template.name}
-                </Link>
-                <div className="flex flex-wrap items-center gap-1 text-xs text-ink-muted">
-                  Publishes
-                  {template.metrics.length ? template.metrics.map((m) => <Tag key={m.key ?? m.name} mono>{m.key}</Tag>) : " nothing"}
-                </div>
-                <div className="flex flex-wrap items-center gap-1 text-xs text-ink-muted">
-                  Controls
-                  {template.actuators.length ? template.actuators.map((a) => <Tag key={a.key ?? a.name} mono>{a.key}</Tag>) : " nothing"}
-                </div>
-              </>
-            ) : (
-              <LoadingSkeleton rows={1} rowClassName="h-5" />
-            )}
-          </div>
         </EditorSection>
 
-        <EditorSection id="status" title="Status">
+        <EditorSection id="status" title="Rule evaluation" card={card} lead={ruleCount ? `${plural(ruleCount, "rule")} use${ruleCount === 1 ? "s" : ""} this device.` : "No rules use this device yet."}>
           <SwitchField
-            label="Rule evaluation"
+            label="Status"
             checked={d.enabled}
             disabled={readOnly}
             onChange={(enabled) => editor.set({ ...d, enabled })}
@@ -258,6 +217,66 @@ export function DeviceEditor({
             offHint="Rules ignore it and its connections are refused. Telemetry history is kept."
           />
         </EditorSection>
+
+        <EditorSection id="template" title="Template" card={card} lead="A device keeps the template it was added with.">
+          {template ? (
+            <div className="flex flex-col gap-2">
+              <Link href={`/templates/${template.id}`} className="w-fit text-sm font-medium text-accent hover:underline">
+                {template.name}
+              </Link>
+              <div className="flex flex-wrap items-center gap-1 text-xs text-ink-muted">
+                Publishes
+                {template.metrics.length ? template.metrics.map((m) => <Tag key={m.key ?? m.name} mono>{m.key}</Tag>) : " nothing"}
+              </div>
+              <div className="flex flex-wrap items-center gap-1 text-xs text-ink-muted">
+                Controls
+                {template.actuators.length ? template.actuators.map((a) => <Tag key={a.key ?? a.name} mono>{a.key}</Tag>) : " nothing"}
+              </div>
+            </div>
+          ) : (
+            <LoadingSkeleton rows={2} rowClassName="h-5" />
+          )}
+        </EditorSection>
+
+        {embedded && (
+          <EditorSection id="connection" title="Connection" card={card}>
+            <Field label="MQTT username" hint="Stored with an argon2id-hashed password, so a password is only ever shown once.">
+              <CopyField value={device.id} label="MQTT username" />
+            </Field>
+            {!readOnly && (
+              <div className="flex flex-wrap items-center gap-3 rounded-lg bg-canvas px-3.5 py-3">
+                <p className="min-w-0 flex-1 text-[13px] text-ink-muted">
+                  Get a ready-to-flash sketch with a new credential. The firmware running now disconnects until you flash the new one.
+                </p>
+                <Link href={`/devices/${device.id}/connect`} className={buttonClassName({ variant: "secondary" })}>
+                  <Cpu aria-hidden size={14} />
+                  Connect and get firmware
+                </Link>
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              <h4 className="text-[13px] font-semibold text-ink">MQTT topics</h4>
+              <DeviceTopics device={device} template={template} />
+            </div>
+          </EditorSection>
+        )}
+
+        {embedded && !readOnly && (
+          <EditorSection id="danger" title="Danger zone" card tone="danger">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0 max-w-[52ch]">
+                <p className="text-sm font-medium text-ink">Delete this device</p>
+                <p className="text-[13px] text-ink-muted">
+                  Its credential stops working{ruleCount ? `, ${plural(ruleCount, "rule")} stop evaluating it` : ""} and its telemetry history is removed.
+                </p>
+              </div>
+              <Button variant="danger" onClick={() => void remove()}>
+                <Trash2 aria-hidden size={14} />
+                Delete device…
+              </Button>
+            </div>
+          </EditorSection>
+        )}
       </EditorFrame>
       {confirmDialog}
       {guardDialog}

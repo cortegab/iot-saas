@@ -5,6 +5,7 @@ multi-device conditions read from, and hot-path evaluation/dispatch.
 """
 
 import asyncio
+import copy
 import json
 import logging
 import uuid
@@ -29,6 +30,7 @@ from app.notifications import service as notifications_service
 from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules import executors
+from app.rules import versions as rule_versions
 from app.rules.evaluators import (
     CHANGE_OPERATORS,
     DEFAULT_STALE_METRIC_AGE_SECONDS,
@@ -55,6 +57,7 @@ from app.rules.models import (
     RuleDeviceRole,
     RuleExecution,
     RuleType,
+    RuleVersion,
 )
 from app.rules.schemas import (
     RuleHealth,
@@ -347,6 +350,7 @@ async def _persist_rule(
     clear_actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
     enabled: bool,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     _assert_leaves_have_device(condition)
     _validate_trigger(trigger)
@@ -371,6 +375,7 @@ async def _persist_rule(
     session.add(rule)
     await session.flush()
     await _sync_rule_devices(session, tenant_id, rule.id, device_map)
+    await rule_versions.record_version(session, rule, None, author_id)
     _publish_invalidation(session)
     return rule
 
@@ -388,6 +393,7 @@ async def create_rule_canonical(
     clear_actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
     enabled: bool,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     return await _persist_rule(
         session,
@@ -401,6 +407,7 @@ async def create_rule_canonical(
         clear_actions=clear_actions,
         editor_graph=editor_graph,
         enabled=enabled,
+        author_id=author_id,
     )
 
 
@@ -416,6 +423,7 @@ async def create_device_rule(
     action: dict[str, Any] | None,
     actions: list[dict[str, Any]] | None,
     enabled: bool,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     """Backward-compatible single-device create (POST /devices/{id}/rules)."""
     stamped = _stamp_condition_device(condition, device_id)
@@ -446,6 +454,7 @@ async def create_device_rule(
         clear_actions=[],
         editor_graph=None,
         enabled=enabled,
+        author_id=author_id,
     )
 
 
@@ -573,8 +582,10 @@ async def update_rule(
     cooldown: int | None,
     action: dict[str, Any] | None,
     clear_actions: list[dict[str, Any]] | None = None,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     rule = await get_rule(session, tenant_id, rule_id)
+    before = copy.deepcopy(rule_versions.snapshot_of(rule))
     # Fallback device for a legacy (device-less) leaf in an incoming
     # condition — the rule's current primary input device.
     existing_inputs = await session.execute(
@@ -628,6 +639,7 @@ async def update_rule(
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
     await session.flush()
     await _sync_rule_devices(session, tenant_id, rule.id, device_map)
+    await rule_versions.record_version(session, rule, before, author_id)
     _publish_invalidation(session)
     return rule
 
@@ -2188,3 +2200,145 @@ async def emit_rule_health_transitions(factory: async_sessionmaker[AsyncSession]
 
     for gone in set(_rule_health_tracks) - live_ids:
         del _rule_health_tracks[gone]
+
+
+# ---- Versions (API-side, DESIGN.md §9) ---------------------------------------
+
+
+async def list_rule_versions(
+    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID
+) -> list[tuple[RuleVersion, str | None]]:
+    """Newest first, each with its author's display name (or email)."""
+    rows = await rule_versions.list_versions(session, tenant_id, rule_id)
+    people = await auth_service.get_people_by_user_ids(
+        session, list({v.author_id for v in rows if v.author_id is not None})
+    )
+    out: list[tuple[RuleVersion, str | None]] = []
+    for v in rows:
+        person = people.get(v.author_id) if v.author_id is not None else None
+        out.append((v, (person[1] or person[0]) if person else None))
+    return out
+
+
+# ---- Activity for the rules list (API-side, DESIGN.md §5 Mini strip) ---------
+
+
+StripCell = Literal["idle", "true", "fired"]
+
+
+class RuleActivityRow(NamedTuple):
+    rule_id: uuid.UUID
+    cells: list[StripCell]
+    fired: int
+    last_fired_at: datetime | None
+
+
+async def rule_activity(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    *,
+    hours: int = 24,
+    buckets: int = 48,
+    now: datetime | None = None,
+) -> list[RuleActivityRow]:
+    """Every rule's last `hours`, in `buckets` cells, from rule_executions.
+
+    A cell is "fired" when a firing landed in it. Rules with on-clear
+    actions record the clear edge too, so the span between a fire and its
+    clear is "true" (the condition held); for other rules nothing is known
+    between firings, so it stays "idle" — never guessed. Read-only, never on
+    the hot path.
+    """
+    end = now or datetime.now(UTC)
+    start = end - timedelta(hours=hours)
+    width = (end - start) / buckets
+    rules = (
+        await session.execute(
+            select(Rule.id, Rule.clear_actions).where(Rule.tenant_id == tenant_id)
+        )
+    ).all()
+    rows = (
+        await session.execute(
+            select(RuleExecution.rule_id, RuleExecution.fired_at, RuleExecution.edge)
+            .where(RuleExecution.tenant_id == tenant_id, RuleExecution.fired_at >= start)
+            .order_by(RuleExecution.fired_at)
+        )
+    ).all()
+    # Whether each clear-tracking rule was held when the window opened.
+    prior = (
+        await session.execute(
+            text(
+                # A window function, not DISTINCT ON: TimescaleDB's SkipScan
+                # rejects DISTINCT ON over this RLS-filtered table.
+                "SELECT rule_id, edge FROM ("
+                "  SELECT rule_id, edge, row_number() OVER ("
+                "    PARTITION BY rule_id ORDER BY fired_at DESC) AS rn"
+                "  FROM rule_executions"
+                "  WHERE tenant_id = :t AND fired_at < :start AND rule_id IS NOT NULL"
+                ") last WHERE rn = 1"
+            ),
+            {"t": tenant_id, "start": start},
+        )
+    ).all()
+    held_at_start = {r.rule_id for r in prior if r.edge == "fire"}
+    by_rule: dict[uuid.UUID, list[tuple[datetime, str]]] = {}
+    for r in rows:
+        if r.rule_id is not None:
+            by_rule.setdefault(r.rule_id, []).append((r.fired_at, r.edge))
+
+    def cell_of(t: datetime) -> int:
+        return min(buckets - 1, max(0, int((t - start) / width)))
+
+    out: list[RuleActivityRow] = []
+    for rule_id, clear_actions in rules:
+        events = by_rule.get(rule_id, [])
+        cells: list[StripCell] = ["idle"] * buckets
+        if clear_actions:
+            held_from: int | None = 0 if rule_id in held_at_start else None
+            for t, edge in events:
+                i = cell_of(t)
+                if edge == "fire" and held_from is None:
+                    held_from = i
+                elif edge == "clear" and held_from is not None:
+                    for j in range(held_from, i + 1):
+                        cells[j] = "true"
+                    held_from = None
+            if held_from is not None:
+                for j in range(held_from, buckets):
+                    cells[j] = "true"
+        fires = [t for t, edge in events if edge == "fire"]
+        for t in fires:
+            cells[cell_of(t)] = "fired"
+        out.append(RuleActivityRow(rule_id, cells, len(fires), fires[-1] if fires else None))
+    return out
+
+
+async def simulate_draft(
+    session: AsyncSession, tenant_id: uuid.UUID, body: dict[str, Any], req: SimulateRequest
+) -> SimulateResponse:
+    """Simulate a rule that isn't saved yet: the same validation as a save,
+    then simulate_rule on a transient Rule that is never added to the
+    session — nothing is written, nothing is dispatched. API-side only."""
+    condition = body.get("condition")
+    trigger = body["trigger"]
+    actions = body["actions"]
+    clear_actions = body.get("clear_actions") or []
+    policy = body["execution_policy"]
+    _assert_leaves_have_device(condition)
+    _validate_trigger(trigger)
+    _validate_clear_actions(trigger, clear_actions)
+    _validate_latch(trigger, policy, clear_actions)
+    device_map = _rule_device_map(condition, actions, trigger, clear_actions)
+    await _validate_devices_in_tenant(session, tenant_id, set(device_map))
+    draft = Rule(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        name=body.get("name") or "Draft",
+        trigger=trigger,
+        condition=condition,
+        execution_policy=policy,
+        actions=actions,
+        clear_actions=clear_actions,
+        enabled=True,
+    )
+    return await simulate_rule(session, tenant_id, draft, req)

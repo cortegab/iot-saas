@@ -454,3 +454,35 @@ class SimulateResponse(BaseModel):
     actions: list[SimulateActionPreview]
     clear_actions: list[SimulateActionPreview] = Field(default_factory=list)
     replay: SimulateReplayResult | None
+
+
+class RuleVersionResponse(BaseModel):
+    """One saved state of a rule (DESIGN.md §9 Versions). `snapshot` holds
+    the rule's definition as saved, for the editor's client-side Restore."""
+
+    id: uuid.UUID
+    version: int
+    snapshot: dict[str, object]
+    change_lines: list[str]
+    author_id: uuid.UUID | None
+    # Display name or email; null for an API-key save or a deleted user.
+    author: str | None
+    created_at: datetime
+
+
+class RuleActivityResponse(BaseModel):
+    """One rule's recent activity for the list's mini strip (DESIGN.md §5):
+    `cells` oldest → newest, each "fired" (a firing landed in it), "true"
+    (inside a fire → clear span; only rules that record clears), or "idle"."""
+
+    rule_id: uuid.UUID
+    cells: list[Literal["idle", "true", "fired"]]
+    fired: int
+    last_fired_at: datetime | None
+
+
+class DraftSimulateRequest(SimulateRequest):
+    """Simulate an unsaved draft (the editor's live preview): the rule body
+    as it would be created, plus the usual overrides / replay window."""
+
+    rule: RuleCreateRequest

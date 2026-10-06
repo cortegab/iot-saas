@@ -14,6 +14,7 @@ same `EmailProvider` protocol — `httpx` is already a dependency. This module
 has no routes and no models; it is a delivery helper like `realtime/`'s.
 """
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from email.message import EmailMessage as _StdEmailMessage
@@ -92,18 +93,54 @@ class SmtpEmailProvider:
         )
 
 
-def send_after_commit(session: AsyncSession, message: EmailMessage) -> None:
-    """Queue a transactional email (invitation, password reset) to go out
-    only once the request's transaction commits. A delivery failure is
-    logged, never raised — the record exists, and the user can resend."""
+# Post-commit callbacks run before the response is sent (get_session's
+# scope="function"), so a slow SMTP server would hold the request. Delivery
+# therefore runs as a background task; tests set this to deliver inline so
+# they can read the outbox as soon as the request returns.
+DELIVER_INLINE = False
+_PENDING: set[asyncio.Task[None]] = set()
 
-    async def _send() -> None:
+
+async def send_soon(message: EmailMessage) -> None:
+    """Send without a database transaction to wait for (the public contact
+    form): in the background like send_after_commit, inline under tests."""
+
+    async def _deliver() -> None:
         try:
             await get_email_provider().send(message)
         except Exception:
             log.exception(
                 "email delivery failed -> %s | %r", ", ".join(message.to), message.subject
             )
+
+    if DELIVER_INLINE:
+        await _deliver()
+        return
+    task = asyncio.create_task(_deliver())
+    _PENDING.add(task)
+    task.add_done_callback(_PENDING.discard)
+
+
+def send_after_commit(session: AsyncSession, message: EmailMessage) -> None:
+    """Queue a transactional email (invitation, password reset) to go out
+    only once the request's transaction commits. A delivery failure is
+    logged, never raised — the record exists, and the user can resend."""
+
+    async def _deliver() -> None:
+        try:
+            await get_email_provider().send(message)
+        except Exception:
+            log.exception(
+                "email delivery failed -> %s | %r", ", ".join(message.to), message.subject
+            )
+
+    async def _send() -> None:
+        if DELIVER_INLINE:
+            await _deliver()
+            return
+        task = asyncio.create_task(_deliver())
+        _PENDING.add(task)
+        task.add_done_callback(_PENDING.discard)
 
     add_post_commit_callback(session, _send)
 

@@ -27,6 +27,7 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
 
   await page.goto("/rules/new");
+  await page.getByRole("button", { name: /Start blank/ }).click();
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
   await page.getByLabel("Rule name").fill(name);
 
@@ -34,14 +35,14 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   await page.getByRole("button", { name: /^Condition / }).first().click();
   await fillContact(page, deviceId, "10");
   // B — in series after A.
-  await page.getByRole("button", { name: "+ In series (AND) after this" }).click();
+  await page.getByRole("button", { name: "Add in series" }).click();
   await fillContact(page, deviceId, "20");
   // C — in parallel below B.
-  await page.getByRole("button", { name: "+ In parallel (OR) below this" }).click();
+  await page.getByRole("button", { name: "Add in parallel" }).click();
   await fillContact(page, deviceId, "30");
   // D — in series after the whole B/C parallel block, picked via the breadcrumb.
-  await page.getByRole("navigation", { name: "Enclosing blocks" }).getByRole("button", { name: "Parallel" }).click();
-  await page.getByRole("button", { name: "+ In series (AND) after this" }).click();
+  await page.getByRole("navigation", { name: "Where this sits" }).getByRole("button", { name: "Parallel" }).click();
+  await page.getByRole("button", { name: "Add in series" }).click();
   await fillContact(page, deviceId, "40");
   await expect(page.getByRole("button", { name: /^Condition / })).toHaveCount(4);
 
@@ -51,7 +52,7 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   // Field puts its hint inside the <label>, so the accessible name continues past "Message".
   await page.getByLabel(/^Message/).fill("E2E ladder fired");
   await page.getByRole("button", { name: /^Action actuator/ }).click();
-  await page.getByRole("button", { name: "Remove action" }).click();
+  await page.getByRole("button", { name: "Remove coil" }).click();
   await expect(page.getByRole("button", { name: /^Action / })).toHaveCount(1);
 
   // The same tree in the form: an AND root with a nested OR group.
