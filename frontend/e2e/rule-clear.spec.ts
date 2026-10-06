@@ -18,6 +18,8 @@ test("a clear notification is configured in the form, summarised, and persisted"
   await expect(page.getByText(/when that's no longer true for 5s/)).toBeVisible();
 
   await page.getByRole("button", { name: "Save changes" }).click();
+  // The rule is live: confirm.
+  await page.getByRole("alertdialog").getByRole("button", { name: "Save changes" }).click();
   await expect(page).toHaveURL("/rules");
 
   await page.goto(`/rules/${ruleUnderTest.id}`);

@@ -8,6 +8,7 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
+import { SchedulePicker } from "@/components/ui/SchedulePicker";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -31,12 +32,6 @@ import {
 import type { CatalogActuator, RuleCatalog, WireOption } from "./useRuleCatalog";
 
 export const SECTION_LABEL = "text-xs font-medium uppercase tracking-wide text-ink-muted";
-
-const CRON_PRESETS: { label: string; cron: string }[] = [
-  { label: "Every 15 min", cron: "*/15 * * * *" },
-  { label: "Hourly", cron: "0 * * * *" },
-  { label: "Daily 08:00", cron: "0 8 * * *" },
-];
 
 const TYPE_TO_KIND: Record<CatalogActuator["value_type"], ValueKind> = {
   bool: "boolean",
@@ -245,36 +240,9 @@ export function WhenFields({
         </div>
       )}
       {when.type === "schedule" && (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="Cron" hint="Standard 5-field cron.">
-            <Input
-              compact
-              value={when.cron}
-              onChange={(e) => onChange({ ...when, cron: e.target.value })}
-              placeholder="0 8 * * *"
-            />
-            <span className="mt-1.5 flex flex-wrap gap-1.5">
-              {CRON_PRESETS.map((p) => (
-                <Button
-                  key={p.cron}
-                  type="button"
-                  variant="link"
-                  className="h-6 px-2 text-xs"
-                  onClick={() => onChange({ ...when, cron: p.cron })}
-                >
-                  {p.label}
-                </Button>
-              ))}
-            </span>
-          </Field>
-          <Field label="Timezone" hint="IANA name, e.g. America/New_York.">
-            <Input
-              compact
-              value={when.timezone}
-              onChange={(e) => onChange({ ...when, timezone: e.target.value })}
-            />
-          </Field>
-        </div>
+        // DESIGN.md §9.5: never ask for cron by default; cron stays the
+        // stored value and an unusual one opens in Custom.
+        <SchedulePicker cron={when.cron} timezone={when.timezone} onChange={({ cron, timezone }) => onChange({ ...when, cron, timezone })} />
       )}
     </div>
   );

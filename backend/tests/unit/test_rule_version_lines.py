@@ -63,8 +63,20 @@ def test_schedule_strategy_and_actions() -> None:
         actions=[*before["actions"], {"type": "notification", "message": "x"}],
     )
     assert change_lines(before, after) == [
-        "When: every reading → schedule 0 8 * * * (Europe/Madrid)",
+        "When: every reading → every day at 08:00 (Europe/Madrid)",
         "Condition changed",
         "Behaviour: Fire once per crossing → Latch until reset",
         "Actions: 1 → 2",
     ]
+
+
+def test_cron_human_matches_the_editor_wording() -> None:
+    from app.rules.versions import cron_human
+
+    assert cron_human("0 22 * * *") == "every day at 22:00"
+    assert cron_human("30 7 * * 2,4") == "Tue, Thu at 07:30"
+    assert cron_human("0 8 * * 1-5") == "weekdays at 08:00"
+    assert cron_human("*/15 * * * *") == "every 15 min"
+    assert cron_human("0 9 1 * *") == "on the 1st of each month at 09:00"
+    assert cron_human("5 */2 * * *") == "every 2 hours at :05"
+    assert cron_human("0 8,20 * * *") == "0 8,20 * * *"  # unusual: kept as cron
