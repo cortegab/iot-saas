@@ -10,6 +10,10 @@ test("landing: sections in G's order, the tour switches, Talk to us sends", asyn
   await page.getByRole("tab", { name: "Rules" }).click();
   await expect(page.getByRole("heading", { name: "Rules you can read out loud" })).toBeVisible();
 
+  // Onboarding illustrates its own steps; the control loop sits in How it works.
+  await expect(page.locator("#onboarding").getByRole("img", { name: /^Onboarding example/ })).toBeVisible();
+  await expect(page.locator('#how [aria-label="Example control loop"]')).toBeVisible();
+
   // Deployment → Talk to us (Dedicated cloud preselected).
   await page.getByRole("navigation", { name: "Page sections" }).getByRole("link", { name: "Deployment" }).click().catch(() => {});
   await page.locator("#deployment").getByRole("button", { name: "Talk to us" }).nth(1).click();
