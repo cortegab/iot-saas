@@ -722,6 +722,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rules/{rule_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Rule Versions
+         * @description Saved states, newest first. Membership is enough (read-side).
+         */
+        get: operations["list_rule_versions_rules__rule_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rules/{rule_id}/executions": {
         parameters: {
             query?: never;
@@ -2056,6 +2076,35 @@ export interface components {
             cooldown?: number | null;
             /** Action */
             action?: (components["schemas"]["ActuatorCommandAction"] | components["schemas"]["NotificationAction"] | components["schemas"]["WebhookAction"] | components["schemas"]["EmailAction"]) | null;
+        };
+        /**
+         * RuleVersionResponse
+         * @description One saved state of a rule (DESIGN.md §9 Versions). `snapshot` holds
+         *     the rule's definition as saved, for the editor's client-side Restore.
+         */
+        RuleVersionResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Version */
+            version: number;
+            /** Snapshot */
+            snapshot: {
+                [key: string]: unknown;
+            };
+            /** Change Lines */
+            change_lines: string[];
+            /** Author Id */
+            author_id: string | null;
+            /** Author */
+            author: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
         };
         /** ScheduleTrigger */
         ScheduleTrigger: {
@@ -4264,6 +4313,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SimulateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_rule_versions_rules__rule_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleVersionResponse"][];
                 };
             };
             /** @description Validation Error */

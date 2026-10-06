@@ -5,6 +5,7 @@ multi-device conditions read from, and hot-path evaluation/dispatch.
 """
 
 import asyncio
+import copy
 import json
 import logging
 import uuid
@@ -29,6 +30,7 @@ from app.notifications import service as notifications_service
 from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules import executors
+from app.rules import versions as rule_versions
 from app.rules.evaluators import (
     CHANGE_OPERATORS,
     DEFAULT_STALE_METRIC_AGE_SECONDS,
@@ -55,6 +57,7 @@ from app.rules.models import (
     RuleDeviceRole,
     RuleExecution,
     RuleType,
+    RuleVersion,
 )
 from app.rules.schemas import (
     RuleHealth,
@@ -347,6 +350,7 @@ async def _persist_rule(
     clear_actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
     enabled: bool,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     _assert_leaves_have_device(condition)
     _validate_trigger(trigger)
@@ -371,6 +375,7 @@ async def _persist_rule(
     session.add(rule)
     await session.flush()
     await _sync_rule_devices(session, tenant_id, rule.id, device_map)
+    await rule_versions.record_version(session, rule, None, author_id)
     _publish_invalidation(session)
     return rule
 
@@ -388,6 +393,7 @@ async def create_rule_canonical(
     clear_actions: list[dict[str, Any]],
     editor_graph: dict[str, Any] | None,
     enabled: bool,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     return await _persist_rule(
         session,
@@ -401,6 +407,7 @@ async def create_rule_canonical(
         clear_actions=clear_actions,
         editor_graph=editor_graph,
         enabled=enabled,
+        author_id=author_id,
     )
 
 
@@ -416,6 +423,7 @@ async def create_device_rule(
     action: dict[str, Any] | None,
     actions: list[dict[str, Any]] | None,
     enabled: bool,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     """Backward-compatible single-device create (POST /devices/{id}/rules)."""
     stamped = _stamp_condition_device(condition, device_id)
@@ -446,6 +454,7 @@ async def create_device_rule(
         clear_actions=[],
         editor_graph=None,
         enabled=enabled,
+        author_id=author_id,
     )
 
 
@@ -573,8 +582,10 @@ async def update_rule(
     cooldown: int | None,
     action: dict[str, Any] | None,
     clear_actions: list[dict[str, Any]] | None = None,
+    author_id: uuid.UUID | None = None,
 ) -> Rule:
     rule = await get_rule(session, tenant_id, rule_id)
+    before = copy.deepcopy(rule_versions.snapshot_of(rule))
     # Fallback device for a legacy (device-less) leaf in an incoming
     # condition — the rule's current primary input device.
     existing_inputs = await session.execute(
@@ -628,6 +639,7 @@ async def update_rule(
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
     await session.flush()
     await _sync_rule_devices(session, tenant_id, rule.id, device_map)
+    await rule_versions.record_version(session, rule, before, author_id)
     _publish_invalidation(session)
     return rule
 
@@ -2188,3 +2200,21 @@ async def emit_rule_health_transitions(factory: async_sessionmaker[AsyncSession]
 
     for gone in set(_rule_health_tracks) - live_ids:
         del _rule_health_tracks[gone]
+
+
+# ---- Versions (API-side, DESIGN.md §9) ---------------------------------------
+
+
+async def list_rule_versions(
+    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID
+) -> list[tuple[RuleVersion, str | None]]:
+    """Newest first, each with its author's display name (or email)."""
+    rows = await rule_versions.list_versions(session, tenant_id, rule_id)
+    people = await auth_service.get_people_by_user_ids(
+        session, list({v.author_id for v in rows if v.author_id is not None})
+    )
+    out: list[tuple[RuleVersion, str | None]] = []
+    for v in rows:
+        person = people.get(v.author_id) if v.author_id is not None else None
+        out.append((v, (person[1] or person[0]) if person else None))
+    return out

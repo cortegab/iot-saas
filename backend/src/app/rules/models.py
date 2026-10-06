@@ -202,3 +202,28 @@ class ActionExecution(Base):
     # Set on a failed delivery once someone retries it: the retry appends its
     # own row, so the failed-deliveries feed shows only the latest attempt.
     retried_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RuleVersion(Base):
+    """One saved state of a rule (DESIGN.md §9 Versions): the snapshot of its
+    definition plus server-computed change lines. Written by the API in the
+    same transaction as the save — never by the worker. Append-only."""
+
+    __tablename__ = "rule_versions"
+    __table_args__ = (UniqueConstraint("rule_id", "version", name="uq_rule_versions_rule_version"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False
+    )
+    rule_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rules.id", ondelete="CASCADE"), nullable=False
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    change_lines: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    # Null for a save made with an API key (no person) or by a since-deleted user.
+    author_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -47,6 +47,7 @@ ALL_TABLES = (
     "telemetry",
     "rules",
     "rule_devices",
+    "rule_versions",
     "commands",
     "dashboards",
     "notifications",
