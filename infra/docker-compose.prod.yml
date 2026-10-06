@@ -98,6 +98,19 @@ services:
       TELEMETRY_BATCH_SIZE: ${TELEMETRY_BATCH_SIZE}
       TELEMETRY_FLUSH_INTERVAL_MS: ${TELEMETRY_FLUSH_INTERVAL_MS}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
+      # Email: invitations, password resets and the contact form are sent
+      # by the api; rule alerts by the worker — both need the same settings.
+      # Without these lines .env.prod's values never reach the container and
+      # email silently falls back to "console" (logged, never sent).
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      CONTACT_EMAIL_TO: ${CONTACT_EMAIL_TO:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      EMAIL_FROM: ${EMAIL_FROM:-alerts@example.com}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -129,6 +142,15 @@ services:
       MQTT_WORKER_PASSWORD: ${MQTT_WORKER_PASSWORD}
       TELEMETRY_BATCH_SIZE: ${TELEMETRY_BATCH_SIZE}
       TELEMETRY_FLUSH_INTERVAL_MS: ${TELEMETRY_FLUSH_INTERVAL_MS}
+      # Same email settings as the api (rule alerts are sent from here).
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-console}
+      EMAIL_FROM: ${EMAIL_FROM:-alerts@example.com}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
     depends_on:
       timescaledb:
         condition: service_healthy
