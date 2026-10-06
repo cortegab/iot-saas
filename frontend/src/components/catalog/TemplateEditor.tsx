@@ -47,7 +47,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 
 const DIFF: DiffField<TemplateDraft>[] = [
   { label: "Name", get: (d) => d.name.trim() },
-  { label: "Availability", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
+  { label: "Status", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
   { label: "Metrics", get: (d) => d.metrics.map((m) => m.key.trim()) },
   { label: "Actuators", get: (d) => d.actuators.map((a) => a.key.trim()) },
 ];
@@ -379,7 +379,7 @@ export function TemplateEditor({
               />
             </Field>
             <SwitchField
-              label="Availability"
+              label="Status"
               checked={d.enabled}
               disabled={readOnly}
               onChange={(enabled) => set({ ...d, enabled })}

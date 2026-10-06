@@ -167,7 +167,7 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | Input / Select / Textarea | existing | 36 px, `--color-input` fill, mono for keys/topics. Affix (suffix unit such as `s`, `°C`) inside the control. |
 | Combobox | existing | For long lists with search (units, devices). |
 | SegmentedControl | existing | Mutually exclusive modes (Form / Ladder, schedule repeat mode). `role="radiogroup"` or pressed buttons. |
-| **Switch** | NEW | Binary *state* such as rule Enabled/Disabled. The switch sits beside a state word with a hint line below. Use Switch for "is it on", and a checkbox only for picking items in a list. |
+| **Switch** | NEW | Every on/off **setting that is saved with a record** (`SwitchField`): a label naming the setting above, the switch beside a **state word**, and a hint below that changes with it. State words: **Enabled / Disabled** for a record's own status (label "Status": rule, device, template), **On / Off** for an option inside a record (e.g. "Turn it back when the condition clears", "Send a notification when it clears"). A **checkbox** is only for picking items in a list (bulk select) or for a one-time choice that belongs to a single submit and isn't stored as a setting ("I've stored it", "Keep me signed in on this device"). List row menus use the verbs **Enable / Disable**. |
 | Tabs | existing | Underline style. **Never show a horizontal scrollbar**: overflowing tabs wrap or collapse into a menu. |
 | Badge / Tag | existing | Pills with a status dot. `tag--warn` (pending surface) for conflicts ("shares fan1"). `tag--sm` for qualifiers ("expert"). |
 | Callout | existing | `info` (accent-muted), `warning` (pending surface), `error` (error surface). Dismissible for tips only. |
@@ -300,13 +300,28 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
 
 ### 9.2 Layout: workbench
 
-- **Page mode** is a two-column workbench: the form on the left, and a **sticky preview** 340 px wide
-  on the right. Below 1200 px the preview stacks under the form.
-- **Ladder view** uses a single full-width column, with the preview cards shown as a grid below it.
+- **One frame for both views**, as on the template page: a **section rail** (When · If · Then ·
+  Behaviour · Name) on the left, the **canvas** in the middle, a sticky **340 px right column**, and
+  one **sticky save bar** (Discard · Save, "N to fix", "N safety warnings", Ctrl+S). Switching Form ⇄
+  Ladder changes only the canvas and what the right column shows; the header, sentence, rail, column
+  and save bar stay put.
+  - **Form:** the canvas is the section cards; the right column is the preview.
+  - **Ladder:** the canvas is the rung; the right column is the **inspector** for the selected element
+    (the rule's name and status when *Name* is picked), over the preview folded into one line.
+  - **Rail:** each section shows a red count of issues that **block saving**, an amber "!" for
+    **safety warnings**, or a ✓ when a new rule's section is complete. In Form it scrolls to the
+    section; in Ladder it selects it on the rung. Below 1200 px it becomes a row of chips; below
+    1100 px the right column stacks under the canvas.
+  - **Validation:** blocking = incomplete trigger, conditions or actions, a clear notification with no
+    message, a name over 200 characters; Save goes to the first one. Safety warnings (hold < 5 s,
+    interval < 30 s, no hysteresis on a hardware rule) show while typing and in the checks, and never
+    block a save.
+  - Saving keeps you on the rule; a new rule opens on its own page.
 - **Tabs:** **Logic · Activity**. There is no Simulate tab; simulating is part of the preview.
 - **Form / Ladder** is a segmented control; Ladder is tagged "expert". The choice is remembered per
   user.
-- **New rules show numbered steps:** **1 When · 2 Then · 3 Safety · 4 Name.**
+- **New rules show numbered steps:** **1 When · 2 If · 3 Then · 4 Behaviour · 5 Name**, matching the
+  rail.
 - A dismissible "Three steps to a rule" tip appears on first use.
 
 ### 9.3 Editable sentence
@@ -549,3 +564,4 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-02 | §4/§5/§7 the peek is a **drawer at every width** (user decision after review), not docked beside the list on wide screens. Reasons: one pattern at every size; a full-height pane instead of a short floating card; no layout shift (a docked peek widened the content column from 1120 to 1520 px, moving the header and search). The cost, a modal that blocks the list, is offset by browsing inside it: ‹ › with "n of N", ↑/↓, and focus returning to the row last shown. Dashboards keep the peek on row click, like every list. |
 | 2026-10-02 | §8 device page **Settings tab**: one settings page of stacked section cards (~760 px) — General (name, zone) · Rule evaluation · Template (read-only; a device keeps its template) · Connection (MQTT username, **one** "Connect and get firmware" action that states it issues a new credential, MQTT topics) · **Danger zone** last (red outline, Delete). The separate credential, firmware, delete and topics cards are gone. Inside a host page the editor's save bar floats within the column and appears only while there is something to save. |
 | 2026-10-02 | §8 device **connect flow** has 5 steps: Credential · **Options** (board ESP32 / ESP32-C3, Wi-Fi from a phone or typed, provisioning security 1 – PoP / 2 – SRP6a, connection, pins, a "The sketch includes" summary; no code) · **Flash** (download / copy, the preview collapsed, upload steps for the chosen board) · **Wi-Fi from your phone** (the ESP BLE Provisioning QR with Download / Print label, app steps; skipped when Wi-Fi is typed in) · Live check. The sketch contains only the chosen Wi-Fi mode. The QR is built from the device's own credential (docs/ble-provisioning.md), so it's only on this page and changes with every rotation. |
+| 2026-10-03 | §9.2 rule editor takes **demo A** (`docs/design/redesign/rules-demo-a-rail.html`): the template page's frame — section rail, canvas, 340 px right column, sticky save bar — shared by Form and Ladder, so switching views no longer reflows the page (Ladder's preview grid and full-width layout are gone; the inspector sits in the right column). The rail carries per-section validation: blocking issues (red) vs safety warnings (amber, never block). Saving stays on the rule (§7). §5 Switch: one rule for on/off controls — a Switch for every saved setting (Enabled / Disabled for a record's status, On / Off for options), a checkbox only for list selection and one-time choices; the rule editor's two clear options become Switches and the template's "Availability" becomes "Status". |

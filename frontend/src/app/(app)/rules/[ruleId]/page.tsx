@@ -115,16 +115,18 @@ export default function EditRulePage() {
   }
   if (!rule) return <EmptyState title="Rule not found" />;
 
+  // The editor stays on the rule after saving (DESIGN.md §7).
   function onSaved(saved: RuleResponse) {
     upsertRuleInCache(saved);
+    void revalidate(`/rules/${saved.id}`);
     void revalidate(`/rules/${saved.id}/versions`);
+    void revalidate("/rules/activity");
     setRestored(null);
-    router.push("/rules");
   }
 
   // Restore: the saved snapshot over the live rule (ids, devices and health
-  // stay current), shown in the editor as an unsaved draft.
-  const editing: RuleResponse = restored ? ({ ...rule, ...restored.snapshot } as RuleResponse) : rule;
+  // stay current), loaded as unsaved changes against the current version.
+  const restoredDraft = restored ? draftFromRule({ ...rule, ...restored.snapshot } as RuleResponse) : undefined;
   const current = rule;
 
   // A copy starts disabled: two live rules on the same actuator fight.
@@ -242,9 +244,9 @@ export default function EditRulePage() {
         <RuleEditor
           key={restored ? `${rule.id}-v${restored.version}` : rule.id}
           deviceId={seedDevice}
-          existing={editing}
+          existing={rule}
+          initialDraft={restoredDraft}
           onSaved={onSaved}
-          onCancel={() => router.push("/rules")}
         />
       </TabPanel>
 
