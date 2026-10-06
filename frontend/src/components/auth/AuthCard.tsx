@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
+import { NetworkCanvas } from "@/components/marketing/NetworkCanvas";
 
 /** The centred sign-in card (demo G `.auth-card`) used by the account pages:
  * login, register, forgot/reset password, invitation. */
@@ -32,11 +33,14 @@ export function AuthCard({
   );
 }
 
-/** Full-screen canvas for account pages outside the (auth) layout. */
+/** The account pages' screen (DESIGN.md §10): the landing's network canvas
+ * as a branded background — never an empty page — with the card centred. */
 export function AuthScreen({ children }: { children: ReactNode }) {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas bg-[radial-gradient(circle_at_100%_0%,color-mix(in_srgb,var(--color-accent)_12%,transparent),transparent_42%),radial-gradient(circle_at_0%_100%,color-mix(in_srgb,var(--color-chart)_9%,transparent),transparent_40%)] px-4 py-10">
-      <div className="w-full max-w-[410px]">{children}</div>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-canvas px-4 py-10">
+      <NetworkCanvas className="absolute inset-0 h-full w-full opacity-50" density={0.8} />
+      <div aria-hidden className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,var(--color-canvas)_0%,transparent_70%)]" />
+      <div className="relative w-full max-w-[410px]">{children}</div>
     </main>
   );
 }
