@@ -440,8 +440,12 @@ path (CLAUDE.md §9.1).
   session ends with the browser), clear error and loading states.
 - **Landing** (`(marketing)`, same tokens and fonts as the app):
   - A text-only night hero over the network canvas, KPIs on a hairline row.
-  - The **control-loop card** lives in the Onboarding section: G's log of one rule's life (in · rule
-    · cmd · ack · clear), beside the onboarding steps.
+  - The **control-loop card** (G's log of one rule's life: in · rule · cmd · ack · clear) lives in
+    **How it works**, under the hot/storage diagram, as the hot path in action.
+  - **Onboarding** shows the **journey figure** beside its four steps: one example device's
+    workspace, template, generated sketch (filled in, password masked) and the device going
+    Waiting → Online with its first reading. The stage it shows is highlighted in the step list;
+    it plays when scrolled into view, and reduced motion shows the finished journey.
   - A **Deployment** section: Cloud (shared) · Dedicated cloud · On-premise, plus an edge-connector
     note (CLAUDE.md §3).
   - An **in-page contact form**.
@@ -575,3 +579,4 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-03 | §9.2 rule editor takes **demo A** (`docs/design/redesign/rules-demo-a-rail.html`): the template page's frame — section rail, canvas, 340 px right column, sticky save bar — shared by Form and Ladder, so switching views no longer reflows the page (Ladder's preview grid and full-width layout are gone; the inspector sits in the right column). The rail carries per-section validation: blocking issues (red) vs safety warnings (amber, never block). Saving stays on the rule (§7). §5 Switch: one rule for on/off controls — a Switch for every saved setting (Enabled / Disabled for a record's status, On / Off for options), a checkbox only for list selection and one-time choices; the rule editor's two clear options become Switches and the template's "Availability" becomes "Status". |
 | 2026-10-03 | §5 **Trend chart** row added, Readout row extended: on/off metrics are step lines on an Off / On axis on the device page and in dashboard widgets (they used to ramp between readings), with no threshold line; aggregated ranges show "On at any point in the minute/hour" and break the line where the state is unknown. A trend chart widget accepts on/off metrics, but a gauge takes only numbers. One value formatter everywhere ("On"/"Off", not "on"/"off") and template names, not wire keys, in chart pickers and legends. |
 | 2026-10-03 | §7 **one record menu, three places**: row ⋯, peek ⋯ and page ⋯ offer the same actions in the same words, naming the action only ("Delete…", not "Delete zone…" / "Delete device…"; "View devices", not "View its devices"). The zones list row menu gains Delete…, which it lacked. A blocked delete is still offered, with the usage count as its hint (zones now match templates). |
+| 2026-10-06 | §10 landing: the Product title drops "babysit" ("Everything an operator needs, running without supervision."). Onboarding gets a **journey figure** that illustrates its own four steps (workspace · template · sketch · device online) and highlights the step it shows; the **control-loop log**, which shows what happens after onboarding, moves to How it works as the hot path in action. Step 3 says Wi-Fi is set up from a phone with a QR code (Espressif provisioning), not "over BLE". |
