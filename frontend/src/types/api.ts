@@ -617,6 +617,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/rules/simulate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Simulate Draft
+         * @description Dry-run an unsaved draft (the editor's preview): replay over stored
+         *     telemetry or evaluate against live values. Writes nothing, dispatches
+         *     nothing, never touches the worker. Declared above /rules/{rule_id}.
+         */
+        post: operations["simulate_draft_rules_simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/rules/activity": {
         parameters: {
             query?: never;
@@ -1498,6 +1520,17 @@ export interface components {
             status?: components["schemas"]["DeviceStatus"] | null;
             /** Zone Id */
             zone_id?: string | null;
+        };
+        /**
+         * DraftSimulateRequest
+         * @description Simulate an unsaved draft (the editor's live preview): the rule body
+         *     as it would be created, plus the usual overrides / replay window.
+         */
+        DraftSimulateRequest: {
+            /** Overrides */
+            overrides?: components["schemas"]["SignalOverride"][];
+            replay?: components["schemas"]["SimulateReplayWindow"] | null;
+            rule: components["schemas"]["RuleCreateRequest"];
         };
         /** EmailAction */
         EmailAction: {
@@ -4109,6 +4142,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FailedActionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    simulate_draft_rules_simulate_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftSimulateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimulateResponse"];
                 };
             };
             /** @description Validation Error */

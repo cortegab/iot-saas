@@ -27,6 +27,7 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
 
   await page.goto("/rules/new");
+  await page.getByRole("button", { name: /Start blank/ }).click();
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
   await page.getByLabel("Rule name").fill(name);
 

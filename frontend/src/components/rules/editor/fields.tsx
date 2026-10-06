@@ -6,7 +6,7 @@
  * inspector. Each takes a slice of the RuleDraft and reports a new slice.
  */
 
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { Card } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -49,20 +49,36 @@ const VALUE_TYPE_WORD: Record<CatalogActuator["value_type"], string> = {
   string: "text",
 };
 
+/** True while creating a rule: sections show their step numbers
+ * (DESIGN.md §9.2: 1 When · 2 Then · 3 Safety · 4 Name). */
+export const StepsContext = createContext(false);
+
 export function SectionCard({
   title,
   aside,
+  step,
   children,
 }: {
   title: string;
   aside?: ReactNode;
+  /** Shown only while creating (StepsContext). */
+  step?: number;
   children: ReactNode;
 }) {
+  const numbered = useContext(StepsContext) && step != null;
   return (
     <Card padding="md">
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between gap-3">
-          <h2 className={SECTION_LABEL}>{title}</h2>
+          <h2 className={cn(SECTION_LABEL, "flex items-center gap-2")}>
+            {numbered && (
+              <span aria-hidden className="grid h-5 w-5 place-items-center rounded-full bg-accent text-[11px] font-semibold normal-case tracking-normal text-on-accent">
+                {step}
+              </span>
+            )}
+            {numbered ? <span className="sr-only">Step {step}: </span> : null}
+            {title}
+          </h2>
           {aside}
         </div>
         {children}
