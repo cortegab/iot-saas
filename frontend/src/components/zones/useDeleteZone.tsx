@@ -1,9 +1,11 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { Trash2 } from "lucide-react";
 import { mutate as revalidate } from "swr";
 import { useApi } from "@/hooks/useApi";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
@@ -24,7 +26,7 @@ export function useDeleteZone(onDeleted: () => void) {
     if (zone.device_count > 0) {
       const go = await confirm(`${plural(zone.device_count, "device is", "devices are")} assigned to it. Move them to another zone from their settings first.`, {
         title: `${zone.name} is in use`,
-        confirmLabel: "View its devices",
+        confirmLabel: "View devices",
         cancelLabel: "Close",
         danger: false,
       });
@@ -42,5 +44,16 @@ export function useDeleteZone(onDeleted: () => void) {
     }
   }
 
-  return { remove, dialog };
+  // The record menu's Delete item (DESIGN.md §7), the same in the list row,
+  // the peek and the zone's page: still offered while devices are in the
+  // zone, with their count as the hint — picking it explains the block.
+  const menuItem = (zone: ZoneResponse): DropdownMenuItem => ({
+    label: "Delete…",
+    icon: <Trash2 size={15} />,
+    danger: true,
+    hint: zone.device_count ? `${plural(zone.device_count, "device is", "devices are")} in it` : undefined,
+    onClick: () => void remove(zone),
+  });
+
+  return { remove, dialog, menuItem };
 }

@@ -67,7 +67,7 @@ export function DevicePeek({
             { label: "Rotate credential…", icon: <KeyRound size={15} />, onClick: () => onRotate(device) },
             { label: device.status === "active" ? "Disable" : "Enable", icon: <Power size={15} />, onClick: () => onToggle(device) },
           ],
-          [{ label: "Delete device…", icon: <Trash2 size={15} />, danger: true, onClick: () => onDelete(device) }],
+          [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => onDelete(device) }],
         ]
       : []),
   ];

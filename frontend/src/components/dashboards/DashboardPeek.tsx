@@ -39,7 +39,7 @@ export function DashboardPeek({
         onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/dashboards/${dashboard.id}`).then(() => toast({ tone: "info", title: "Link copied" })),
       },
     ],
-    [{ label: "Delete dashboard…", icon: <Trash2 size={15} />, danger: true, onClick: () => onDelete(dashboard) }],
+    [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => onDelete(dashboard) }],
   ];
 
   return (

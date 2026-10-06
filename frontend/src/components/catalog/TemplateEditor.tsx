@@ -365,7 +365,7 @@ export function TemplateEditor({
             </Button>
           ) : undefined
         }
-        menu={!isNew && !readOnly ? [[{ label: "Delete template…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]] : undefined}
+        menu={!isNew && !readOnly ? [[{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]] : undefined}
       >
         <EditorSection id="general" title="General">
           <div className="grid gap-3.5 @[640px]:grid-cols-2">
