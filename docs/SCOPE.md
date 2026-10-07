@@ -54,7 +54,7 @@ iodriven is a multi-tenant IoT platform:
 
 | Capability | Status | Notes |
 |---|---|---|
-| MQTT ingestion with validation; a malformed message is dropped and logged, never stops the stream | ✅ | `docs/phase-2-mqtt-ingestion.md`. |
+| MQTT ingestion with validation; a malformed message is dropped and logged, never stops the stream | ✅ | |
 | Split path: rules on the in-memory hot path; Redis Stream → batched writer → TimescaleDB for history | ✅ | |
 | Compression after 7 days; 1-minute and 1-hour continuous aggregates; dashboards read rollups | ✅ | |
 | Retention | 🚧 | Fixed **90 days for every workspace**. There are no plans or quotas yet, so retention is not per plan. |
@@ -140,9 +140,9 @@ iodriven is a multi-tenant IoT platform:
 |---|---|
 | Architecture, constraints, conventions | `CLAUDE.md` |
 | Frontend standard and its changelog | `docs/design/DESIGN.md` |
-| Rule engine model | `docs/rule-engine-multi-device.md`, `docs/phase-3-rules-engine.md` |
-| Ingestion and storage | `docs/phase-2-mqtt-ingestion.md` |
-| Backend core (auth, tenants, devices) | `docs/phase-1-backend-core.md` |
+| Rule semantics | `docs/rule-engine-multi-device.md` |
+| Implementation decisions and the runtime diagram | `docs/decisions.md` |
+| API reference | the running API's OpenAPI docs at `/docs` |
 | BLE provisioning | `docs/ble-provisioning.md` |
 | Deploy, VPS, backups | `infra/README.md`, `infra/backups/RESTORE_RUNBOOK.md` |
 | Local setup | `README.md` |

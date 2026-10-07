@@ -374,7 +374,7 @@ this codegen step is what replaces the type safety a single-language stack would
 **Frontend design** — `docs/design/DESIGN.md` is binding for the frontend's look, layout,
 components, interaction and wording; demo G (`docs/design/redesign/demo-g-full-site.html`) is the
 visual reference where it is silent. Precedence: §9 constraints > DESIGN.md > demo G > everything
-else (code comments such as the old "Control Room" notes, demos A–F, `docs/history/PLAN.md` UI bullets, older
+else (code comments such as the old "Control Room" notes, `docs/history/PLAN.md` UI bullets, older
 notes). Design skills/plugins (`frontend-design`, `ui-ux-pro-max`) may help with technique, but
 their palettes, fonts and styles are **not** applied here — DESIGN.md's tokens and patterns win. To
 deviate, change DESIGN.md first (with a changelog entry), then the code.
