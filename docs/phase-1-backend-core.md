@@ -1,6 +1,6 @@
 # Phase 1 — Backend Core: deliverables & how to test them
 
-Companion doc to `PLAN.md`'s "Phase 1 — Backend core" section. This is a map of what got
+Companion doc to `docs/history/PLAN.md`'s "Phase 1 — Backend core" section. This is a map of what got
 built, where the code lives, and how to poke at it yourself.
 
 **Milestone met:** register a user → tenant auto-created → device registered → its

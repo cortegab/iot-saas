@@ -3,9 +3,9 @@
 Docker Compose setup that runs the whole `iot-saas` stack locally: TimescaleDB, Redis, EMQX, plus
 the `api`, `worker`, and `frontend` containers with source bind-mounted for hot reload.
 
-> These app containers are **Phase 0 skeletons** — enough to boot the stack and prove the wiring end
-> to end. Auth, migrations, the rule evaluator, and the batched writer arrive in later phases (see
-> `PLAN.md`).
+> These app containers run the full application with source bind-mounted for hot reload. The dev
+> stack does not run migrations on start: run `alembic upgrade head` in the `api` container after
+> pulling new ones. What the platform does is listed in `docs/SCOPE.md`.
 
 ## Bring it up
 

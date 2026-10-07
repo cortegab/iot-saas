@@ -1,6 +1,6 @@
 # Phase 2 — MQTT Ingestion & Storage Path: deliverables & how to test them
 
-Companion doc to `PLAN.md`'s "Phase 2 — MQTT ingestion & storage path" section. This is a map
+Companion doc to `docs/history/PLAN.md`'s "Phase 2 — MQTT ingestion & storage path" section. This is a map
 of what got built, where the code lives, and how to poke at it yourself.
 
 **Milestone met:** `mosquitto_pub` to a device topic, with the device's real credentials —
@@ -175,7 +175,7 @@ TimescaleDB compression and RLS cannot coexist on the same hypertable — confir
 the running TimescaleDB version (`FeatureNotSupportedError: compression cannot be used on
 table with row security`) and against TimescaleDB's own open issues
 (timescale/timescaledb#6827, #7830 — the security-barrier-view workaround is blocked by the
-same restriction, #6425). Compression was chosen over RLS for this one table (PLAN.md calls
+same restriction, #6425). Compression was chosen over RLS for this one table (docs/history/PLAN.md calls
 deferred compression "the single biggest cost risk in the project"); tenant isolation is
 enforced at the application layer instead — every query in `telemetry/service.py` filters
 explicitly by `tenant_id`. See the `create_telemetry_hypertable` migration's docstring and

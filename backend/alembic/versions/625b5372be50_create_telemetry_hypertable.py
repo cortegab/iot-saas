@@ -35,7 +35,7 @@ def upgrade() -> None:
     (timescale/timescaledb#6827, #7830), not a workaround-able syntax issue;
     wrapping the table in a security-barrier view hits the identical
     restriction (timescale/timescaledb#6425). Compression was chosen over RLS
-    for this one table (PLAN.md calls deferred compression "the single biggest
+    for this one table (docs/history/PLAN.md calls deferred compression "the single biggest
     cost risk in the project"); tenant isolation for telemetry is enforced at
     the application layer instead — every query in app/telemetry/service.py
     filters explicitly by tenant_id, and every write path (the worker's

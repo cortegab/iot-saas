@@ -19,7 +19,7 @@ real Next.js app. Read it before building or changing any page or component.
 4. **Everything else is subordinate**, and gets updated to match this file, never the reverse:
    - code comments (for example the "Control Room" comments in `globals.css`)
    - demos A–F
-   - UI bullets in `PLAN.md`
+   - UI bullets in `docs/history/PLAN.md`
    - suggestions from the `frontend-design` / `ui-ux-pro-max` skills
    - older notes
 

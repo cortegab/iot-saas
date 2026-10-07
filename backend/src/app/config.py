@@ -59,7 +59,7 @@ class Settings(BaseSettings):
 
     # Device connection-state threshold (app/devices/): a device with no telemetry
     # more recent than this is shown as "offline" rather than "online". A few
-    # multiples of the expected reporting interval (PLAN.md's free-tier "1 msg / 5s").
+    # multiples of the expected reporting interval (docs/history/PLAN.md's free-tier "1 msg / 5s").
     device_offline_after_seconds: int = 90
 
     # Browser origins allowed to call the API (app/main.py's CORSMiddleware).

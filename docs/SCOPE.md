@@ -2,7 +2,7 @@
 
 **Last reviewed:** 2026-10-07 · **Version:** 1.0 (in production at iodriven.tech) · **Up to:** PR #86
 
-This is the single answer to "what does the product do, what doesn't it do, and what's next".
+The single list of what the platform does **today**: what is built and what it deliberately leaves out. Plans and ideas live elsewhere (the original plan is archived in `docs/history/PLAN.md`).
 
 - **How it's built:** `CLAUDE.md`.
 - **How the UI looks and behaves:** `docs/design/DESIGN.md`.
@@ -29,7 +29,7 @@ iodriven is a multi-tenant IoT platform:
 | Scale | **500–1,000 devices** per host |
 | Infrastructure | **One Linux VPS** with Docker Compose |
 
-**Status legend:** ✅ shipped · 🚧 partial · 🗓 planned · ❌ out of scope
+**Status:** ✅ built · 🚧 built, with a stated gap
 
 ---
 
@@ -43,14 +43,12 @@ iodriven is a multi-tenant IoT platform:
 | Per-device MQTT credential, stored hashed (argon2id), shown once, rotatable | ✅ | EMQX ACLs restrict each device to its own topic subtree. |
 | Device templates: metrics (number or on/off, unit, decimals, range, publish cadence) and actuators | ✅ | Keys validated as topic segments; usage counts; a rename that would break rules or widgets is warned about. |
 | Generated firmware sketch (ESP32 and ESP32-C3) with topics, TLS and credential filled in | ✅ | Pins common to the 30- and 38-pin DevKits; provisioning reset on GPIO 19 (C3: GPIO 9). |
-| Wi-Fi from a phone: Espressif BLE provisioning (ESP BLE Prov app), QR from the device credential, Security 1 or 2 | ✅ | `docs/ble-provisioning.md`. Security 2 needs a matching phone app and esp32 board package (see §4). |
+| Wi-Fi from a phone: Espressif BLE provisioning (ESP BLE Prov app), QR from the device credential, Security 1 or 2 | ✅ | `docs/ble-provisioning.md`. Security 2 needs a matching phone app and esp32 board package (see §3). |
 | 5-step connect flow with a live "waiting for first message" check and a test command | ✅ | |
 | Zones (places devices live in), filter devices by zone | ✅ | A zone can't be deleted while devices are in it. |
 | Device health: retained status topic, Last-Will offline, RSSI / battery / firmware / uptime | ✅ | |
-| "Device went offline" notification | 🚧 | Fixed and on for every device; no "back online", can't be muted per device (§5). |
-| Reconnect action for an offline device on its page | 🗓 | Today the Connect button shows only for never-connected devices. |
+| "Device went offline" notification | 🚧 | Fixed and on for every device; no "back online", can't be muted per device. |
 | HTTP REST ingest as a fallback to MQTT | ✅ | `POST /ingest`. |
-| Non-MQTT protocols (OPC UA, Modbus, vendor clouds) | 🗓 | Only through an edge connector (§3); never in the platform core. |
 
 ### Telemetry and storage
 
@@ -59,7 +57,7 @@ iodriven is a multi-tenant IoT platform:
 | MQTT ingestion with validation; a malformed message is dropped and logged, never stops the stream | ✅ | `docs/phase-2-mqtt-ingestion.md`. |
 | Split path: rules on the in-memory hot path; Redis Stream → batched writer → TimescaleDB for history | ✅ | |
 | Compression after 7 days; 1-minute and 1-hour continuous aggregates; dashboards read rollups | ✅ | |
-| Retention | 🚧 | Fixed **90 days for every workspace**. Per-plan retention (7 days free / 90 paid) arrives with billing (§3). |
+| Retention | 🚧 | Fixed **90 days for every workspace**. There are no plans or quotas yet, so retention is not per plan. |
 | Publish profiles pushed to devices (periodic / on change / streaming) | ✅ | Retained `config` topic. |
 | Live updates in the browser over WebSocket | ✅ | |
 
@@ -76,7 +74,6 @@ iodriven is a multi-tenant IoT platform:
 | Recipes, live preview, "would send", 24-hour replay, dry run of unsaved edits | ✅ | |
 | Rule versions with change lines and Restore; activity strips; execution history | ✅ | |
 | Rule health (can it evaluate now?) | ✅ | |
-| Custom evaluators / anomaly detection (ML) | 🗓 | Same `Evaluator` interface, in-process (§3). |
 
 ### Actions and notifications
 
@@ -95,7 +92,6 @@ iodriven is a multi-tenant IoT platform:
 | Personal dashboards: switcher, edit mode, drag / resize / remove | ✅ | Each member builds their own. |
 | Widgets: value card, trend chart, gauge, device status, actuator control | ✅ | On/off metrics draw as step charts on an Off / On axis. |
 | Stale values marked as stale, never shown as current | ✅ | |
-| Shared / workspace dashboards, CSV export | 🗓 | CSV export was a paid-tier item in the billing plan. |
 
 ### Workspaces, people and access
 
@@ -115,7 +111,6 @@ iodriven is a multi-tenant IoT platform:
 |---|---|---|
 | Landing page at iodriven.tech: product tour, how it works, safety, onboarding, security, deployment options, FAQ | ✅ | DESIGN.md §10. |
 | "Talk to us" contact form: emails `CONTACT_EMAIL_TO`, stores nothing, honeypot, 5 per address per hour | ✅ | |
-| Public demo workspace, published plan tiers / pricing | ❌ | A deliberate decision for now. |
 
 ### Operations
 
@@ -124,87 +119,22 @@ iodriven is a multi-tenant IoT platform:
 | Push-to-deploy to the VPS (GitHub Actions, `prod` branch), migrations on deploy, health check | ✅ | `.github/workflows/deploy-prod.yml`, `infra/README.md`. |
 | TLS via Let's Encrypt with a renewal timer | ✅ | |
 | Daily database backup (03:00) and a restore script with runbook | 🚧 | `infra/backups/`. Off-host copy is optional (`RCLONE_REMOTE`); **a restore drill has not been recorded yet** (CLAUDE.md §9.13). |
-| Monitoring and alerting (disk, restarts, ingestion lag) | 🗓 | |
-| Rate limiting at ingestion and on the REST API | 🗓 | Only the contact form is rate-limited today. |
-| Automated test CI | ❌ | Tests run locally: backend `pytest`, frontend vitest and Playwright. |
+| Tests | ✅ | Run locally: backend `pytest` (unit + integration against real RLS), frontend vitest and Playwright. |
 
 ---
 
-## 3. Planned: the roadmap carried over from PLAN.md
-
-These are the parts of the original staged plan that haven't been built. Each keeps the decisions that still matter, so `PLAN.md` can be archived without losing them.
-
-### Billing and plan quotas (was Phase 5) 🗓
-
-**Plan tiers (draft):**
-
-| Plan | Price | Devices | History | Includes |
-|---|---|---|---|---|
-| Free | $0 | 2 | 7 days | 1 dashboard, 1 message every 5 s |
-| Premium | $5 | 20 | 90 days | unlimited dashboards, CSV export |
-| Control | $10 | 20 | 90 days | actuators, commands, rules |
-
-**Scope:** Stripe Checkout and Customer Portal, quota enforcement (devices, message rate, dashboards), usage display and upgrade prompts.
-
-**Keep in mind:**
-- Enforce retention per plan **in the database**, so a downgrade actually reclaims storage.
-- Handle Stripe webhooks idempotently.
-
-### Production hardening (was Phase 6) 🚧
-
-- Finish **off-host backups**, and **run and time the restore drill**. Restore time *is* the availability guarantee, because there's no high availability.
-- Add monitoring and alerts:
-  - disk above 80 %
-  - container restarts
-  - ingestion stalls
-- Add log rotation.
-- Complete a security review (dependency audit, EMQX defaults, rate limits).
-
-### Dedicated single-tenant variant (was Phase 7) 🗓
-
-- **Repo:** a separate `iot-dedicated` copy of the hardened core, without tenants, row-level security or billing.
-- **White-label:** logo, colours, name and domain, all set from configuration.
-- **Client extensions:** a loader for client-specific evaluators, and integration adapters.
-- **Deployment:** one deployment per client.
-- **Shared contract:** the device contract (CLAUDE.md §4) is shared, so the same firmware must work against both variants; `[core]` commits get cross-checked.
-
-### OPC UA edge connector (was Phase 8, dedicated variant) 🗓
-
-- **What it is:** a Python (`asyncua`) service running **on the client's network**.
-- **How it connects:** it maps OPC UA nodes to the device contract and speaks MQTT/TLS outbound only.
-- **Actuation:** it writes commands back to OPC UA nodes.
-- **Resilience:** it stores and forwards during outages.
-
-Limits:
-- Rules stay in the cloud, so it isn't suitable for safety interlocks.
-- OPC Classic / DA is out of scope.
-- Check first whether the PLC can publish OPC UA PubSub over MQTT itself.
-
-### Anomaly detection / ML (was Phase 9) 🗓
-
-Detectors implement the same pure, synchronous `Evaluator` and run in the worker on the hot path, with models loaded at startup. The likely path is rolling-window and z-score rules, then seasonal baselines, then learned per-device baselines.
-
-### Ideas, not yet scoped
-
-*Add new ideas here as one line each. Promote an idea to its own section above once it has a scope.*
-
-- Connectivity alerts: a "back online" event that resolves the offline alert, plus a per-device mute.
-- Reconnect action for offline devices.
-- Workspace-wide dashboards.
-
----
-
-## 4. Non-goals and known limits
+## 3. Not included, and known limits
 
 - **One host, no high availability.** Recovery is a restore from backup, measured in minutes. Multi-node is out until a deliberate infrastructure-split plan exists (validated to about 1,000 devices).
 - **The 2 s guarantee assumes a connected device.** An offline device catches up from its retained desired state when it reconnects, and commands carry a TTL so it never acts on a stale order.
 - **Protocols other than MQTT** never enter the platform core; they use the edge-connector pattern.
 - **Security 2 provisioning** needs a phone app and an esp32 Arduino core that agree on Espressif's updated message encryption (introduced in ESP-IDF 5.1.7 and the matching 5.x releases; Android app 2.2.3+). Use current versions of both. Security 1 works with every version, and is the safe default.
+- **Not built:** billing, plan tiers and quotas; monitoring and alerting; rate limiting outside the contact form; automated test CI; a public demo workspace; workspace-shared dashboards and CSV export; non-MQTT protocol connectors; ML / anomaly detection.
 - **Contact-form rate-limit counters** live in the real Redis, so repeated test runs within an hour can hit the limit.
 
 ---
 
-## 5. Where to look next
+## 4. Where to look next
 
 | Topic | Document |
 |---|---|

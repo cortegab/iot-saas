@@ -1,6 +1,6 @@
 # Phase 3 — Rules Engine, Hot Path & Actuators: deliverables & how to test them
 
-Companion doc to `PLAN.md`'s "Phase 3 — Rules engine, hot path & actuators" section. This is
+Companion doc to `docs/history/PLAN.md`'s "Phase 3 — Rules engine, hot path & actuators" section. This is
 a map of what got built, where the code lives, and how to poke at it yourself.
 
 **Milestone met — this is the architecture's acceptance test:** a simulated sensor crosses a
@@ -214,7 +214,7 @@ exhaustively either way (see the evaluator unit tests).
 
 ## What's deliberately not in this phase
 
-- **EMQX's built-in Rule Engine as a broker-level backstop** — PLAN.md calls this optional,
+- **EMQX's built-in Rule Engine as a broker-level backstop** — docs/history/PLAN.md calls this optional,
   dashboard/deployment config, not code.
 - **Manual actuator-trigger HTTP endpoint** ("buttons/toggles") — Phase 4 (dashboard)
   territory. `commands.service.dispatch_command` is generic enough to be reused then, but no

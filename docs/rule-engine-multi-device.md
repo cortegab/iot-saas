@@ -1,6 +1,6 @@
 # Rule engine — Phase 1: multi-device rules
 
-Companion to `PLAN.md`'s rule-engine roadmap (Phase 1). What landed and how to exercise it.
+Companion to `docs/history/PLAN.md`'s rule-engine roadmap (Phase 1). What landed and how to exercise it.
 
 > This doc is authoritative for rule **semantics** (tree, latch, `clear_actions`, stale = unknown).
 > How the rule editor **presents** them is defined in `docs/design/DESIGN.md` §9.
@@ -94,7 +94,7 @@ the retained `state/fan1`.
 
 Execution history, rule health / simulate, email delivery, scheduled/manual triggers, richer
 operators (BETWEEN / CHANGED / metric-vs-metric), the async retry dispatcher, and the visual
-node builder — all later phases in `PLAN.md`.
+node builder — all later phases in `docs/history/PLAN.md`.
 
 ## Later addition: on-clear actions
 
