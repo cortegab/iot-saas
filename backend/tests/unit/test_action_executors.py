@@ -147,6 +147,32 @@ async def test_smtp_provider_uses_starttls_on_port_587(monkeypatch: pytest.Monke
     assert send.call_args.kwargs["start_tls"] is True
 
 
+async def test_smtp_provider_sends_from_the_display_name(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inboxes show "IO Driven Platform Alerts", not the bare address."""
+    send = AsyncMock()
+    monkeypatch.setattr(email_module.aiosmtplib, "send", send)
+    provider = email_module.SmtpEmailProvider(
+        Settings(_env_file=None, smtp_host="smtp.example.com", email_from="alerts@iodriven.tech")
+    )
+    await provider.send(email_module.EmailMessage(to=["a@x.com"], subject="s", body="b"))
+    assert send.call_args.args[0]["From"] == "IO Driven Platform Alerts <alerts@iodriven.tech>"
+
+
+@pytest.mark.parametrize(
+    ("name", "address", "expected"),
+    [
+        ("", "alerts@iodriven.tech", "alerts@iodriven.tech"),
+        ("Ops", "Night shift <ops@x.com>", "Night shift <ops@x.com>"),
+        ("Planta Norte · Alertas", "a@x.com", "=?utf-8?q?Planta_Norte_=C2=B7_Alertas?= <a@x.com>"),
+    ],
+)
+def test_sender_bare_address_existing_name_and_non_ascii(
+    name: str, address: str, expected: str
+) -> None:
+    config = Settings(_env_file=None, email_from_name=name, email_from=address)
+    assert email_module.sender(config) == expected
+
+
 def test_settings_email_provider_env_round_trips(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("EMAIL_PROVIDER", "smtp")
     assert Settings().email_provider == "smtp"
