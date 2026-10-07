@@ -22,5 +22,5 @@ test("new rule: a recipe opens the workbench with its checks passing", async ({ 
   const preview = page.getByRole("complementary", { name: "Preview" });
   await expect(preview.getByText("Fires on each event, not on readings.")).toBeVisible();
   await expect(preview.getByText("Actions complete")).toBeVisible();
-  await expect(preview.getByText(": fails")).toHaveCount(0);
+  await expect(preview.getByText(/^: (needs fixing|warning)$/)).toHaveCount(0);
 });

@@ -23,6 +23,9 @@ describe("ruleChecks", () => {
     if (d.condition?.kind === "contact") d.condition.hysteresis = 0;
     const failed = ruleChecks(d).filter((c) => !c.ok).map((c) => c.id);
     expect(failed).toEqual(["hold", "interval", "hysteresis"]);
+    // Safety checks are warnings (they never block a save, as in the rail);
+    // only incomplete conditions or actions are blocking.
+    expect(ruleChecks(d).filter((c) => c.blocking).map((c) => c.id)).toEqual(["conditions", "actions"]);
   });
 
   it("reports incomplete conditions and actions in the editor's words", () => {

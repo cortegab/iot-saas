@@ -19,6 +19,9 @@ export interface Check {
   id: "conditions" | "actions" | "hold" | "interval" | "hysteresis";
   label: string;
   ok: boolean;
+  /** A failing blocking check stops the save (red ✕); a safety check is a
+   * warning that never blocks it (amber "!", like the section rail). */
+  blocking: boolean;
   /** Why it failed, in the editor's words. */
   detail?: string;
 }
@@ -39,14 +42,15 @@ export function ruleChecks(d: RuleDraft): Check[] {
   const actionsProblem =
     d.actions.length === 0 && d.preserved.actions.length === 0 ? "Add at least one action." : (d.actions.map(actionProblem).find(Boolean) ?? null);
   const checks: Check[] = [
-    { id: "conditions", label: "Conditions complete", ok: !conditionProblem, detail: conditionProblem ?? undefined },
-    { id: "actions", label: "Actions complete", ok: !actionsProblem, detail: actionsProblem ?? undefined },
+    { id: "conditions", label: "Conditions complete", ok: !conditionProblem, blocking: true, detail: conditionProblem ?? undefined },
+    { id: "actions", label: "Actions complete", ok: !actionsProblem, blocking: true, detail: actionsProblem ?? undefined },
   ];
   if (reading) {
     checks.push({
       id: "hold",
       label: `Hold for at least ${MIN_HOLD} s`,
       ok: d.forDuration >= MIN_HOLD,
+      blocking: false,
       detail: d.forDuration >= MIN_HOLD ? undefined : "A single noisy reading could fire it. Hold the condition for a few seconds first.",
     });
   }
@@ -54,6 +58,7 @@ export function ruleChecks(d: RuleDraft): Check[] {
     id: "interval",
     label: `Minimum interval of at least ${MIN_INTERVAL} s`,
     ok: d.cooldown >= MIN_INTERVAL,
+    blocking: false,
     detail: d.cooldown >= MIN_INTERVAL ? undefined : "It could fire again within seconds of the last time.",
   });
   if (reading && switchesHardware(d)) {
@@ -62,6 +67,7 @@ export function ruleChecks(d: RuleDraft): Check[] {
       id: "hysteresis",
       label: "Hysteresis above 0 on thresholds",
       ok: bare.length === 0,
+      blocking: false,
       detail: bare.length === 0 ? undefined : "A reading hovering at the threshold would toggle the relay. Add a margin it must clear first.",
     });
   }

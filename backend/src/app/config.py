@@ -80,6 +80,9 @@ class Settings(BaseSettings):
     contact_email_to: str = ""
     email_provider: Literal["console", "smtp"] = "console"
     email_from: str = "alerts@example.com"
+    # Display name shown beside EMAIL_FROM in the recipient's inbox
+    # ("IO Driven Platform Alerts <alerts@…>"). Empty = the bare address.
+    email_from_name: str = "IO Driven Platform Alerts"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""

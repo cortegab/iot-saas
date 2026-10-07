@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCircle2, CircleX, Play } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleAlert, CircleX, Play } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuth } from "@/hooks/useAuth";
@@ -250,15 +250,19 @@ export function RulePreview({
         <ul className="flex flex-col gap-1.5">
           {checks.map((c) => (
             <li key={c.id} className="flex gap-2 text-[13px]">
+              {/* Red ✕ only for what blocks saving; a safety check that isn't
+                  met is a warning — the amber "!" the section rail uses. */}
               {c.ok ? (
                 <CheckCircle2 aria-hidden size={15} className="mt-px shrink-0 text-status-online" />
-              ) : (
+              ) : c.blocking ? (
                 <CircleX aria-hidden size={15} className="mt-px shrink-0 text-status-error" />
+              ) : (
+                <CircleAlert aria-hidden size={15} className="mt-px shrink-0 text-status-pending" />
               )}
               <span className="flex flex-col">
                 <span className={c.ok ? "text-ink" : "font-medium text-ink"}>
                   {c.label}
-                  <span className="sr-only">{c.ok ? ": passes" : ": fails"}</span>
+                  <span className="sr-only">{c.ok ? ": passes" : c.blocking ? ": needs fixing" : ": warning"}</span>
                 </span>
                 {c.detail && <span className="text-[12px] text-ink-muted">{c.detail}</span>}
               </span>
