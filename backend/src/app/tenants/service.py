@@ -223,7 +223,7 @@ async def remove_member(
     await session.flush()
 
 
-# ---- role guards (DESIGN.md §8 members; redesign-report P0) -----------------
+# ---- role guards (DESIGN.md §8 members; redesign audit P0) ------------------
 
 _RANK = {TenantRole.VIEWER.value: 0, TenantRole.ADMIN.value: 1, TenantRole.OWNER.value: 2}
 

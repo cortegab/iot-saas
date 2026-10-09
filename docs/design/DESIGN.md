@@ -18,15 +18,14 @@ real Next.js app. Read it before building or changing any page or component.
    the demo, write the answer back into this file.
 4. **Everything else is subordinate**, and gets updated to match this file, never the reverse:
    - code comments (for example the "Control Room" comments in `globals.css`)
-   - demos A–F
-   - UI bullets in `PLAN.md`
+   - UI bullets in `docs/history/PLAN.md`
    - suggestions from the `frontend-design` / `ui-ux-pro-max` skills
    - older notes
 
 **Status:**
 - Demo G is a prototype. Its **behaviour, layout and wording are binding**. Its vanilla-JS code is
   not: build it with the app's React primitives.
-- Demos A–F are kept for history only.
+- Demos A–F, the rule-editor demos and the redesign audit were removed on 2026-10-07; they are in git history.
 - **Rule semantics are defined elsewhere.** `docs/rule-engine-multi-device.md` and CLAUDE.md §5 own
   the condition tree, latch, `clear_actions` and "stale = unknown". This file owns only how the
   rule editor presents them.
@@ -514,7 +513,7 @@ G is not frontend-only. These need API, schema or migration work, each respectin
 | Conflicts ("shares fan1") | Query over enabled rules by device + actuator (can be computed client-side from the rules list). |
 | Blocked delete / rename warnings | Usage counts: templates→devices, keys→rules/widgets, zones→devices. |
 | Recipes, schedule picker, time zone labels, status switch | **No backend change.** Cron + IANA tz and `enabled` are already stored. |
-| CRUD fixes | The P0/P1 items in `docs/design/redesign/redesign-report.html`: key freeze, owner-role escalation, disabled templates usable, key format validation, orphaning renames, dropped 422 details. |
+| CRUD fixes | The P0/P1 items from the redesign audit (now in git history): key freeze, owner-role escalation, disabled templates usable, key format validation, orphaning renames, dropped 422 details. |
 
 Regenerate `frontend/src/types/api.ts` after every schema change (CLAUDE.md §9.8).
 
@@ -546,9 +545,6 @@ Each step is a separate PR and leaves the app fully working.
 - `docs/design/redesign/demo-g-full-site.html`: **the reference**.
   - Use the **Demo controls** button (top right) to switch role and theme and to open any route.
   - Hash routes deep-link to pages and editors.
-- `docs/design/redesign/redesign-report.html`: the audit, the CRUD matrix, the P0–P2 issues, and
-  each version's rationale.
-- Demos A–F: history only.
 
 **Changelog**
 
@@ -582,3 +578,4 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-03 | §7 **one record menu, three places**: row ⋯, peek ⋯ and page ⋯ offer the same actions in the same words, naming the action only ("Delete…", not "Delete zone…" / "Delete device…"; "View devices", not "View its devices"). The zones list row menu gains Delete…, which it lacked. A blocked delete is still offered, with the usage count as its hint (zones now match templates). |
 | 2026-10-06 | §10 landing: the Product title drops "babysit" ("Everything an operator needs, running without supervision."). Onboarding gets a **journey figure** that illustrates its own four steps (workspace · template · sketch · device online) and highlights the step it shows; the **control-loop log**, which shows what happens after onboarding, moves to How it works as the hot path in action. Step 3 says Wi-Fi is set up from a phone with a QR code (Espressif provisioning), not "over BLE". |
 | 2026-10-06 | §9.2 Checks card: a safety check that isn't met (hold < 5 s, interval < 30 s, no hysteresis on a hardware rule) shows the **amber circled "!"**, the rail's warning mark, instead of the red ✕, which is kept for problems that block saving (incomplete conditions or actions). Screen readers hear "warning" or "needs fixing". |
+| 2026-10-07 | Docs cleanup: demos A–F, the two rule-editor demos and the redesign audit (`redesign-report.html`) are removed; their outcomes are built and written into this file, and the files stay in git history. **Demo G is the only reference demo left.** |
