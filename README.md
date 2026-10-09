@@ -6,9 +6,9 @@ A multi-tenant IoT platform that ingests sensor telemetry over MQTT, evaluates t
 logic in real time, drives actuators, and serves live dashboards. Built for ESP32 makers, small
 agriculture, and solar DIY.
 
-> **Status: pre-development.** Phase 0 has not started. This README describes the intended shape of
-> the repository; sections marked _(planned)_ are not yet implemented. See `PLAN.md` in the workspace
-> root for the staged build order.
+> **Status: version 1.0, in production at iodriven.tech.** What the platform does today is listed in
+> [`docs/SCOPE.md`](docs/SCOPE.md). The original staged build plan is archived in
+> [`docs/history/PLAN.md`](docs/history/PLAN.md).
 
 ---
 
@@ -329,8 +329,10 @@ Retention is enforced in the database, not just the UI.
 
 - **`CLAUDE.md`** _(repo-scoped, added in Phase 0)_ — architecture, design decisions and their
   rationale, coding conventions, and constraints that changes must respect
-- **`PLAN.md`** _(workspace root)_ — staged development plan with manual setup instructions per phase
-- **`docs/`** — firmware quickstart and API reference
+- **`docs/SCOPE.md`** — what the platform does today, area by area, and its known limits
+- **`docs/design/DESIGN.md`** — the binding frontend design standard
+- **`docs/`** — deep dives per area (ingestion, rules, BLE provisioning)
+- **`docs/history/PLAN.md`** — the original staged development plan (archived)
 
 ---
 
