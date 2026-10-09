@@ -5,26 +5,17 @@ import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import useSWR from "swr";
 import { useApi } from "@/hooks/useApi";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
 import { boolBuckets } from "@/lib/bool-series";
+import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, slideIntervalMs } from "@/lib/chart-range";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import type { components } from "@/types/api";
 
 type TelemetryDataResponse = components["schemas"]["TelemetryDataResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
 type Resolution = "raw" | "1m" | "1h";
-
-const HOUR = 60 * 60 * 1000;
-const RANGE_OPTIONS: { label: string; ms: number }[] = [
-  { label: "10m", ms: 10 * 60 * 1000 },
-  { label: "1h", ms: HOUR },
-  { label: "6h", ms: 6 * HOUR },
-  { label: "24h", ms: 24 * HOUR },
-  { label: "7d", ms: 7 * 24 * HOUR },
-];
 
 // Every preset here ends at "now", so every fetch is inherently a live-window
 // fetch — polling is always appropriate. A fixed-in-the-past custom range
@@ -121,7 +112,8 @@ export function TrendChart({
    * and the chart resizes with it via the ResizeObserver below. */
   fillHeight?: boolean;
 }) {
-  const [rangeMs, setRangeMs] = useState(RANGE_OPTIONS[0].ms);
+  const [rangeMs, setRangeMs] = useState(DEFAULT_RANGE_MS);
+  const rangeLabel = RANGE_OPTIONS.find((o) => o.ms === rangeMs)?.label ?? "";
   const resolution = resolutionFor(rangeMs);
   const colors = useThemeColors();
   const isBool = isBoolMetric(meta);
@@ -162,6 +154,16 @@ export function TrendChart({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const plotRef = useRef<uPlot | null>(null);
+  // The x axis follows "now" until the user drag-zooms; double-click (or a
+  // new range) resumes following. Refs, so the plot isn't rebuilt for either.
+  const followRef = useRef(true);
+  const rangeRef = useRef(rangeMs);
+  rangeRef.current = rangeMs;
+
+  const pinX = (u: uPlot) => {
+    const [min, max] = pinnedWindow(rangeRef.current);
+    u.setScale("x", { min, max });
+  };
 
   const points = useMemo(() => data?.points ?? [], [data]);
   const chartData = useMemo<uPlot.AlignedData>(
@@ -237,13 +239,31 @@ export function TrendChart({
           points: { show: !anyOn && points.length < 200 },
         },
       ],
-      hooks: { draw: isBool ? [] : [drawThresholds] },
+      hooks: {
+        draw: isBool ? [] : [drawThresholds],
+        // A drag-zoom (a non-empty selection) stops the axis following now.
+        setSelect: [
+          (u) => {
+            if (u.select.width > 0) followRef.current = false;
+          },
+        ],
+      },
     };
 
-    plotRef.current = new uPlot(opts, chartData, containerRef.current);
+    const plot = new uPlot(opts, chartData, containerRef.current);
+    plotRef.current = plot;
+    pinX(plot);
+    // Runs after uPlot's own double-click reset (which fits to the data), so
+    // the axis goes back to the full window ending now.
+    const onDoubleClick = () => {
+      followRef.current = true;
+      pinX(plot);
+    };
+    plot.over.addEventListener("dblclick", onDoubleClick);
 
     return () => {
-      plotRef.current?.destroy();
+      plot.over.removeEventListener("dblclick", onDoubleClick);
+      plot.destroy();
       plotRef.current = null;
     };
     // chartData is intentionally excluded — updated via setData in the effect
@@ -251,9 +271,27 @@ export function TrendChart({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colors, metric, meta, anyOn, thresholds, fillHeight]);
 
+  // setData re-fits x to the data; put the window back (pinned, or the user's
+  // zoom). Setting x also re-ranges y over what's visible.
   useEffect(() => {
-    plotRef.current?.setData(chartData);
+    const u = plotRef.current;
+    if (!u) return;
+    const { min, max } = u.scales.x;
+    u.setData(chartData);
+    if (followRef.current || min == null || max == null) pinX(u);
+    else u.setScale("x", { min, max });
   }, [chartData]);
+
+  // A new range follows now again, and the axis slides on a timer so it
+  // moves between readings too.
+  useEffect(() => {
+    followRef.current = true;
+    if (plotRef.current) pinX(plotRef.current);
+    const id = setInterval(() => {
+      if (followRef.current && plotRef.current) pinX(plotRef.current);
+    }, slideIntervalMs(rangeMs));
+    return () => clearInterval(id);
+  }, [rangeMs]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -306,30 +344,30 @@ export function TrendChart({
         />
       )}
 
-      {!isLoading && !error && points.length === 0 && (
-        <EmptyState
-          title="No data in this range"
-          description="Try a wider time range, or check back once this device reports again."
-        />
-      )}
-
       {/* The measured element is the *inner* unpadded div, not this padded
           wrapper: sizing uPlot to a padded box's clientWidth makes its canvas
           wider than the space it sits in, and flex items' default
           min-width:auto lets that overshoot ratchet the layout wider on every
           ResizeObserver tick — the "chart keeps growing horizontally" bug.
           overflow-hidden + min-w-0 stop any residual off-by-one from doing the
-          same. */}
+          same.
+          An empty window keeps the frame (and its sliding axis), so the next
+          reading appears in place instead of swapping in a whole chart. */}
       <div
         className={
-          points.length === 0
+          isLoading || error
             ? "hidden"
-            : `min-w-0 overflow-hidden rounded-xl border border-border shadow-card bg-surface p-2 ${
+            : `relative min-w-0 overflow-hidden rounded-xl border border-border shadow-card bg-surface p-2 ${
                 fillHeight ? "min-h-0 flex-1" : ""
               }`
         }
       >
         <div ref={containerRef} className={fillHeight ? "h-full min-h-0" : ""} />
+        {points.length === 0 && (
+          <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-ink-muted">
+            No readings in the last {rangeLabel}
+          </p>
+        )}
       </div>
     </div>
   );
