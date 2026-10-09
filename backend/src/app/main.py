@@ -2,7 +2,7 @@
 
 Skeleton for Phase 0/1 — exposes health/root endpoints so the container boots,
 serves OpenAPI at /docs, and gives the frontend something to call. Real modules
-(auth, tenants, devices, ...) are added per PLAN.md.
+(auth, tenants, devices, ...) are added per docs/history/PLAN.md.
 """
 
 from fastapi import FastAPI

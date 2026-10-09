@@ -1,7 +1,7 @@
 """Cross-tenant / cross-user isolation, proven against real Postgres RLS policies.
 
 The tenant_memberships tests below were written early (Phase 1, while there were
-only two tables), per PLAN.md's own advice. The devices tests at the bottom are
+only two tables), per docs/history/PLAN.md's own advice. The devices tests at the bottom are
 the milestone-defining suite for this phase: five assertions, each proving a
 different layer, on a table using the *standard* single-tenant RLS predicate
 (tenant_memberships uses a dual predicate instead — see its own tests above).

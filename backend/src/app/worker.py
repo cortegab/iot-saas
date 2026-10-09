@@ -12,7 +12,7 @@ never subscribes to MQTT, the worker never serves HTTP):
    RESERVED_METRIC_STATUS.
 2. stream_writer_loop — drains that stream through a consumer group (durable
    across worker restarts — the alternative, plain XREAD, would silently lose
-   any buffered-but-unwritten telemetry on a crash, PLAN.md's called-out
+   any buffered-but-unwritten telemetry on a crash, docs/history/PLAN.md's called-out
    failure mode for this phase) and batch-inserts into the TimescaleDB
    hypertable in one multi-row INSERT per flush, regardless of how many
    tenants are in the batch. `telemetry` intentionally has no RLS — see the

@@ -1,5 +1,12 @@
 # PLAN.md — Staged Development Plan
 
+> **Archived on 2026-10-07.** This is the original plan that guided the build up to version 1.0. It
+> is kept for its reasoning and history, not maintained. Phases 0–4 shipped, and the product has since
+> gone well beyond them (the demo G redesign, the multi-device rule engine, BLE provisioning). What the
+> platform does today is in [`docs/SCOPE.md`](../SCOPE.md). Phases 5–9 (billing, hardening, dedicated
+> variant, OPC UA, ML) are not built; treat them as ideas to re-plan, not commitments. The planned
+> dedicated-variant diagram is next to this file (`iot_dedicated_runtime_architecture.png`).
+
 Nine phases plus a sketched future phase. **Phases 0–6 build `iot-saas`** (the multi-tenant SaaS).
 **Phase 7 stands up `iot-dedicated`.** **Phase 8 adds OPC UA** to the dedicated product only.
 
