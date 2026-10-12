@@ -10,6 +10,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
 import { boolBuckets } from "@/lib/bool-series";
 import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, slideIntervalMs } from "@/lib/chart-range";
+import { decimateMinMax } from "@/lib/chart-decimate";
 import { appendToWindow, liveBuffer } from "@/lib/live-buffer";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import type { components } from "@/types/api";
@@ -54,6 +55,10 @@ export interface ChartThreshold {
   label: string;
 }
 
+// The default must be one stable array: `thresholds` rebuilds the plot, and a
+// fresh `[]` per render rebuilt every dashboard chart on every device update.
+const NO_THRESHOLDS: ChartThreshold[] = [];
+
 /** Reads a CSS custom property's resolved value so canvas drawing (which
  * cannot resolve var(...) itself) stays in sync with the active theme —
  * light is the default, `.dark` on <html> is the full peer theme
@@ -96,7 +101,7 @@ export function TrendChart({
   deviceId,
   metric,
   meta,
-  thresholds = [],
+  thresholds = NO_THRESHOLDS,
   fillHeight = false,
 }: {
   deviceId: string;
@@ -174,16 +179,21 @@ export function TrendChart({
   const chartDataRef = useRef<() => uPlot.AlignedData>(() => [[], []]);
   chartDataRef.current = () => {
     const { xs, ys } = seriesRef.current;
-    return anyOn ? boolBuckets(xs, ys, bucketSec) : [xs, ys];
+    if (anyOn) return boolBuckets(xs, ys, bucketSec);
+    // Following "now", the whole series spans the plot: keep min/max per
+    // pixel column. A drag-zoom draws every point, so detail isn't lost.
+    if (!followRef.current) return [xs, ys];
+    return decimateMinMax(xs, ys, containerRef.current?.clientWidth ?? 0);
   };
 
-  // setData re-fits x to the data; put the window back (pinned, or the user's
-  // zoom). Setting x also re-ranges y over what's visible.
+  // Put the window back (pinned, or the user's zoom) without letting setData
+  // re-fit the scales first — one paint per flush, not two. Setting x also
+  // re-ranges y over what's visible.
   const redraw = () => {
     const u = plotRef.current;
     if (!u) return;
     const { min, max } = u.scales.x;
-    u.setData(chartDataRef.current());
+    u.setData(chartDataRef.current(), false);
     if (followRef.current || min == null || max == null) pinX(u);
     else u.setScale("x", { min, max });
   };
@@ -293,7 +303,11 @@ export function TrendChart({
         // A drag-zoom (a non-empty selection) stops the axis following now.
         setSelect: [
           (u) => {
-            if (u.select.width > 0) followRef.current = false;
+            if (u.select.width > 0 && followRef.current) {
+              followRef.current = false;
+              // After uPlot applies the zoom: redraw undecimated, keeping it.
+              setTimeout(() => redrawRef.current(), 0);
+            }
           },
         ],
       },
