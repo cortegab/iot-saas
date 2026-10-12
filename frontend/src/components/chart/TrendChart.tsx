@@ -11,7 +11,7 @@ import { ApiRequestError } from "@/lib/api-client";
 import { boolBuckets } from "@/lib/bool-series";
 import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, slideIntervalMs } from "@/lib/chart-range";
 import { decimateMinMax } from "@/lib/chart-decimate";
-import { appendToWindow, liveBuffer } from "@/lib/live-buffer";
+import { appendToWindow, liveBuffer, reseed, type Series } from "@/lib/live-buffer";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import type { components } from "@/types/api";
 
@@ -141,14 +141,18 @@ export function TrendChart({
   //
   // keepPreviousData: switching range or metric changes the key — without this
   // the chart would blank to a loading skeleton while the new key's first fetch runs.
+  // The result is tagged with the series it was fetched for, because during a
+  // metric switch `data` is still the *previous* metric's (see the seed effect).
+  const seriesId = `${deviceId}|${metric}`;
   const api = useApi();
-  const { data, error, isLoading } = useSWR<TelemetryDataResponse>(
+  const { data, error, isLoading } = useSWR<{ seriesId: string; response: TelemetryDataResponse }>(
     queryKey,
-    () => {
+    async () => {
       const from = new Date(Date.now() - rangeMs).toISOString();
-      return api.get<TelemetryDataResponse>(
+      const response = await api.get<TelemetryDataResponse>(
         `/devices/${deviceId}/data?metric=${encodedMetric}&from=${encodeURIComponent(from)}&resolution=${resolution}`,
       );
+      return { seriesId, response };
     },
     {
       refreshInterval: rangeMs <= 6 * HOUR ? 20_000 : 60_000,
@@ -173,7 +177,7 @@ export function TrendChart({
   // React: seeded once per fetch, then appended to in place by every live
   // flush. A device publishing 20×/s used to re-derive (and re-parse) the
   // whole window and re-render this component on every reading.
-  const seriesRef = useRef<{ xs: number[]; ys: number[] }>({ xs: [], ys: [] });
+  const seriesRef = useRef<Series>({ id: seriesId, xs: [], ys: [] });
   const [hasPoints, setHasPoints] = useState(false);
   const bucketSec = resolution === "1h" ? 3600 : 60;
   const chartDataRef = useRef<() => uPlot.AlignedData>(() => [[], []]);
@@ -202,35 +206,38 @@ export function TrendChart({
 
   // A fetch (first load, the periodic refetch, a new range) reseeds the
   // series; live points newer than what the fetch returned (the DB lags by
-  // its ~1s batch flush) are kept on the end.
+  // its ~1s batch flush) are kept on the end. On a metric switch, `data` is
+  // still the previous metric's until the new fetch lands: start this
+  // series empty rather than draw — or append onto — the other one.
   useEffect(() => {
-    const fetched = data?.points ?? [];
+    if (!data || data.seriesId !== seriesId) {
+      if (seriesRef.current.id !== seriesId) {
+        seriesRef.current = { id: seriesId, xs: [], ys: [] };
+        setHasPoints(false);
+        redrawRef.current();
+      }
+      return;
+    }
+    const fetched = data.response.points;
     const xs = fetched.map((p) => Date.parse(p.time) / 1000);
     const ys = fetched.map((p) => p.value);
-    const prev = seriesRef.current;
-    const tip = xs.length > 0 ? xs[xs.length - 1] : -Infinity;
-    for (let i = 0; i < prev.xs.length; i++) {
-      if (prev.xs[i] > tip) {
-        xs.push(prev.xs[i]);
-        ys.push(prev.ys[i]);
-      }
-    }
-    seriesRef.current = { xs, ys };
-    setHasPoints(xs.length > 0);
+    seriesRef.current = reseed(seriesRef.current, seriesId, xs, ys);
+    setHasPoints(seriesRef.current.xs.length > 0);
     redrawRef.current();
-  }, [data]);
+  }, [data, seriesId]);
 
   // Live points: one batch per buffer flush (at most 4×/s), straight into
   // the plot — no React render.
   useEffect(
     () =>
       liveBuffer.subscribeSeries(deviceId, metric, (batch) => {
+        if (seriesRef.current.id !== seriesId) seriesRef.current = { id: seriesId, xs: [], ys: [] };
         const { xs, ys } = seriesRef.current;
         appendToWindow(xs, ys, batch, (Date.now() - rangeRef.current) / 1000);
         setHasPoints(xs.length > 0);
         redrawRef.current();
       }),
-    [deviceId, metric],
+    [deviceId, metric, seriesId],
   );
 
   // Rebuild (not just re-set-data) whenever the theme or threshold set changes,
