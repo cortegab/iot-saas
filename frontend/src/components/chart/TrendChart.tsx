@@ -59,6 +59,9 @@ export interface ChartThreshold {
 // fresh `[]` per render rebuilt every dashboard chart on every device update.
 const NO_THRESHOLDS: ChartThreshold[] = [];
 
+// Reading markers are drawn only while fewer than this many points are in view.
+const MAX_MARKERS = 200;
+
 /** Reads a CSS custom property's resolved value so canvas drawing (which
  * cannot resolve var(...) itself) stays in sync with the active theme —
  * light is the default, `.dark` on <html> is the full peer theme
@@ -302,7 +305,11 @@ export function TrendChart({
             fill: /^#[0-9a-f]{6}$/i.test(colors.chart) ? `${colors.chart}24` : undefined,
           }),
           // Markers are the readings; aggregated on/off steps are bucket spans, not readings.
-          points: { show: !anyOn && seriesRef.current.xs.length < 200 },
+          // Decided on every draw from the points in view — not once at
+          // construction, which froze the choice at whatever the series held
+          // then (empty right after a metric switch, so markers stayed on as
+          // a fast metric filled the window, until some rebuild dropped them).
+          points: { show: (_u, _s, idx0, idx1) => !anyOn && idx1 - idx0 + 1 < MAX_MARKERS },
         },
       ],
       hooks: {
