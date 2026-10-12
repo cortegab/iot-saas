@@ -41,6 +41,27 @@ Bump `FW_VERSION` in `src/version.h` for every release. `release.py` fails if `d
 `src/drivers/registry.cpp` list different drivers, or if an app outgrows its OTA slot. It also warns
 above 90%.
 
+## Size (open decision)
+
+| Board | App | Share of a 1.875 MB OTA slot |
+|---|---|---|
+| ESP32 | 1.91 MB | **97%** |
+| ESP32-C3 | 1.56 MB | 79% |
+
+**The difference is Bluetooth.** The ESP32's Arduino libraries are built with Bluedroid (BLE +
+Classic BT), and the C3's with NimBLE. Provisioning only needs BLE.
+
+**Switching the ESP32 to NimBLE was tried and doesn't build.** The attempt used pioarduino's
+`custom_sdkconfig` with NimBLE on and Bluedroid off. Arduino's `WiFiProv` includes Bluedroid's
+`SimpleBLE.h` on the ESP32, so the build fails. The ways forward:
+
+1. **Call ESP-IDF's `network_provisioning` directly instead of `WiFiProv`.** It supports NimBLE
+   and the same phone app and QR, and keeps OTA. This costs a custom-sdkconfig build (much slower
+   the first time) and a provisioning rewrite in `net.cpp`.
+2. **One big app partition on the ESP32 (no OTA slot).** Room for every driver, but ESP32 boards
+   could only be updated over USB.
+3. **Stay at 97%** and keep the ESP32 driver set small.
+
 ## Trying it on a board
 
 1. `python3 release.py --dev`.
