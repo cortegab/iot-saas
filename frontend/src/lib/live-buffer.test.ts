@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LiveBuffer, appendToWindow, type LatestBatch, type LivePoint } from "@/lib/live-buffer";
+import { LiveBuffer, appendToWindow, reseed, type LatestBatch, type LivePoint } from "@/lib/live-buffer";
 
 function makeBuffer() {
   const state = { hidden: false, pending: null as (() => void) | null, scheduled: 0 };
@@ -94,6 +94,23 @@ describe("LiveBuffer", () => {
     runFlush();
     expect(batches).toHaveLength(1);
     expect(batches[0].get("d1")).toEqual([{ metric: "temp", value: 2, t: 11 }]);
+  });
+});
+
+describe("reseed", () => {
+  it("keeps this series' live points newer than the fetched tip", () => {
+    const prev = { id: "d|temp", xs: [1, 2, 3, 4], ys: [10, 20, 30, 40] };
+    expect(reseed(prev, "d|temp", [1, 2], [11, 21])).toEqual({ id: "d|temp", xs: [1, 2, 3, 4], ys: [11, 21, 30, 40] });
+  });
+
+  it("drops another metric's points instead of carrying them over", () => {
+    const prev = { id: "d|humidity", xs: [5, 6], ys: [80, 81] };
+    expect(reseed(prev, "d|temp", [1, 2], [20, 21])).toEqual({ id: "d|temp", xs: [1, 2], ys: [20, 21] });
+  });
+
+  it("keeps the live tail when the fetch comes back empty", () => {
+    const prev = { id: "d|temp", xs: [5, 6], ys: [20, 21] };
+    expect(reseed(prev, "d|temp", [], [])).toEqual({ id: "d|temp", xs: [5, 6], ys: [20, 21] });
   });
 });
 

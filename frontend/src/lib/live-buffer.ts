@@ -142,6 +142,30 @@ export const liveBuffer = new LiveBuffer({
   isHidden: () => isBrowser && document.hidden,
 });
 
+/** A chart's drawn series, as uPlot columns, tagged with the (device,
+ * metric) it belongs to — one chart can switch metric without remounting
+ * (DeviceTrendChart), and its points must never carry over. */
+export interface Series {
+  id: string;
+  xs: number[];
+  ys: number[];
+}
+
+/** A fresh fetch for series `id`: the fetched columns, plus any live points
+ * newer than the fetch's tip (the DB lags by its batch flush) — but only
+ * live points of this same series; another metric's are dropped. */
+export function reseed(prev: Series, id: string, xs: number[], ys: number[]): Series {
+  if (prev.id !== id) return { id, xs, ys };
+  const tip = xs.length > 0 ? xs[xs.length - 1] : -Infinity;
+  for (let i = 0; i < prev.xs.length; i++) {
+    if (prev.xs[i] > tip) {
+      xs.push(prev.xs[i]);
+      ys.push(prev.ys[i]);
+    }
+  }
+  return { id, xs, ys };
+}
+
 /** Appends `points` (in arrival order) to aligned `xs`/`ys` in place —
  * skipping any not newer than the current tip, so a reading already in the
  * fetched series isn't drawn twice — then drops what slid out of the window
