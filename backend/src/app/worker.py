@@ -568,6 +568,14 @@ async def _ensure_consumer_group(r: redis.Redis) -> None:
             raise
 
 
+def _should_flush(buffered: int, oldest_age_s: float, batch_size: int, interval_s: float) -> bool:
+    """Flush on a full batch, or once the oldest buffered row has waited a
+    whole flush interval. (Waiting for an *idle* read instead meant a device
+    publishing steadily — never a quiet second — was only stored every
+    `batch_size` readings: minutes at a few readings per second.)"""
+    return buffered >= batch_size or (buffered > 0 and oldest_age_s >= interval_s)
+
+
 def _row_from_stream_entry(fields: dict[str, str]) -> _TelemetryRow | None:
     try:
         # Float epoch seconds (sub-second receive time). Entries queued by an
@@ -592,6 +600,9 @@ async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis
     ack_ids: list[str] = []
     batch_size = settings.telemetry_batch_size
     block_ms = settings.telemetry_flush_interval_ms
+    interval_s = block_ms / 1000
+    # When the oldest row still in `buffer` arrived (monotonic seconds).
+    first_buffered_at = 0.0
 
     async def flush() -> None:
         nonlocal buffer, ack_ids
@@ -635,13 +646,18 @@ async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis
         buffer = []
         ack_ids = []
 
+    loop = asyncio.get_running_loop()
     while True:
+        # With rows waiting, block only until the oldest one is due.
+        wait_ms = block_ms
+        if buffer:
+            wait_ms = max(1, int((first_buffered_at + interval_s - loop.time()) * 1000))
         raw = await r.xreadgroup(
             CONSUMER_GROUP,
             CONSUMER_NAME,
             {ingestion_service.TELEMETRY_STREAM: ">"},
             count=batch_size - len(buffer),
-            block=block_ms,
+            block=wait_ms,
         )
         # redis-py's stub covers both decode_responses=True/False shapes as a
         # Union; this client is always constructed with decode_responses=True
@@ -651,10 +667,12 @@ async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis
             for msg_id, fields in messages:
                 row = _row_from_stream_entry(fields)
                 if row is not None:
+                    if not buffer:
+                        first_buffered_at = loop.time()
                     buffer.append(row)
                 ack_ids.append(msg_id)
 
-        if len(buffer) >= batch_size or not entries:
+        if _should_flush(len(buffer), loop.time() - first_buffered_at, batch_size, interval_s):
             await flush()
 
 
