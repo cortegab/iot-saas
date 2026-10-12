@@ -138,8 +138,9 @@ test("realtime load: dashboard and device page under high-rate telemetry", async
     if (ws.url().includes("/ws?")) ws.on("framereceived", () => frames.count++);
   });
 
-  // Runs a little longer than the test needs and stops on its own — killing
-  // the `docker compose exec` client doesn't reliably stop the process inside.
+  // Killing the `docker compose exec` client doesn't stop the process inside
+  // the container, so the script also exits when our stdin pipe closes — and
+  // on its own a little after the test would have finished.
   const loadMinutes = (WARMUP_S + 2 * MINUTES * 60) / 60 + 1;
   const load = spawn(
     "docker",
@@ -147,9 +148,9 @@ test("realtime load: dashboard and device page under high-rate telemetry", async
       "compose", "-f", "../infra/docker-compose.yml", "exec", "-T", "api",
       "uv", "run", "python", "scripts/load_publish.py",
       "--tenant", tenantSlug, "--prefix", "load-", "--count", String(DEVICES),
-      "--hz", String(HZ), "--minutes", String(loadMinutes),
+      "--hz", String(HZ), "--minutes", String(loadMinutes), "--exit-on-stdin-eof",
     ],
-    { stdio: ["ignore", "inherit", "inherit"] },
+    { stdio: ["pipe", "inherit", "inherit"] },
   );
 
   try {
@@ -165,6 +166,7 @@ test("realtime load: dashboard and device page under high-rate telemetry", async
 
     await testInfo.attach("realtime-load.json", { body: JSON.stringify(results, null, 2), contentType: "application/json" });
   } finally {
+    load.stdin?.end();
     load.kill();
   }
 });
