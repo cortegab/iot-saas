@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     telemetry_batch_size: int = 500
     telemetry_flush_interval_ms: int = 1000
 
+    # Live-updates WebSocket (app/realtime/router.py): each socket gets at most
+    # one frame per interval, carrying every event since the last one. UI-only
+    # latency — actuation never goes through /ws.
+    realtime_flush_interval_ms: int = 250
+
     # Actuator command TTL (CLAUDE.md §4's example) — how long a device should
     # honor a command after `issued_at` before treating it as stale.
     command_default_ttl_seconds: int = 30
