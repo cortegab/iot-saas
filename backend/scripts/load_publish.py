@@ -36,6 +36,7 @@ from app.redis import redis_client
 async def _publish_device(
     device: DeviceDirectoryRecord,
     metric: str,
+    base: float,
     hz: float,
     deadline: float,
     counter: list[int],
@@ -45,7 +46,7 @@ async def _publish_device(
     next_at = time.monotonic()
     while next_at < deadline:
         t = time.monotonic()
-        value = round(22 + 4 * math.sin(t / 20 + phase) + random.gauss(0, 0.3), 2)
+        value = round(base + 4 * math.sin(t / 20 + phase) + random.gauss(0, 0.3), 2)
         payload = TelemetryPayload(value=value)
         await ingestion_service.record_telemetry_direct(
             redis_client,
@@ -77,6 +78,9 @@ async def main() -> None:
     parser.add_argument("--prefix", default="load-")
     parser.add_argument("--count", type=int, default=20)
     parser.add_argument("--metric", default="temperature")
+    parser.add_argument(
+        "--base", type=float, default=22, help="centre value (readings swing about ±4 around it)"
+    )
     parser.add_argument("--hz", type=float, default=20)
     parser.add_argument("--minutes", type=float, default=30)
     parser.add_argument(
@@ -106,7 +110,7 @@ async def main() -> None:
     counter = [0]
     await asyncio.gather(
         _report(counter, deadline),
-        *(_publish_device(d, args.metric, args.hz, deadline, counter) for d in devices),
+        *(_publish_device(d, args.metric, args.base, args.hz, deadline, counter) for d in devices),
     )
 
 
