@@ -49,7 +49,26 @@ ran in a burst when the tab came back.
 
 ## 2. Changes
 
-*(filled in as the PRs land)*
+1. **Client-side live buffer** (`frontend/src/lib/live-buffer.ts`). Telemetry frames land in plain
+   maps outside React. One flush, at most 4×/s and on an animation frame:
+   - applies the newest reading per device to `/devices/{id}/latest` and `/devices/{id}`
+     (`markOnline` moves `last_seen_at` only by whole seconds);
+   - hands each chart every point since the last flush.
+
+   Frames are dropped while the tab is hidden. When the page is visible again, the device keys are
+   revalidated, the same catch-up a WS reconnect does.
+2. **TrendChart appends in place.** The series lives in a ref as uPlot columns. It is seeded once
+   per fetch, then appended to and trimmed (binary search) per flush, with no React render. It
+   redraws once per flush and decimates to min/max per pixel column while following "now". A
+   drag-zoom draws every point.
+3. **Dashboard charts no longer rebuild on device updates.** The `thresholds = []` default param
+   was a new array each render and a plot-rebuild dependency. Profiling showed the uPlot
+   constructor as the top JS cost: every `/devices/{id}` update tore down and re-created every
+   dashboard chart.
+4. **Server-side coalescing** (`realtime/router.py`). Each socket gets at most one frame per
+   `REALTIME_FLUSH_INTERVAL_MS` (default 250), shaped `{"type":"batch","events":[…]}`. Every event
+   is kept, and a lone event is sent unwrapped. This is UI-only latency: actuation never touches
+   `/ws`.
 
 ## 3. Measuring
 
@@ -79,12 +98,38 @@ page actually received. Below 400, the main thread can't keep up and frames back
 |---|---|---|---|---|---|
 | **Before**: dashboard (20 charts + 20 value cards) | 98.8% | 16.4 | 157 ms | 42 → 46 MB, max 124 | 108 |
 | **Before**: device page | 40.8% | 1.8 | 73 ms | 138 → 21 MB | 375 |
+| **After 1**: dashboard | 29.7% | 116.8 | 185 ms | 68 → 37 MB, max 74 | 434 |
+| **After 1**: device page | 12.5% | 1.6 | 116 ms | 72 → 24 MB | 431 |
+| **After 1–3**: device page | 16.6% | 2.6 | 134 ms | 94 → 21 MB | 434 |
+| **After 1–4**: dashboard | **12.1%** | 21.8 | 128 ms | 37 → 46 MB, max 55 | 4.3 (all 400 readings/s inside) |
+| **After 1–4**: device page | **6.5%** | 2.8 | 252 ms | 55 → 20 MB | 4.3 |
+
+Reading the "After" rows:
+- **After 1:** the page now keeps up with the stream, and CPU fell by two thirds. Long tasks got
+  more frequent: each flush redrew 20 charts at once, and every device update rebuilt every chart
+  (fixed in 3).
+- **After 1–3:** the dashboard run overlapped a stray load script from an earlier run (≈800
+  readings/s), so it isn't listed. The device-page run came after the overlap.
+- **After 1–4:** measured once the machine was idle (load average 1.5–4.5 during the run). An
+  earlier attempt overlapped a firmware build (load ≈11) and was discarded.
+
+**Against the brief's acceptance criteria:**
+- **CPU < 30%:** met. 12% on the dashboard, 7% on the device page, down from 99% and 41%.
+- **Stable memory:** heap stayed within 37–55 MB over 5 minutes. A full 30-minute run is still to
+  do: `PERF_MINUTES=30`.
+- **No long tasks > 50 ms:** not met in dev mode. About 22/min remain, up to 128 ms. Development
+  React is several times slower than a production build. The likely remaining source is the
+  20-second reconciling refetch: each chart re-downloads and re-parses its whole raw window, which
+  is 12,000 points at 20 Hz over 10m. Bucketing raw reads server-side (follow-up below) would cut
+  that, and a production-build run would show how much is left.
 
 ## 5. Follow-ups
 
 - Per-connection device filter (the client sends the device ids it shows). Traffic is
   tenant-wide today, so this matters for large tenants.
-- Bucket raw reads for the 1h range when a device publishes fast (`telemetry.service.get_range`).
+- Bucket raw reads when a device publishes fast (`telemetry.service.get_range`). This covers the
+  10m/1h ranges and the chart's 20 s refetch, which re-sends the whole raw window.
+- Re-measure against a production build (`next build && next start`) for absolute numbers.
 - Storage-side downsampling for high-rate devices, without touching the device contract.
 - The worker logs one INFO line per reading (`telemetry … -> value=…`). At high rates that is
   log volume worth cutting.
