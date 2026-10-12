@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import uPlot from "uplot";
 import "uplot/dist/uPlot.min.css";
 import useSWR from "swr";
@@ -10,6 +10,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
 import { boolBuckets } from "@/lib/bool-series";
 import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, slideIntervalMs } from "@/lib/chart-range";
+import { appendToWindow, liveBuffer } from "@/lib/live-buffer";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import type { components } from "@/types/api";
 
@@ -123,17 +124,15 @@ export function TrendChart({
   // A stable cache key per (device, metric, window) — not a URL. `from` is
   // computed at fetch time instead of being baked into the key: a key that
   // re-anchored to "now" every few seconds minted a fresh cache entry each
-  // time, froze the chart on the previous snapshot while it loaded, and left
-  // useRealtime guessing which of the lingering keys was on screen (it guessed
-  // wrong on every range but 10m). useRealtime matches this exact shape — the
-  // `metric=…&window=…` prefix — to append live frames, so keep them in sync.
+  // time and froze the chart on the previous snapshot while it loaded. (Live
+  // points no longer go through this key at all — see seriesRef below.)
   const encodedMetric = encodeURIComponent(metric);
   const queryKey = `/devices/${deviceId}/data?metric=${encodedMetric}&window=${rangeMs}&resolution=${resolution}`;
 
-  // The reconciling backstop — useRealtime appends each live telemetry frame
-  // straight onto this key's `points` (revalidate:false), so the tip moves
-  // in real time; this periodic refetch just resnaps to the authoritative
-  // series (and, on wider ranges, the bucket averages).
+  // The reconciling backstop — live points come from lib/live-buffer (the
+  // effect below), so the tip moves in real time; this periodic refetch just
+  // resnaps to the authoritative series (and, on wider ranges, the bucket
+  // averages).
   //
   // keepPreviousData: switching range or metric changes the key — without this
   // the chart would blank to a loading skeleton while the new key's first fetch runs.
@@ -165,13 +164,63 @@ export function TrendChart({
     u.setScale("x", { min, max });
   };
 
-  const points = useMemo(() => data?.points ?? [], [data]);
-  const chartData = useMemo<uPlot.AlignedData>(
+  // The drawn series, as uPlot's columns (x in epoch seconds), held outside
+  // React: seeded once per fetch, then appended to in place by every live
+  // flush. A device publishing 20×/s used to re-derive (and re-parse) the
+  // whole window and re-render this component on every reading.
+  const seriesRef = useRef<{ xs: number[]; ys: number[] }>({ xs: [], ys: [] });
+  const [hasPoints, setHasPoints] = useState(false);
+  const bucketSec = resolution === "1h" ? 3600 : 60;
+  const chartDataRef = useRef<() => uPlot.AlignedData>(() => [[], []]);
+  chartDataRef.current = () => {
+    const { xs, ys } = seriesRef.current;
+    return anyOn ? boolBuckets(xs, ys, bucketSec) : [xs, ys];
+  };
+
+  // setData re-fits x to the data; put the window back (pinned, or the user's
+  // zoom). Setting x also re-ranges y over what's visible.
+  const redraw = () => {
+    const u = plotRef.current;
+    if (!u) return;
+    const { min, max } = u.scales.x;
+    u.setData(chartDataRef.current());
+    if (followRef.current || min == null || max == null) pinX(u);
+    else u.setScale("x", { min, max });
+  };
+  const redrawRef = useRef(redraw);
+  redrawRef.current = redraw;
+
+  // A fetch (first load, the periodic refetch, a new range) reseeds the
+  // series; live points newer than what the fetch returned (the DB lags by
+  // its ~1s batch flush) are kept on the end.
+  useEffect(() => {
+    const fetched = data?.points ?? [];
+    const xs = fetched.map((p) => Date.parse(p.time) / 1000);
+    const ys = fetched.map((p) => p.value);
+    const prev = seriesRef.current;
+    const tip = xs.length > 0 ? xs[xs.length - 1] : -Infinity;
+    for (let i = 0; i < prev.xs.length; i++) {
+      if (prev.xs[i] > tip) {
+        xs.push(prev.xs[i]);
+        ys.push(prev.ys[i]);
+      }
+    }
+    seriesRef.current = { xs, ys };
+    setHasPoints(xs.length > 0);
+    redrawRef.current();
+  }, [data]);
+
+  // Live points: one batch per buffer flush (at most 4×/s), straight into
+  // the plot — no React render.
+  useEffect(
     () =>
-      anyOn
-        ? boolBuckets(points, resolution === "1h" ? 3600 : 60)
-        : [points.map((p) => new Date(p.time).getTime() / 1000), points.map((p) => p.value)],
-    [points, anyOn, resolution],
+      liveBuffer.subscribeSeries(deviceId, metric, (batch) => {
+        const { xs, ys } = seriesRef.current;
+        appendToWindow(xs, ys, batch, (Date.now() - rangeRef.current) / 1000);
+        setHasPoints(xs.length > 0);
+        redrawRef.current();
+      }),
+    [deviceId, metric],
   );
 
   // Rebuild (not just re-set-data) whenever the theme or threshold set changes,
@@ -236,7 +285,7 @@ export function TrendChart({
             fill: /^#[0-9a-f]{6}$/i.test(colors.chart) ? `${colors.chart}24` : undefined,
           }),
           // Markers are the readings; aggregated on/off steps are bucket spans, not readings.
-          points: { show: !anyOn && points.length < 200 },
+          points: { show: !anyOn && seriesRef.current.xs.length < 200 },
         },
       ],
       hooks: {
@@ -250,7 +299,7 @@ export function TrendChart({
       },
     };
 
-    const plot = new uPlot(opts, chartData, containerRef.current);
+    const plot = new uPlot(opts, chartDataRef.current(), containerRef.current);
     plotRef.current = plot;
     pinX(plot);
     // Runs after uPlot's own double-click reset (which fits to the data), so
@@ -266,21 +315,11 @@ export function TrendChart({
       plot.destroy();
       plotRef.current = null;
     };
-    // chartData is intentionally excluded — updated via setData in the effect
-    // below so a live tick doesn't tear down/rebuild (and lose zoom/pan state).
+    // The series is intentionally not a dependency — fetches and live ticks
+    // go through redraw() (setData) so they don't tear down/rebuild the plot
+    // (and lose zoom/pan state).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [colors, metric, meta, anyOn, thresholds, fillHeight]);
-
-  // setData re-fits x to the data; put the window back (pinned, or the user's
-  // zoom). Setting x also re-ranges y over what's visible.
-  useEffect(() => {
-    const u = plotRef.current;
-    if (!u) return;
-    const { min, max } = u.scales.x;
-    u.setData(chartData);
-    if (followRef.current || min == null || max == null) pinX(u);
-    else u.setScale("x", { min, max });
-  }, [chartData]);
 
   // A new range follows now again, and the axis slides on a timer so it
   // moves between readings too.
@@ -363,7 +402,7 @@ export function TrendChart({
         }
       >
         <div ref={containerRef} className={fillHeight ? "h-full min-h-0" : ""} />
-        {points.length === 0 && (
+        {!hasPoints && (
           <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-xs text-ink-muted">
             No readings in the last {rangeLabel}
           </p>
