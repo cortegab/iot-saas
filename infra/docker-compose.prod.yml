@@ -97,6 +97,7 @@ services:
       MQTT_WORKER_PASSWORD: ${MQTT_WORKER_PASSWORD}
       TELEMETRY_BATCH_SIZE: ${TELEMETRY_BATCH_SIZE}
       TELEMETRY_FLUSH_INTERVAL_MS: ${TELEMETRY_FLUSH_INTERVAL_MS}
+      REALTIME_FLUSH_INTERVAL_MS: ${REALTIME_FLUSH_INTERVAL_MS:-250}
       CORS_ALLOW_ORIGINS: ${CORS_ALLOW_ORIGINS}
       # Email: invitations, password resets and the contact form are sent
       # by the api; rule alerts by the worker — both need the same settings.
