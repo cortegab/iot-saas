@@ -1,0 +1,11 @@
+# 4 MB flash. Two app slots so OTA updates can come later; `cfg` holds the
+# per-device config blob the dashboard writes (src/config.cpp has the layout).
+# `cfg`'s offset is part of the flashing contract: release.py publishes it in
+# manifest.json and the browser writes there. Moving it breaks re-configuring
+# boards already in the field.
+# Name,   Type, SubType, Offset,   Size
+nvs,      data, nvs,     0x9000,   0x5000
+otadata,  data, ota,     0xe000,   0x2000
+app0,     app,  ota_0,   0x10000,  0x1E0000
+app1,     app,  ota_1,   0x1F0000, 0x1E0000
+cfg,      data, 0x40,    0x3D0000, 0x8000

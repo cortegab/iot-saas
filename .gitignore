@@ -38,6 +38,19 @@ frontend/e2e/.auth/
 frontend/playwright-report/
 frontend/test-results/
 
+# Firmware (firmware/): PlatformIO build output, and the release binaries
+# release.py writes (synced to the VPS by the deploy step, never committed).
+firmware/.pio/
+# ...and what pioarduino generates when an env recompiles the framework
+# (custom_sdkconfig): ESP-IDF project scaffolding and downloaded components.
+firmware/.dummy/
+firmware/CMakeLists.txt
+firmware/dependencies.lock
+firmware/managed_components/
+firmware/sdkconfig.*
+infra/firmware/
+frontend/public/firmware/
+
 # OS / editor
 .DS_Store
 Thumbs.db
