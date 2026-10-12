@@ -40,7 +40,11 @@ export async function login(request: APIRequestContext) {
   if (!tenantId) {
     throw new Error("Login succeeded but the account has no tenant membership.");
   }
-  return { accessToken: body.access_token as string, tenantId };
+  return {
+    accessToken: body.access_token as string,
+    tenantId,
+    tenantSlug: body.memberships[0].tenant_slug as string,
+  };
 }
 
 export const test = base.extend<{ ruleUnderTest: RuleFixture }>({
