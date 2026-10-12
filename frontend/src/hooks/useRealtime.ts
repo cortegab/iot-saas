@@ -5,23 +5,35 @@ import { mutate, useSWRConfig } from "swr";
 import { useAuth } from "@/hooks/useAuth";
 import { connectRealtime, type RealtimeMessage, type RealtimeStatus } from "@/lib/realtime";
 import { emitRealtime } from "@/lib/realtime-bus";
-import { applyDeviceHealth, appendPoint, markOnline, mergeLatest } from "@/lib/live-telemetry";
+import { liveBuffer, type LatestBatch } from "@/lib/live-buffer";
+import { applyDeviceHealth, markOnline, mergeLatest } from "@/lib/live-telemetry";
 import type { components } from "@/types/api";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
-type TelemetryDataResponse = components["schemas"]["TelemetryDataResponse"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** One real revalidation of every device-scoped key — after a WS reconnect
+ * (frames were missed) or when the page is visible again (lib/live-buffer
+ * drops frames while hidden). */
+function catchUpDevices(): void {
+  void mutate((key) => typeof key === "string" && key.startsWith("/devices/"), undefined, {
+    revalidate: true,
+  });
+}
+
 /** Mounted once (frontend/src/app/(app)/layout.tsx), not per-component.
  *
- * For a telemetry frame it **applies** the pushed `{metric, value, time}`
- * straight into the relevant SWR caches (`revalidate: false`) rather than
+ * Telemetry frames go into lib/live-buffer, not straight into SWR: a device
+ * publishing 20×/s would otherwise re-render every subscriber 20×/s. Each
+ * buffer flush (at most 4×/s) **applies** the newest `{metric, value, time}`
+ * per device into its SWR caches (`revalidate: false`) rather than
  * invalidating and re-fetching — the frame already carries everything the
  * live surfaces need, and a refetch would only race the ~1s DB batch flush
- * and return the previous sample. The existing `refreshInterval` / on-focus
- * refetch on those keys stays as the reconciling backstop, and a WS
+ * and return the previous sample. Trend charts read their points from the
+ * buffer directly (TrendChart.tsx). The existing `refreshInterval` /
+ * on-focus refetch on those keys stays as the reconciling backstop, and a WS
  * reconnect triggers one real revalidation to catch up on missed frames.
  *
  * It only writes keys that are *already cached with data* — writing into a
@@ -58,17 +70,26 @@ export function useRealtime(): RealtimeStatus {
       return cacheRef.current.get(key)?.data != null;
     }
 
-    /** Every cached TrendChart key for this device+metric — one per range
-     * shown anywhere (device page, dashboard widgets). Keys are stable per
-     * window (TrendChart.tsx), so each is either on screen or a cheap no-op. */
-    function chartKeys(prefix: string): { key: string; windowMs: number | undefined }[] {
-      const found: { key: string; windowMs: number | undefined }[] = [];
-      for (const key of cacheRef.current.keys()) {
-        if (typeof key !== "string" || !key.startsWith(prefix) || !hasData(key)) continue;
-        const windowMs = Number(new URLSearchParams(key.split("?")[1] ?? "").get("window"));
-        found.push({ key, windowMs: windowMs > 0 ? windowMs : undefined });
+    /** One flush's worth of readings: a single mutate per device and key,
+     * however many frames arrived since the last one. */
+    function applyLatest(batch: LatestBatch) {
+      const iso = (seconds: number) => new Date(seconds * 1000).toISOString();
+      for (const [deviceId, readings] of batch) {
+        const latestKey = `/devices/${deviceId}/latest`;
+        if (hasData(latestKey)) {
+          void mutate<TelemetryLatestResponse[]>(
+            latestKey,
+            (current) => readings.reduce((acc, r) => mergeLatest(r.metric, r.value, iso(r.t))(acc), current),
+            { revalidate: false },
+          );
+        }
+
+        const deviceKey = `/devices/${deviceId}`;
+        if (hasData(deviceKey)) {
+          const newest = Math.max(...readings.map((r) => r.t));
+          void mutate<DeviceResponse>(deviceKey, markOnline(iso(newest)), { revalidate: false });
+        }
       }
-      return found;
     }
 
     function onMessage(message: RealtimeMessage) {
@@ -79,32 +100,7 @@ export function useRealtime(): RealtimeStatus {
         message.metric != null &&
         typeof message.value === "number"
       ) {
-        const deviceId = message.device_id;
-        const metric = message.metric;
-        const value = message.value;
-        const seconds = message.time ?? Math.floor(Date.now() / 1000);
-        const iso = new Date(seconds * 1000).toISOString();
-
-        const latestKey = `/devices/${deviceId}/latest`;
-        if (hasData(latestKey)) {
-          void mutate<TelemetryLatestResponse[]>(latestKey, mergeLatest(metric, value, iso), {
-            revalidate: false,
-          });
-        }
-
-        const deviceKey = `/devices/${deviceId}`;
-        if (hasData(deviceKey)) {
-          void mutate<DeviceResponse>(deviceKey, markOnline(iso), { revalidate: false });
-        }
-
-        // Trailing "&" so metric "temp" doesn't also match "temp2".
-        for (const { key, windowMs } of chartKeys(
-          `/devices/${deviceId}/data?metric=${encodeURIComponent(metric)}&`,
-        )) {
-          void mutate<TelemetryDataResponse>(key, appendPoint(iso, value, windowMs), {
-            revalidate: false,
-          });
-        }
+        liveBuffer.push(message.device_id, message.metric, message.value, message.time ?? Date.now() / 1000);
       } else if (
         message.type === "device_health" &&
         message.device_id &&
@@ -142,14 +138,18 @@ export function useRealtime(): RealtimeStatus {
       if (next === "reconnecting") droppedRef.current = true;
       if (next === "open" && droppedRef.current) {
         droppedRef.current = false;
-        // Frames that arrived while the socket was down were missed — do one
-        // real revalidation of every device-scoped key to catch up.
-        void mutate((key) => typeof key === "string" && key.startsWith("/devices/"), undefined, {
-          revalidate: true,
-        });
+        // Frames that arrived while the socket was down were missed.
+        catchUpDevices();
       }
     }
 
+    function onVisibilityChange() {
+      if (document.hidden) liveBuffer.clear();
+      else catchUpDevices();
+    }
+
+    liveBuffer.setLatestHandler(applyLatest);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     const connection = connectRealtime({
       getToken,
       tenantId: currentTenantId,
@@ -158,7 +158,11 @@ export function useRealtime(): RealtimeStatus {
       onStatusChange,
     });
 
-    return () => connection.close();
+    return () => {
+      connection.close();
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      liveBuffer.setLatestHandler(null);
+    };
   }, [currentTenantId, refresh]);
 
   return status;

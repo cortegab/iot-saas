@@ -101,7 +101,7 @@ async function measure(page: Page, label: string, frames: { count: number }) {
   await cdp.detach();
 
   const round = (n: number) => Math.round(n * 10) / 10;
-  return {
+  const result = {
     label,
     load: `${DEVICES} devices x ${HZ} Hz`,
     minutes: MINUTES,
@@ -113,6 +113,9 @@ async function measure(page: Page, label: string, frames: { count: number }) {
     heapMb: { start: round(heapMb[0]), end: round(heapMb[heapMb.length - 1]), max: round(Math.max(...heapMb)) },
     wsFramesPerSec: round((frames.count - framesAtStart) / seconds),
   };
+  // Printed as soon as it's measured, so a later failure doesn't lose it.
+  console.log(JSON.stringify(result, null, 2));
+  return result;
 }
 
 test.skip(!ENABLED, "perf probe: set PERF_REALTIME=1 to run");
@@ -160,7 +163,6 @@ test("realtime load: dashboard and device page under high-rate telemetry", async
     await expect(page.locator(".uplot canvas").first()).toBeVisible();
     results.push(await measure(page, "device page", frames));
 
-    console.log(JSON.stringify(results, null, 2));
     await testInfo.attach("realtime-load.json", { body: JSON.stringify(results, null, 2), contentType: "application/json" });
   } finally {
     load.kill();
