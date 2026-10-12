@@ -60,10 +60,50 @@ class CatalogActuator(BaseModel):
     off_value: bool | float | str | None = None
 
 
+# Boards the generic firmware (firmware/) is built for.
+HardwareBoard = Literal["esp32", "esp32c3"]
+# Driver ids: firmware/drivers.json's vocabulary.
+_DRIVER_ID = r"^[a-z0-9_:]{1,64}$"
+
+
+class HardwareBinding(BaseModel):
+    """One sensor or actuator wired to the board, as the generic firmware reads
+    it from its config blob (firmware/src/config.h): which driver, on which
+    GPIOs, with which params, and which metric (or, for an output, which
+    actuator) each of the driver's channels feeds.
+
+    Only the shape and the channel → key mapping are checked here. Pin rules
+    (ADC1, input-only, no sharing) and driver params belong to the driver
+    catalog: the dashboard checks them before flashing, and the firmware
+    refuses a config that breaks them.
+    """
+
+    driver: str = Field(pattern=_DRIVER_ID)
+    pins: dict[str, int] = Field(default_factory=dict, max_length=8)
+    params: dict[str, bool | int | float | str] = Field(default_factory=dict, max_length=16)
+    channels: dict[str, str] = Field(default_factory=dict, max_length=16)
+
+
+class I2cBus(BaseModel):
+    sda: int = Field(ge=0, le=48)
+    scl: int = Field(ge=0, le=48)
+
+
+class HardwareConfig(BaseModel):
+    """How a device is wired, for the generic firmware. A template carries the
+    default; a device may carry its own (devices/schemas.py)."""
+
+    board: HardwareBoard = "esp32"
+    i2c: I2cBus | None = None
+    inputs: list[HardwareBinding] = Field(default_factory=list, max_length=32)
+    outputs: list[HardwareBinding] = Field(default_factory=list, max_length=32)
+
+
 class CatalogEntryCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     metrics: list[CatalogMetric] = Field(default_factory=list)
     actuators: list[CatalogActuator] = Field(default_factory=list)
+    hardware: HardwareConfig | None = None
 
 
 class CatalogEntryUpdateRequest(BaseModel):
@@ -71,6 +111,8 @@ class CatalogEntryUpdateRequest(BaseModel):
     metrics: list[CatalogMetric] | None = None
     actuators: list[CatalogActuator] | None = None
     status: CatalogEntryStatus | None = None
+    # Explicit null clears the wiring; omitted leaves it unchanged.
+    hardware: HardwareConfig | None = None
 
 
 class KeyUsageResponse(BaseModel):
@@ -92,6 +134,7 @@ class CatalogEntryResponse(BaseModel):
     name: str
     metrics: list[CatalogMetric]
     actuators: list[CatalogActuator]
+    hardware: HardwareConfig | None = None
     status: CatalogEntryStatus
     is_legacy: bool
     device_count: int

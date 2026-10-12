@@ -6,6 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from app.catalog.schemas import HardwareConfig
 from app.devices.models import DeviceStatus
 from app.health.schemas import MetricHealthResponse
 
@@ -26,6 +27,9 @@ class DeviceUpdateRequest(BaseModel):
     status: DeviceStatus | None = None
     # Explicit null clears the zone; omitted leaves it unchanged.
     zone_id: uuid.UUID | None = None
+    # This device's own wiring. Explicit null goes back to the template's;
+    # omitted leaves it unchanged.
+    hardware: HardwareConfig | None = None
 
 
 class DeviceResponse(BaseModel):
@@ -33,6 +37,8 @@ class DeviceResponse(BaseModel):
     name: str
     catalog_entry_id: uuid.UUID
     zone_id: uuid.UUID | None = None
+    # The device's own wiring, or null when its template's applies.
+    hardware: HardwareConfig | None = None
     slug: str
     status: str
     last_seen_at: datetime | None
