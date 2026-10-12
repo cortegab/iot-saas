@@ -101,7 +101,8 @@ page actually received. Below 400, the main thread can't keep up and frames back
 | **After 1**: dashboard | 29.7% | 116.8 | 185 ms | 68 → 37 MB, max 74 | 434 |
 | **After 1**: device page | 12.5% | 1.6 | 116 ms | 72 → 24 MB | 431 |
 | **After 1–3**: device page | 16.6% | 2.6 | 134 ms | 94 → 21 MB | 434 |
-| **After 1–4** | *pending: rerun on an idle machine* | | | | |
+| **After 1–4**: dashboard | **12.1%** | 21.8 | 128 ms | 37 → 46 MB, max 55 | 4.3 (all 400 readings/s inside) |
+| **After 1–4**: device page | **6.5%** | 2.8 | 252 ms | 55 → 20 MB | 4.3 |
 
 Reading the "After" rows:
 - **After 1:** the page now keeps up with the stream, and CPU fell by two thirds. Long tasks got
@@ -109,15 +110,26 @@ Reading the "After" rows:
   (fixed in 3).
 - **After 1–3:** the dashboard run overlapped a stray load script from an earlier run (≈800
   readings/s), so it isn't listed. The device-page run came after the overlap.
-- **After 1–4:** the first run coincided with a firmware build on the same machine (load average
-  ≈11), which invalidates its long-task numbers. It did confirm the batching: 4.2 frames/s instead
-  of 400.
+- **After 1–4:** measured once the machine was idle (load average 1.5–4.5 during the run). An
+  earlier attempt overlapped a firmware build (load ≈11) and was discarded.
+
+**Against the brief's acceptance criteria:**
+- **CPU < 30%:** met. 12% on the dashboard, 7% on the device page, down from 99% and 41%.
+- **Stable memory:** heap stayed within 37–55 MB over 5 minutes. A full 30-minute run is still to
+  do: `PERF_MINUTES=30`.
+- **No long tasks > 50 ms:** not met in dev mode. About 22/min remain, up to 128 ms. Development
+  React is several times slower than a production build. The likely remaining source is the
+  20-second reconciling refetch: each chart re-downloads and re-parses its whole raw window, which
+  is 12,000 points at 20 Hz over 10m. Bucketing raw reads server-side (follow-up below) would cut
+  that, and a production-build run would show how much is left.
 
 ## 5. Follow-ups
 
 - Per-connection device filter (the client sends the device ids it shows). Traffic is
   tenant-wide today, so this matters for large tenants.
-- Bucket raw reads for the 1h range when a device publishes fast (`telemetry.service.get_range`).
+- Bucket raw reads when a device publishes fast (`telemetry.service.get_range`). This covers the
+  10m/1h ranges and the chart's 20 s refetch, which re-sends the whole raw window.
+- Re-measure against a production build (`next build && next start`) for absolute numbers.
 - Storage-side downsampling for high-rate devices, without touching the device contract.
 - The worker logs one INFO line per reading (`telemetry … -> value=…`). At high rates that is
   log volume worth cutting.
