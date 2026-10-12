@@ -59,9 +59,6 @@ export interface ChartThreshold {
 // fresh `[]` per render rebuilt every dashboard chart on every device update.
 const NO_THRESHOLDS: ChartThreshold[] = [];
 
-// Reading markers are drawn only while fewer than this many points are in view.
-const MAX_MARKERS = 200;
-
 /** Reads a CSS custom property's resolved value so canvas drawing (which
  * cannot resolve var(...) itself) stays in sync with the active theme —
  * light is the default, `.dark` on <html> is the full peer theme
@@ -274,6 +271,7 @@ export function TrendChart({
 
     const axis = { stroke: colors.inkMuted, grid: { stroke: colors.border, width: 1 }, ticks: { stroke: colors.border } };
     const unit = meta?.unit ? ` ${meta.unit}` : "";
+    const isHex = /^#[0-9a-f]{6}$/i.test(colors.chart);
     const legendValue = (_u: uPlot, v: number | null) =>
       v == null ? "--" : `${formatReading(v, meta)}${isBool ? "" : unit}`;
 
@@ -297,19 +295,34 @@ export function TrendChart({
           stroke: colors.chart,
           width: 2,
           value: legendValue,
-          ...(isBool && {
-            paths: stepped,
-            fillTo: 0,
-            // A light wash under the On periods, so they read at a glance.
-            // (--color-chart is a #rrggbb token; canvas can't resolve color-mix.)
-            fill: /^#[0-9a-f]{6}$/i.test(colors.chart) ? `${colors.chart}24` : undefined,
-          }),
-          // Markers are the readings; aggregated on/off steps are bucket spans, not readings.
-          // Decided on every draw from the points in view — not once at
-          // construction, which froze the choice at whatever the series held
-          // then (empty right after a metric switch, so markers stayed on as
-          // a fast metric filled the window, until some rebuild dropped them).
-          points: { show: (_u, _s, idx0, idx1) => !anyOn && idx1 - idx0 + 1 < MAX_MARKERS },
+          // (--color-chart is a #rrggbb token; canvas can't resolve color-mix,
+          // so translucency is a hex alpha suffix.)
+          ...(isBool
+            ? {
+                paths: stepped,
+                fillTo: 0,
+                // A light wash under the On periods, so they read at a glance.
+                fill: isHex ? `${colors.chart}24` : undefined,
+              }
+            : {
+                // A faint gradient under the line (DESIGN.md §5), fading to
+                // nothing at the bottom of the plot. Built per draw: it spans
+                // the plot box, which changes on resize.
+                fillTo: (u: uPlot) => u.scales.y.min ?? 0,
+                fill: isHex
+                  ? (u: uPlot) => {
+                      // uPlot also asks once while building, before the plot box is sized.
+                      const { top, height } = u.bbox ?? {};
+                      if (!Number.isFinite(top) || !Number.isFinite(height)) return `${colors.chart}1a`;
+                      const g = u.ctx.createLinearGradient(0, top, 0, top + height);
+                      g.addColorStop(0, `${colors.chart}2e`);
+                      g.addColorStop(1, `${colors.chart}00`);
+                      return g;
+                    }
+                  : undefined,
+              }),
+          // No reading markers: the line is the reading (DESIGN.md §5).
+          points: { show: false },
         },
       ],
       hooks: {
