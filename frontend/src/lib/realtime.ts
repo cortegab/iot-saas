@@ -70,10 +70,22 @@ export function connectRealtime(options: {
       options.onStatusChange("open");
     };
     socket.onmessage = (event: MessageEvent<string>) => {
+      let frame: RealtimeMessage | { type: "batch"; events: RealtimeMessage[] };
       try {
-        options.onMessage(JSON.parse(event.data) as RealtimeMessage);
+        frame = JSON.parse(event.data);
       } catch {
         // A malformed frame is dropped, never crashes the live-updates UI.
+        return;
+      }
+      // The server coalesces a tick's events into one `batch` frame
+      // (backend realtime/router.py); a lone event arrives as itself.
+      const messages = frame.type === "batch" && "events" in frame ? frame.events : [frame as RealtimeMessage];
+      for (const message of messages) {
+        try {
+          options.onMessage(message);
+        } catch {
+          // One bad event never drops the rest of its batch.
+        }
       }
     };
     socket.onclose = (event: CloseEvent) => {

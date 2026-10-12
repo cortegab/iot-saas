@@ -1,11 +1,10 @@
 import type { components } from "@/types/api";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
-type TelemetryDataResponse = components["schemas"]["TelemetryDataResponse"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 
 /**
- * SWR cache updaters that apply a live telemetry WebSocket frame directly,
+ * SWR cache updaters that apply live telemetry (coalesced by lib/live-buffer) directly,
  * instead of invalidating and re-fetching (which races the ~1s DB batch
  * flush and returns the previous sample). Each is a pure factory returning
  * an SWR updater; when the key isn't cached yet the updater is a no-op and
@@ -34,30 +33,20 @@ export function mergeLatest(metric: string, value: number, iso: string) {
   };
 }
 
+/** Already-online devices only get a new `last_seen_at` once it moves a full
+ * second: every rewrite re-renders the whole device page, and "last seen"
+ * never shows finer than seconds. */
 export function markOnline(iso: string) {
   return (current: DeviceResponse | undefined): DeviceResponse | undefined => {
     if (!current) return current;
-    if (current.connection_state === "online" && !isNewer(iso, current.last_seen_at)) return current;
-    return { ...current, connection_state: "online", last_seen_at: iso };
-  };
-}
-
-/** `windowMs`, when given, drops points that have slid out of the chart's
- * trailing window — the periodic refetch can't be relied on for that, since
- * SWR discards a refetch whenever a live frame mutates the key mid-flight
- * (routine for a device publishing every second). */
-export function appendPoint(iso: string, value: number, windowMs?: number) {
-  return (current: TelemetryDataResponse | undefined): TelemetryDataResponse | undefined => {
-    if (!current) return current;
-    const last = current.points[current.points.length - 1];
-    if (last && !isNewer(iso, last.time)) return current;
-    let points = [...current.points, { time: iso, value }];
-    if (windowMs != null) {
-      const cutoff = Date.now() - windowMs;
-      const firstInWindow = points.findIndex((p) => new Date(p.time).getTime() >= cutoff);
-      if (firstInWindow > 0) points = points.slice(firstInWindow);
+    if (
+      current.connection_state === "online" &&
+      current.last_seen_at &&
+      new Date(iso).getTime() - new Date(current.last_seen_at).getTime() < 1000
+    ) {
+      return current;
     }
-    return { ...current, points };
+    return { ...current, connection_state: "online", last_seen_at: iso };
   };
 }
 

@@ -8,25 +8,26 @@
  *   was On at some point), and the state after it is unknown, so the line
  *   breaks until the next bucket with readings.
  *
- * Returns uPlot's aligned [x seconds, y] arrays (y null = gap). */
-export function boolBuckets(points: { time: string; value: number }[], bucketSec: number): [number[], (number | null)[]] {
+ * Takes the buckets as aligned columns (`times` in epoch seconds) and returns
+ * uPlot's aligned [x seconds, y] arrays (y null = gap). */
+export function boolBuckets(times: number[], values: number[], bucketSec: number): [number[], (number | null)[]] {
   const xs: number[] = [];
   const ys: (number | null)[] = [];
-  points.forEach((p, i) => {
-    const t = Date.parse(p.time) / 1000;
-    const pure = p.value <= 0 || p.value >= 1;
-    const v = p.value > 0 ? 1 : 0;
+  times.forEach((t, i) => {
+    const value = values[i];
+    const pure = value <= 0 || value >= 1;
+    const v = value > 0 ? 1 : 0;
     xs.push(t);
     ys.push(v);
     if (pure) return;
     const end = t + bucketSec;
-    const next = points[i + 1];
-    const nextT = next ? Date.parse(next.time) / 1000 : Infinity;
+    const hasNext = i + 1 < times.length;
+    const nextT = hasNext ? times[i + 1] : Infinity;
     if (nextT <= end) return;
     // Hold On to the bucket's end, then break the line.
     xs.push(end - 0.001);
     ys.push(v);
-    if (next) {
+    if (hasNext) {
       xs.push(end);
       ys.push(null);
     }

@@ -20,7 +20,10 @@ realtime-load Playwright probe creates exactly those).
 import argparse
 import asyncio
 import math
+import os
 import random
+import sys
+import threading
 import time
 
 from app.db import session_factory
@@ -76,7 +79,15 @@ async def main() -> None:
     parser.add_argument("--metric", default="temperature")
     parser.add_argument("--hz", type=float, default=20)
     parser.add_argument("--minutes", type=float, default=30)
+    parser.add_argument(
+        "--exit-on-stdin-eof",
+        action="store_true",
+        help="stop when stdin closes — killing a `docker compose exec` client "
+        "doesn't stop the process inside the container, but it does close stdin",
+    )
     args = parser.parse_args()
+    if args.exit_on_stdin_eof:
+        threading.Thread(target=lambda: (sys.stdin.read(), os._exit(0)), daemon=True).start()
 
     devices: list[DeviceDirectoryRecord] = []
     for i in range(1, args.count + 1):
