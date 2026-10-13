@@ -51,6 +51,8 @@ export interface DriverCatalog {
   version: string;
   drivers: DriverSpec[];
   models: BoardModel[];
+  /** The whole release, for flashing it. */
+  manifest: FirmwareManifest;
 }
 
 /** A board people buy and wire (firmware/boards.json): which chip's build it
@@ -98,6 +100,7 @@ export function useDriverCatalog() {
         version: manifest.version,
         drivers: manifest.drivers,
         models: boardModels(manifest),
+        manifest,
       };
     },
     { revalidateOnFocus: false, shouldRetryOnError: false },

@@ -29,6 +29,8 @@ export interface FirmwareManifest {
       parts: ManifestPart[];
       app: { offset: number; size: number; used: number };
       cfg: { offset: number; size: number };
+      /** Where saved Wi-Fi lives. Missing from releases before 0.3.1. */
+      nvs?: { offset: number; size: number };
     }
   >;
   /** The board models people pick (firmware/boards.json). Missing from
@@ -54,6 +56,10 @@ export interface FlashTimings {
   writeMs: number;
   totalMs: number;
   bytes: number;
+  /** Whether the saved Wi-Fi was erased (full mode with eraseWifi). */
+  wifiErased: boolean;
+  /** Anything skipped, in words (e.g. a release too old to erase Wi-Fi). */
+  notes: string[];
 }
 
 export function webSerialSupported(): boolean {
@@ -88,6 +94,9 @@ export interface FlashOptions {
   mode: "full" | "config";
   /** The encoded config (encodeConfigBlob), written to the cfg partition. */
   configBlob: Uint8Array;
+  /** Full mode only: blank the saved Wi-Fi too, so the board starts at phone
+   * setup. A config-only update always keeps it. */
+  eraseWifi?: boolean;
   /** From navigator.serial.requestPort(), which needs the click's user gesture:
    * call it in the click handler before any other await. */
   port: SerialPort;
@@ -95,6 +104,29 @@ export interface FlashOptions {
   base?: string;
   onProgress?: (p: FlashProgress) => void;
   onLog?: (line: string) => void;
+}
+
+export interface FlashFile {
+  name: string;
+  data: Uint8Array;
+  address: number;
+}
+
+/** What gets written, in order: the firmware parts (full mode), a blank NVS
+ * when the Wi-Fi is to be erased (0xFF is an empty NVS, which the firmware
+ * re-initialises), then the device config. `notes` explains anything skipped. */
+export function flashFiles(
+  target: FirmwareManifest["boards"][SketchBoard],
+  opts: { mode: "full" | "config"; parts: FlashFile[]; configBlob: Uint8Array; eraseWifi?: boolean },
+): { files: FlashFile[]; notes: string[] } {
+  const files: FlashFile[] = opts.mode === "full" ? [...opts.parts] : [];
+  const notes: string[] = [];
+  if (opts.mode === "full" && opts.eraseWifi) {
+    if (target.nvs) files.push({ name: "saved Wi-Fi (erased)", data: new Uint8Array(target.nvs.size).fill(0xff), address: target.nvs.offset });
+    else notes.push("This firmware release doesn't say where the saved Wi-Fi is, so it was kept.");
+  }
+  files.push({ name: "device config", data: opts.configBlob, address: target.cfg.offset });
+  return { files, notes };
 }
 
 /** Flashes the board on `port` and restarts it. Throws with a message a person
@@ -124,13 +156,14 @@ export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
     const t1 = performance.now();
 
     progress({ stage: "downloading" });
-    const files =
+    const parts =
       mode === "full"
         ? await Promise.all(
             target.parts.map(async (part) => ({ name: part.path, data: await fetchPart(base, manifest.version, part), address: part.offset })),
           )
         : [];
-    files.push({ name: "device config", data: configBlob, address: target.cfg.offset });
+    const { files, notes } = flashFiles(target, { mode, parts, configBlob, eraseWifi: opts.eraseWifi });
+    notes.forEach(log);
     const t2 = performance.now();
 
     await loader.writeFlash({
@@ -153,6 +186,8 @@ export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
       writeMs: t3 - t2,
       totalMs: performance.now() - t0,
       bytes: files.reduce((n, f) => n + f.data.length, 0),
+      wifiErased: files.some((f) => target.nvs != null && f.address === target.nvs.offset),
+      notes,
     };
   } finally {
     await transport.disconnect().catch(() => {});

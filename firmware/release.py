@@ -129,6 +129,7 @@ def main() -> None:
     partitions = read_partitions()
     app_offset, app_size = partitions["app0"]
     cfg_offset, cfg_size = partitions["cfg"]
+    nvs_offset, nvs_size = partitions["nvs"]
 
     if not args.skip_build:
         envs = [arg for env, _chip, _boot in BOARDS.values() for arg in ("-e", env)]
@@ -164,6 +165,9 @@ def main() -> None:
             "parts": parts,
             "app": {"offset": app_offset, "size": app_size, "used": app_bytes},
             "cfg": {"offset": cfg_offset, "size": cfg_size},
+            # Where saved Wi-Fi lives: a first-time install blanks it (0xFF is
+            # an empty NVS), so a reused board starts at phone setup.
+            "nvs": {"offset": nvs_offset, "size": nvs_size},
         }
 
     manifest = {
