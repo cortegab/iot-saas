@@ -44,8 +44,12 @@ export function FlashSpike() {
   const [timings, setTimings] = useState<FlashTimings | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [log, setLog] = useState<string[]>([]);
+  // Unknown until mounted: the server has no navigator, so deciding while
+  // rendering would make the server's HTML differ from the browser's.
+  const [serialOk, setSerialOk] = useState<boolean | null>(null);
 
   useEffect(() => {
+    setSerialOk(webSerialSupported());
     loadManifest().then(setManifest, (e: Error) => setLoadError(e.message));
   }, []);
 
@@ -90,7 +94,7 @@ export function FlashSpike() {
   const app = manifest?.boards[board]?.app;
   return (
     <div className="flex flex-col gap-4">
-      {!webSerialSupported() && (
+      {serialOk === false && (
         <Callout tone="warning" title="This browser can't flash">
           Web Serial needs Chrome or Edge on a computer.
         </Callout>
@@ -132,7 +136,7 @@ export function FlashSpike() {
         <Textarea mono rows={18} value={json} onChange={(e) => setJson(e.target.value)} spellCheck={false} />
       </Card>
       <div className="flex flex-wrap items-center gap-3">
-        <Button disabled={!manifest || busy || !webSerialSupported()} onClick={flash}>
+        <Button disabled={!manifest || busy || !serialOk} onClick={flash}>
           {busy ? "Flashing…" : "Connect and flash"}
         </Button>
         {progress && (
