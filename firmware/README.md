@@ -100,6 +100,22 @@ Classic BT), and the C3's with NimBLE. Provisioning only needs BLE.
    could only be updated over USB.
 3. **Stay at 97%** and keep the ESP32 driver set small.
 
+## Status LED
+
+The board's built-in LED is reserved for the firmware (ESP32 DevKits: GPIO 2; ESP32-C3 Super
+Mini: GPIO 8). It's never offered for wiring. It shows where the board is, so you don't need a
+serial monitor:
+
+| LED | Meaning | What to do |
+|---|---|---|
+| **Off** | Connected and working | Nothing |
+| **Slow blink** (1 s on, 1 s off) | Waiting for Wi-Fi from the phone | Scan the device's QR with the ESP BLE Provisioning app |
+| **Double blink**, every second | Joining Wi-Fi or the MQTT broker | Wait. If it keeps going, check the Wi-Fi is in range and the broker is reachable, and that the credential hasn't been rotated since the flash |
+| **Fast blink** (about 3 times a second) | The config is missing or invalid; the board stays offline | Install the config again from the dashboard. The serial log says why every 5 s |
+
+The patterns live in `src/led_pattern.h` and are host-tested (`test/test_led_pattern`). Keep this
+table in step with `src/led.h`.
+
 ## Trying it on a board
 
 1. `python3 release.py --dev`.

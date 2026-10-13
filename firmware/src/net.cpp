@@ -29,11 +29,18 @@ unsigned long lastStatusMs = 0;
 unsigned long lastMqttAttemptMs = 0;
 bool mqttAttempted = false;
 unsigned long resetDownSince = 0;
+// Advertising over BLE and waiting for the phone app. Set from the Wi-Fi
+// event task, read from loop(), hence volatile.
+volatile bool provisioning = false;
 
 void onWifiEvent(arduino_event_t* e) {
   switch (e->event_id) {
     case ARDUINO_EVENT_PROV_START:
+      provisioning = true;
       Serial.printf("[PROV] no Wi-Fi stored, advertising over BLE as %s\n", cfg->provName);
+      break;
+    case ARDUINO_EVENT_PROV_END:
+      provisioning = false;
       break;
     case ARDUINO_EVENT_PROV_CRED_RECV:
       Serial.println("[PROV] Wi-Fi received from the app");
@@ -42,9 +49,11 @@ void onWifiEvent(arduino_event_t* e) {
       Serial.println("[PROV] couldn't join that network; check the password and send it again");
       break;
     case ARDUINO_EVENT_PROV_CRED_SUCCESS:
+      provisioning = false;
       Serial.println("[PROV] Wi-Fi saved");
       break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      provisioning = false;
       Serial.print("[WIFI] connected, IP: ");
       Serial.println(WiFi.localIP());
       break;
@@ -160,4 +169,10 @@ void netLoop() {
   mqtt.loop();
   ioPublishMetrics(mqtt);
   if (millis() - lastStatusMs >= STATUS_INTERVAL_MS) publishStatus();
+}
+
+NetState netState() {
+  if (provisioning) return NetState::Provisioning;
+  if (WiFi.status() != WL_CONNECTED || !mqtt.connected()) return NetState::Connecting;
+  return NetState::Connected;
 }
