@@ -1765,10 +1765,9 @@ export interface components {
         HardwareConfig: {
             /**
              * Board
-             * @default esp32
-             * @enum {string}
+             * @default esp32-devkit-30
              */
-            board: "esp32" | "esp32c3";
+            board: string;
             i2c?: components["schemas"]["I2cBus"] | null;
             /** Inputs */
             inputs?: components["schemas"]["HardwareBinding"][];

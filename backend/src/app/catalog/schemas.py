@@ -60,8 +60,10 @@ class CatalogActuator(BaseModel):
     off_value: bool | float | str | None = None
 
 
-# Boards the generic firmware (firmware/) is built for.
-HardwareBoard = Literal["esp32", "esp32c3"]
+# Board model ids: firmware/boards.json's vocabulary (e.g. "esp32-devkit-30").
+# Like driver ids, the list itself lives with the firmware release, so new
+# boards need no backend change; the dashboard and the firmware check them.
+_BOARD_ID = r"^[a-z0-9][a-z0-9-]{0,47}$"
 # Driver ids: firmware/drivers.json's vocabulary.
 _DRIVER_ID = r"^[a-z0-9_:]{1,64}$"
 
@@ -93,7 +95,7 @@ class HardwareConfig(BaseModel):
     """How a device is wired, for the generic firmware. A template carries the
     default; a device may carry its own (devices/schemas.py)."""
 
-    board: HardwareBoard = "esp32"
+    board: str = Field(default="esp32-devkit-30", pattern=_BOARD_ID)
     i2c: I2cBus | None = None
     inputs: list[HardwareBinding] = Field(default_factory=list, max_length=32)
     outputs: list[HardwareBinding] = Field(default_factory=list, max_length=32)

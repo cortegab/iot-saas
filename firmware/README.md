@@ -22,7 +22,8 @@ Last-Will and BLE provisioning. Keep `src/io.cpp` and `src/net.cpp` in step with
 | `src/net.*` | Wi-Fi / BLE provisioning, MQTT, status + Last-Will |
 | `src/drivers/` | One file per driver plus `registry.cpp`. Adding one: [docs/firmware/drivers.md](../docs/firmware/drivers.md) |
 | `drivers.json` | The driver catalog the dashboard reads: pins, params, channels, wiring notes |
-| `release.py` | Builds both boards, checks sizes and the catalog, and writes the release + `manifest.json` |
+| `boards.json` | The board models people pick (30-/38-pin ESP32 DevKit, ESP32-C3 Super Mini): chip, header pins, labels, reset button, LED |
+| `release.py` | Builds each chip, checks sizes and both catalogs, and writes the release + `manifest.json` |
 | `test/` | Host-side unit tests, plus `config-vector.json`, shared with the browser's encoder tests |
 
 ## Build, test, release
@@ -37,9 +38,46 @@ pio test -e native           # host-side unit tests
 python3 release.py --dev     # build + package to infra/firmware/<version>/ and frontend/public/firmware/
 ```
 
-Bump `FW_VERSION` in `src/version.h` for every release. `release.py` fails if `drivers.json` and
-`src/drivers/registry.cpp` list different drivers, or if an app outgrows its OTA slot. It also warns
-above 90%.
+Bump `FW_VERSION` in `src/version.h` for every release. `release.py` fails if:
+- `drivers.json` and `src/drivers/registry.cpp` list different drivers
+- a board model in `boards.json` offers a pin `src/pins.cpp` refuses for its chip
+- an app outgrows its OTA slot
+
+It also warns when an app is above 90% of its slot.
+
+## Boards: chips and models
+
+**One firmware build per chip, many board models per chip.** The 30-pin and the 38-pin ESP32
+DevKit run the same `esp32` build. What differs is which GPIOs are on the header and how they're
+labelled, and that lives in `boards.json`.
+
+- **The config blob's `board`** is the chip, and the firmware checks it against its own build.
+- **Its `model`** is the board model id, which the firmware only logs.
+- **Templates store the model id** (`hardware.board`). The backend checks only the id's shape, so a
+  new model needs no backend change.
+
+### Adding a board
+
+**A new model of a chip we already build** (for example an ESP32-C3 DevKitM) is data only:
+1. Add an entry to `boards.json`:
+   - `id` (kebab-case, never renamed once used), `chip`, `label`, `description`
+   - `pins`: the free GPIOs on its header, a subset of the chip's `USABLE` in `src/pins.cpp`
+   - `pin_labels`: printed names that differ from the number, such as VP, VN, RX or TX
+   - `reset` and `led`: these must match `src/board.h` for that chip
+   - `notes`: anything a person wiring it should know
+2. Bump `FW_VERSION`, then run `release.py`. It refuses pins the firmware wouldn't accept.
+3. Deploy. The dashboard offers the model as soon as the release is live.
+
+**A new model whose reset button or LED differs from its chip's `board.h`:** move those two pins
+into the config blob first (`config.h`, `net.cpp`, `main.cpp`). Today they're per chip.
+
+**A new chip** (for example the ESP32-S3):
+1. Add a PlatformIO env, plus its `#if` branches in `src/board.h` and `src/pins.cpp`.
+2. Add it to `BOARDS` in `release.py` (env, esptool chip name, bootloader offset).
+3. Mirror its pin rules in `CHIP_PINS` (`frontend/src/lib/hardware/board-pins.ts`), and its pin
+   pools in `BOARDS` (`frontend/src/lib/firmware-sketch.ts`).
+4. Add a model for it in `boards.json`.
+5. Add an alembic data migration only if stored values need renaming. They don't for a new chip.
 
 ## Size (open decision)
 

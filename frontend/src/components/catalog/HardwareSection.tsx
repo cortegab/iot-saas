@@ -9,11 +9,9 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Select } from "@/components/ui/Select";
 import { SwitchField } from "@/components/ui/Switch";
 import { Table } from "@/components/ui/Table";
-import type { SketchBoard } from "@/lib/firmware-sketch";
-import { pinsFor } from "@/lib/hardware/board-pins";
-import { findDriver, type DriverSpec } from "@/lib/hardware/driver-catalog";
+import { pinName, pinsFor, resolveModel } from "@/lib/hardware/board-pins";
+import { findDriver, type DriverCatalog } from "@/lib/hardware/driver-catalog";
 import {
-  BOARD_LABEL,
   blankBinding,
   blankHardware,
   usedPins,
@@ -29,7 +27,7 @@ type Kind = "inputs" | "outputs";
  * A template's Wiring section (DESIGN.md §8): which driver reads each metric
  * and drives each actuator, on which pins, for the generic firmware's
  * one-click install. Optional: without wiring, devices get the sketch.
- * Pins, params and channels come from the published firmware's driver
+ * Boards, pins, params and channels come from the published firmware's
  * catalog, so it only offers what that firmware supports.
  */
 export function HardwareSection({
@@ -42,7 +40,7 @@ export function HardwareSection({
 }: {
   hardware: HardwareDraft | null;
   rows: { metrics: KeyedRow[]; actuators: KeyedRow[] };
-  catalog: { drivers?: DriverSpec[]; version?: string; loading: boolean; error: boolean };
+  catalog: { data?: DriverCatalog; loading: boolean; error: boolean };
   readOnly: boolean;
   onChange: (next: HardwareDraft | null) => void;
   /** Error/warning props and blur handler for a field path. */
@@ -50,8 +48,8 @@ export function HardwareSection({
 }) {
   if (catalog.loading) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
 
-  const drivers = catalog.drivers;
-  if (!drivers) {
+  const fw = catalog.data;
+  if (!fw) {
     return hardware ? (
       <Callout tone="warning" title="Couldn't load the driver list">
         This wiring is kept as saved. Publish a firmware release to edit it.
@@ -71,7 +69,7 @@ export function HardwareSection({
           browser with no code.
         </p>
         {!readOnly && (
-          <Button variant="secondary" onClick={() => onChange(blankHardware())}>
+          <Button variant="secondary" onClick={() => onChange(blankHardware(fw.models[0]?.id))}>
             <Cpu aria-hidden size={14} />
             Set up wiring
           </Button>
@@ -81,24 +79,32 @@ export function HardwareSection({
   }
 
   const h = hardware;
+  const model = resolveModel(fw.models, h.board);
   const setBinding = (kind: Kind, i: number, b: BindingDraft) => onChange({ ...h, [kind]: h[kind].map((x, j) => (j === i ? b : x)) });
-  const firstOf = (kind: Kind) => drivers.find((d) => d.kind === (kind === "inputs" ? "input" : "output"));
+  const firstOf = (kind: Kind) => fw.drivers.find((d) => d.kind === (kind === "inputs" ? "input" : "output"));
   const add = (kind: Kind) => {
     const spec = firstOf(kind);
-    if (spec) onChange({ ...h, [kind]: [...h[kind], blankBinding(spec, h)] });
+    if (spec) onChange({ ...h, [kind]: [...h[kind], blankBinding(spec, h, fw)] });
   };
-  const guide = wiringGuide(h, rows, drivers);
+  const guide = wiringGuide(h, rows, fw);
   const wiredMetrics = new Set(h.inputs.flatMap((b) => Object.values(b.channels)).filter(Boolean)).size;
   const wiredActuators = new Set(h.outputs.flatMap((b) => Object.values(b.channels)).filter(Boolean)).size;
+  const boardField = field("hardware.board");
 
   return (
     <div className="flex flex-col gap-5">
       <div className="grid gap-3.5 @[640px]:grid-cols-2">
-        <Field label="Board" hint={`Pins are checked for this board. Firmware ${catalog.version}.`}>
-          <Select value={h.board} disabled={readOnly} onChange={(e) => onChange({ ...h, board: e.target.value as SketchBoard })}>
-            {(Object.keys(BOARD_LABEL) as SketchBoard[]).map((b) => (
-              <option key={b} value={b}>
-                {BOARD_LABEL[b]}
+        <Field
+          label="Board"
+          error={boardField.error}
+          hint={`${model?.description ? `${model.description} ` : ""}Pins are checked for this board. Firmware ${fw.version}.`}
+        >
+          {/* A saved chip id ("esp32") shows as its model until the board is picked again. */}
+          <Select value={model?.id ?? h.board} disabled={readOnly} onChange={(e) => onChange({ ...h, board: e.target.value })}>
+            {!model && <option value={h.board}>{h.board} (not in this firmware)</option>}
+            {fw.models.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
               </option>
             ))}
           </Select>
@@ -124,7 +130,7 @@ export function HardwareSection({
               index={i}
               binding={b}
               hardware={h}
-              drivers={drivers}
+              catalog={fw}
               targets={kind === "inputs" ? rows.metrics : rows.actuators}
               readOnly={readOnly}
               field={field}
@@ -146,7 +152,7 @@ export function HardwareSection({
           <h3 className="text-sm font-semibold text-ink">Wiring guide</h3>
           <Table
             columns={[
-              { header: "Pin", render: (r) => <span className="font-mono">GPIO {r.pin}</span>, className: "w-28" },
+              { header: "Pin", render: (r) => <span className="font-mono">{r.name}</span>, className: "w-36" },
               { header: "Connects to", render: (r) => r.to },
               { header: "As", render: (r) => <span className="text-ink-muted">{r.role}</span> },
             ]}
@@ -154,6 +160,11 @@ export function HardwareSection({
             rowKey={(r) => `${r.pin}-${r.role}-${r.to}`}
           />
           <ul className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
+            {guide.board?.lines.map((line) => (
+              <li key={line}>
+                <b className="font-medium text-ink">{guide.board!.label}:</b> {line}
+              </li>
+            ))}
             {guide.notes.map((n) =>
               n.lines.map((line) => (
                 <li key={n.driver + line}>
@@ -179,7 +190,7 @@ function BindingCard({
   index,
   binding,
   hardware,
-  drivers,
+  catalog,
   targets,
   readOnly,
   field,
@@ -190,13 +201,15 @@ function BindingCard({
   index: number;
   binding: BindingDraft;
   hardware: HardwareDraft;
-  drivers: DriverSpec[];
+  catalog: DriverCatalog;
   targets: KeyedRow[];
   readOnly: boolean;
   field: (path: string) => { error?: string; warning?: string; onBlur: () => void };
   onChange: (b: BindingDraft) => void;
   onRemove: () => void;
 }) {
+  const drivers = catalog.drivers;
+  const model = resolveModel(catalog.models, hardware.board);
   const spec = findDriver(drivers, binding.driver);
   const p = `hardware.${kind}.${index}.`;
   const noun = kind === "inputs" ? "Input" : "Output";
@@ -209,7 +222,7 @@ function BindingCard({
     if (!next) return;
     // Start fresh on the new driver, with pins chosen around everyone else's.
     const without = { ...hardware, [kind]: hardware[kind].filter((x) => x.uid !== binding.uid) };
-    onChange({ ...blankBinding(next, without), uid: binding.uid });
+    onChange({ ...blankBinding(next, without, catalog), uid: binding.uid });
   };
 
   return (
@@ -274,7 +287,7 @@ function BindingCard({
         {(spec?.pins ?? []).map((role) => {
           const path = `${p}pins.${role.role}`;
           const value = binding.pins[role.role];
-          const allowed = pinsFor(hardware.board, role.needs);
+          const allowed = model ? pinsFor(model, role.needs) : [];
           const options = value != null && !allowed.includes(value) ? [value, ...allowed] : allowed;
           return (
             <Field key={role.role} label={`${role.label} pin`} error={field(path).error}>
@@ -286,7 +299,7 @@ function BindingCard({
                 {value == null && <option value="">Pick a pin</option>}
                 {options.map((n) => (
                   <option key={n} value={n}>
-                    GPIO {n}
+                    {pinName(model, n)}
                     {others.has(n) ? ` · used by ${others.get(n)}` : ""}
                   </option>
                 ))}

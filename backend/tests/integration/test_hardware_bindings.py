@@ -14,7 +14,12 @@ DOOR_INPUT = {
     "channels": {"value": "door"},
 }
 FAN_OUTPUT = {"driver": "relay", "pins": {"pin": 23}, "params": {}, "channels": {"value": "fan1"}}
-HARDWARE = {"board": "esp32", "i2c": None, "inputs": [DOOR_INPUT], "outputs": [FAN_OUTPUT]}
+HARDWARE = {
+    "board": "esp32-devkit-30",
+    "i2c": None,
+    "inputs": [DOOR_INPUT],
+    "outputs": [FAN_OUTPUT],
+}
 
 
 async def _headers(client: httpx.AsyncClient, email: str) -> dict[str, str]:
@@ -58,6 +63,24 @@ async def test_template_hardware_round_trips(client: httpx.AsyncClient) -> None:
 
     fetched = await client.get(f"/catalog/{created['id']}", headers=headers)
     assert fetched.json()["hardware"] == HARDWARE
+
+
+async def test_any_board_model_id_is_stored_but_not_any_string(client: httpx.AsyncClient) -> None:
+    """The model list lives with the firmware release (firmware/boards.json),
+    so a new board needs no backend change; only the id's shape is checked."""
+    headers = await _headers(client, "hw7@example.com")
+    created = await _template(client, headers, hardware={**HARDWARE, "board": "esp32-s3-devkit"})
+    assert created["hardware"]["board"] == "esp32-s3-devkit"
+
+    resp = await client.post(
+        "/catalog",
+        json={
+            "name": "Bad board",
+            "hardware": {**HARDWARE, "inputs": [], "outputs": [], "board": "ESP32 DevKit!"},
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422
 
 
 async def test_template_without_hardware_has_none(client: httpx.AsyncClient) -> None:

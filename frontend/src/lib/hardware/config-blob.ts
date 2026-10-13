@@ -24,7 +24,10 @@ export interface HardwareBinding {
 
 export interface FirmwareConfig {
   v: 1;
+  /** The chip, which the firmware checks against its own build. */
   board: SketchBoard;
+  /** The board model (firmware/boards.json). Informational: the firmware logs it. */
+  model?: string;
   device: { tenant: string; device: string };
   mqtt: { host: string; port: number; tls: boolean; username: string; password: string };
   /** Phone provisioning; `salt`/`verifier` (base64) for Security 2. */

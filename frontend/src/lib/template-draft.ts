@@ -4,7 +4,14 @@
  */
 
 import type { DriverSpec } from "@/lib/hardware/driver-catalog";
-import { hardwareToDraft, hardwareToRequest, validateHardware, type HardwareDraft, type KeyedRow } from "@/lib/hardware/hardware-draft";
+import {
+  hardwareToDraft,
+  hardwareToRequest,
+  validateHardware,
+  type HardwareCatalog,
+  type HardwareDraft,
+  type KeyedRow,
+} from "@/lib/hardware/hardware-draft";
 import { slugify } from "@/lib/slug";
 import type { components } from "@/types/api";
 
@@ -231,11 +238,11 @@ export function validateTemplate(
   ctx: {
     otherNames: string[];
     usage?: { metrics: Record<string, KeyUsage>; actuators: Record<string, KeyUsage> };
-    /** The firmware's driver catalog; without it only the wiring's mapping is checked. */
-    drivers?: DriverSpec[];
+    /** The firmware's drivers and boards; without it only the wiring's mapping is checked. */
+    catalog?: HardwareCatalog;
   },
 ): { errors: Record<string, string>; warnings: Record<string, string> } {
-  const hardware = validateHardware(d.hardware, keyedRows(d), ctx.drivers);
+  const hardware = validateHardware(d.hardware, keyedRows(d), ctx.catalog);
   const errors: Record<string, string> = { ...hardware.errors };
   const warnings: Record<string, string> = { ...hardware.warnings };
   const name = d.name.trim();

@@ -7,9 +7,11 @@ import { Card, CardHeader } from "@/components/ui/Card";
 import { Field } from "@/components/ui/Field";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
+import { resolveModel } from "@/lib/hardware/board-pins";
 import { encodeConfigBlob, type FirmwareConfig } from "@/lib/hardware/config-blob";
+import { boardModels } from "@/lib/hardware/driver-catalog";
 import { flashBoard, loadManifest, webSerialSupported, type FirmwareManifest, type FlashProgress, type FlashTimings } from "@/lib/hardware/flasher";
-import type { SketchBoard } from "@/lib/firmware-sketch";
+import { DEFAULT_BOARD } from "@/lib/hardware/hardware-draft";
 
 const EXAMPLE: FirmwareConfig = {
   v: 1,
@@ -35,7 +37,7 @@ const EXAMPLE: FirmwareConfig = {
 export function FlashSpike() {
   const [manifest, setManifest] = useState<FirmwareManifest | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [board, setBoard] = useState<SketchBoard>("esp32");
+  const [modelId, setModelId] = useState(DEFAULT_BOARD);
   const [mode, setMode] = useState<"full" | "config">("full");
   const [baud, setBaud] = useState(921600);
   const [json, setJson] = useState(JSON.stringify(EXAMPLE, null, 2));
@@ -53,13 +55,17 @@ export function FlashSpike() {
     loadManifest().then(setManifest, (e: Error) => setLoadError(e.message));
   }, []);
 
+  const models = manifest ? boardModels(manifest) : [];
+  const model = resolveModel(models, modelId) ?? models[0];
+  const board = model?.chip ?? "esp32";
+
   async function flash() {
     setError(null);
     setTimings(null);
     setLog([]);
     let blob: Uint8Array;
     try {
-      const config = { ...(JSON.parse(json) as FirmwareConfig), board };
+      const config = { ...(JSON.parse(json) as FirmwareConfig), board, model: model?.id };
       blob = encodeConfigBlob(config, manifest!.boards[board].cfg.size);
     } catch (e) {
       setError(`Config: ${(e as Error).message}`);
@@ -110,10 +116,13 @@ export function FlashSpike() {
           }
         />
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Board">
-            <Select value={board} onChange={(e) => setBoard(e.target.value as SketchBoard)}>
-              <option value="esp32">ESP32</option>
-              <option value="esp32c3">ESP32-C3</option>
+          <Field label="Board" hint={model?.description}>
+            <Select value={model?.id ?? modelId} onChange={(e) => setModelId(e.target.value)}>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label}
+                </option>
+              ))}
             </Select>
           </Field>
           <Field label="Write">

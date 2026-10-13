@@ -92,6 +92,7 @@ bool loadConfig(DeviceConfig& out, String& err) {
   JsonObjectConst device = root["device"];
   if (!requireText(device, "tenant", "device", out.tenant, err)) return false;
   if (!requireText(device, "device", "device", out.device, err)) return false;
+  out.model = root["model"] | "";
 
   JsonObjectConst mqtt = root["mqtt"];
   if (!requireText(mqtt, "host", "mqtt", out.mqttHost, err)) return false;

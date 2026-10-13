@@ -18,6 +18,10 @@
 // The browser's writer is frontend/src/lib/hardware/config-blob.ts; the two
 // share the test vector in firmware/test/config-vector.json.
 struct DeviceConfig {
+  // The board model the dashboard wired this for (firmware/boards.json), for
+  // the log only; "" when absent. `board` (the chip) is what's checked.
+  const char* model;
+
   const char* tenant;
   const char* device;
 
