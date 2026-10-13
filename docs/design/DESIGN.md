@@ -265,6 +265,12 @@ editable side panel and no "Expand" toggle.
   - Reserved keys (`status`, `config`) and duplicates are rejected inline (CLAUDE.md §4).
   - Min ≤ max; units come from the unit Combobox. The data type `bool` gives flag metrics.
   - Disabled templates can't be picked for new devices.
+  - A **Wiring** section (optional, last in the rail) says how the board is wired for the generic
+    firmware: board, then input and output cards (driver, the metric it feeds or actuator it drives,
+    pins, params), then a generated **wiring guide** (pin table + per-driver notes). Drivers, pin
+    roles and params come from the published firmware's driver catalog; with none published the
+    section says so instead of offering anything. Pin problems (clash, ADC1, input-only) are
+    errors on the pin field; type mismatches (an on/off reading feeding a number) are warnings.
 - **Devices**
   - Zone is set and changed **only in the device's own settings**.
   - The one-time credential uses SecretReveal.
@@ -580,4 +586,5 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-06 | §9.2 Checks card: a safety check that isn't met (hold < 5 s, interval < 30 s, no hysteresis on a hardware rule) shows the **amber circled "!"**, the rail's warning mark, instead of the red ✕, which is kept for problems that block saving (incomplete conditions or actions). Screen readers hear "warning" or "needs fixing". |
 | 2026-10-07 | Docs cleanup: demos A–F, the two rule-editor demos and the redesign audit (`redesign-report.html`) are removed; their outcomes are built and written into this file, and the files stay in git history. **Demo G is the only reference demo left.** |
 | 2026-10-08 | §5 **Trend chart**: a **1m** range joins 10m · 1h · 6h · 24h · 7d (charts still open on 10m). On every range the time axis is pinned to the full window and slides live instead of fitting to the data; drag-zoom pauses it, double-click resumes. An empty window keeps the chart frame with "No readings in the last {range}" instead of the empty-state card. Same on the device page and in dashboard widgets. |
+| 2026-10-12 | §8 device templates gain a **Wiring** section for the generic firmware (browser install, no code): board, input/output cards built from the firmware's driver catalog, and a wiring guide. Cards reuse the metric/actuator card shape; bool params use the Switch with On / Off. New bindings start on the board's boot-quiet output pins, as the sketch does. |
 | 2026-10-12 | §5 **Trend chart**: a number's line gets a faint `--color-chart` gradient fill under it, fading to transparent at the plot's bottom (the on/off wash is unchanged). Reading markers (circles) are dropped everywhere; they used to show on sparse series and cluttered dense ones. |

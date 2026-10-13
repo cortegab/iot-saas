@@ -3,12 +3,15 @@
  * and from the API, and validation. Pure — no React — so it's unit-tested.
  */
 
+import type { DriverSpec } from "@/lib/hardware/driver-catalog";
+import { hardwareToDraft, hardwareToRequest, validateHardware, type HardwareDraft, type KeyedRow } from "@/lib/hardware/hardware-draft";
 import { slugify } from "@/lib/slug";
 import type { components } from "@/types/api";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
 type CatalogActuator = components["schemas"]["CatalogActuator"];
+type HardwareConfig = components["schemas"]["HardwareConfig"];
 type Scalar = boolean | number | string;
 
 /** Mirrors backend catalog/service.py KEY_PATTERN: one MQTT topic segment. */
@@ -53,6 +56,16 @@ export interface TemplateDraft {
   enabled: boolean;
   metrics: MetricDraft[];
   actuators: ActuatorDraft[];
+  /** Wiring for the generic firmware; null = none (devices use the sketch). */
+  hardware: HardwareDraft | null;
+}
+
+/** The metric and actuator rows wiring can point at. */
+export function keyedRows(d: Pick<TemplateDraft, "metrics" | "actuators">): { metrics: KeyedRow[]; actuators: KeyedRow[] } {
+  return {
+    metrics: d.metrics.map((m) => ({ uid: m.uid, key: m.key.trim(), name: m.name.trim(), type: m.data_type })),
+    actuators: d.actuators.map((a) => ({ uid: a.uid, key: a.key.trim(), name: a.name.trim(), type: a.value_type })),
+  };
 }
 
 let seq = 0;
@@ -93,11 +106,16 @@ export function blankActuator(): ActuatorDraft {
 }
 
 export function blankTemplate(): TemplateDraft {
-  return { name: "", enabled: true, metrics: [blankMetric()], actuators: [] };
+  return { name: "", enabled: true, metrics: [blankMetric()], actuators: [], hardware: null };
 }
 
 /** Saved entry → draft. `duplicate` drops the saved keys' identity. */
 export function templateToDraft(e: CatalogEntryResponse, { duplicate = false } = {}): TemplateDraft {
+  const rows = templateRows(e, duplicate);
+  return { ...rows, hardware: hardwareToDraft(e.hardware, keyedRows(rows)) };
+}
+
+function templateRows(e: CatalogEntryResponse, duplicate: boolean): Omit<TemplateDraft, "hardware"> {
   return {
     name: duplicate ? `${e.name} (copy)` : e.name,
     enabled: duplicate ? true : e.status === "active",
@@ -143,15 +161,21 @@ const scalar = (text: string, saved: Scalar | null): Scalar | null => {
   return saved != null && String(saved) === text ? saved : text;
 };
 
-export function draftToRequest(d: TemplateDraft): {
+/** `drivers` types edited wiring params; without it they're sent as saved. */
+export function draftToRequest(
+  d: TemplateDraft,
+  drivers?: DriverSpec[],
+): {
   name: string;
   status: "active" | "disabled";
   metrics: CatalogMetric[];
   actuators: CatalogActuator[];
+  hardware: HardwareConfig | null;
 } {
   return {
     name: d.name.trim(),
     status: d.enabled ? "active" : "disabled",
+    hardware: hardwareToRequest(d.hardware, keyedRows(d), drivers),
     metrics: d.metrics.map((m) => ({
       name: m.name.trim(),
       key: m.key.trim() || null,
@@ -207,10 +231,13 @@ export function validateTemplate(
   ctx: {
     otherNames: string[];
     usage?: { metrics: Record<string, KeyUsage>; actuators: Record<string, KeyUsage> };
+    /** The firmware's driver catalog; without it only the wiring's mapping is checked. */
+    drivers?: DriverSpec[];
   },
 ): { errors: Record<string, string>; warnings: Record<string, string> } {
-  const errors: Record<string, string> = {};
-  const warnings: Record<string, string> = {};
+  const hardware = validateHardware(d.hardware, keyedRows(d), ctx.drivers);
+  const errors: Record<string, string> = { ...hardware.errors };
+  const warnings: Record<string, string> = { ...hardware.warnings };
   const name = d.name.trim();
   if (!name) errors["general.name"] = "Give the template a name.";
   else if (ctx.otherNames.some((n) => n.trim().toLowerCase() === name.toLowerCase()))
