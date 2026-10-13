@@ -10,7 +10,7 @@ import secrets
 import uuid
 from collections.abc import Sequence
 from datetime import datetime
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -170,8 +170,15 @@ async def update_device(
     device_status: DeviceStatus | None,
     zone_id: uuid.UUID | None = None,
     zone_set: bool = False,
+    hardware: dict[str, Any] | None = None,
+    hardware_set: bool = False,
 ) -> Device:
+    """Raises catalog_service.HardwareMappingError if `hardware` feeds a key
+    the device's template doesn't declare."""
     device = await get_device(session, tenant_id, device_id)
+    if hardware_set and hardware is not None:
+        entry = await catalog_service.get_catalog_entry(session, tenant_id, device.catalog_entry_id)
+        catalog_service.check_hardware(hardware, entry.metrics, entry.actuators)
     if name is not None:
         device.name = name
     if device_status is not None:
@@ -180,6 +187,8 @@ async def update_device(
         if zone_id is not None:
             await zones_service.get_zone(session, tenant_id, zone_id)
         device.zone_id = zone_id
+    if hardware_set:
+        device.hardware = hardware
     await session.flush()
     return device
 

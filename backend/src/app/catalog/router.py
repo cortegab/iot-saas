@@ -22,6 +22,7 @@ from app.catalog.schemas import (
     CatalogEntryUpdateRequest,
     CatalogMetric,
     CatalogUsageResponse,
+    HardwareConfig,
     KeyUsageResponse,
 )
 from app.db import get_session
@@ -34,7 +35,9 @@ router = APIRouter(prefix="/catalog", tags=["catalog"])
 
 def _key_error(exc: Exception) -> HTTPException:
     """Maps the service's key-validation errors to a readable 400."""
-    if isinstance(exc, service.DuplicateKeyError):
+    if isinstance(exc, service.HardwareMappingError):
+        detail = str(exc)
+    elif isinstance(exc, service.DuplicateKeyError):
         detail = f"Duplicate key: {exc}"
     elif isinstance(exc, service.ReservedMetricKeyError):
         detail = f"'{exc}' is a reserved metric key"
@@ -46,7 +49,12 @@ def _key_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
 
 
-_KEY_ERRORS = (service.DuplicateKeyError, service.ReservedMetricKeyError, service.InvalidKeyError)
+_KEY_ERRORS = (
+    service.DuplicateKeyError,
+    service.ReservedMetricKeyError,
+    service.InvalidKeyError,
+    service.HardwareMappingError,
+)
 
 
 def _to_response(entry: DeviceCatalogEntry, device_count: int = 0) -> CatalogEntryResponse:
@@ -55,6 +63,7 @@ def _to_response(entry: DeviceCatalogEntry, device_count: int = 0) -> CatalogEnt
         name=entry.name,
         metrics=[CatalogMetric.model_validate(m) for m in entry.metrics],
         actuators=[CatalogActuator.model_validate(a) for a in entry.actuators],
+        hardware=HardwareConfig.model_validate(entry.hardware) if entry.hardware else None,
         status=entry.status,  # type: ignore[arg-type]
         is_legacy=entry.is_legacy,
         device_count=device_count,
@@ -86,6 +95,7 @@ async def create_catalog_entry(
             body.name,
             [m.model_dump(mode="json") for m in body.metrics],
             [a.model_dump(mode="json") for a in body.actuators],
+            hardware=body.hardware.model_dump(mode="json") if body.hardware else None,
         )
     except _KEY_ERRORS as exc:
         raise _key_error(exc) from exc
@@ -136,7 +146,14 @@ async def update_catalog_entry(
     )
     try:
         updated = await service.update_catalog_entry(
-            session, entry, body.name, metrics, actuators, body.status
+            session,
+            entry,
+            body.name,
+            metrics,
+            actuators,
+            body.status,
+            hardware=body.hardware.model_dump(mode="json") if body.hardware else None,
+            hardware_set="hardware" in body.model_fields_set,
         )
     except _KEY_ERRORS as exc:
         raise _key_error(exc) from exc

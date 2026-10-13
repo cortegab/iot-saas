@@ -40,6 +40,11 @@ class DeviceCatalogEntry(Base):
     # list[{"name", "key", "value_type", "allowed_values", "on_value", "off_value"}]
     # — see catalog/schemas.py's CatalogActuator.
     actuators: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    # How devices of this type are wired for the generic firmware (firmware/):
+    # {"board", "i2c", "inputs": [binding], "outputs": [binding]} — see
+    # catalog/schemas.py's HardwareConfig. Null = no wiring defined; such
+    # devices are flashed with the generated sketch instead.
+    hardware: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # "active" | "disabled" — a disabled type stays intact (existing devices
     # keep working) but shouldn't be offered when creating a new device.
     status: Mapped[str] = mapped_column(nullable=False, default="active")

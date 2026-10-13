@@ -1186,6 +1186,7 @@ export interface components {
             metrics?: components["schemas"]["CatalogMetric"][];
             /** Actuators */
             actuators?: components["schemas"]["CatalogActuator"][];
+            hardware?: components["schemas"]["HardwareConfig"] | null;
         };
         /** CatalogEntryResponse */
         CatalogEntryResponse: {
@@ -1200,6 +1201,7 @@ export interface components {
             metrics: components["schemas"]["CatalogMetric"][];
             /** Actuators */
             actuators: components["schemas"]["CatalogActuator"][];
+            hardware?: components["schemas"]["HardwareConfig"] | null;
             /**
              * Status
              * @enum {string}
@@ -1230,6 +1232,7 @@ export interface components {
             actuators?: components["schemas"]["CatalogActuator"][] | null;
             /** Status */
             status?: ("active" | "disabled") | null;
+            hardware?: components["schemas"]["HardwareConfig"] | null;
         };
         /** CatalogMetric */
         CatalogMetric: {
@@ -1376,7 +1379,7 @@ export interface components {
             /** Email */
             email: string;
             /** Company */
-            company?: string | null;
+            company: string;
             /**
              * Deployment
              * @default not_sure
@@ -1384,8 +1387,11 @@ export interface components {
              */
             deployment: "cloud" | "dedicated" | "on_prem" | "not_sure";
             /** Devices */
-            devices?: string | null;
-            /** Message */
+            devices?: ("<100" | "100-500" | "500-1000" | ">1000") | null;
+            /**
+             * Message
+             * @default
+             */
             message: string;
             /** Website */
             website?: string | null;
@@ -1475,6 +1481,7 @@ export interface components {
             catalog_entry_id: string;
             /** Zone Id */
             zone_id?: string | null;
+            hardware?: components["schemas"]["HardwareConfig"] | null;
             /** Slug */
             slug: string;
             /** Status */
@@ -1566,6 +1573,7 @@ export interface components {
             status?: components["schemas"]["DeviceStatus"] | null;
             /** Zone Id */
             zone_id?: string | null;
+            hardware?: components["schemas"]["HardwareConfig"] | null;
         };
         /**
          * DraftSimulateRequest
@@ -1720,6 +1728,59 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HardwareBinding
+         * @description One sensor or actuator wired to the board, as the generic firmware reads
+         *     it from its config blob (firmware/src/config.h): which driver, on which
+         *     GPIOs, with which params, and which metric (or, for an output, which
+         *     actuator) each of the driver's channels feeds.
+         *
+         *     Only the shape and the channel → key mapping are checked here. Pin rules
+         *     (ADC1, input-only, no sharing) and driver params belong to the driver
+         *     catalog: the dashboard checks them before flashing, and the firmware
+         *     refuses a config that breaks them.
+         */
+        HardwareBinding: {
+            /** Driver */
+            driver: string;
+            /** Pins */
+            pins?: {
+                [key: string]: number;
+            };
+            /** Params */
+            params?: {
+                [key: string]: boolean | number | string;
+            };
+            /** Channels */
+            channels?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * HardwareConfig
+         * @description How a device is wired, for the generic firmware. A template carries the
+         *     default; a device may carry its own (devices/schemas.py).
+         */
+        HardwareConfig: {
+            /**
+             * Board
+             * @default esp32
+             * @enum {string}
+             */
+            board: "esp32" | "esp32c3";
+            i2c?: components["schemas"]["I2cBus"] | null;
+            /** Inputs */
+            inputs?: components["schemas"]["HardwareBinding"][];
+            /** Outputs */
+            outputs?: components["schemas"]["HardwareBinding"][];
+        };
+        /** I2cBus */
+        I2cBus: {
+            /** Sda */
+            sda: number;
+            /** Scl */
+            scl: number;
         };
         /**
          * IngestRequest
