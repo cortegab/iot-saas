@@ -10,3 +10,7 @@ void netBegin(const DeviceConfig& cfg);
 // Every loop: the provisioning-reset button, MQTT (re)connects without
 // blocking the loop for long, incoming messages, telemetry and status.
 void netLoop();
+
+// Where the board is in getting online, for the status LED.
+enum class NetState { Provisioning, Connecting, Connected };
+NetState netState();
