@@ -14,7 +14,10 @@ class AnalogIn : public InputDriver {
     if (!floatParam(binding, "offset", 0.0f, offset_, err)) return false;
     if (!intParam(binding, "samples", 8, 1, 64, samples, err)) return false;
     samples_ = samples;
-    analogSetPinAttenuation(pin_, ADC_11db);  // the full 0–3.3 V range
+    // The first read sets the pin up as an analog channel; attenuation can only
+    // be set after that (Arduino core 3.x). 11 dB: the full 0–3.3 V range.
+    analogReadMilliVolts(pin_);
+    analogSetPinAttenuation(pin_, ADC_11db);
     return true;
   }
 
