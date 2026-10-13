@@ -1,13 +1,24 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { DriverSpec } from "./driver-catalog";
+import type { BoardModel, DriverSpec } from "./driver-catalog";
 import type { components } from "@/types/api";
-import { blankBinding, blankHardware, hardwareToDraft, hardwareToRequest, validateHardware, wiringGuide, type KeyedRow } from "./hardware-draft";
+import {
+  blankBinding,
+  blankHardware,
+  hardwareToDraft,
+  hardwareToRequest,
+  validateHardware,
+  wiringGuide,
+  type HardwareCatalog,
+  type KeyedRow,
+} from "./hardware-draft";
 
-// The real catalog the firmware ships, so a catalog change that breaks the
+// The real catalogs the firmware ships, so a catalog change that breaks the
 // editor shows up here.
-const DRIVERS = (JSON.parse(readFileSync(new URL("../../../../firmware/drivers.json", import.meta.url), "utf8")) as { drivers: DriverSpec[] })
-  .drivers;
+const read = <T,>(file: string) => JSON.parse(readFileSync(new URL(`../../../../firmware/${file}`, import.meta.url), "utf8")) as T;
+const DRIVERS = read<{ drivers: DriverSpec[] }>("drivers.json").drivers;
+const MODELS = read<{ models: BoardModel[] }>("boards.json").models;
+const CATALOG: HardwareCatalog = { drivers: DRIVERS, models: MODELS };
 const spec = (id: string) => DRIVERS.find((d) => d.id === id)!;
 
 const rows: { metrics: KeyedRow[]; actuators: KeyedRow[] } = {
@@ -19,7 +30,7 @@ const rows: { metrics: KeyedRow[]; actuators: KeyedRow[] } = {
 };
 
 const SAVED: components["schemas"]["HardwareConfig"] = {
-  board: "esp32",
+  board: "esp32-devkit-30",
   i2c: null,
   inputs: [
     { driver: "digital_in", pins: { pin: 13 }, params: { pull: "up", invert: true }, channels: { value: "door" } },
@@ -56,16 +67,17 @@ describe("hardwareToDraft / hardwareToRequest", () => {
 describe("blankBinding", () => {
   it("starts at the defaults on free pins that suit each role", () => {
     const hw = hardwareToDraft(SAVED, rows)!;
-    const b = blankBinding(spec("analog_in"), hw);
+    const b = blankBinding(spec("analog_in"), hw, CATALOG);
     expect(b.params).toEqual({ scale: 1, offset: 0, samples: 8 });
     expect([32, 33, 35, 36, 39]).toContain(b.pins.pin); // ADC1, and 34 is taken
     expect(b.channels).toEqual({ value: "" });
   });
 
   it("puts a relay on a pin that stays quiet at boot, and inputs off the output pins", () => {
-    expect(blankBinding(spec("relay"), blankHardware()).pins.pin).toBe(23);
-    expect(blankBinding(spec("digital_in"), blankHardware()).pins.pin).toBe(4);
-    expect(blankBinding(spec("relay"), blankHardware("esp32c3")).pins.pin).toBe(3);
+    expect(blankBinding(spec("relay"), blankHardware(), CATALOG).pins.pin).toBe(23);
+    expect(blankBinding(spec("digital_in"), blankHardware(), CATALOG).pins.pin).toBe(4);
+    expect(blankBinding(spec("relay"), blankHardware("esp32-devkit-38"), CATALOG).pins.pin).toBe(23);
+    expect(blankBinding(spec("relay"), blankHardware("esp32c3-supermini"), CATALOG).pins.pin).toBe(3);
   });
 });
 
@@ -73,39 +85,51 @@ describe("validateHardware", () => {
   const valid = () => hardwareToDraft(SAVED, rows)!;
 
   it("passes a valid config", () => {
-    expect(validateHardware(valid(), rows, DRIVERS)).toEqual({ errors: {}, warnings: {} });
+    expect(validateHardware(valid(), rows, CATALOG)).toEqual({ errors: {}, warnings: {} });
+  });
+
+  it("passes the same wiring on the 38-pin DevKit", () => {
+    expect(validateHardware({ ...valid(), board: "esp32-devkit-38" }, rows, CATALOG)).toEqual({ errors: {}, warnings: {} });
+  });
+
+  it("reads a chip id saved before board models existed as that chip's first model", () => {
+    expect(validateHardware({ ...valid(), board: "esp32" }, rows, CATALOG)).toEqual({ errors: {}, warnings: {} });
+  });
+
+  it("refuses a board this firmware doesn't know", () => {
+    expect(validateHardware({ ...valid(), board: "esp32-s3-devkit" }, rows, CATALOG).errors["hardware.board"]).toMatch(/no “esp32-s3-devkit” board/);
   });
 
   it("refuses a pin used twice, on the second user", () => {
     const h = valid();
     h.outputs[0].pins.pin = 13;
-    expect(validateHardware(h, rows, DRIVERS).errors).toEqual({ "hardware.outputs.0.pins.pin": "GPIO 13 is also used by input 1." });
+    expect(validateHardware(h, rows, CATALOG).errors).toEqual({ "hardware.outputs.0.pins.pin": "GPIO 13 is also used by input 1." });
   });
 
   it("holds analog to ADC1 and outputs off input-only pins", () => {
     const h = valid();
     h.inputs[1].pins.pin = 25;
     h.outputs[0].pins.pin = 35;
-    const { errors } = validateHardware(h, rows, DRIVERS);
+    const { errors } = validateHardware(h, rows, CATALOG);
     expect(errors["hardware.inputs.1.pins.pin"]).toMatch(/can't read analog while Wi-Fi is on/);
     expect(errors["hardware.outputs.0.pins.pin"]).toMatch(/input-only/);
   });
 
   it("checks pins against the chosen board", () => {
-    const h = { ...valid(), board: "esp32c3" as const };
-    expect(validateHardware(h, rows, DRIVERS).errors["hardware.inputs.0.pins.pin"]).toMatch(/isn't free on this board/);
+    const h = { ...valid(), board: "esp32c3-supermini" };
+    expect(validateHardware(h, rows, CATALOG).errors["hardware.inputs.0.pins.pin"]).toBe("GPIO 13 isn't free on the ESP32-C3 Super Mini. Pick another pin.");
   });
 
   it("refuses a pull resistor on a pin that has none", () => {
     const h = valid();
     h.inputs[0].pins.pin = 35;
-    expect(validateHardware(h, rows, DRIVERS).errors["hardware.inputs.0.params.pull"]).toMatch(/no internal pull resistor/);
+    expect(validateHardware(h, rows, CATALOG).errors["hardware.inputs.0.params.pull"]).toMatch(/no internal pull resistor/);
   });
 
   it("range-checks params", () => {
     const h = valid();
     h.inputs[1].params = { samples: "100", scale: "x" };
-    const { errors } = validateHardware(h, rows, DRIVERS);
+    const { errors } = validateHardware(h, rows, CATALOG);
     expect(errors["hardware.inputs.1.params.samples"]).toBe("Enter a number from 1 to 64.");
     expect(errors["hardware.inputs.1.params.scale"]).toBe("Enter a number.");
   });
@@ -114,14 +138,14 @@ describe("validateHardware", () => {
     const h = valid();
     h.inputs[1].channels.value = "m1";
     h.outputs[0].channels.value = "";
-    const { errors } = validateHardware(h, rows, DRIVERS);
+    const { errors } = validateHardware(h, rows, CATALOG);
     expect(errors["hardware.inputs.1.channels.value"]).toBe("Door is already read by input 1.");
     expect(errors["hardware.outputs.0.channels.value"]).toBe("Pick the actuator it drives.");
   });
 
   it("flags a key the template no longer has", () => {
     const h = hardwareToDraft(SAVED, { ...rows, metrics: rows.metrics.slice(1) })!;
-    expect(validateHardware(h, { ...rows, metrics: rows.metrics.slice(1) }, DRIVERS).errors["hardware.inputs.0.channels.value"]).toMatch(
+    expect(validateHardware(h, { ...rows, metrics: rows.metrics.slice(1) }, CATALOG).errors["hardware.inputs.0.channels.value"]).toMatch(
       /“door” isn't a metric of this template any more/,
     );
   });
@@ -129,36 +153,51 @@ describe("validateHardware", () => {
   it("says so when the row it pointed at was removed in this draft", () => {
     const h = valid();
     const fewer = { ...rows, actuators: [] };
-    expect(validateHardware(h, fewer, DRIVERS).errors["hardware.outputs.0.channels.value"]).toBe("The actuator it drove was removed. Pick another.");
+    expect(validateHardware(h, fewer, CATALOG).errors["hardware.outputs.0.channels.value"]).toBe("The actuator it drove was removed. Pick another.");
   });
 
   it("warns when an on/off reading feeds a number", () => {
     const h = valid();
     h.inputs[0].channels.value = "m2";
     h.inputs[1].channels.value = "";
-    expect(validateHardware(h, rows, DRIVERS).warnings["hardware.inputs.0.channels.value"]).toMatch(/reads on\/off, but Level is a number/);
+    expect(validateHardware(h, rows, CATALOG).warnings["hardware.inputs.0.channels.value"]).toMatch(/reads on\/off, but Level is a number/);
   });
 
   it("refuses a driver this firmware doesn't have", () => {
     const h = valid();
     h.inputs[0].driver = "bme280";
-    expect(validateHardware(h, rows, DRIVERS).errors["hardware.inputs.0.driver"]).toMatch(/no “bme280” driver/);
+    expect(validateHardware(h, rows, CATALOG).errors["hardware.inputs.0.driver"]).toMatch(/no “bme280” driver/);
   });
 
   it("has nothing to check without wiring", () => {
-    expect(validateHardware(null, rows, DRIVERS)).toEqual({ errors: {}, warnings: {} });
-    expect(validateHardware(blankHardware(), rows, DRIVERS)).toEqual({ errors: {}, warnings: {} });
+    expect(validateHardware(null, rows, CATALOG)).toEqual({ errors: {}, warnings: {} });
+    expect(validateHardware(blankHardware(), rows, CATALOG)).toEqual({ errors: {}, warnings: {} });
+  });
+
+  it("checks only the mapping without the firmware's catalog", () => {
+    const h = valid();
+    h.outputs[0].pins.pin = 35; // input-only, but unknowable without the catalog
+    expect(validateHardware(h, rows, undefined)).toEqual({ errors: {}, warnings: {} });
   });
 });
 
 describe("wiringGuide", () => {
   it("lists pins in order with what they connect to, and each driver's notes once", () => {
-    const guide = wiringGuide(hardwareToDraft(SAVED, rows)!, rows, DRIVERS);
-    expect(guide.pins.map((p) => [p.pin, p.to])).toEqual([
-      [13, "Digital input (Door)"],
-      [23, "Relay / on-off output (Fan)"],
-      [34, "Analog input (Level)"],
+    const guide = wiringGuide(hardwareToDraft(SAVED, rows)!, rows, CATALOG);
+    expect(guide.pins.map((p) => [p.name, p.to])).toEqual([
+      ["GPIO 13", "Digital input (Door)"],
+      ["GPIO 23", "Relay / on-off output (Fan)"],
+      ["GPIO 34", "Analog input (Level)"],
     ]);
     expect(guide.notes.map((n) => n.driver)).toEqual(["Digital input", "Analog input", "Relay / on-off output"]);
+  });
+
+  it("uses the board's printed labels and says how to re-provision it", () => {
+    const h = hardwareToDraft(SAVED, rows)!;
+    h.inputs[1].pins.pin = 36;
+    const guide = wiringGuide(h, rows, CATALOG);
+    expect(guide.pins.find((p) => p.pin === 36)?.name).toBe("GPIO 36 (VP)");
+    expect(guide.board?.label).toBe("ESP32 DevKit (30-pin)");
+    expect(guide.board?.lines.at(-1)).toMatch(/hold a button between GPIO 19 \(D19\) and GND for 5 seconds/);
   });
 });

@@ -7,14 +7,15 @@
  * so renaming a key in the same draft carries its wiring along. A saved key the
  * draft no longer has stays as `key:<key>` and shows as an error.
  */
-import type { SketchBoard } from "@/lib/firmware-sketch";
-import { hasInternalPull, pinProblem, preferredPins } from "@/lib/hardware/board-pins";
-import { findDriver, type DriverSpec } from "@/lib/hardware/driver-catalog";
+import { hasInternalPull, pinName, pinProblem, preferredPins, resolveModel } from "@/lib/hardware/board-pins";
+import { findDriver, type DriverCatalog, type DriverSpec } from "@/lib/hardware/driver-catalog";
 import type { components } from "@/types/api";
 
 type HardwareConfig = components["schemas"]["HardwareConfig"];
 type HardwareBinding = components["schemas"]["HardwareBinding"];
 type ParamValue = number | boolean | string;
+/** What validation and the guide need from the published firmware. */
+export type HardwareCatalog = Pick<DriverCatalog, "drivers" | "models">;
 
 export interface BindingDraft {
   uid: string;
@@ -27,7 +28,8 @@ export interface BindingDraft {
 }
 
 export interface HardwareDraft {
-  board: SketchBoard;
+  /** A board model id (firmware/boards.json); older configs hold a chip id. */
+  board: string;
   i2c: { sda: number; scl: number } | null;
   inputs: BindingDraft[];
   outputs: BindingDraft[];
@@ -45,19 +47,21 @@ let seq = 0;
 const uid = () => `b${++seq}`;
 const MISSING = "key:";
 
-export const BOARD_LABEL: Record<SketchBoard, string> = { esp32: "ESP32 DevKit", esp32c3: "ESP32-C3" };
+/** The board new wiring starts on. */
+export const DEFAULT_BOARD = "esp32-devkit-30";
 
-export function blankHardware(board: SketchBoard = "esp32"): HardwareDraft {
+export function blankHardware(board: string = DEFAULT_BOARD): HardwareDraft {
   return { board, i2c: null, inputs: [], outputs: [] };
 }
 
 /** A new binding for `spec`: params at their defaults, each pin on the first
  * free one that suits it, in the board's preferred order. */
-export function blankBinding(spec: DriverSpec, hw: HardwareDraft): BindingDraft {
+export function blankBinding(spec: DriverSpec, hw: HardwareDraft, catalog: HardwareCatalog): BindingDraft {
+  const model = resolveModel(catalog.models, hw.board);
   const taken = new Set(usedPins(hw).map((u) => u.pin));
   const pins: Record<string, number | null> = {};
   for (const p of spec.pins) {
-    const free = preferredPins(hw.board, p.needs).find((n) => !taken.has(n)) ?? null;
+    const free = (model ? preferredPins(model, p.needs) : []).find((n) => !taken.has(n)) ?? null;
     pins[p.role] = free;
     if (free != null) taken.add(free);
   }
@@ -152,16 +156,19 @@ const article = (word: string) => (/^[aeiou]/i.test(word) ? "an" : "a");
 
 /** Errors (block save) and warnings (explain a risk), keyed by field path
  * under `hardware.` — the same checks the firmware makes at boot, plus the
- * backend's channel → key check. Without a driver catalog only the mapping
- * is checked. */
+ * backend's channel → key check. Without the firmware's catalog only the
+ * mapping is checked. */
 export function validateHardware(
   h: HardwareDraft | null,
   rows: { metrics: KeyedRow[]; actuators: KeyedRow[] },
-  drivers: DriverSpec[] | undefined,
+  catalog: HardwareCatalog | undefined,
 ): { errors: Record<string, string>; warnings: Record<string, string> } {
   const errors: Record<string, string> = {};
   const warnings: Record<string, string> = {};
   if (!h) return { errors, warnings };
+  const drivers = catalog?.drivers;
+  const model = resolveModel(catalog?.models, h.board);
+  if (catalog && !model) errors["hardware.board"] = `This firmware has no “${h.board}” board. Pick one.`;
 
   // Pins: each suits its role on this board, and none is used twice.
   const seen = new Map<number, string>();
@@ -186,8 +193,8 @@ export function validateHardware(
         const path = `${p}pins.${role.role}`;
         const pin = b.pins[role.role];
         if (pin == null) errors[path] = "Pick a pin.";
-        else if (!errors[path]) {
-          const problem = pinProblem(h.board, role.needs, pin);
+        else if (!errors[path] && model) {
+          const problem = pinProblem(model, role.needs, pin);
           if (problem) errors[path] = problem;
         }
       }
@@ -209,7 +216,7 @@ export function validateHardware(
       // Pins 34–39 on the ESP32 have no internal pull resistor; the firmware
       // refuses a pull on them (firmware/src/drivers/digital_in.cpp).
       const pullPin = b.pins.pin;
-      if (b.params.pull !== undefined && b.params.pull !== "none" && pullPin != null && !hasInternalPull(h.board, pullPin))
+      if (model && b.params.pull !== undefined && b.params.pull !== "none" && pullPin != null && !hasInternalPull(model.chip, pullPin))
         errors[`${p}params.pull`] = `GPIO ${pullPin} has no internal pull resistor. Set it to none and fit a 10 kΩ resistor.`;
 
       const channels = spec?.channels ?? Object.keys(b.channels).map((key) => ({ key, label: key }) as DriverSpec["channels"][number]);
@@ -241,38 +248,50 @@ export function validateHardware(
 }
 
 export interface WiringGuide {
-  pins: { pin: number; to: string; role: string }[];
+  /** The board, with its own notes and how to re-provision it. */
+  board: { label: string; lines: string[] } | null;
+  pins: { pin: number; name: string; to: string; role: string }[];
   notes: { driver: string; lines: string[] }[];
 }
 
-/** The pin table and per-driver notes a person wires the board from. */
+/** The pin table and notes a person wires the board from. */
 export function wiringGuide(
   h: HardwareDraft,
   rows: { metrics: KeyedRow[]; actuators: KeyedRow[] },
-  drivers: DriverSpec[] | undefined,
+  catalog: HardwareCatalog | undefined,
 ): WiringGuide {
+  const model = resolveModel(catalog?.models, h.board);
   const pins: WiringGuide["pins"] = [];
   const notes = new Map<string, string[]>();
+  const row = (pin: number, to: string, role: string) => pins.push({ pin, name: pinName(model, pin), to, role });
   if (h.i2c) {
-    pins.push({ pin: h.i2c.sda, to: "I2C sensors", role: "SDA" });
-    pins.push({ pin: h.i2c.scl, to: "I2C sensors", role: "SCL" });
+    row(h.i2c.sda, "I2C sensors", "SDA");
+    row(h.i2c.scl, "I2C sensors", "SCL");
   }
   for (const kind of ["inputs", "outputs"] as const) {
     const list = kind === "inputs" ? rows.metrics : rows.actuators;
     for (const b of h[kind]) {
-      const spec = findDriver(drivers, b.driver);
+      const spec = findDriver(catalog?.drivers, b.driver);
       const fed = Object.values(b.channels)
         .map((ref) => list.find((r) => r.uid === ref))
         .filter((r): r is KeyedRow => !!r)
         .map((r) => r.name || r.key);
       const to = `${spec?.label ?? b.driver}${fed.length ? ` (${fed.join(", ")})` : ""}`;
       for (const [role, pin] of Object.entries(b.pins)) {
-        if (pin == null) continue;
-        pins.push({ pin, to, role: spec?.pins.find((p) => p.role === role)?.label ?? role });
+        if (pin != null) row(pin, to, spec?.pins.find((p) => p.role === role)?.label ?? role);
       }
       if (spec && spec.wiring.length && !notes.has(spec.label)) notes.set(spec.label, spec.wiring);
     }
   }
   pins.sort((a, b) => a.pin - b.pin);
-  return { pins, notes: [...notes].map(([driver, lines]) => ({ driver, lines })) };
+  const board = model
+    ? {
+        label: model.label,
+        lines: [
+          ...(model.notes ?? []),
+          `To set up Wi-Fi again, hold ${model.reset.label} for 5 seconds while the board is running.`,
+        ],
+      }
+    : null;
+  return { board, pins, notes: [...notes].map(([driver, lines]) => ({ driver, lines })) };
 }

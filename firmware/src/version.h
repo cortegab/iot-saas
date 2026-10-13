@@ -2,4 +2,4 @@
 
 // Bumped for every release (release.py reads it). Reported in the status
 // payload's fw_version, so the platform can see which build each board runs.
-#define FW_VERSION "0.1.1"
+#define FW_VERSION "0.2.0"

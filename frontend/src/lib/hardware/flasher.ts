@@ -6,7 +6,7 @@
  * config-only update rewrites just the `cfg` partition, keeping the app and the
  * Wi-Fi the board already has. Chrome/Edge on desktop only (Web Serial). */
 import type { SketchBoard } from "@/lib/firmware-sketch";
-import type { DriverSpec } from "@/lib/hardware/driver-catalog";
+import type { BoardModel, DriverSpec } from "@/lib/hardware/driver-catalog";
 
 export const FIRMWARE_BASE = "/firmware";
 
@@ -20,6 +20,7 @@ export interface ManifestPart {
 export interface FirmwareManifest {
   version: string;
   built_at: string;
+  /** One build per chip, keyed by chip (a board model's `chip`). */
   boards: Record<
     SketchBoard,
     {
@@ -30,6 +31,9 @@ export interface FirmwareManifest {
       cfg: { offset: number; size: number };
     }
   >;
+  /** The board models people pick (firmware/boards.json). Missing from
+   * releases before 0.2.0. */
+  models?: BoardModel[];
   /** The driver catalog (firmware/drivers.json) this build supports. */
   drivers: DriverSpec[];
 }

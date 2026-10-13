@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "models": [
+    {
+      "id": "esp32-devkit-30",
+      "chip": "esp32",
+      "label": "ESP32 DevKit (30-pin)",
+      "description": "DOIT ESP32 DevKit V1 and its 30-pin clones.",
+      "pins": [4, 13, 14, 16, 17, 18, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39],
+      "pin_labels": { "36": "VP", "39": "VN", "16": "RX2", "17": "TX2" },
+      "reset": { "pin": 19, "label": "a button between GPIO 19 (D19) and GND" },
+      "led": { "pin": 2, "active_low": false },
+      "notes": ["Header labels like D13 mean GPIO 13."]
+    },
+    {
+      "id": "esp32-devkit-38",
+      "chip": "esp32",
+      "label": "ESP32 DevKit (38-pin)",
+      "description": "ESP32-DevKitC and its 38-pin clones.",
+      "pins": [4, 13, 14, 16, 17, 18, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39],
+      "pin_labels": { "36": "VP", "39": "VN" },
+      "reset": { "pin": 19, "label": "a button between GPIO 19 and GND" },
+      "led": { "pin": 2, "active_low": false },
+      "notes": ["The extra pins on this board (GPIO 0 and 6–11) are BOOT and the flash chip's: never wire them."]
+    },
+    {
+      "id": "esp32c3-supermini",
+      "chip": "esp32c3",
+      "label": "ESP32-C3 Super Mini",
+      "description": "The thumb-sized ESP32-C3 board with USB-C.",
+      "pins": [0, 1, 3, 4, 5, 6, 7, 10, 20, 21],
+      "pin_labels": { "20": "RX", "21": "TX" },
+      "reset": { "pin": 9, "label": "the BOOT button" },
+      "led": { "pin": 8, "active_low": true },
+      "notes": ["Some Super Mini boards need BOOT held while plugging in before they can be flashed."]
+    }
+  ]
+}

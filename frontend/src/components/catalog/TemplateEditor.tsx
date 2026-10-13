@@ -100,7 +100,7 @@ export function TemplateEditor({
   }, [isNew, entry, duplicateOf, source]);
 
   const otherNames = useMemo(() => (all ?? []).filter((e) => e.id !== entryId).map((e) => e.name), [all, entryId]);
-  const validate = useCallback((d: TemplateDraft) => validateTemplate(d, { otherNames, usage, drivers }), [otherNames, usage, drivers]);
+  const validate = useCallback((d: TemplateDraft) => validateTemplate(d, { otherNames, usage, catalog }), [otherNames, usage, catalog]);
   const editor = useRecordEditor({ source: initial, isNew, validate });
   const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, entry?.name ?? "this template");
 
@@ -595,7 +595,7 @@ export function TemplateEditor({
           <HardwareSection
             hardware={d.hardware}
             rows={keyedRows(d)}
-            catalog={{ drivers, version: catalog?.version, loading: catalogLoading, error: !!catalogError }}
+            catalog={{ data: catalog, loading: catalogLoading, error: !!catalogError }}
             readOnly={readOnly}
             onChange={(hardware) => set({ ...d, hardware })}
             field={(path) => ({ ...f(path), onBlur: blur(path) })}

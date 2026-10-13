@@ -39,7 +39,8 @@ void setup() {
     pinMode(LED_PIN, OUTPUT);
     return;
   }
-  Serial.printf("[BOOT] device %s/%s\n", config.tenant, config.device);
+  Serial.printf("[BOOT] device %s/%s%s%s\n", config.tenant, config.device, strlen(config.model) ? " on " : "",
+                config.model);
   netBegin(config);
 }
 

@@ -69,6 +69,38 @@ def check_driver_ids(catalog: dict) -> None:
         )
 
 
+def firmware_pins() -> dict[str, set[int]]:
+    """Each chip's USABLE GPIOs, read from src/pins.cpp (the firmware's own rules)."""
+    source = (HERE / "src/pins.cpp").read_text()
+    c3, esp32 = re.search(r"#if CONFIG_IDF_TARGET_ESP32C3(.*?)#else(.*?)#endif", source, re.S).groups()  # type: ignore[union-attr]
+
+    def usable(block: str) -> set[int]:
+        match = re.search(r"USABLE\[\]\s*=\s*\{([^}]*)\}", block)
+        if not match:
+            fail("USABLE not found in src/pins.cpp")
+        return {int(p) for p in match.group(1).split(",")}  # type: ignore[union-attr]
+
+    return {"esp32c3": usable(c3), "esp32": usable(esp32)}
+
+
+def check_board_models(models: list[dict]) -> None:
+    """Every board model is built for (its chip has an env here), uses only
+    pins the firmware accepts, and keeps its reset button and LED off them."""
+    allowed = firmware_pins()
+    ids = [m["id"] for m in models]
+    if len(ids) != len(set(ids)):
+        fail(f"boards.json has a duplicate id: {ids}")
+    for m in models:
+        if m["chip"] not in BOARDS:
+            fail(f"boards.json: {m['id']} is for chip {m['chip']}, which has no build here")
+        extra = set(m["pins"]) - allowed[m["chip"]]
+        if extra:
+            fail(f"boards.json: {m['id']} offers {sorted(extra)}, which src/pins.cpp refuses for {m['chip']}")
+        for part in ("reset", "led"):
+            if m[part]["pin"] in m["pins"]:
+                fail(f"boards.json: {m['id']}'s {part} pin {m[part]['pin']} is also offered for wiring")
+
+
 def boot_app0() -> Path:
     """The otadata image that boots app0, shipped with the Arduino framework."""
     packages = Path.home() / ".platformio/packages"
@@ -92,6 +124,8 @@ def main() -> None:
     version = read_version()
     catalog = json.loads((HERE / "drivers.json").read_text())
     check_driver_ids(catalog)
+    models = json.loads((HERE / "boards.json").read_text())["models"]
+    check_board_models(models)
     partitions = read_partitions()
     app_offset, app_size = partitions["app0"]
     cfg_offset, cfg_size = partitions["cfg"]
@@ -135,7 +169,10 @@ def main() -> None:
     manifest = {
         "version": version,
         "built_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        # One build per chip, keyed by chip...
         "boards": boards,
+        # ...and the board models people pick, each pointing at its chip's build.
+        "models": models,
         "drivers": catalog["drivers"],
     }
     (out_dir / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
