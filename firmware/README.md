@@ -45,6 +45,11 @@ Bump `FW_VERSION` in `src/version.h` for every release. `release.py` fails if:
 
 It also warns when an app is above 90% of its slot.
 
+**How a release reaches prod:** you don't publish it by hand. On a deploy, the workflow builds the
+release in CI when the commit's `FW_VERSION` is new, and copies it to the VPS, where nginx serves
+it at `/firmware/`. That's why every firmware change must bump the version: an unchanged version
+is never rebuilt. Details are in `infra/PROD_DEPLOY.md`, "Firmware releases".
+
 ## Boards: chips and models
 
 **One firmware build per chip, many board models per chip.** The 30-pin and the 38-pin ESP32
