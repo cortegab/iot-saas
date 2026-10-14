@@ -45,6 +45,11 @@ export interface DriverSpec {
   params: DriverParamSpec[];
   channels: DriverChannelSpec[];
   wiring: string[];
+  /** Set for drivers on the shared I2C bus: they take no pins of their own
+   * (the template's I2C bus row sets SDA/SCL) but an `address` param. */
+  bus?: "i2c";
+  /** The I2C addresses this part can be set to. */
+  addresses?: string[];
 }
 
 export interface DriverCatalog {
@@ -65,6 +70,8 @@ export interface BoardModel {
   description: string;
   pins: number[];
   pin_labels?: Record<string, string>;
+  /** Where the I2C bus goes by default on this board. */
+  i2c?: { sda: number; scl: number };
   reset: { pin: number; label: string };
   led: { pin: number; active_low: boolean };
   notes?: string[];

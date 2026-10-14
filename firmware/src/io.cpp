@@ -205,7 +205,11 @@ void handleState(Actuator& a, const uint8_t* payload, unsigned int length) {
   if (!a.output->apply(doc["value"], err)) Serial.printf("[STATE] %s: %s\n", a.key, err.c_str());
 }
 
+bool i2cReady = false;
+
 }  // namespace
+
+bool i2cBusReady() { return i2cReady; }
 
 bool ioBegin(const DeviceConfig& cfg, String& err) {
   String prefix = String(cfg.tenant) + "/" + cfg.device + "/";
@@ -216,7 +220,11 @@ bool ioBegin(const DeviceConfig& cfg, String& err) {
   if (cfg.i2cSda >= 0 || cfg.i2cScl >= 0) {
     if (!claimRawPin(cfg.i2cSda, PinUse::Bus, "i2c.sda", err)) return false;
     if (!claimRawPin(cfg.i2cScl, PinUse::Bus, "i2c.scl", err)) return false;
-    Wire.begin(cfg.i2cSda, cfg.i2cScl);
+    i2cReady = Wire.begin(cfg.i2cSda, cfg.i2cScl);
+    if (!i2cReady) {
+      err = String("couldn't start the I2C bus on GPIO ") + cfg.i2cSda + "/" + cfg.i2cScl;
+      return false;
+    }
   }
   // Outputs first: they reach their safe boot state as early as possible.
   if (!beginOutputs(cfg, prefix, err)) return false;

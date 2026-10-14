@@ -36,6 +36,122 @@
       ]
     },
     {
+      "id": "ds18b20",
+      "kind": "input",
+      "label": "DS18B20 temperature",
+      "description": "1-Wire temperature probes, up to 4 on one pin.",
+      "pins": [{ "role": "pin", "label": "Data", "needs": "bus" }],
+      "params": [
+        { "key": "resolution", "label": "Resolution (bits)", "type": "int", "default": 12, "min": 9, "max": 12 },
+        { "key": "interval_ms", "label": "Read every (ms)", "type": "int", "default": 2000, "min": 1000, "max": 60000 }
+      ],
+      "channels": [
+        { "key": "temp_1", "label": "Probe 1 (°C)", "data_type": "float" },
+        { "key": "temp_2", "label": "Probe 2 (°C)", "data_type": "float" },
+        { "key": "temp_3", "label": "Probe 3 (°C)", "data_type": "float" },
+        { "key": "temp_4", "label": "Probe 4 (°C)", "data_type": "float" }
+      ],
+      "wiring": [
+        "Fit a 4.7 kΩ resistor between the data line and 3.3 V (many probe modules already have one).",
+        "Power the probes from 3.3 V with 3 wires; parasite power (2 wires) isn't supported.",
+        "Several probes share one pin; they're numbered in address order, so swapping a probe can change which is Probe 1."
+      ]
+    },
+    {
+      "id": "dht22",
+      "kind": "input",
+      "label": "DHT22 / AM2302",
+      "description": "Temperature and humidity on one data pin.",
+      "pins": [{ "role": "pin", "label": "Data", "needs": "bus" }],
+      "params": [
+        { "key": "interval_ms", "label": "Read every (ms)", "type": "int", "default": 2500, "min": 2000, "max": 60000 }
+      ],
+      "channels": [
+        { "key": "temperature", "label": "Temperature (°C)", "data_type": "float" },
+        { "key": "humidity", "label": "Humidity (%)", "data_type": "float" }
+      ],
+      "wiring": [
+        "Power it from 3.3 V. A bare sensor needs a 10 kΩ pull-up from data to 3.3 V; modules usually have one.",
+        "It can't be read more often than every 2 seconds."
+      ]
+    },
+    {
+      "id": "pulse_counter",
+      "kind": "input",
+      "label": "Pulse counter",
+      "description": "Counts pulses: flow meters, anemometers, energy meter pulse outputs, rain gauges.",
+      "pins": [{ "role": "pin", "label": "Pulses", "needs": "input" }],
+      "params": [
+        { "key": "edge", "label": "Count on", "type": "enum", "options": ["falling", "rising"], "default": "falling" },
+        { "key": "pull", "label": "Pull resistor", "type": "enum", "options": ["up", "down", "none"], "default": "up" },
+        { "key": "pulses_per_unit", "label": "Pulses per unit", "type": "float", "default": 1 },
+        { "key": "min_gap_us", "label": "Ignore pulses closer than (µs)", "type": "int", "default": 0, "min": 0, "max": 100000 },
+        { "key": "window_s", "label": "Rate window (s)", "type": "int", "default": 5, "min": 1, "max": 60 }
+      ],
+      "channels": [
+        { "key": "total", "label": "Total (units since boot)", "data_type": "float" },
+        { "key": "rate_per_min", "label": "Rate (units per minute)", "data_type": "float" }
+      ],
+      "wiring": [
+        "Pulses per unit converts pulses to your unit, e.g. 450 for a YF-S201 flow meter in litres.",
+        "Open-collector sensors (most flow meters, hall sensors) need the pull-up on.",
+        "A 5 V sensor output needs a voltage divider to 3.3 V. Counts up to about 10 kHz.",
+        "For a mechanical switch (reed, rain gauge), set Ignore pulses closer than to ~5000 µs to skip bounce."
+      ]
+    },
+    {
+      "id": "hcsr04",
+      "kind": "input",
+      "label": "HC-SR04 distance",
+      "description": "Ultrasonic distance, 2-400 cm. Also tank level, measured from the top.",
+      "pins": [
+        { "role": "trig", "label": "Trigger", "needs": "output" },
+        { "role": "echo", "label": "Echo", "needs": "input" }
+      ],
+      "params": [
+        { "key": "interval_ms", "label": "Measure every (ms)", "type": "int", "default": 500, "min": 60, "max": 5000 },
+        { "key": "max_cm", "label": "Max distance (cm)", "type": "float", "default": 400 }
+      ],
+      "channels": [{ "key": "distance_cm", "label": "Distance (cm)", "data_type": "float" }],
+      "wiring": [
+        "The HC-SR04 runs on 5 V and its ECHO pin outputs 5 V: put a divider (1 kΩ from ECHO, 2 kΩ to GND) between ECHO and the GPIO, or use the 3.3 V HC-SR04P.",
+        "TRIG can be driven straight from the GPIO.",
+        "No echo, or anything past Max distance, reads as unknown, not 0."
+      ]
+    },
+    {
+      "id": "mpu6050",
+      "kind": "input",
+      "label": "MPU6050 / GY-521 motion",
+      "description": "Accelerometer and gyroscope: tilt, vibration and raw motion.",
+      "bus": "i2c",
+      "addresses": ["0x68", "0x69"],
+      "pins": [],
+      "params": [
+        { "key": "address", "label": "I2C address", "type": "enum", "options": ["0x68", "0x69"], "default": "0x68" },
+        { "key": "accel_range", "label": "Accel range (±g)", "type": "enum", "options": ["2", "4", "8", "16"], "default": "4" },
+        { "key": "sample_hz", "label": "Samples per second", "type": "int", "default": 50, "min": 10, "max": 200 },
+        { "key": "window_ms", "label": "Vibration window (ms)", "type": "int", "default": 1000, "min": 200, "max": 10000 }
+      ],
+      "channels": [
+        { "key": "tilt_x", "label": "Tilt X (°)", "data_type": "float" },
+        { "key": "tilt_y", "label": "Tilt Y (°)", "data_type": "float" },
+        { "key": "vibration_rms", "label": "Vibration (g RMS)", "data_type": "float" },
+        { "key": "temperature", "label": "Chip temperature (°C)", "data_type": "float" },
+        { "key": "accel_x", "label": "Accel X (g)", "data_type": "float" },
+        { "key": "accel_y", "label": "Accel Y (g)", "data_type": "float" },
+        { "key": "accel_z", "label": "Accel Z (g)", "data_type": "float" },
+        { "key": "gyro_x", "label": "Gyro X (°/s)", "data_type": "float" },
+        { "key": "gyro_y", "label": "Gyro Y (°/s)", "data_type": "float" },
+        { "key": "gyro_z", "label": "Gyro Z (°/s)", "data_type": "float" }
+      ],
+      "wiring": [
+        "Connect VCC to 3.3 V, GND to GND, SDA and SCL to the board's I2C pins (set in the I2C bus row). The GY-521 has its own pull-ups.",
+        "AD0 to GND (or unconnected) is address 0x68; AD0 to 3.3 V is 0x69. Two on one bus need different addresses.",
+        "Tilt is only meaningful while the board is still. For raw axes, use a metric that publishes as a stream."
+      ]
+    },
+    {
       "id": "relay",
       "kind": "output",
       "label": "Relay / on-off output",
@@ -50,6 +166,46 @@
         "Many relay modules switch on when their input is LOW: turn on Active low for those.",
         "Power the relay coil from the module's own VCC (5 V), not from a GPIO.",
         "The output holds its boot state until the platform's desired state arrives."
+      ]
+    },
+    {
+      "id": "pwm",
+      "kind": "output",
+      "label": "PWM output",
+      "description": "A variable output: dimmers, fan speed, MOSFET modules, buzzers, PWM-to-0-10 V modules.",
+      "pins": [{ "role": "pin", "label": "Signal", "needs": "output" }],
+      "params": [
+        { "key": "freq_hz", "label": "Frequency (Hz)", "type": "int", "default": 1000, "min": 1, "max": 40000 },
+        { "key": "resolution_bits", "label": "Resolution (bits)", "type": "int", "default": 10, "min": 8, "max": 14 },
+        { "key": "in_min", "label": "Command for 0%", "type": "float", "default": 0 },
+        { "key": "in_max", "label": "Command for 100%", "type": "float", "default": 100 },
+        { "key": "boot_value", "label": "Value at boot", "type": "float", "default": 0 },
+        { "key": "invert", "label": "Invert", "type": "bool", "default": false }
+      ],
+      "channels": [{ "key": "value", "label": "Level", "value_type": "float" }],
+      "wiring": [
+        "Drive loads through a MOSFET or driver module, never straight from the pin.",
+        "LED dimming: 1-5 kHz. Fans: 25 kHz. A passive buzzer: its tone's frequency.",
+        "Very high frequencies need fewer resolution bits (e.g. 40 kHz at 10 bits)."
+      ]
+    },
+    {
+      "id": "servo",
+      "kind": "output",
+      "label": "Servo",
+      "description": "A hobby servo (SG90, MG996R...): the command is an angle.",
+      "pins": [{ "role": "pin", "label": "Signal", "needs": "output" }],
+      "params": [
+        { "key": "min_angle", "label": "Min angle (°)", "type": "float", "default": 0 },
+        { "key": "max_angle", "label": "Max angle (°)", "type": "float", "default": 180 },
+        { "key": "min_us", "label": "Pulse at min angle (µs)", "type": "float", "default": 500 },
+        { "key": "max_us", "label": "Pulse at max angle (µs)", "type": "float", "default": 2500 },
+        { "key": "boot_angle", "label": "Angle at boot (°)", "type": "float", "default": 90 }
+      ],
+      "channels": [{ "key": "value", "label": "Angle", "value_type": "float" }],
+      "wiring": [
+        "Power the servo from its own 5 V supply, not the board's 3.3 V, and join the grounds.",
+        "If it buzzes or hits the end stops, narrow the pulse widths (e.g. 1000-2000 µs)."
       ]
     }
   ]

@@ -99,6 +99,9 @@ def check_board_models(models: list[dict]) -> None:
         for part in ("reset", "led"):
             if m[part]["pin"] in m["pins"]:
                 fail(f"boards.json: {m['id']}'s {part} pin {m[part]['pin']} is also offered for wiring")
+        i2c = m.get("i2c")
+        if i2c and not {i2c["sda"], i2c["scl"]} <= set(m["pins"]):
+            fail(f"boards.json: {m['id']}'s default I2C pins {i2c} aren't among its pins")
 
 
 def boot_app0() -> Path:

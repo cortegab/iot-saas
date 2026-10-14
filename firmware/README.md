@@ -86,10 +86,10 @@ into the config blob first (`config.h`, `net.cpp`, `main.cpp`). Today they're pe
 
 ## Size
 
-| Board | App (0.4.0) | Share of a 1.875 MB OTA slot |
+| Board | App (0.5.0) | Share of a 1.875 MB OTA slot |
 |---|---|---|
-| ESP32 | 1.40 MB | 71% |
-| ESP32-C3 | 1.52 MB | 77% |
+| ESP32 | 1.43 MB | 73% |
+| ESP32-C3 | 1.55 MB | 79% |
 
 **The ESP32 builds with NimBLE, not Bluedroid.** The prebuilt Arduino libraries for the ESP32 use
 Bluedroid (BLE + Classic BT), and provisioning only needs BLE. Up to 0.3.x that put the ESP32 at

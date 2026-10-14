@@ -7,6 +7,7 @@ import {
   blankHardware,
   hardwareToDraft,
   hardwareToRequest,
+  syncI2c,
   validateHardware,
   wiringGuide,
   type HardwareCatalog,
@@ -189,6 +190,74 @@ describe("validateHardware", () => {
     const h = valid();
     h.outputs[0].pins.pin = 35; // input-only, but unknowable without the catalog
     expect(validateHardware(h, rows, undefined)).toEqual({ errors: {}, warnings: {} });
+  });
+});
+
+describe("batch 1 drivers", () => {
+  it("checks each of the HC-SR04's two pins for its own role", () => {
+    const h = blankHardware();
+    const b = blankBinding(spec("hcsr04"), h, CATALOG);
+    b.channels.distance_cm = "m2";
+    b.pins.trig = 34; // input-only: can't trigger
+    b.pins.echo = 35; // input-only: fine to listen on
+    const { errors } = validateHardware({ ...h, inputs: [b] }, rows, CATALOG);
+    expect(errors["hardware.inputs.0.pins.trig"]).toMatch(/input-only/);
+    expect(errors["hardware.inputs.0.pins.echo"]).toBeUndefined();
+  });
+
+  it("puts the DS18B20 and DHT22 data line on a pin that can drive the bus", () => {
+    const h = blankHardware();
+    for (const id of ["ds18b20", "dht22"]) {
+      const b = blankBinding(spec(id), h, CATALOG);
+      expect([34, 35, 36, 39]).not.toContain(b.pins.pin);
+    }
+  });
+});
+
+describe("I2C bus", () => {
+  const withMpu = (board = "esp32-devkit-30") => {
+    const h = blankHardware(board);
+    const mpu = blankBinding(spec("mpu6050"), h, CATALOG);
+    mpu.channels.tilt_x = "m2";
+    return syncI2c({ ...h, inputs: [mpu] }, CATALOG);
+  };
+
+  it("adding an I2C driver brings the board's default bus pins; removing it clears them", () => {
+    const h = withMpu();
+    expect(h.i2c).toEqual({ sda: 21, scl: 22 });
+    expect(withMpu("esp32c3-supermini").i2c).toEqual({ sda: 5, scl: 6 });
+    expect(syncI2c({ ...h, inputs: [] }, CATALOG).i2c).toBeNull();
+    expect(validateHardware(h, rows, CATALOG).errors).toEqual({});
+  });
+
+  it("takes other free pins when the defaults are already wired", () => {
+    const h = blankHardware();
+    const button = blankBinding(spec("digital_in"), h, CATALOG);
+    button.pins.pin = 21;
+    button.channels.value = "m1";
+    const mpu = blankBinding(spec("mpu6050"), h, CATALOG);
+    const synced = syncI2c({ ...h, inputs: [button, mpu] }, CATALOG);
+    expect(synced.i2c).not.toBeNull();
+    expect([synced.i2c!.sda, synced.i2c!.scl]).not.toContain(21);
+  });
+
+  it("refuses two parts on one address", () => {
+    const h = withMpu();
+    const second = { ...h.inputs[0], uid: "x", channels: { tilt_y: "m1" } };
+    const { errors } = validateHardware({ ...h, inputs: [h.inputs[0], second] }, rows, CATALOG);
+    expect(errors["hardware.inputs.1.params.address"]).toMatch(/0x68 is also used by input 1/);
+    second.params = { ...second.params, address: "0x69" };
+    expect(validateHardware({ ...h, inputs: [h.inputs[0], second] }, rows, CATALOG).errors).toEqual({});
+  });
+
+  it("refuses SDA on an input-only pin", () => {
+    const h = withMpu();
+    expect(validateHardware({ ...h, i2c: { sda: 34, scl: 22 } }, rows, CATALOG).errors["hardware.i2c.sda"]).toMatch(/input-only/);
+  });
+
+  it("names what's on the bus in the wiring guide", () => {
+    const guide = wiringGuide(withMpu(), rows, CATALOG);
+    expect(guide.pins.find((p) => p.role === "SDA")).toMatchObject({ pin: 21, to: "I2C bus (MPU6050 / GY-521 motion)" });
   });
 });
 

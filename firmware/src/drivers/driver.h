@@ -81,6 +81,45 @@ inline bool boolParam(JsonObjectConst binding, const char* key, bool def, bool& 
   return true;
 }
 
+// One of a fixed set of strings (drivers.json "enum" params), e.g. an edge or
+// an I2C address. `out` points at the matching entry of `options`.
+inline bool enumParam(JsonObjectConst binding, const char* key, const char* def, std::initializer_list<const char*> options,
+                      const char*& out, String& err) {
+  const char* value = binding["params"][key] | def;
+  for (const char* o : options) {
+    if (strcmp(o, value) == 0) {
+      out = o;
+      return true;
+    }
+  }
+  err = String(binding["driver"] | "?") + ": " + key + " must be one of";
+  for (const char* o : options) err += String(" ") + o;
+  return false;
+}
+
+// A command value read as a number: a number, true/false (1/0), or numeric text.
+inline bool numeric(JsonVariantConst value, float& out) {
+  if (value.is<float>()) {
+    out = value.as<float>();
+    return true;
+  }
+  if (value.is<bool>()) {
+    out = value.as<bool>() ? 1.0f : 0.0f;
+    return true;
+  }
+  if (value.is<const char*>()) {
+    char* end = nullptr;
+    const char* s = value.as<const char*>();
+    out = strtof(s, &end);
+    return end != s && *end == '\0';
+  }
+  return false;
+}
+
+// Whether the config set the I2C bus pins and io.cpp started the bus. I2C
+// drivers check it in begin(): without it every read would just fail.
+bool i2cBusReady();
+
 // A command value read as on/off: true/false, a number (non-zero = on), or the
 // strings "on"/"off", "true"/"false", "1"/"0" in any case.
 inline bool truthy(JsonVariantConst value, bool& on) {

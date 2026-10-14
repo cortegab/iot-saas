@@ -74,6 +74,31 @@ export function blankBinding(spec: DriverSpec, hw: HardwareDraft, catalog: Hardw
   };
 }
 
+/** Whether any binding is an I2C driver (they share the bus row's SDA/SCL). */
+export function usesI2c(h: HardwareDraft, catalog: HardwareCatalog | undefined): boolean {
+  return [...h.inputs, ...h.outputs].some((b) => findDriver(catalog?.drivers, b.driver)?.bus === "i2c");
+}
+
+/** Keeps the I2C bus in step with the bindings: the first I2C driver brings
+ * the board's default SDA/SCL (or the first two free bus pins if those are
+ * taken), and removing the last one clears them. Apply after every change to
+ * the bindings or the board. */
+export function syncI2c(h: HardwareDraft, catalog: HardwareCatalog | undefined): HardwareDraft {
+  if (!usesI2c(h, catalog)) return h.i2c ? { ...h, i2c: null } : h;
+  if (h.i2c) return h;
+  const model = resolveModel(catalog?.models, h.board);
+  if (!model) return h;
+  const taken = new Set(usedPins(h).map((u) => u.pin));
+  if (model.i2c && !taken.has(model.i2c.sda) && !taken.has(model.i2c.scl)) return { ...h, i2c: { ...model.i2c } };
+  const free = preferredPins(model, "bus").filter((p) => !taken.has(p));
+  return free.length >= 2 ? { ...h, i2c: { sda: free[0], scl: free[1] } } : h;
+}
+
+/** An I2C binding's address: its param, else the driver's default. */
+function i2cAddress(b: BindingDraft, spec: DriverSpec): string {
+  return String(b.params.address ?? spec.params.find((p) => p.key === "address")?.default ?? "");
+}
+
 export function hardwareToDraft(
   h: HardwareConfig | null | undefined,
   rows: { metrics: KeyedRow[]; actuators: KeyedRow[] },
@@ -178,6 +203,29 @@ export function validateHardware(
     else seen.set(u.pin, u.owner);
   }
 
+  // The I2C bus: there when an I2C driver is, on pins that can carry it.
+  if (usesI2c(h, catalog) && !h.i2c) errors["hardware.i2c.sda"] = "Pick the I2C bus pins.";
+  if (h.i2c && model) {
+    for (const line of ["sda", "scl"] as const) {
+      const path = `hardware.i2c.${line}`;
+      const problem = pinProblem(model, "bus", h.i2c[line]);
+      if (problem && !errors[path]) errors[path] = problem;
+    }
+  }
+  // Two parts on one bus need different addresses.
+  const addresses = new Map<string, string>();
+  for (const kind of ["inputs", "outputs"] as const) {
+    h[kind].forEach((b, i) => {
+      const spec = findDriver(drivers, b.driver);
+      if (spec?.bus !== "i2c") return;
+      const addr = i2cAddress(b, spec);
+      const other = addresses.get(addr);
+      if (other)
+        errors[`hardware.${kind}.${i}.params.address`] = `Address ${addr} is also used by ${other}. Set the other address on one of them (e.g. AD0 to 3.3 V).`;
+      else addresses.set(addr, `${kind === "inputs" ? "input" : "output"} ${i + 1}`);
+    });
+  }
+
   for (const kind of ["inputs", "outputs"] as const) {
     const list = kind === "inputs" ? rows.metrics : rows.actuators;
     const noun = kind === "inputs" ? "metric" : "actuator";
@@ -270,8 +318,11 @@ export function wiringGuide(
   const notes = new Map<string, string[]>();
   const row = (pin: number, to: string, role: string) => pins.push({ pin, name: pinName(model, pin), to, role });
   if (h.i2c) {
-    row(h.i2c.sda, "I2C sensors", "SDA");
-    row(h.i2c.scl, "I2C sensors", "SCL");
+    // Name what's on the bus: "I2C bus (MPU6050 / GY-521 motion)".
+    const onBus = [...new Set([...h.inputs, ...h.outputs].map((b) => findDriver(catalog?.drivers, b.driver)).filter((s) => s?.bus === "i2c").map((s) => s!.label))];
+    const to = onBus.length ? `I2C bus (${onBus.join(", ")})` : "I2C bus";
+    row(h.i2c.sda, to, "SDA");
+    row(h.i2c.scl, to, "SCL");
   }
   for (const kind of ["inputs", "outputs"] as const) {
     const list = kind === "inputs" ? rows.metrics : rows.actuators;
