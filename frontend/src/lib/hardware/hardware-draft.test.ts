@@ -156,6 +156,17 @@ describe("validateHardware", () => {
     expect(validateHardware(h, fewer, CATALOG).errors["hardware.outputs.0.channels.value"]).toBe("The actuator it drove was removed. Pick another.");
   });
 
+  it("warns when an input feeds no metric, and not once it does", () => {
+    const h = valid();
+    h.inputs[0].channels.value = "";
+    expect(validateHardware(h, rows, CATALOG)).toEqual({
+      errors: {},
+      warnings: { "hardware.inputs.0.channels.value": "This input feeds no metric, so nothing from it is published. Pick the metric it reads." },
+    });
+    h.inputs[0].channels.value = "m1";
+    expect(validateHardware(h, rows, CATALOG).warnings).toEqual({});
+  });
+
   it("warns when an on/off reading feeds a number", () => {
     const h = valid();
     h.inputs[0].channels.value = "m2";

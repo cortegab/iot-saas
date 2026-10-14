@@ -56,8 +56,9 @@ class Device(Base):
     # This device's own wiring for the generic firmware (catalog/schemas.py's
     # HardwareConfig), when it differs from its template's. Null = the
     # template's hardware applies. A copy, not a diff: later template edits
-    # don't reach a device that has its own.
-    hardware: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # don't reach a device that has its own. none_as_null: None is SQL NULL,
+    # not the JSON value `null`.
+    hardware: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     token_hash: Mapped[str] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(nullable=False, default=DeviceStatus.ACTIVE.value)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

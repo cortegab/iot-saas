@@ -43,8 +43,9 @@ class DeviceCatalogEntry(Base):
     # How devices of this type are wired for the generic firmware (firmware/):
     # {"board", "i2c", "inputs": [binding], "outputs": [binding]} — see
     # catalog/schemas.py's HardwareConfig. Null = no wiring defined; such
-    # devices are flashed with the generated sketch instead.
-    hardware: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    # devices are flashed with the generated sketch instead. none_as_null: a
+    # Python None is SQL NULL, not the JSON value `null` (JSONB's default).
+    hardware: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     # "active" | "disabled" — a disabled type stays intact (existing devices
     # keep working) but shouldn't be offered when creating a new device.
     status: Mapped[str] = mapped_column(nullable=False, default="active")
