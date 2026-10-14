@@ -11,7 +11,8 @@
 // The Super Mini's blue LED, wired to 3V3: LOW lights it.
 #define LED_PIN 8
 #define LED_ACTIVE_LOW true
-#define BLE_HANDLER NETWORK_PROV_SCHEME_HANDLER_FREE_BLE
+// After provisioning, free the BLE controller's memory (scheme_ble.h).
+#define BLE_HANDLER NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BLE
 #else
 #define BOARD_ID "esp32"
 // A button between GPIO 19 and GND: on the header of both the 30- and 38-pin
@@ -19,5 +20,7 @@
 #define RESET_PIN 19
 #define LED_PIN 2
 #define LED_ACTIVE_LOW false
-#define BLE_HANDLER NETWORK_PROV_SCHEME_HANDLER_FREE_BTDM
+// After provisioning, free the whole Bluetooth controller's memory (BLE and
+// Classic), as WiFiProv did (scheme_ble.h).
+#define BLE_HANDLER NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BTDM
 #endif

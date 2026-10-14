@@ -3,10 +3,10 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
-#include <WiFiProv.h>
 
 #include "board.h"
 #include "io.h"
+#include "provisioning.h"
 #include "root_ca.h"
 #include "version.h"
 
@@ -24,7 +24,6 @@ WiFiClient plainClient;
 WiFiClientSecure tlsClient;
 PubSubClient mqtt;
 String statusTopic;
-network_prov_security2_params_t sec2Params;
 unsigned long lastStatusMs = 0;
 unsigned long lastMqttAttemptMs = 0;
 bool mqttAttempted = false;
@@ -103,7 +102,8 @@ void tryConnectMqtt() {
   Serial.printf("[MQTT] connecting as %s ... ", cfg->mqttUsername);
   if (mqtt.connect(cfg->mqttUsername, cfg->mqttUsername, cfg->mqttPassword, statusTopic.c_str(), 1, true,
                    "{\"online\":false}")) {
-    Serial.println("connected");
+    // Free heap, once per connect: the headroom drivers have to work with.
+    Serial.printf("connected (free heap %u KB)\n", (unsigned)(ESP.getFreeHeap() / 1024));
     publishStatus();
     ioSubscribe(mqtt);
   } else {
@@ -144,17 +144,10 @@ void netBegin(const DeviceConfig& config) {
   pinMode(RESET_PIN, INPUT_PULLUP);
   // Connects with the Wi-Fi stored in NVS, or advertises over BLE if there is
   // none. Returns at once; netLoop() waits for the connection.
-  if (config.provSecurity == 2) {
-    // The app proves it knows the device's password; the board keeps only the
-    // salt and verifier for it (username = the MQTT username).
-    sec2Params = {(const char*)config.sec2Salt.data(), (uint16_t)config.sec2Salt.size(),
-                  (const char*)config.sec2Verifier.data(), (uint16_t)config.sec2Verifier.size()};
-    WiFiProv.beginProvision(NETWORK_PROV_SCHEME_BLE, BLE_HANDLER, NETWORK_PROV_SECURITY_2,
-                            (const char*)&sec2Params, config.provName, NULL, NULL, false);
-  } else {
-    // Security 1: the proof of possession is the device's password.
-    WiFiProv.beginProvision(NETWORK_PROV_SCHEME_BLE, BLE_HANDLER, NETWORK_PROV_SECURITY_1, config.mqttPassword,
-                            config.provName, NULL, NULL, false);
+  String err;
+  if (!provisioningBegin(config, err)) {
+    // The LED stays on its connecting pattern; the reset button still works.
+    Serial.printf("[PROV] %s; hold the reset button 5 s to try again\n", err.c_str());
   }
 }
 

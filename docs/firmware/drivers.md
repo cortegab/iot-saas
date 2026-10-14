@@ -21,7 +21,7 @@ flashes a board.
 |---|---|---|---|---|
 | (core) | MQTT | `knolleary/PubSubClient` | same as the generated sketch | ✅ |
 | (core) | JSON | `bblanchon/ArduinoJson` | | ✅ |
-| (core) | BLE provisioning, Wi-Fi, TLS | ESP32 Arduino core 3.x (`WiFiProv`, `WiFiClientSecure`) | no download | ✅ |
+| (core) | BLE provisioning, Wi-Fi, TLS | ESP-IDF `network_provisioning` (NimBLE) and the Arduino core's `WiFiClientSecure` | no download | ✅ |
 | `digital_in` | contacts, buttons, PIR | core (`digitalRead`) | params: pull, invert, debounce_ms | ✅ |
 | `analog_in` | 0–3.3 V sensors | core (`analogReadMilliVolts`) | ADC1 pins only; params: scale, offset, samples | ✅ |
 | `relay` | relay modules, digital out | core (`digitalWrite`) | params: active_low, boot_state | ✅ |

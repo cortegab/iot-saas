@@ -206,7 +206,8 @@ The platform stamps its own receive time for staleness math and never trusts thi
 MQTT credentials map 1:1 to a device; EMQX ACLs restrict each device to its own topic subtree.
 
 **BLE Wi-Fi provisioning** (device-side, before MQTT): sketches generated with "Set up from a
-phone" use **Espressif's unified provisioning** (Arduino `WiFiProv`), so the ESP BLE Provisioning
+phone" use **Espressif's unified provisioning** (Arduino `WiFiProv`; the generic firmware in
+`firmware/` calls ESP-IDF's `network_provisioning` directly, same protocol), so the ESP BLE Provisioning
 app works today and the future app embeds Espressif's libraries. The service name is the device
 name; the QR carries the device's own MQTT credential (`pop` = password, plus `username` = device
 id for Security 2), so rotating the credential means a new sketch and a new QR. Security 1 (PoP)

@@ -10,6 +10,12 @@ the Arduino core's `WiFiProv` library (ESP32 board package 3.x, `NETWORK_PROV_*`
 that speaks it works: today the **ESP BLE Provisioning** app (Android / iOS) and Espressif's
 `esp_prov.py`; the future iodriven app embeds Espressif's provisioning libraries.
 
+The **generic firmware** (`firmware/`, installed from the dashboard) speaks the same protocol
+without `WiFiProv`. It calls ESP-IDF's `network_provisioning` directly (`firmware/src/provisioning.cpp`),
+with the same service UUID, advertised name, Security 1/2 and saved-Wi-Fi behaviour, so the app and
+QR are unchanged. On the ESP32 that lets it use NimBLE instead of Bluedroid, which is smaller
+(`firmware/README.md`, "Size").
+
 > Replaces the earlier custom GATT service (`6e1f0001-…` UUIDs). Boards flashed with that firmware
 > that are already on Wi-Fi keep working; to provision one again, flash a newly generated sketch.
 
