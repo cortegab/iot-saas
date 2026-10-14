@@ -173,6 +173,12 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
     actuators: actuators.map((a) => ({ uid: wireId(a), key: wireId(a), name: a.name, type: a.value_type ?? "bool" })),
   };
   const guide = installable ? wiringGuide(hardwareToDraft(wiring, keyedRows)!, keyedRows, firmware) : null;
+  // Inputs wired to a pin but feeding no metric: read and thrown away.
+  const unlinkedPins = installable
+    ? (wiring.inputs ?? [])
+        .filter((b) => !Object.values(b.channels ?? {}).some(Boolean))
+        .flatMap((b) => Object.values(b.pins ?? {}))
+    : [];
   /** The GPIO a metric or actuator is wired to, for "Not showing up?" hints. */
   const wiredPin = (key: string): number | undefined => {
     if (!installable) return pins[key];
@@ -537,6 +543,16 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                         />
                       ) : (
                         <p className="text-sm text-ink-muted">Nothing is wired yet, so the board will only report that it&apos;s online.</p>
+                      )}
+                      {unlinkedPins.length > 0 && (
+                        <Callout tone="warning">
+                          GPIO {unlinkedPins.join(", ")} {unlinkedPins.length === 1 ? "isn't" : "aren't"} linked to a metric, so{" "}
+                          {unlinkedPins.length === 1 ? "it won't" : "they won't"} publish anything. Pick the metric in{" "}
+                          <Link href={`/templates/${template.id}#hardware`} className="text-accent hover:underline">
+                            the wiring
+                          </Link>
+                          .
+                        </Callout>
                       )}
                     </div>
                   ) : (

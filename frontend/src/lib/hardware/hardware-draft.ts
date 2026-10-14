@@ -221,6 +221,11 @@ export function validateHardware(
 
       const channels = spec?.channels ?? Object.keys(b.channels).map((key) => ({ key, label: key }) as DriverSpec["channels"][number]);
       if (kind === "outputs" && !b.channels.value) errors[`${p}channels.value`] = "Pick the actuator it drives.";
+      // An input that feeds nothing is read and thrown away: the board logs
+      // "no input bound" and nothing reaches the platform. A warning, not an
+      // error, so half-done wiring can still be saved.
+      if (kind === "inputs" && channels.length > 0 && !channels.some((ch) => b.channels[ch.key]))
+        warnings[`${p}channels.${channels[0].key}`] = "This input feeds no metric, so nothing from it is published. Pick the metric it reads.";
       for (const ch of channels) {
         const path = `${p}channels.${ch.key}`;
         const ref = b.channels[ch.key];

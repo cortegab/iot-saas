@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { encodeConfigBlob, type FirmwareConfig } from "@/lib/hardware/config-blob";
 import type { BoardModel } from "@/lib/hardware/driver-catalog";
-import { flashBoard, webSerialSupported, type FirmwareManifest, type FlashProgress, type FlashTimings } from "@/lib/hardware/flasher";
+import { FlashError, flashBoard, webSerialSupported, type FirmwareManifest, type FlashProgress, type FlashTimings } from "@/lib/hardware/flasher";
 
 type Mode = "full" | "config";
 
@@ -69,15 +69,22 @@ export function InstallStep({
       try {
         timings = await attempt(921600);
       } catch (first) {
-        // Some USB-serial chips (CH340 especially) drop out at full speed:
-        // one retry at half speed before giving up. Not for a wrong board.
-        if ((first as Error).message.includes("you picked")) throw first;
+        // Some USB-serial chips (CH340 especially) drop out at full speed
+        // mid-transfer: one retry at half speed. Pointless for a busy port,
+        // a board that didn't answer or the wrong board, so only for those
+        // FlashError marks retryable.
+        if (!(first instanceof FlashError && first.retryable)) throw first;
         timings = await attempt(460800);
       }
       setDone({ mode, timings });
       onInstalled(mode);
     } catch (err) {
-      setError((err as Error).message);
+      // A FlashError already says what to do; anything else gets the usual hint.
+      setError(
+        err instanceof FlashError
+          ? err.message
+          : `${(err as Error).message} If the board wouldn't connect, hold its BOOT button while you click Install, then try again.`,
+      );
     } finally {
       setBusy(null);
       setProgress(null);
@@ -133,7 +140,7 @@ export function InstallStep({
 
       {error && (
         <Callout tone="error" title="The install didn't finish">
-          {error} If the board wouldn&apos;t connect, hold its BOOT button while you click Install, then try again.
+          {error}
         </Callout>
       )}
       {done && (

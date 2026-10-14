@@ -6,6 +6,8 @@ Postgres.
 from typing import Any
 
 import httpx
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 DOOR_INPUT = {
     "driver": "digital_in",
@@ -81,6 +83,37 @@ async def test_any_board_model_id_is_stored_but_not_any_string(client: httpx.Asy
         headers=headers,
     )
     assert resp.status_code == 422
+
+
+async def test_no_wiring_is_stored_as_sql_null(
+    client: httpx.AsyncClient, admin_session: AsyncSession
+) -> None:
+    """Not the JSON value `null`, which would make `hardware IS NOT NULL` true
+    for templates and devices with no wiring."""
+    headers = await _headers(client, "hw8@example.com")
+    plain = await _template(client, headers)
+    wired = await _template(client, headers, hardware=HARDWARE)
+    resp = await client.patch(f"/catalog/{wired['id']}", json={"hardware": None}, headers=headers)
+    assert resp.status_code == 200
+    device = (
+        await client.post(
+            "/devices", json={"name": "P", "catalog_entry_id": wired["id"]}, headers=headers
+        )
+    ).json()["device"]
+    await client.patch(f"/devices/{device['id']}", json={"hardware": HARDWARE}, headers=headers)
+    await client.patch(f"/devices/{device['id']}", json={"hardware": None}, headers=headers)
+
+    rows = await admin_session.execute(
+        text(
+            "SELECT count(*) FROM device_catalog_entries WHERE id IN (:a, :b) AND hardware IS NULL"
+        ),
+        {"a": plain["id"], "b": wired["id"]},
+    )
+    assert rows.scalar_one() == 2
+    device_row = await admin_session.execute(
+        text("SELECT hardware IS NULL FROM devices WHERE id = :id"), {"id": device["id"]}
+    )
+    assert device_row.scalar_one() is True
 
 
 async def test_template_without_hardware_has_none(client: httpx.AsyncClient) -> None:

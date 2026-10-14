@@ -129,8 +129,43 @@ export function flashFiles(
   return { files, notes };
 }
 
-/** Flashes the board on `port` and restarts it. Throws with a message a person
- * can act on; the port is always released. */
+/** A failed flash: where it failed, a message a person can act on, and whether
+ * trying again at a lower speed could help (only a transfer that dropped). */
+export class FlashError extends Error {
+  constructor(
+    message: string,
+    readonly stage: FlashStage,
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = "FlashError";
+  }
+}
+
+/** A raw Web Serial / esptool-js failure, in words. */
+export function explainFlashError(err: unknown, stage: FlashStage): FlashError {
+  if (err instanceof FlashError) return err;
+  const raw = err instanceof Error ? err.message : String(err);
+  const name = err instanceof Error ? err.name : "";
+  if (/failed to open serial port|port is already open/i.test(raw) || name === "InvalidStateError")
+    return new FlashError(
+      "The board's COM port is busy. Close any serial monitor using it (Arduino IDE, PuTTY, pio device monitor), then try again. If none is open, unplug the board and plug it in again.",
+      stage,
+      false,
+    );
+  if (/device has been lost|disconnected/i.test(raw) || name === "NetworkError")
+    return new FlashError("The board disconnected. Check the USB cable, plug the board in again, and try again.", stage, false);
+  if (stage === "connecting")
+    return new FlashError(
+      "The board didn't answer. Hold its BOOT button while you click Install, and let go once the progress starts.",
+      stage,
+      false,
+    );
+  return new FlashError(raw, stage, stage === "writing");
+}
+
+/** Flashes the board on `port` and restarts it. Throws a FlashError with a
+ * message a person can act on; the port is always released. */
 export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
   const { manifest, board, mode, configBlob, port, baudrate = 921600, base = FIRMWARE_BASE } = opts;
   const target = manifest.boards[board];
@@ -139,7 +174,12 @@ export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
 
   // esptool-js touches `window` at import; load it only when flashing.
   const { ESPLoader, Transport } = await import("esptool-js");
-  const progress = opts.onProgress ?? (() => {});
+  let stage: FlashStage = "connecting";
+  const report = opts.onProgress ?? (() => {});
+  const progress = (p: FlashProgress) => {
+    stage = p.stage;
+    report(p);
+  };
   const log = opts.onLog ?? (() => {});
   const terminal = { clean: () => {}, write: log, writeLine: log };
   const transport = new Transport(port, false);
@@ -151,7 +191,7 @@ export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
     await loader.main();
     const chip = loader.chip.CHIP_NAME;
     if (chip !== target.chip) {
-      throw new Error(`This board is an ${chip}, but you picked ${target.chip}. Pick the matching board and try again.`);
+      throw new FlashError(`This board is an ${chip}, but you picked ${target.chip}. Pick the matching board and try again.`, stage, false);
     }
     const t1 = performance.now();
 
@@ -189,6 +229,8 @@ export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
       wifiErased: files.some((f) => target.nvs != null && f.address === target.nvs.offset),
       notes,
     };
+  } catch (err) {
+    throw explainFlashError(err, stage);
   } finally {
     await transport.disconnect().catch(() => {});
   }
