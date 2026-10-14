@@ -84,26 +84,26 @@ into the config blob first (`config.h`, `net.cpp`, `main.cpp`). Today they're pe
 4. Add a model for it in `boards.json`.
 5. Add an alembic data migration only if stored values need renaming. They don't for a new chip.
 
-## Size (open decision)
+## Size
 
-| Board | App | Share of a 1.875 MB OTA slot |
+| Board | App (0.4.0) | Share of a 1.875 MB OTA slot |
 |---|---|---|
-| ESP32 | 1.91 MB | **97%** |
-| ESP32-C3 | 1.56 MB | 79% |
+| ESP32 | 1.40 MB | 71% |
+| ESP32-C3 | 1.52 MB | 77% |
 
-**The difference is Bluetooth.** The ESP32's Arduino libraries are built with Bluedroid (BLE +
-Classic BT), and the C3's with NimBLE. Provisioning only needs BLE.
+**The ESP32 builds with NimBLE, not Bluedroid.** The prebuilt Arduino libraries for the ESP32 use
+Bluedroid (BLE + Classic BT), and provisioning only needs BLE. Up to 0.3.x that put the ESP32 at
+1.91 MB, 97% of a slot. `[env:esp32]` now recompiles the framework with NimBLE
+(`custom_sdkconfig`). The first build is slow (~10 min) and later builds are cached.
 
-**Switching the ESP32 to NimBLE was tried and doesn't build.** The attempt used pioarduino's
-`custom_sdkconfig` with NimBLE on and Bluedroid off. Arduino's `WiFiProv` includes Bluedroid's
-`SimpleBLE.h` on the ESP32, so the build fails. The ways forward:
+**That's why provisioning is ours, not `WiFiProv`.** On the ESP32, Arduino's `WiFiProv` includes
+Bluedroid's `SimpleBLE.h`, which won't build against NimBLE. `src/provisioning.cpp` makes the same
+`network_provisioning` calls `WiFiProv` made, with the same service UUID, name, security levels and
+events, so the phone app and QR didn't change. `lib_ignore` keeps `WiFiProv` and the
+Bluedroid-only Arduino BLE libraries out of the build.
 
-1. **Call ESP-IDF's `network_provisioning` directly instead of `WiFiProv`.** It supports NimBLE
-   and the same phone app and QR, and keeps OTA. This costs a custom-sdkconfig build (much slower
-   the first time) and a provisioning rewrite in `net.cpp`.
-2. **One big app partition on the ESP32 (no OTA slot).** Room for every driver, but ESP32 boards
-   could only be updated over USB.
-3. **Stay at 97%** and keep the ESP32 driver set small.
+**Checking it after a change:** the linker map should show no Bluedroid at all.
+`grep -c 'btc_\|bta_' .pio/build/esp32/firmware.map` should print `0`.
 
 ## Status LED
 
