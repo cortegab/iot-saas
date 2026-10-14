@@ -265,10 +265,32 @@ editable side panel and no "Expand" toggle.
   - Reserved keys (`status`, `config`) and duplicates are rejected inline (CLAUDE.md §4).
   - Min ≤ max; units come from the unit Combobox. The data type `bool` gives flag metrics.
   - Disabled templates can't be picked for new devices.
+  - A **Wiring** section (optional, last in the rail) says how the board is wired for the generic
+    firmware: board, then input and output cards (driver, the metric it feeds or actuator it drives,
+    pins, params), then a generated **wiring guide** (pin table + per-driver notes). Drivers, pin
+    roles and params come from the published firmware's driver catalog; with none published the
+    section says so instead of offering anything. Pin problems (clash, ADC1, input-only) are
+    errors on the pin field; type mismatches (an on/off reading feeding a number) are warnings.
+  - **Board** is a board model, by its sales name ("ESP32 DevKit (30-pin)", "ESP32-C3 Super
+    Mini"), with its one-line description as the hint. Pin pickers offer only that board's header
+    pins, by number plus the printed label where it differs ("GPIO 36 (VP)"). Changing the board
+    keeps the wiring and flags each pin the new board lacks; the guide adds the board's own notes
+    and how to set up its Wi-Fi again.
 - **Devices**
   - Zone is set and changed **only in the device's own settings**.
   - The one-time credential uses SecretReveal.
   - The connect / firmware-sketch flow is part of the device page.
+  - **Install** (a device whose wiring is set, its own or its template's):
+    - **Options** shows a **Wiring** card instead of Board and pins: the board model, the pin table,
+      and "Change the wiring".
+    - Step 3 is **Install**, not Flash: Install firmware (primary), Update config only (secondary),
+      board hints, progress, and a result callout. The sketch stays under "Advanced: download the
+      sketch instead".
+    - A first Install erases the board's saved Wi-Fi; Update config only keeps it.
+    - With no Web Serial, a warning callout replaces the buttons.
+    - The live check waits only for what's wired.
+  - **Broker host** (every device) is an editable field. It defaults to the page's host, and it's
+    an error when the host is `localhost` / `127.*`, because the board can't reach it.
 - **Zones** (see §13 for the backend work)
   - The editor has **name and notes only**: no zone type, and no adding or moving devices from the
     zone editor.
@@ -580,4 +602,7 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-06 | §9.2 Checks card: a safety check that isn't met (hold < 5 s, interval < 30 s, no hysteresis on a hardware rule) shows the **amber circled "!"**, the rail's warning mark, instead of the red ✕, which is kept for problems that block saving (incomplete conditions or actions). Screen readers hear "warning" or "needs fixing". |
 | 2026-10-07 | Docs cleanup: demos A–F, the two rule-editor demos and the redesign audit (`redesign-report.html`) are removed; their outcomes are built and written into this file, and the files stay in git history. **Demo G is the only reference demo left.** |
 | 2026-10-08 | §5 **Trend chart**: a **1m** range joins 10m · 1h · 6h · 24h · 7d (charts still open on 10m). On every range the time axis is pinned to the full window and slides live instead of fitting to the data; drag-zoom pauses it, double-click resumes. An empty window keeps the chart frame with "No readings in the last {range}" instead of the empty-state card. Same on the device page and in dashboard widgets. |
+| 2026-10-13 | §8 connect flow: wired devices **Install** from the browser (generic firmware over Web Serial) instead of downloading a sketch. Step 3 becomes Install, Options shows the wiring, a first install erases saved Wi-Fi, and the sketch moves under Advanced. Every device gets an editable **Broker host** that refuses `localhost`, which a board can't reach. |
+| 2026-10-13 | §8 Wiring: **Board** picks a board model (30-pin / 38-pin ESP32 DevKit, ESP32-C3 Super Mini), listed by the firmware release (`firmware/boards.json`), replacing the two chip choices. Pins show their printed label; changing the board flags pins it lacks instead of clearing the wiring. |
+| 2026-10-12 | §8 device templates gain a **Wiring** section for the generic firmware (browser install, no code): board, input/output cards built from the firmware's driver catalog, and a wiring guide. Cards reuse the metric/actuator card shape; bool params use the Switch with On / Off. New bindings start on the board's boot-quiet output pins, as the sketch does. |
 | 2026-10-12 | §5 **Trend chart**: a number's line gets a faint `--color-chart` gradient fill under it, fading to transparent at the plot's bottom (the on/off wash is unchanged). Reading markers (circles) are dropped everywhere; they used to show on sparse series and cluttered dense ones. |

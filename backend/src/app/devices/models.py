@@ -14,8 +14,10 @@ doesn't change anything about this schema.
 import enum
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -51,6 +53,12 @@ class Device(Base):
     )
     name: Mapped[str] = mapped_column(nullable=False)
     slug: Mapped[str] = mapped_column(nullable=False)
+    # This device's own wiring for the generic firmware (catalog/schemas.py's
+    # HardwareConfig), when it differs from its template's. Null = the
+    # template's hardware applies. A copy, not a diff: later template edits
+    # don't reach a device that has its own. none_as_null: None is SQL NULL,
+    # not the JSON value `null`.
+    hardware: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
     token_hash: Mapped[str] = mapped_column(nullable=False)
     status: Mapped[str] = mapped_column(nullable=False, default=DeviceStatus.ACTIVE.value)
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

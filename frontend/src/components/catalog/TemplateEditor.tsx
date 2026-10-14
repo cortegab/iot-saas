@@ -17,6 +17,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Select } from "@/components/ui/Select";
 import { SwitchField } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
+import { HardwareSection } from "@/components/catalog/HardwareSection";
 import { UnitField } from "@/components/catalog/UnitField";
 import { EditorFrame, EditorSection, type EditorMode } from "@/components/editor/EditorFrame";
 import { useRecordEditor } from "@/components/editor/useRecordEditor";
@@ -24,12 +25,14 @@ import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { ApiRequestError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
+import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import {
   blankActuator,
   blankMetric,
   blankTemplate,
   brokenUsages,
   draftToRequest,
+  keyedRows,
   renamed,
   templateToDraft,
   usageText,
@@ -50,6 +53,10 @@ const DIFF: DiffField<TemplateDraft>[] = [
   { label: "Status", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
   { label: "Metrics", get: (d) => d.metrics.map((m) => m.key.trim()) },
   { label: "Actuators", get: (d) => d.actuators.map((a) => a.key.trim()) },
+  {
+    label: "Wiring",
+    get: (d) => (d.hardware ? `${d.hardware.inputs.length} in · ${d.hardware.outputs.length} out (${d.hardware.board})` : "none"),
+  },
 ];
 
 const PUBLISH_LABEL = { periodic: "Every N seconds", on_change: "When it changes", streaming: "As fast as it samples" } as const;
@@ -82,6 +89,8 @@ export function TemplateEditor({
   const { data: source } = useApiSWR<CatalogEntryResponse>(duplicateOf ? `/catalog/${duplicateOf}` : null);
   const { data: all } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const { data: usage } = useApiSWR<CatalogUsageResponse>(entryId ? `/catalog/${entryId}/usage` : null);
+  const { data: catalog, error: catalogError, isLoading: catalogLoading } = useDriverCatalog();
+  const drivers = catalog?.drivers;
 
   const isNew = entryId == null;
   const initial = useMemo<TemplateDraft | null>(() => {
@@ -91,7 +100,7 @@ export function TemplateEditor({
   }, [isNew, entry, duplicateOf, source]);
 
   const otherNames = useMemo(() => (all ?? []).filter((e) => e.id !== entryId).map((e) => e.name), [all, entryId]);
-  const validate = useCallback((d: TemplateDraft) => validateTemplate(d, { otherNames, usage }), [otherNames, usage]);
+  const validate = useCallback((d: TemplateDraft) => validateTemplate(d, { otherNames, usage, catalog }), [otherNames, usage, catalog]);
   const editor = useRecordEditor({ source: initial, isNew, validate });
   const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, entry?.name ?? "this template");
 
@@ -159,13 +168,14 @@ export function TemplateEditor({
     }
     return editor
       .save(async (draft) => {
-        const body = draftToRequest(draft);
+        const body = draftToRequest(draft, drivers);
         try {
           if (isNew) {
             const created = await api.post<CatalogEntryResponse>("/catalog", {
               name: body.name,
               metrics: body.metrics as unknown as Record<string, unknown>[],
               actuators: body.actuators as unknown as Record<string, unknown>[],
+              hardware: body.hardware as unknown as Record<string, unknown> | null,
             });
             if (!draft.enabled) await api.patch(`/catalog/${created.id}`, { status: "disabled" });
             void revalidate("/catalog");
@@ -176,6 +186,7 @@ export function TemplateEditor({
               ...body,
               metrics: body.metrics as unknown as Record<string, unknown>[],
               actuators: body.actuators as unknown as Record<string, unknown>[],
+              hardware: body.hardware as unknown as Record<string, unknown> | null,
             });
             await mutate();
             toast({ title: "Template saved", detail: before ? changeSummary(diffLines(before, draft, DIFF)) : undefined });
@@ -351,6 +362,7 @@ export function TemplateEditor({
           { id: "general", label: "General", description: "Name and availability" },
           { id: "metrics", label: "Metrics", count: d.metrics.length, description: "What the device publishes" },
           { id: "actuators", label: "Actuators", count: d.actuators.length, description: "What the platform can switch" },
+          { id: "hardware", label: "Wiring", description: "For installing from the browser" },
         ]}
         status={editor}
         readOnly={readOnly}
@@ -573,6 +585,21 @@ export function TemplateEditor({
               </Button>
             )}
           </div>
+        </EditorSection>
+
+        <EditorSection
+          id="hardware"
+          title="Wiring"
+          lead="How the board is wired: which sensor reads each metric and which output drives each actuator. Optional, but with it every device installs from the browser with no code."
+        >
+          <HardwareSection
+            hardware={d.hardware}
+            rows={keyedRows(d)}
+            catalog={{ data: catalog, loading: catalogLoading, error: !!catalogError }}
+            readOnly={readOnly}
+            onChange={(hardware) => set({ ...d, hardware })}
+            field={(path) => ({ ...f(path), onBlur: blur(path) })}
+          />
         </EditorSection>
       </EditorFrame>
       {confirmDialog}

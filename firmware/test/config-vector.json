@@ -1,0 +1,6 @@
+{
+  "comment": "Shared by firmware/test/test_crc32 and frontend/src/lib/hardware/config-blob.test.ts: the same JSON must give the same header on both sides.",
+  "json": "{\"v\":1,\"board\":\"esp32\",\"device\":{\"tenant\":\"demo\",\"device\":\"sensor01\"}}",
+  "crc32": "0x6069ff13",
+  "header_hex": "494f4346010000004600000013ff6960"
+}

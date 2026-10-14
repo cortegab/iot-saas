@@ -90,6 +90,54 @@ class CatalogEntryDisabledError(Exception):
     disabled templates can't be picked for new devices (DESIGN.md §8)."""
 
 
+class HardwareMappingError(Exception):
+    """Raised when a hardware config's channels don't line up with the
+    template's keys: a channel feeding a metric (or driving an actuator) the
+    template doesn't declare, or one key fed by two bindings. The message is
+    the user-facing reason."""
+
+
+def check_hardware(
+    hardware: dict[str, Any] | None,
+    metrics: list[dict[str, Any]],
+    actuators: list[dict[str, Any]],
+) -> None:
+    """Every input channel feeds a declared metric, every output drives a
+    declared actuator through its single `value` channel, and no key is fed
+    twice — the same checks the firmware makes at boot (firmware/src/io.cpp),
+    caught here at save time instead. Pins and driver params aren't checked
+    here (catalog/schemas.py's HardwareBinding).
+    """
+    if hardware is None:
+        return
+    metric_keys, actuator_keys = _keys_of(metrics), _keys_of(actuators)
+    fed: set[str] = set()
+    for binding in hardware.get("inputs", []):
+        for channel, key in binding.get("channels", {}).items():
+            if key not in metric_keys:
+                raise HardwareMappingError(
+                    f"{binding['driver']}.{channel} feeds '{key}', which isn't a metric of this template"
+                )
+            if key in fed:
+                raise HardwareMappingError(f"Metric '{key}' is fed by two inputs")
+            fed.add(key)
+    driven: set[str] = set()
+    for binding in hardware.get("outputs", []):
+        channels = binding.get("channels", {})
+        if set(channels) != {"value"}:
+            raise HardwareMappingError(
+                f"Output {binding['driver']} needs exactly one channel, 'value'"
+            )
+        key = channels["value"]
+        if key not in actuator_keys:
+            raise HardwareMappingError(
+                f"{binding['driver']} drives '{key}', which isn't an actuator of this template"
+            )
+        if key in driven:
+            raise HardwareMappingError(f"Actuator '{key}' is driven by two outputs")
+        driven.add(key)
+
+
 # A key is one MQTT topic segment: letters, digits, `-` (the kebab-case
 # convention auto-derived keys use) or `_`, up to 64 characters. That rules
 # out `/` (splits the topic), `+`/`#` (wildcards), whitespace and a leading
@@ -191,12 +239,17 @@ async def create_catalog_entry(
     metrics: list[dict[str, Any]],
     actuators: list[dict[str, Any]],
     is_legacy: bool = False,
+    hardware: dict[str, Any] | None = None,
 ) -> DeviceCatalogEntry:
+    normalized_metrics = _normalize_metrics(metrics)
+    normalized_actuators = _normalize_actuators(actuators)
+    check_hardware(hardware, normalized_metrics, normalized_actuators)
     entry = DeviceCatalogEntry(
         tenant_id=tenant_id,
         name=name,
-        metrics=_normalize_metrics(metrics),
-        actuators=_normalize_actuators(actuators),
+        metrics=normalized_metrics,
+        actuators=normalized_actuators,
+        hardware=hardware,
         is_legacy=is_legacy,
     )
     session.add(entry)
@@ -238,16 +291,36 @@ async def update_catalog_entry(
     metrics: list[dict[str, Any]] | None,
     actuators: list[dict[str, Any]] | None,
     entry_status: str | None,
+    hardware: dict[str, Any] | None = None,
+    hardware_set: bool = False,
 ) -> DeviceCatalogEntry:
     before_metrics, before_actuators = list(entry.metrics), list(entry.actuators)
+    new_metrics = (
+        _normalize_metrics(metrics, _keys_of(entry.metrics))
+        if metrics is not None
+        else entry.metrics
+    )
+    new_actuators = (
+        _normalize_actuators(actuators, _keys_of(entry.actuators))
+        if actuators is not None
+        else entry.actuators
+    )
+    # Checked before anything is assigned: removing a key the stored wiring
+    # still feeds fails the whole update, so the wiring is fixed in the same
+    # save rather than left pointing at nothing.
+    new_hardware = hardware if hardware_set else entry.hardware
+    check_hardware(new_hardware, new_metrics, new_actuators)
+
     if name is not None:
         entry.name = name
     if metrics is not None:
-        entry.metrics = _normalize_metrics(metrics, _keys_of(entry.metrics))
+        entry.metrics = new_metrics
         _publish_invalidation(session)
         request_config_publish(session, entry.id)
     if actuators is not None:
-        entry.actuators = _normalize_actuators(actuators, _keys_of(entry.actuators))
+        entry.actuators = new_actuators
+    if hardware_set:
+        entry.hardware = hardware
     if entry_status is not None:
         entry.status = entry_status
     if entry.metrics != before_metrics or entry.actuators != before_actuators:

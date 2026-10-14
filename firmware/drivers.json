@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "drivers": [
+    {
+      "id": "digital_in",
+      "kind": "input",
+      "label": "Digital input",
+      "description": "A contact, button, float switch or PIR read as on/off.",
+      "pins": [{ "role": "pin", "label": "Signal", "needs": "input" }],
+      "params": [
+        { "key": "pull", "label": "Pull resistor", "type": "enum", "options": ["up", "down", "none"], "default": "up" },
+        { "key": "invert", "label": "Invert", "type": "bool", "default": false },
+        { "key": "debounce_ms", "label": "Debounce (ms)", "type": "int", "default": 30, "min": 0, "max": 1000 }
+      ],
+      "channels": [{ "key": "value", "label": "State", "data_type": "bool" }],
+      "wiring": [
+        "With pull up (the default), wire the contact between the pin and GND: closed reads 0, open reads 1. Turn on Invert to flip that.",
+        "GPIOs 34-39 on the ESP32 have no internal pull resistor: set pull to none and fit a 10 kΩ resistor."
+      ]
+    },
+    {
+      "id": "analog_in",
+      "kind": "input",
+      "label": "Analog input",
+      "description": "A 0-3.3 V sensor. Value = volts × scale + offset.",
+      "pins": [{ "role": "pin", "label": "Signal", "needs": "adc1" }],
+      "params": [
+        { "key": "scale", "label": "Scale", "type": "float", "default": 1 },
+        { "key": "offset", "label": "Offset", "type": "float", "default": 0 },
+        { "key": "samples", "label": "Samples averaged", "type": "int", "default": 8, "min": 1, "max": 64 }
+      ],
+      "channels": [{ "key": "value", "label": "Value", "data_type": "float" }],
+      "wiring": [
+        "Never more than 3.3 V on the pin. For a 0-5 V or 0-10 V sensor, use a voltage divider and fold its ratio into the scale.",
+        "Only ADC1 pins read while Wi-Fi is on; the pin picker offers only those."
+      ]
+    },
+    {
+      "id": "relay",
+      "kind": "output",
+      "label": "Relay / on-off output",
+      "description": "A relay module or any output switched on and off.",
+      "pins": [{ "role": "pin", "label": "Signal", "needs": "output" }],
+      "params": [
+        { "key": "active_low", "label": "Active low", "type": "bool", "default": false },
+        { "key": "boot_state", "label": "On at boot", "type": "bool", "default": false }
+      ],
+      "channels": [{ "key": "value", "label": "On/off", "value_type": "bool" }],
+      "wiring": [
+        "Many relay modules switch on when their input is LOW: turn on Active low for those.",
+        "Power the relay coil from the module's own VCC (5 V), not from a GPIO.",
+        "The output holds its boot state until the platform's desired state arrives."
+      ]
+    }
+  ]
+}

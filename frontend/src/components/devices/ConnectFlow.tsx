@@ -18,7 +18,9 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SecretReveal } from "@/components/ui/SecretReveal";
 import { Select } from "@/components/ui/Select";
+import { Table } from "@/components/ui/Table";
 import { useToast } from "@/components/ui/Toast";
+import { InstallStep } from "@/components/devices/InstallStep";
 import { ProvisioningQr } from "@/components/devices/ProvisioningQr";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiRequestError } from "@/lib/api-client";
@@ -26,6 +28,10 @@ import { cn } from "@/lib/cn";
 import { forgetCredential, peekCredential } from "@/lib/credential-handoff";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
 import { BOARDS, buildSketch, defaultPins, pinChoices, pinClashes, provName, type SketchBoard, type SketchCredential } from "@/lib/firmware-sketch";
+import { resolveModel } from "@/lib/hardware/board-pins";
+import { brokerHostProblem, buildFirmwareConfig } from "@/lib/hardware/device-config";
+import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
+import { hardwareToDraft, wiringGuide, type KeyedRow } from "@/lib/hardware/hardware-draft";
 import { useRealtimeEvents } from "@/lib/realtime-bus";
 import { sec2Credentials } from "@/lib/srp6a";
 import { wireId } from "@/lib/wire-id";
@@ -60,7 +66,11 @@ interface Sec2 {
 
 /** Connect a device (DESIGN.md §8, demo G): credential → options → flash →
  * Wi-Fi from a phone (Espressif provisioning, docs/ble-provisioning.md) →
- * live check. The live check listens on the app's realtime socket. */
+ * live check. The live check listens on the app's realtime socket.
+ *
+ * A device whose wiring is set (its own, else its template's) installs the
+ * generic firmware from the browser instead: step 3 is Install, with the
+ * downloadable sketch kept under Advanced. Others get the sketch, as before. */
 export function ConnectFlow({ deviceId }: { deviceId: string }) {
   const api = useApi();
   const router = useRouter();
@@ -71,6 +81,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
   const tenantSlug = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_slug ?? "";
   const { data: device, error } = useApiSWR<DeviceResponse>(`/devices/${deviceId}`);
   const { data: template } = useApiSWR<CatalogEntryResponse>(device ? `/catalog/${device.catalog_entry_id}` : null);
+  const { data: firmware } = useDriverCatalog();
 
   const [step, setStep] = useState(1);
   const [credential, setCredential] = useState<SketchCredential | null>(() => peekCredential(deviceId));
@@ -88,10 +99,19 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
 
   const metrics = useMemo(() => template?.metrics ?? [], [template]);
   const actuators = useMemo(() => template?.actuators ?? [], [template]);
-  const pins = useMemo(() => ({ ...defaultPins(metrics, actuators, board), ...pinOverrides }), [metrics, actuators, board, pinOverrides]);
+  // The generic firmware's path: this device's wiring, its board model, and
+  // a published firmware release to install.
+  const wiring = device?.hardware ?? template?.hardware ?? null;
+  const model = wiring ? resolveModel(firmware?.models, wiring.board) : undefined;
+  const installable = wiring != null && model != null && firmware != null;
+  const sketchBoard: SketchBoard = installable ? model.chip : board;
+  const pins = useMemo(() => ({ ...defaultPins(metrics, actuators, sketchBoard), ...pinOverrides }), [metrics, actuators, sketchBoard, pinOverrides]);
   const clashes = pinClashes(pins);
-  const blocked = Object.keys(clashes).length > 0;
-  const host = typeof window !== "undefined" ? window.location.hostname : "YOUR_SERVER_HOST";
+  const blocked = !installable && Object.keys(clashes).length > 0;
+  // The broker the board connects to. Defaults to this page's host, which is
+  // right in production; on a dev machine it's localhost, which a board can't reach.
+  const [host, setHost] = useState(() => (typeof window !== "undefined" ? window.location.hostname : ""));
+  const hostProblem = brokerHostProblem(host);
   const phone = wifiMode === "ble";
 
   // Security 2: the SRP6a salt + verifier for this credential, computed once
@@ -129,14 +149,14 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
 
   const st = DEVICE_STATUS[deviceStatusKey(device)];
   const neverConnected = device.connection_state === "never_connected";
-  const boardInfo = BOARDS[board];
+  const boardInfo = BOARDS[sketchBoard];
   const name = provName(device.name);
   const sketchFor = (cred: SketchCredential | null) =>
     buildSketch({
       tenantSlug,
       deviceSlug: device.slug,
       deviceName: device.name,
-      board,
+      board: sketchBoard,
       host,
       tls,
       metrics,
@@ -147,11 +167,47 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
       pins,
     });
 
+  // The wiring as rows keyed by wire id, for the guide and the live check's hints.
+  const keyedRows: { metrics: KeyedRow[]; actuators: KeyedRow[] } = {
+    metrics: metrics.map((m) => ({ uid: wireId(m), key: wireId(m), name: m.name, type: m.data_type ?? "float" })),
+    actuators: actuators.map((a) => ({ uid: wireId(a), key: wireId(a), name: a.name, type: a.value_type ?? "bool" })),
+  };
+  const guide = installable ? wiringGuide(hardwareToDraft(wiring, keyedRows)!, keyedRows, firmware) : null;
+  // Inputs wired to a pin but feeding no metric: read and thrown away.
+  const unlinkedPins = installable
+    ? (wiring.inputs ?? [])
+        .filter((b) => !Object.values(b.channels ?? {}).some(Boolean))
+        .flatMap((b) => Object.values(b.pins ?? {}))
+    : [];
+  /** The GPIO a metric or actuator is wired to, for "Not showing up?" hints. */
+  const wiredPin = (key: string): number | undefined => {
+    if (!installable) return pins[key];
+    const [kind, id] = [key.slice(0, 1), key.slice(2)];
+    const binding = (kind === "m" ? wiring.inputs : wiring.outputs)?.find((b) => Object.values(b.channels ?? {}).includes(id));
+    return binding ? Object.values(binding.pins ?? {})[0] : undefined;
+  };
+  const installConfig =
+    installable && credential && sec2Ready && !hostProblem && (phone || ssid)
+      ? buildFirmwareConfig({
+          tenantSlug,
+          device,
+          metrics,
+          actuators,
+          wiring,
+          model,
+          host: host.trim(),
+          tls,
+          credential,
+          wifi: phone ? undefined : { ssid, password: wifiPassword },
+          provisioning: phone && security === 2 && sec2 ? { security: 2, salt: sec2.salt, verifier: sec2.verifier } : { security: 1 },
+        })
+      : null;
+
   const steps: [string, string][] = [
     ["Credential", "Shown once"],
-    ["Options", "Board, Wi-Fi, pins"],
-    ["Flash", "Download and upload"],
-    ["Wi-Fi", phone ? "From your phone" : "Skipped: in the sketch"],
+    ["Options", installable ? "Wiring, Wi-Fi, broker" : "Board, Wi-Fi, pins"],
+    installable ? ["Install", "Over USB, from here"] : ["Flash", "Download and upload"],
+    ["Wi-Fi", phone ? "From your phone" : "Skipped: typed in"],
     ["Live check", "First data"],
   ];
 
@@ -215,20 +271,33 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
     setPinOverrides({}); // the other board has different GPIOs
   }
 
-  const boolActuators = actuators.filter((a) => (a.value_type ?? "bool") === "bool");
+  // With the generic firmware, only what's wired publishes or answers, so the
+  // live check waits for just those.
+  const checkedMetrics = installable ? metrics.filter((m) => wiredPin(`m:${wireId(m)}`) != null) : metrics;
+  const boolActuators = actuators.filter((a) => (a.value_type ?? "bool") === "bool" && (!installable || wiredPin(`a:${wireId(a)}`) != null));
   const items: CheckItem[] = [
-    { k: "status", label: "Reached the broker", sub: `${tenantSlug}/${device.slug}/status`, hint: "Check the board is powered and on a 2.4 GHz network, and that the whole credential was pasted." },
-    ...metrics.map((m) => ({
+    {
+      k: "status",
+      label: "Reached the broker",
+      sub: `${tenantSlug}/${device.slug}/status`,
+      hint: installable
+        ? `Check the board is on a 2.4 GHz network that can reach ${host}. Its LED double-blinks while it can't connect.`
+        : "Check the board is powered and on a 2.4 GHz network, and that the whole credential was pasted.",
+    },
+    ...checkedMetrics.map((m) => ({
       k: `m:${wireId(m)}`,
       label: `First reading: ${m.name}`,
       sub: `…/${wireId(m)}`,
-      hint: m.data_type === "bool" ? `Check the wiring on GPIO ${pins[`m:${wireId(m)}`]}.` : "The sketch publishes nothing until your sensor code returns a number.",
+      hint:
+        installable || m.data_type === "bool"
+          ? `Check the wiring on GPIO ${wiredPin(`m:${wireId(m)}`)}.`
+          : "The sketch publishes nothing until your sensor code returns a number.",
     })),
     ...boolActuators.map((a) => ({
       k: `a:${wireId(a)}`,
       label: `Command test: ${a.name}`,
       sub: `…/cmd/${wireId(a)} → ack`,
-      hint: `Nothing on GPIO ${pins[`a:${wireId(a)}`]}? Check the relay's supply and whether it's active-low.`,
+      hint: `Nothing on GPIO ${wiredPin(`a:${wireId(a)}`)}? Check the relay's supply and whether it's active-low.`,
       actuator: a,
     })),
   ];
@@ -249,6 +318,72 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
     </div>
   );
 
+  // The sketch path: step 3 itself for devices without wiring, and the
+  // "Advanced" fallback under Install for wired ones.
+  const sketchBlock = (
+    <>
+      <p className="text-sm text-ink-muted">
+        Your sketch for <b className="text-ink">{boardInfo.label}</b>
+        {phone ? `, Wi-Fi from a phone (Security ${security})` : `, Wi-Fi "${ssid}"`}. Download it, add your sensor code, and upload it.
+      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant={installable ? "secondary" : "primary"} disabled={blocked || !sec2Ready} onClick={downloadSketch}>
+          <Download aria-hidden size={15} />
+          Download {device.slug}.ino
+        </Button>
+        <Button variant="secondary" disabled={blocked || !sec2Ready} onClick={() => void copySketch()}>
+          <Copy aria-hidden size={14} />
+          Copy sketch
+        </Button>
+        {!sec2Ready && !installable && (
+          <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
+            <Loader2 aria-hidden size={13} className="animate-spin" /> Computing the Security 2 verifier…
+          </span>
+        )}
+      </div>
+      <details className="overflow-hidden rounded-lg border border-border">
+        <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-[13px] text-ink">
+          Preview the sketch <span className="text-ink-muted">· {sketchFor(null).split("\n").length} lines, password masked</span>
+        </summary>
+        <pre aria-label="Generated sketch" className="max-h-[520px] overflow-auto bg-canvas p-3 font-mono text-[12px] leading-[1.55] text-ink">
+          <code>{sketchFor(credential ? { username: credential.username, password: "••••••••" } : null)}</code>
+        </pre>
+      </details>
+      <div className="rounded-lg border border-border p-4">
+        <h3 className="mb-2 text-sm font-semibold text-ink">Upload with Arduino IDE</h3>
+        <ol className="list-decimal space-y-1 pl-5 text-sm text-ink">
+          <li>Boards Manager: ESP32 by Espressif, version 3.x. Library Manager: PubSubClient, ArduinoJson.</li>
+          <li>Plug the board in over USB.</li>
+          <li>
+            Tools → Board → <b>{boardInfo.arduinoBoard}</b>.
+          </li>
+          {boardInfo.ideSettings.map((s) => (
+            <li key={s}>
+              Tools → <b>{s}</b>.
+            </li>
+          ))}
+          {phone && (
+            <li>
+              Tools → Partition Scheme → <b>Huge APP (3MB No OTA/1MB SPIFFS)</b>. BLE and Wi-Fi don&apos;t fit the default.
+            </li>
+          )}
+          {phone && sketchBoard === "esp32" && (
+            <li>
+              Wire a push button between <b>GPIO 19</b> and <b>GND</b> (optional). Holding it for 5 seconds clears the Wi-Fi so you can set a new one.
+            </li>
+          )}
+          <li>Open the sketch, add your sensor code, and select Upload.</li>
+          <li>
+            Open the Serial Monitor at <b>115200 baud</b>.
+          </li>
+        </ol>
+        <p className="mt-2 text-xs text-ink-muted">
+          PlatformIO works too: <code className="font-mono">board = {sketchBoard === "esp32c3" ? "esp32-c3-devkitm-1" : "esp32dev"}</code>, same libraries.
+        </p>
+      </div>
+    </>
+  );
+
   return (
     <>
       <PageHeader
@@ -259,7 +394,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
           </>
         }
         status={<Badge tone={st.tone} shape={st.shape} label={st.label} />}
-        description={`${template.name}. About ten minutes from here to live data.`}
+        description={`${template.name}. About ${installable ? "five" : "ten"} minutes from here to live data.`}
         actions={
           <Button variant="ghost" onClick={() => leave(`/devices/${deviceId}`)}>
             I&apos;ll do this later
@@ -353,27 +488,93 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
           {step === 2 && (
             <>
               <h2 className="text-lg font-semibold text-ink">Options</h2>
-              <p className="text-sm text-ink-muted">
-                The sketch is built from the <b className="text-ink">{template.name}</b> template and these choices. You get it on the next step.
-              </p>
+              {installable ? (
+                <p className="text-sm text-ink-muted">
+                  The board gets firmware <b className="text-ink">{firmware.version}</b>, set up from {device.hardware ? "this device's own wiring" : <>the <b className="text-ink">{template.name}</b> wiring</>} and these choices. Nothing to
+                  edit or compile: you install it on the next step.
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm text-ink-muted">
+                    The sketch is built from the <b className="text-ink">{template.name}</b> template and these choices. You get it on the next step.
+                  </p>
+                  <Callout>
+                    {wiring && firmware && !model ? (
+                      <>
+                        This device is wired for a board the published firmware doesn&apos;t know (<code className="font-mono">{wiring.board}</code>). Pick
+                        another board in the template&apos;s wiring, or use the sketch.
+                      </>
+                    ) : wiring && !firmware ? (
+                      "No firmware release is published yet, so this device gets the sketch to upload."
+                    ) : (
+                      <>
+                        To install from this page with no code,{" "}
+                        <Link href={`/templates/${template.id}#hardware`} className="text-accent hover:underline">
+                          set up the wiring
+                        </Link>{" "}
+                        on the {template.name} template.
+                      </>
+                    )}
+                  </Callout>
+                </>
+              )}
               <div className="grid gap-5 xl:grid-cols-2">
                 <div className="flex flex-col gap-4">
-                  <OptionGroup
-                    label="Board"
-                    value={board}
-                    onChange={(v) => changeBoard(v as SketchBoard)}
-                    options={[
-                      ["esp32", BOARDS.esp32.label, "Classic ESP32, 30/38-pin dev boards."],
-                      ["esp32c3", BOARDS.esp32c3.label, "ESP32-C3 DevKitM, Super Mini and similar."],
-                    ]}
-                  />
+                  {installable && guide ? (
+                    <div className="flex flex-col gap-2">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-[13px] font-medium text-ink">Wiring</span>
+                        <Link href={`/templates/${template.id}#hardware`} className="text-xs text-accent hover:underline">
+                          Change the wiring
+                        </Link>
+                      </div>
+                      <p className="text-sm text-ink">
+                        {model.label}
+                        {model.description && <span className="text-ink-muted"> · {model.description}</span>}
+                      </p>
+                      {guide.pins.length > 0 ? (
+                        <Table
+                          columns={[
+                            { header: "Pin", render: (r) => <span className="font-mono">{r.name}</span>, className: "w-36" },
+                            { header: "Connects to", render: (r) => r.to },
+                          ]}
+                          rows={guide.pins}
+                          rowKey={(r) => `${r.pin}-${r.role}-${r.to}`}
+                        />
+                      ) : (
+                        <p className="text-sm text-ink-muted">Nothing is wired yet, so the board will only report that it&apos;s online.</p>
+                      )}
+                      {unlinkedPins.length > 0 && (
+                        <Callout tone="warning">
+                          GPIO {unlinkedPins.join(", ")} {unlinkedPins.length === 1 ? "isn't" : "aren't"} linked to a metric, so{" "}
+                          {unlinkedPins.length === 1 ? "it won't" : "they won't"} publish anything. Pick the metric in{" "}
+                          <Link href={`/templates/${template.id}#hardware`} className="text-accent hover:underline">
+                            the wiring
+                          </Link>
+                          .
+                        </Callout>
+                      )}
+                    </div>
+                  ) : (
+                    <OptionGroup
+                      label="Board"
+                      value={board}
+                      onChange={(v) => changeBoard(v as SketchBoard)}
+                      options={[
+                        ["esp32", BOARDS.esp32.label, "Classic ESP32, 30/38-pin dev boards."],
+                        ["esp32c3", BOARDS.esp32c3.label, "ESP32-C3 DevKitM, Super Mini and similar."],
+                      ]}
+                    />
+                  )}
                   <OptionGroup
                     label="Wi-Fi"
                     value={wifiMode}
                     onChange={(v) => setWifiMode(v as "ble" | "sketch")}
                     options={[
                       ["ble", "Set up from a phone", "ESP BLE Provisioning app: scan a QR, pick the network. Nothing about your Wi-Fi in the firmware."],
-                      ["sketch", "Type it into the sketch", "Quick for a bench test. Readable from the binary."],
+                      installable
+                        ? ["sketch", "Type it in", "Quick for a bench test. Readable from the board's flash."]
+                        : ["sketch", "Type it into the sketch", "Quick for a bench test. Readable from the binary."],
                     ]}
                   />
                   {phone ? (
@@ -398,6 +599,13 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                   )}
                 </div>
                 <div className="flex flex-col gap-4">
+                  <Field
+                    label="Broker host"
+                    error={hostProblem ?? undefined}
+                    hint="Where the board connects: this server's address, as the board's network sees it."
+                  >
+                    <Input mono value={host} autoComplete="off" spellCheck={false} onChange={(e) => setHost(e.target.value)} />
+                  </Field>
                   <OptionGroup
                     label="Connection"
                     value={tls ? "tls" : "plain"}
@@ -413,7 +621,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                       Without TLS the credential crosses the network in the clear. Use it only against a local development broker.
                     </p>
                   )}
-                  {Object.keys(pins).length > 0 && (
+                  {!installable && Object.keys(pins).length > 0 && (
                     <fieldset className="flex flex-col gap-2">
                       <legend className="mb-1 text-[13px] font-medium text-ink">Pins</legend>
                       {[...metrics.filter((m) => m.data_type === "bool").map((m) => [`m:${wireId(m)}`, m.name, "input"] as const), ...boolActuators.map((a) => [`a:${wireId(a)}`, a.name, "output"] as const)].map(([k, label, dir]) => (
@@ -438,6 +646,26 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                       ))}
                     </fieldset>
                   )}
+                  {installable ? (
+                    <div className="rounded-lg bg-canvas px-3.5 py-3 text-[13px]">
+                      <p className="mb-1 font-medium text-ink">The board gets</p>
+                      <ul className="list-disc pl-5 text-ink-muted">
+                        <li>
+                          Firmware {firmware.version} for the {model.label}
+                        </li>
+                        <li>
+                          {phone
+                            ? `Wi-Fi from a phone (Espressif provisioning, Security ${security}), advertised as "${name}". Any Wi-Fi it had saved is erased.`
+                            : `Wi-Fi "${ssid || "…"}", typed in.`}
+                        </li>
+                        {phone && <li>To set a new Wi-Fi later: hold {model.reset.label} for 5 seconds.</li>}
+                        <li>
+                          MQTT over {tls ? "TLS on 8883" : "plain 1883"} to {host || "…"}, {checkedMetrics.length} metric{checkedMetrics.length === 1 ? "" : "s"} and {boolActuators.length} actuator
+                          {boolActuators.length === 1 ? "" : "s"} wired
+                        </li>
+                      </ul>
+                    </div>
+                  ) : (
                   <div className="rounded-lg bg-canvas px-3.5 py-3 text-[13px]">
                     <p className="mb-1 font-medium text-ink">The sketch includes</p>
                     <ul className="list-disc pl-5 text-ink-muted">
@@ -456,74 +684,51 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                       </li>
                     </ul>
                   </div>
+                  )}
                 </div>
               </div>
-              <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={blocked || (!phone && !ssid)} />
+              <StepNav onBack={() => setStep(1)} onNext={() => setStep(3)} nextDisabled={blocked || (!phone && !ssid) || hostProblem != null} />
             </>
           )}
 
           {step === 3 && (
             <>
-              <h2 className="text-lg font-semibold text-ink">Flash</h2>
-              <p className="text-sm text-ink-muted">
-                Your sketch for <b className="text-ink">{boardInfo.label}</b>
-                {phone ? `, Wi-Fi from a phone (Security ${security})` : `, Wi-Fi "${ssid}"`}. Download it, add your sensor code, and upload it.
-              </p>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button disabled={blocked || !sec2Ready} onClick={downloadSketch}>
-                  <Download aria-hidden size={15} />
-                  Download {device.slug}.ino
-                </Button>
-                <Button variant="secondary" disabled={blocked || !sec2Ready} onClick={() => void copySketch()}>
-                  <Copy aria-hidden size={14} />
-                  Copy sketch
-                </Button>
-                {!sec2Ready && (
-                  <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
-                    <Loader2 aria-hidden size={13} className="animate-spin" /> Computing the Security 2 verifier…
-                  </span>
-                )}
-              </div>
-              <details className="overflow-hidden rounded-lg border border-border">
-                <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-[13px] text-ink">
-                  Preview the sketch <span className="text-ink-muted">· {sketchFor(null).split("\n").length} lines, password masked</span>
-                </summary>
-                <pre aria-label="Generated sketch" className="max-h-[520px] overflow-auto bg-canvas p-3 font-mono text-[12px] leading-[1.55] text-ink">
-                  <code>{sketchFor(credential ? { username: credential.username, password: "••••••••" } : null)}</code>
-                </pre>
-              </details>
-              <div className="rounded-lg border border-border p-4">
-                <h3 className="mb-2 text-sm font-semibold text-ink">Upload with Arduino IDE</h3>
-                <ol className="list-decimal space-y-1 pl-5 text-sm text-ink">
-                  <li>Boards Manager: ESP32 by Espressif, version 3.x. Library Manager: PubSubClient, ArduinoJson.</li>
-                  <li>Plug the board in over USB.</li>
-                  <li>
-                    Tools → Board → <b>{boardInfo.arduinoBoard}</b>.
-                  </li>
-                  {boardInfo.ideSettings.map((s) => (
-                    <li key={s}>
-                      Tools → <b>{s}</b>.
-                    </li>
-                  ))}
-                  {phone && (
-                    <li>
-                      Tools → Partition Scheme → <b>Huge APP (3MB No OTA/1MB SPIFFS)</b>. BLE and Wi-Fi don&apos;t fit the default.
-                    </li>
+              <h2 className="text-lg font-semibold text-ink">{installable ? "Install" : "Flash"}</h2>
+              {installable ? (
+                <>
+                  <p className="text-sm text-ink-muted">
+                    Installs firmware {firmware.version} and {device.name}&apos;s settings on the <b className="text-ink">{model.label}</b>, straight from
+                    this page. About a minute.
+                  </p>
+                  {!sec2Ready && (
+                    <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
+                      <Loader2 aria-hidden size={13} className="animate-spin" /> Computing the Security 2 verifier…
+                    </span>
                   )}
-                  {phone && board === "esp32" && (
-                    <li>
-                      Wire a push button between <b>GPIO 19</b> and <b>GND</b> (optional). Holding it for 5 seconds clears the Wi-Fi so you can set a new one.
-                    </li>
-                  )}
-                  <li>Open the sketch, add your sensor code, and select Upload.</li>
-                  <li>
-                    Open the Serial Monitor at <b>115200 baud</b>.
-                  </li>
-                </ol>
-                <p className="mt-2 text-xs text-ink-muted">
-                  PlatformIO works too: <code className="font-mono">board = {board === "esp32c3" ? "esp32-c3-devkitm-1" : "esp32dev"}</code>, same libraries.
-                </p>
-              </div>
+                  <InstallStep
+                    config={installConfig}
+                    model={model}
+                    manifest={firmware.manifest}
+                    onInstalled={(mode) => {
+                      if (mode !== "full") return;
+                      toast({ title: "Firmware installed", detail: phone ? "Now give it Wi-Fi from your phone." : "It's joining your Wi-Fi." });
+                      setStep(phone ? 4 : 5);
+                    }}
+                  />
+                  <details className="overflow-hidden rounded-lg border border-border">
+                    <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-[13px] text-ink">Advanced: download the sketch instead</summary>
+                    <div className="flex flex-col gap-4 p-4">
+                      <p className="text-xs text-ink-muted">
+                        For custom code. The sketch uses its own default pins, not the wiring above, and publishes numbers only once you add your sensor
+                        code.
+                      </p>
+                      {sketchBlock}
+                    </div>
+                  </details>
+                </>
+              ) : (
+                sketchBlock
+              )}
               {!phone && serialMonitor}
               <StepNav onBack={() => setStep(2)} onNext={() => setStep(phone ? 4 : 5)} />
             </>
@@ -533,7 +738,8 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
             <>
               <h2 className="text-lg font-semibold text-ink">Wi-Fi from your phone</h2>
               <p className="text-sm text-ink-muted">
-                Once the sketch is running, the board waits for Wi-Fi over Bluetooth as <b className="font-mono text-ink">{name}</b>. Give it your network with
+                Once the {installable ? "firmware" : "sketch"} is running, the board waits for Wi-Fi over Bluetooth as <b className="font-mono text-ink">{name}</b>
+                {installable ? " (its LED blinks slowly)" : ""}. Give it your network with
                 the ESP BLE Provisioning app.
               </p>
               <ProvisioningQr deviceName={device.name} username={credential.username} password={credential.password} security={security} />
@@ -556,7 +762,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                   <li>The board joins and connects to the broker; the next step turns green.</li>
                 </ol>
                 <p className="mt-2 text-xs text-ink-muted">
-                  To give it a different network later, hold {boardInfo.resetButton} for 5 seconds while the board is running. Searching without the QR? Clear the app&apos;s
+                  To give it a different network later, hold {installable ? model.reset.label : boardInfo.resetButton} for 5 seconds while the board is running. Searching without the QR? Clear the app&apos;s
                   &quot;PROV_&quot; name filter in its settings first.
                 </p>
               </div>

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import service as catalog_service
+from app.catalog.schemas import HardwareConfig
 from app.config import settings
 from app.db import get_session
 from app.devices import service
@@ -56,6 +57,7 @@ def _to_response(
         name=device.name,
         catalog_entry_id=device.catalog_entry_id,
         zone_id=device.zone_id,
+        hardware=HardwareConfig.model_validate(device.hardware) if device.hardware else None,
         slug=device.slug,
         status=device.status,
         last_seen_at=device.last_seen_at,
@@ -139,9 +141,13 @@ async def update_device(
             body.status,
             zone_id=body.zone_id,
             zone_set="zone_id" in body.model_fields_set,
+            hardware=body.hardware.model_dump(mode="json") if body.hardware else None,
+            hardware_set="hardware" in body.model_fields_set,
         )
     except zones_service.ZoneNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found") from exc
+    except catalog_service.HardwareMappingError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return _to_response(updated)
 
 

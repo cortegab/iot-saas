@@ -251,6 +251,29 @@ $C exec nginx nginx -s reload                # up -d recreates api/frontend with
                                              # caches the old ones and 502s until reloaded
 ```
 
+**Firmware releases** (the generic device firmware the dashboard installs from a device's Connect
+page; `firmware/README.md`):
+- **Where they live:** `~/iot-saas/infra/firmware/`, one directory per version plus
+  `latest.json`, which names the current one. The directory is git-ignored, so a checkout never
+  touches it.
+- **How they're served:** nginx serves it read-only at `https://<DOMAIN_APP>/firmware/`.
+  `latest.json` is never cached; versioned files are cached forever, because a published version
+  never changes.
+- **How they get there:** the deploy workflow's `firmware` job builds the release in GitHub
+  Actions and copies it over. It only does that when the commit's `FW_VERSION`
+  (`firmware/src/version.h`) isn't on the VPS yet, so most deploys skip it. A cold build takes
+  about 15 minutes.
+- **Publishing one by hand** (e.g. to test before a deploy), from a machine with PlatformIO:
+
+  ```bash
+  python3 firmware/release.py
+  V=$(sed -n 's/^#define FW_VERSION "\(.*\)"/\1/p' firmware/src/version.h)
+  tar -C infra/firmware -cf - "$V" latest.json | ssh deploy@<VPS> 'mkdir -p ~/iot-saas/infra/firmware && tar -C ~/iot-saas/infra/firmware -xf -'
+  ```
+- **Rolling back:** point `latest.json` at an older version. Boards don't fetch firmware
+  themselves (yet), so this only changes what the next Install writes. Old version directories
+  are kept, and deleting one breaks nothing.
+
 **Logs:**
 
 ```bash

@@ -1,0 +1,65 @@
+#include "pins.h"
+
+#include <map>
+
+namespace {
+
+// The GPIOs bindings may use: BOARDS' input and output pools in
+// frontend/src/lib/firmware-sketch.ts, plus ADC1 and the ESP32's input-only
+// pins. Never strapping, flash, USB or the reset button's pin.
+#if CONFIG_IDF_TARGET_ESP32C3
+const int8_t USABLE[] = {0, 1, 3, 4, 5, 6, 7, 10, 20, 21};
+const int8_t ADC1[] = {0, 1, 3, 4};
+const int8_t INPUT_ONLY[] = {-1};
+#else
+const int8_t USABLE[] = {4, 13, 14, 16, 17, 18, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39};
+const int8_t ADC1[] = {32, 33, 34, 35, 36, 39};
+const int8_t INPUT_ONLY[] = {34, 35, 36, 39};
+#endif
+
+template <size_t N>
+bool contains(const int8_t (&list)[N], int pin) {
+  for (int8_t p : list)
+    if (p == pin) return true;
+  return false;
+}
+
+std::map<int, String> owners;
+
+}  // namespace
+
+bool hasInternalPull(int pin) { return !contains(INPUT_ONLY, pin); }
+
+bool claimRawPin(int pin, PinUse use, const char* owner, String& err) {
+  String where = String("GPIO ") + pin + " (" + owner + ")";
+  if (!contains(USABLE, pin)) {
+    err = where + " isn't a pin this board hands out";
+    return false;
+  }
+  if ((use == PinUse::Output || use == PinUse::Bus) && contains(INPUT_ONLY, pin)) {
+    err = where + " is input-only";
+    return false;
+  }
+  if (use == PinUse::Analog && !contains(ADC1, pin)) {
+    err = where + " can't read analog while Wi-Fi is on (ADC1 pins only)";
+    return false;
+  }
+  auto taken = owners.find(pin);
+  if (taken != owners.end()) {
+    err = where + " is already used by " + taken->second;
+    return false;
+  }
+  owners[pin] = owner;
+  return true;
+}
+
+bool claimPin(JsonObjectConst binding, const char* role, PinUse use, int& pin, String& err) {
+  JsonVariantConst value = binding["pins"][role];
+  String owner = String(binding["driver"] | "?") + "." + role;
+  if (!value.is<int>()) {
+    err = owner + ": no pin set";
+    return false;
+  }
+  pin = value.as<int>();
+  return claimRawPin(pin, use, owner.c_str(), err);
+}
