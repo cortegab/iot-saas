@@ -5,6 +5,13 @@
 # infra/PROD_DEPLOY.md §11, automated. The build runs on the VPS (the prod
 # compose files use `build:`, not prebuilt images).
 #
+# Firmware is the exception: building it needs ~5 GB of toolchains and ~15
+# minutes cold, which a single VPS shouldn't spend. The `firmware` job builds
+# it here instead, and only when the commit's FW_VERSION isn't on the VPS yet
+# (a release is immutable, and every firmware change bumps the version —
+# firmware/README.md). It then copies the release to ~/iot-saas/infra/firmware,
+# which nginx serves at /firmware/ (infra/PROD_DEPLOY.md, "Firmware releases").
+#
 # Required repo secrets (Settings → Secrets and variables → Actions):
 #   DEPLOY_SSH_KEY   private key whose public half is in ~deploy/.ssh/authorized_keys on the VPS
 #   VPS_HOST         VPS hostname or IP (e.g. 2.25.104.233)
@@ -26,7 +33,72 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  firmware:
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      published: ${{ steps.version.outputs.needed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "${{ secrets.VPS_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Firmware version, and whether the VPS has it
+        id: version
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          VERSION=$(sed -n 's/^#define FW_VERSION "\(.*\)"/\1/p' firmware/src/version.h)
+          [ -n "$VERSION" ] || { echo "::error::FW_VERSION not found in firmware/src/version.h"; exit 1; }
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if ssh -i ~/.ssh/id_ed25519 "deploy@${VPS_HOST}" test -f "iot-saas/infra/firmware/${VERSION}/manifest.json"; then
+            echo "Firmware ${VERSION} is already published; skipping the build."
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-python@v5
+        if: steps.version.outputs.needed == 'true'
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO toolchains
+        if: steps.version.outputs.needed == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ hashFiles('firmware/platformio.ini') }}
+
+      - name: Build the release
+        if: steps.version.outputs.needed == 'true'
+        run: |
+          pip install platformio==6.2.0
+          # Builds both chips and fails on an oversized app or a catalog that
+          # disagrees with the firmware (drivers.json, boards.json).
+          python3 firmware/release.py
+
+      - name: Publish to the VPS
+        if: steps.version.outputs.needed == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # The version directory first, latest.json last, so latest.json never
+          # points at a half-copied release.
+          tar -C infra/firmware -cf - "$VERSION" latest.json \
+            | ssh -i ~/.ssh/id_ed25519 "deploy@${VPS_HOST}" \
+                'mkdir -p ~/iot-saas/infra/firmware && tar -C ~/iot-saas/infra/firmware -xf -'
+
   deploy:
+    needs: firmware
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -47,6 +119,9 @@ jobs:
           cd ~/iot-saas
           git fetch --prune origin
           git checkout --detach "${SHA}"
+          # nginx bind-mounts this; created here (as deploy) so Docker never
+          # creates it root-owned, which would block publishing firmware.
+          mkdir -p infra/firmware
           C="docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod"
           \$C up -d --build
           # Re-render the generated nginx/emqx configs so a .template change in
@@ -66,12 +141,25 @@ jobs:
           EOF
 
       - name: Health check
+        env:
+          FW_VERSION: ${{ needs.firmware.outputs.version }}
+          FW_PUBLISHED: ${{ needs.firmware.outputs.published }}
         run: |
           for i in $(seq 1 10); do
             if curl -fsS "https://api.iodriven.tech/health" | grep -q '"status":"ok"'; then
-              echo "healthy"; exit 0
+              echo "healthy"; break
             fi
             echo "attempt $i: not healthy yet"; sleep 6
+            [ "$i" = 10 ] && { echo "::error::API did not report healthy after deploy"; exit 1; }
           done
-          echo "::error::API did not report healthy after deploy"
-          exit 1
+          # The browser flasher's entry point: the current release, served by
+          # nginx. When this deploy published a release, it must be the one
+          # named; otherwise (an unchanged version, or a rollback to an older
+          # commit) latest.json just has to be served.
+          LATEST=$(curl -fsS "https://iodriven.tech/firmware/latest.json") || {
+            echo "::error::https://iodriven.tech/firmware/latest.json isn't served"; exit 1; }
+          echo "latest.json: $LATEST"
+          if [ "$FW_PUBLISHED" = "true" ] && ! grep -q "\"${FW_VERSION}\"" <<<"$LATEST"; then
+            echo "::error::latest.json doesn't name the firmware ${FW_VERSION} this deploy published"
+            exit 1
+          fi

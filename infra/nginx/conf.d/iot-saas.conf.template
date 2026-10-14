@@ -48,6 +48,24 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_session_cache shared:SSL:10m;
 
+    # Generic device firmware releases (firmware/release.py), downloaded by
+    # the browser flasher on a device's Connect page. Same origin as the app,
+    # so its relative /firmware/... fetches need no CORS. Files live in
+    # infra/firmware/ on the host (published by the deploy workflow; git-ignored).
+    #
+    # latest.json names the current release: never cached, so a new release
+    # is offered right away.
+    location = /firmware/latest.json {
+        alias /usr/share/nginx/firmware/latest.json;
+        add_header Cache-Control "no-store";
+    }
+    # Everything else sits under a version directory and never changes once
+    # published.
+    location /firmware/ {
+        alias /usr/share/nginx/firmware/;
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
     location / {
         proxy_pass http://frontend:3000;
         proxy_http_version 1.1;
