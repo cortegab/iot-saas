@@ -14,6 +14,7 @@ import { findDriver, type DriverCatalog } from "@/lib/hardware/driver-catalog";
 import {
   blankBinding,
   blankHardware,
+  syncI2c,
   usedPins,
   wiringGuide,
   type BindingDraft,
@@ -80,12 +81,17 @@ export function HardwareSection({
 
   const h = hardware;
   const model = resolveModel(fw.models, h.board);
-  const setBinding = (kind: Kind, i: number, b: BindingDraft) => onChange({ ...h, [kind]: h[kind].map((x, j) => (j === i ? b : x)) });
+  // Every change goes through syncI2c, so the I2C bus row comes and goes with
+  // the I2C drivers.
+  const commit = (next: HardwareDraft) => onChange(syncI2c(next, fw));
+  const setBinding = (kind: Kind, i: number, b: BindingDraft) => commit({ ...h, [kind]: h[kind].map((x, j) => (j === i ? b : x)) });
   const firstOf = (kind: Kind) => fw.drivers.find((d) => d.kind === (kind === "inputs" ? "input" : "output"));
   const add = (kind: Kind) => {
     const spec = firstOf(kind);
-    if (spec) onChange({ ...h, [kind]: [...h[kind], blankBinding(spec, h, fw)] });
+    if (spec) commit({ ...h, [kind]: [...h[kind], blankBinding(spec, h, fw)] });
   };
+  const busPins = model ? pinsFor(model, "bus") : [];
+  const i2cOthers = new Map(usedPins(h).filter((u) => !u.path.startsWith("hardware.i2c")).map((u) => [u.pin, u.owner]));
   const guide = wiringGuide(h, rows, fw);
   const wiredMetrics = new Set(h.inputs.flatMap((b) => Object.values(b.channels)).filter(Boolean)).size;
   const wiredActuators = new Set(h.outputs.flatMap((b) => Object.values(b.channels)).filter(Boolean)).size;
@@ -100,7 +106,8 @@ export function HardwareSection({
           hint={`${model?.description ? `${model.description} ` : ""}Pins are checked for this board. Firmware ${fw.version}.`}
         >
           {/* A saved chip id ("esp32") shows as its model until the board is picked again. */}
-          <Select value={model?.id ?? h.board} disabled={readOnly} onChange={(e) => onChange({ ...h, board: e.target.value })}>
+          {/* A new board moves the I2C bus to that board's default pins. */}
+          <Select value={model?.id ?? h.board} disabled={readOnly} onChange={(e) => commit({ ...h, board: e.target.value, i2c: null })}>
             {!model && <option value={h.board}>{h.board} (not in this firmware)</option>}
             {fw.models.map((m) => (
               <option key={m.id} value={m.id}>
@@ -114,6 +121,31 @@ export function HardwareSection({
           published or switched.
         </p>
       </div>
+
+      {h.i2c && (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold text-ink">I2C bus</h3>
+          <p className="text-[13px] text-ink-muted">Every I2C part below shares these two pins; each needs its own address.</p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">
+            {(["sda", "scl"] as const).map((line) => (
+              <Field key={line} label={line.toUpperCase()} error={field(`hardware.i2c.${line}`).error}>
+                <Select
+                  value={h.i2c![line]}
+                  disabled={readOnly}
+                  onChange={(e) => onChange({ ...h, i2c: { ...h.i2c!, [line]: Number(e.target.value) } })}
+                >
+                  {(busPins.includes(h.i2c![line]) ? busPins : [h.i2c![line], ...busPins]).map((n) => (
+                    <option key={n} value={n}>
+                      {pinName(model, n)}
+                      {i2cOthers.has(n) ? ` · used by ${i2cOthers.get(n)}` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ))}
+          </div>
+        </div>
+      )}
 
       {(["inputs", "outputs"] as const).map((kind) => (
         <div key={kind} className="flex flex-col gap-2">
@@ -135,7 +167,7 @@ export function HardwareSection({
               readOnly={readOnly}
               field={field}
               onChange={(next) => setBinding(kind, i, next)}
-              onRemove={() => onChange({ ...h, [kind]: h[kind].filter((x) => x.uid !== b.uid) })}
+              onRemove={() => commit({ ...h, [kind]: h[kind].filter((x) => x.uid !== b.uid) })}
             />
           ))}
           {!readOnly && (
@@ -283,6 +315,10 @@ function BindingCard({
             </Field>
           );
         })}
+
+        {spec?.bus === "i2c" && (
+          <p className="col-span-2 self-end pb-2 text-[13px] text-ink-muted">On the I2C bus: no pins of its own, set its address below.</p>
+        )}
 
         {(spec?.pins ?? []).map((role) => {
           const path = `${p}pins.${role.role}`;

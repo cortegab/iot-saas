@@ -2,7 +2,14 @@
 
 InputDriver* makeDigitalIn();
 InputDriver* makeAnalogIn();
+InputDriver* makeDs18b20();
+InputDriver* makeDht22();
+InputDriver* makePulseCounter();
+InputDriver* makeHcsr04();
+InputDriver* makeMpu6050();
 OutputDriver* makeRelay();
+OutputDriver* makePwm();
+OutputDriver* makeServo();
 
 namespace {
 
@@ -20,9 +27,16 @@ struct OutputEntry {
 const InputEntry INPUTS[] = {
     {"digital_in", makeDigitalIn},
     {"analog_in", makeAnalogIn},
+    {"ds18b20", makeDs18b20},
+    {"dht22", makeDht22},
+    {"pulse_counter", makePulseCounter},
+    {"hcsr04", makeHcsr04},
+    {"mpu6050", makeMpu6050},
 };
 const OutputEntry OUTPUTS[] = {
     {"relay", makeRelay},
+    {"pwm", makePwm},
+    {"servo", makeServo},
 };
 
 }  // namespace
