@@ -17,6 +17,9 @@ export interface FieldProps {
   /** A small link on the label row's right (e.g. "Forgot password?"). It
    * sits outside the <label>, so it isn't part of the control's name. */
   action?: ReactNode;
+  /** Label on the left and the control (with its message line) on the
+   * right, for lists of like fields such as a driver's readings. */
+  inline?: boolean;
   children: ReactNode;
   className?: string;
 }
@@ -26,7 +29,7 @@ export interface FieldProps {
  * control should NOT also carry an `aria-label`. When the child is a single
  * element, the message line is wired to it via `aria-describedby`, and
  * `aria-invalid` is set while there is an error. */
-export function Field({ label, optional, hint, error, warning, action, children, className }: FieldProps) {
+export function Field({ label, optional, hint, error, warning, action, inline, children, className }: FieldProps) {
   const msgId = useId();
   const message = error ?? warning ?? hint;
   const tone = error ? "error" : warning ? "warning" : "hint";
@@ -43,9 +46,9 @@ export function Field({ label, optional, hint, error, warning, action, children,
   // The <label> holds only the label text and the control, so the control's
   // accessible name is the label; the message line is its description.
   return (
-    <div className={cn("relative flex min-w-0 flex-col gap-[5px]", className)}>
-      <label className="flex min-w-0 flex-col gap-[5px]">
-        <span className="text-xs font-medium text-ink-muted">
+    <div className={cn("relative grid min-w-0 gap-[5px]", inline && "grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3", className)}>
+      <label className={cn("grid min-w-0 gap-[5px]", inline && "col-span-2 grid-cols-subgrid items-center")}>
+        <span className={cn("text-xs font-medium text-ink-muted", inline && "text-[13px] text-ink")}>
           {label}
           {optional && <span className="font-normal opacity-75"> · optional</span>}
         </span>
@@ -58,6 +61,7 @@ export function Field({ label, optional, hint, error, warning, action, children,
           id={msgId}
           className={cn(
             "flex items-start gap-[5px] text-xs",
+            inline && "col-start-2",
             tone === "error" && "text-status-error",
             tone === "warning" && "text-status-pending",
             tone === "hint" && "text-ink-muted",
