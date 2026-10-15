@@ -8,6 +8,7 @@ import {
   hardwareToDraft,
   hardwareToRequest,
   syncI2c,
+  takenTargets,
   validateHardware,
   wiringGuide,
   type HardwareCatalog,
@@ -279,5 +280,33 @@ describe("wiringGuide", () => {
     expect(guide.pins.find((p) => p.pin === 36)?.name).toBe("GPIO 36 (VP)");
     expect(guide.board?.label).toBe("ESP32 DevKit (30-pin)");
     expect(guide.board?.lines.at(-1)).toMatch(/hold a button between GPIO 19 \(D19\) and GND for 5 seconds/);
+  });
+});
+
+describe("takenTargets", () => {
+  it("is empty with nothing wired", () => {
+    expect(takenTargets(blankHardware(), "inputs").size).toBe(0);
+  });
+
+  it("maps each fed metric to the first channel holding it, apart from actuators", () => {
+    const h = hardwareToDraft(SAVED, rows)!;
+    const inputs = takenTargets(h, "inputs");
+    expect([...inputs]).toEqual([
+      ["m1", "hardware.inputs.0.channels.value"],
+      ["m2", "hardware.inputs.1.channels.value"],
+    ]);
+    expect([...takenTargets(h, "outputs")]).toEqual([["a1", "hardware.outputs.0.channels.value"]]);
+  });
+
+  it("counts every channel of a multi-reading driver, and ignores unused ones", () => {
+    const h = blankHardware();
+    const b = blankBinding(spec("mpu6050"), h, CATALOG);
+    h.inputs = [{ ...b, channels: { ...b.channels, accel_x: "m1", accel_y: "m2" } }];
+    expect([...takenTargets(h, "inputs").keys()]).toEqual(["m1", "m2"]);
+  });
+
+  it("keeps the first holder when a saved draft feeds one metric twice", () => {
+    const h = hardwareToDraft({ ...SAVED, inputs: [SAVED.inputs![0], { ...SAVED.inputs![1], channels: { value: "door" } }] }, rows)!;
+    expect(takenTargets(h, "inputs").get("m1")).toBe("hardware.inputs.0.channels.value");
   });
 });

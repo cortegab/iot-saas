@@ -162,7 +162,7 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | Component | Status | Directives |
 |---|---|---|
 | Button | existing | Variants: `primary` · `secondary` · `ghost` · `danger` (filled, NEW variant) · size `sm`. One primary per view. Labels are verbs ("Save rule", "Add device"). |
-| Field | existing | Label above, control, one message line below. That line holds the hint, or the error/warning replacing it (`aria-describedby`). Errors show on blur or submit; **safety errors show while typing**. Optional fields say "optional" in the label. |
+| Field | existing | Label above, control, one message line below. That line holds the hint, or the error/warning replacing it (`aria-describedby`). Errors show on blur or submit; **safety errors show while typing**. Optional fields say "optional" in the label. **Inline** (`inline`): label on the left, control and message on the right; only for a list of like fields that map one thing to another (a driver's readings). |
 | Input / Select / Textarea | existing | 36 px, `--color-input` fill, mono for keys/topics. Affix (suffix unit such as `s`, `°C`) inside the control. |
 | Combobox | existing | For long lists with search (units, devices). |
 | SegmentedControl | existing | Mutually exclusive modes (Form / Ladder, schedule repeat mode). `role="radiogroup"` or pressed buttons. |
@@ -266,8 +266,12 @@ editable side panel and no "Expand" toggle.
   - Min ≤ max; units come from the unit Combobox. The data type `bool` gives flag metrics.
   - Disabled templates can't be picked for new devices.
   - A **Wiring** section (optional, last in the rail) says how the board is wired for the generic
-    firmware: board, then input and output cards (driver, the metric it feeds or actuator it drives,
-    pins, params), then a generated **wiring guide** (pin table + per-driver notes). Drivers, pin
+    firmware: board, then input and output cards, then a generated **wiring guide** (pin table +
+    per-driver notes). Each card reads top to bottom in labelled blocks: **Driver**, **Connection**
+    (pins, or the I2C bus line plus the part's address), **Settings** (params), then **Readings**
+    (inputs) or **Commands** (outputs): one inline Field per channel, the channel on the left and
+    the metric it feeds or actuator it drives on the right. A metric is fed, and an actuator driven,
+    by one channel only, so the pickers offer only free ones (a picker keeps its own choice). Drivers, pin
     roles and params come from the published firmware's driver catalog; with none published the
     section says so instead of offering anything. Pin problems (clash, ADC1, input-only) are
     errors on the pin field; type mismatches (an on/off reading feeding a number) are warnings.
@@ -606,3 +610,4 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-13 | §8 Wiring: **Board** picks a board model (30-pin / 38-pin ESP32 DevKit, ESP32-C3 Super Mini), listed by the firmware release (`firmware/boards.json`), replacing the two chip choices. Pins show their printed label; changing the board flags pins it lacks instead of clearing the wiring. |
 | 2026-10-12 | §8 device templates gain a **Wiring** section for the generic firmware (browser install, no code): board, input/output cards built from the firmware's driver catalog, and a wiring guide. Cards reuse the metric/actuator card shape; bool params use the Switch with On / Off. New bindings start on the board's boot-quiet output pins, as the sketch does. |
 | 2026-10-12 | §5 **Trend chart**: a number's line gets a faint `--color-chart` gradient fill under it, fading to transparent at the plot's bottom (the on/off wash is unchanged). Reading markers (circles) are dropped everywhere; they used to show on sparse series and cluttered dense ones. |
+| 2026-10-15 | §8 Wiring cards: fixed block order **Driver → Connection → Settings → Readings / Commands**; an I2C part's address moves to Connection. Channels are inline Fields (§5 Field gains `inline`), so a 10-reading driver (MPU6050) scans as a list. Metric and actuator pickers offer only rows no other channel holds. |

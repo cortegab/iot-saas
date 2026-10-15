@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Cpu, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -9,12 +10,14 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Select } from "@/components/ui/Select";
 import { SwitchField } from "@/components/ui/Switch";
 import { Table } from "@/components/ui/Table";
+import { SECTION_LABEL } from "@/components/rules/editor/fields";
 import { pinName, pinsFor, resolveModel } from "@/lib/hardware/board-pins";
-import { findDriver, type DriverCatalog } from "@/lib/hardware/driver-catalog";
+import { findDriver, type DriverCatalog, type DriverParamSpec } from "@/lib/hardware/driver-catalog";
 import {
   blankBinding,
   blankHardware,
   syncI2c,
+  takenTargets,
   usedPins,
   wiringGuide,
   type BindingDraft,
@@ -93,6 +96,9 @@ export function HardwareSection({
   const busPins = model ? pinsFor(model, "bus") : [];
   const i2cOthers = new Map(usedPins(h).filter((u) => !u.path.startsWith("hardware.i2c")).map((u) => [u.pin, u.owner]));
   const guide = wiringGuide(h, rows, fw);
+  // One metric is fed, and one actuator driven, by one channel: the pickers
+  // offer only what's still free.
+  const taken = { inputs: takenTargets(h, "inputs"), outputs: takenTargets(h, "outputs") };
   const wiredMetrics = new Set(h.inputs.flatMap((b) => Object.values(b.channels)).filter(Boolean)).size;
   const wiredActuators = new Set(h.outputs.flatMap((b) => Object.values(b.channels)).filter(Boolean)).size;
   const boardField = field("hardware.board");
@@ -164,6 +170,7 @@ export function HardwareSection({
               hardware={h}
               catalog={fw}
               targets={kind === "inputs" ? rows.metrics : rows.actuators}
+              taken={taken[kind]}
               readOnly={readOnly}
               field={field}
               onChange={(next) => setBinding(kind, i, next)}
@@ -224,6 +231,7 @@ function BindingCard({
   hardware,
   catalog,
   targets,
+  taken,
   readOnly,
   field,
   onChange,
@@ -235,6 +243,8 @@ function BindingCard({
   hardware: HardwareDraft;
   catalog: DriverCatalog;
   targets: KeyedRow[];
+  /** Rows some channel already feeds or drives (takenTargets). */
+  taken: Map<string, string>;
   readOnly: boolean;
   field: (path: string) => { error?: string; warning?: string; onBlur: () => void };
   onChange: (b: BindingDraft) => void;
@@ -257,6 +267,49 @@ function BindingCard({
     onChange({ ...blankBinding(next, without, catalog), uid: binding.uid });
   };
 
+  // The card reads top to bottom: driver, how it connects, its settings, then
+  // what each of its readings feeds (or the actuator it drives).
+  const pins = spec?.pins ?? [];
+  const i2c = spec?.bus === "i2c";
+  const params = spec?.params ?? [];
+  // An I2C part's address is part of how it connects, not a setting.
+  const connectionParams = i2c ? params.filter((x) => x.key === "address") : [];
+  const settings = params.filter((x) => !connectionParams.includes(x));
+  const channels = spec?.channels ?? [];
+
+  const renderParam = (param: DriverParamSpec) => {
+    const path = `${p}params.${param.key}`;
+    const value = binding.params[param.key] ?? param.default;
+    const setParam = (v: string | boolean) => onChange({ ...binding, params: { ...binding.params, [param.key]: v } });
+    if (param.type === "bool") {
+      return (
+        <SwitchField key={param.key} label={param.label} checked={value === true} disabled={readOnly} onChange={setParam} onLabel="On" offLabel="Off" />
+      );
+    }
+    const { error, onBlur } = field(path);
+    return (
+      <Field key={param.key} label={param.label} error={error}>
+        {param.type === "enum" ? (
+          <Select value={String(value)} disabled={readOnly} onChange={(e) => setParam(e.target.value)}>
+            {param.options?.map((o) => (
+              <option key={o} value={o}>
+                {o}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Input
+            inputMode={param.type === "int" ? "numeric" : "decimal"}
+            value={String(value)}
+            disabled={readOnly}
+            onChange={(e) => setParam(e.target.value)}
+            onBlur={onBlur}
+          />
+        )}
+      </Field>
+    );
+  };
+
   return (
     <fieldset className="min-w-0 rounded-xl border border-border bg-surface px-3.5 pb-3.5 pt-3">
       <legend className="sr-only">
@@ -273,118 +326,119 @@ function BindingCard({
           </Button>
         )}
       </div>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">
-        <Field label="Driver" error={field(p + "driver").error} className="col-span-2">
-          <Select value={binding.driver} disabled={readOnly} onChange={(e) => pickDriver(e.target.value)}>
-            {!spec && <option value={binding.driver}>{binding.driver} (not in this firmware)</option>}
-            {choices.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.label}
-              </option>
-            ))}
-          </Select>
-        </Field>
+      <div className="flex flex-col gap-4">
+        <div className="grid gap-3.5 @[640px]:grid-cols-2">
+          <Field label="Driver" error={field(p + "driver").error}>
+            <Select value={binding.driver} disabled={readOnly} onChange={(e) => pickDriver(e.target.value)}>
+              {!spec && <option value={binding.driver}>{binding.driver} (not in this firmware)</option>}
+              {choices.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
 
-        {(spec?.channels ?? []).map((ch) => {
-          const path = `${p}channels.${ch.key}`;
-          const { error, warning } = field(path);
-          return (
-            <Field
-              key={ch.key}
-              label={kind === "inputs" ? (spec!.channels.length > 1 ? `${ch.label} feeds` : "Feeds metric") : "Drives actuator"}
-              error={error}
-              warning={warning}
-              className="col-span-2"
-            >
-              <Select
-                value={binding.channels[ch.key] ?? ""}
-                disabled={readOnly}
-                onChange={(e) => onChange({ ...binding, channels: { ...binding.channels, [ch.key]: e.target.value } })}
-              >
-                <option value="">{kind === "inputs" ? "Not used" : "Pick an actuator"}</option>
-                {binding.channels[ch.key] && !targets.some((t) => t.uid === binding.channels[ch.key]) && (
-                  <option value={binding.channels[ch.key]}>Missing</option>
-                )}
-                {targets.map((t) => (
-                  <option key={t.uid} value={t.uid}>
-                    {t.name || "Unnamed"}
-                    {t.key ? ` (${t.key})` : ""}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          );
-        })}
-
-        {spec?.bus === "i2c" && (
-          <p className="col-span-2 self-end pb-2 text-[13px] text-ink-muted">On the I2C bus: no pins of its own, set its address below.</p>
+        {(pins.length > 0 || i2c) && (
+          <Block title="Connection">
+            {i2c && (
+              <p className="text-[13px] text-ink-muted">
+                On the I2C bus
+                {hardware.i2c && ` (SDA ${pinName(model, hardware.i2c.sda)}, SCL ${pinName(model, hardware.i2c.scl)})`}: no pins of its own.
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">
+              {pins.map((role) => {
+                const path = `${p}pins.${role.role}`;
+                const value = binding.pins[role.role];
+                const allowed = model ? pinsFor(model, role.needs) : [];
+                const options = value != null && !allowed.includes(value) ? [value, ...allowed] : allowed;
+                return (
+                  <Field key={role.role} label={`${role.label} pin`} error={field(path).error}>
+                    <Select
+                      value={value ?? ""}
+                      disabled={readOnly}
+                      onChange={(e) => onChange({ ...binding, pins: { ...binding.pins, [role.role]: e.target.value === "" ? null : Number(e.target.value) } })}
+                    >
+                      {value == null && <option value="">Pick a pin</option>}
+                      {options.map((n) => (
+                        <option key={n} value={n}>
+                          {pinName(model, n)}
+                          {others.has(n) ? ` · used by ${others.get(n)}` : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                );
+              })}
+              {connectionParams.map(renderParam)}
+            </div>
+          </Block>
         )}
 
-        {(spec?.pins ?? []).map((role) => {
-          const path = `${p}pins.${role.role}`;
-          const value = binding.pins[role.role];
-          const allowed = model ? pinsFor(model, role.needs) : [];
-          const options = value != null && !allowed.includes(value) ? [value, ...allowed] : allowed;
-          return (
-            <Field key={role.role} label={`${role.label} pin`} error={field(path).error}>
-              <Select
-                value={value ?? ""}
-                disabled={readOnly}
-                onChange={(e) => onChange({ ...binding, pins: { ...binding.pins, [role.role]: e.target.value === "" ? null : Number(e.target.value) } })}
-              >
-                {value == null && <option value="">Pick a pin</option>}
-                {options.map((n) => (
-                  <option key={n} value={n}>
-                    {pinName(model, n)}
-                    {others.has(n) ? ` · used by ${others.get(n)}` : ""}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-          );
-        })}
+        {settings.length > 0 && (
+          <Block title="Settings">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">{settings.map(renderParam)}</div>
+          </Block>
+        )}
 
-        {(spec?.params ?? []).map((param) => {
-          const path = `${p}params.${param.key}`;
-          const value = binding.params[param.key] ?? param.default;
-          const setParam = (v: string | boolean) => onChange({ ...binding, params: { ...binding.params, [param.key]: v } });
-          if (param.type === "bool") {
-            return (
-              <SwitchField
-                key={param.key}
-                label={param.label}
-                checked={value === true}
-                disabled={readOnly}
-                onChange={setParam}
-                onLabel="On"
-                offLabel="Off"
-              />
-            );
-          }
-          const { error, onBlur } = field(path);
-          return (
-            <Field key={param.key} label={param.label} error={error}>
-              {param.type === "enum" ? (
-                <Select value={String(value)} disabled={readOnly} onChange={(e) => setParam(e.target.value)}>
-                  {param.options?.map((o) => (
-                    <option key={o} value={o}>
-                      {o}
-                    </option>
-                  ))}
-                </Select>
-              ) : (
-                <Input
-                  inputMode={param.type === "int" ? "numeric" : "decimal"}
-                  value={String(value)}
-                  disabled={readOnly}
-                  onChange={(e) => setParam(e.target.value)}
-                  onBlur={onBlur}
-                />
+        {channels.length > 0 && (
+          <Block title={kind === "inputs" ? "Readings" : "Commands"} aside={kind === "inputs" ? "Feeds metric" : "Drives actuator"}>
+            <div className="flex flex-col gap-2.5">
+              {channels.map((ch) => {
+                const path = `${p}channels.${ch.key}`;
+                const { error, warning } = field(path);
+                const current = binding.channels[ch.key] ?? "";
+                // Rows another channel already holds are left out; this
+                // picker's own choice always stays.
+                const free = targets.filter((t) => t.uid === current || !taken.has(t.uid));
+                return (
+                  <Field key={ch.key} inline label={ch.label} error={error} warning={warning}>
+                    <Select
+                      value={current}
+                      disabled={readOnly}
+                      onChange={(e) => onChange({ ...binding, channels: { ...binding.channels, [ch.key]: e.target.value } })}
+                    >
+                      <option value="">{kind === "inputs" ? "Not used" : "Pick an actuator"}</option>
+                      {current && !targets.some((t) => t.uid === current) && <option value={current}>Missing</option>}
+                      {free.map((t) => (
+                        <option key={t.uid} value={t.uid}>
+                          {t.name || "Unnamed"}
+                          {t.key ? ` (${t.key})` : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                );
+              })}
+              {/* Only where it explains an empty picker: this card has a free
+                  channel and nothing is left to give it. */}
+              {!readOnly && targets.length > 0 && channels.some((ch) => !binding.channels[ch.key]) && targets.every((t) => taken.has(t.uid)) && (
+                <p className="text-[13px] text-ink-muted">
+                  {kind === "inputs"
+                    ? "Every metric is already fed. Add a metric above to map more."
+                    : "Every actuator is already driven. Add an actuator above to wire more."}
+                </p>
               )}
-            </Field>
-          );
-        })}
+            </div>
+          </Block>
+        )}
       </div>
     </fieldset>
+  );
+}
+
+/** One labelled block of a binding card. `aside` heads the right-hand column
+ * of an inline Field list (the readings' "Feeds metric"). */
+function Block({ title, aside, children }: { title: string; aside?: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2.5 border-t border-border pt-3">
+      <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3">
+        <h4 className={SECTION_LABEL}>{title}</h4>
+        {aside && <span className={SECTION_LABEL}>{aside}</span>}
+      </div>
+      {children}
+    </section>
   );
 }

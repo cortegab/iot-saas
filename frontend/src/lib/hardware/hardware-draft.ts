@@ -74,6 +74,19 @@ export function blankBinding(spec: DriverSpec, hw: HardwareDraft, catalog: Hardw
   };
 }
 
+/** The metric (inputs) or actuator (outputs) rows already fed or driven, each
+ * with the first channel path that holds it. The editor leaves these out of
+ * every other channel's picker; a picker always keeps its own choice. */
+export function takenTargets(h: HardwareDraft, kind: "inputs" | "outputs"): Map<string, string> {
+  const taken = new Map<string, string>();
+  h[kind].forEach((b, i) => {
+    for (const [ch, ref] of Object.entries(b.channels)) {
+      if (ref && !taken.has(ref)) taken.set(ref, `hardware.${kind}.${i}.channels.${ch}`);
+    }
+  });
+  return taken;
+}
+
 /** Whether any binding is an I2C driver (they share the bus row's SDA/SCL). */
 export function usesI2c(h: HardwareDraft, catalog: HardwareCatalog | undefined): boolean {
   return [...h.inputs, ...h.outputs].some((b) => findDriver(catalog?.drivers, b.driver)?.bus === "i2c");
