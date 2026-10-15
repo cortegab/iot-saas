@@ -104,6 +104,18 @@ def check_board_models(models: list[dict]) -> None:
             fail(f"boards.json: {m['id']}'s default I2C pins {i2c} aren't among its pins")
 
 
+def check_esp32_bluetooth() -> None:
+    """The ESP32 build's final sdkconfig must be NimBLE on a BLE-only controller:
+    on the dual-mode default the board never advertises (platformio.ini)."""
+    final = HERE / "sdkconfig.esp32"
+    if not final.exists():
+        fail("sdkconfig.esp32 not found (build the esp32 env first)")
+    lines = set(final.read_text().splitlines())
+    for needed in ("CONFIG_BT_NIMBLE_ENABLED=y", "CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y"):
+        if needed not in lines:
+            fail(f"sdkconfig.esp32 lacks {needed}: BLE provisioning won't start. Check custom_sdkconfig in platformio.ini")
+
+
 def boot_app0() -> Path:
     """The otadata image that boots app0, shipped with the Arduino framework."""
     packages = Path.home() / ".platformio/packages"
@@ -134,9 +146,14 @@ def main() -> None:
     cfg_offset, cfg_size = partitions["cfg"]
     nvs_offset, nvs_size = partitions["nvs"]
 
-    if not args.skip_build:
-        envs = [arg for env, _chip, _boot in BOARDS.values() for arg in ("-e", env)]
-        subprocess.run(["pio", "run", *envs], cwd=HERE, check=True)
+    if args.skip_build:
+        print("note: --skip-build doesn't check the ESP32's Bluetooth config; a full build does")
+    else:
+        for env, _chip, _boot in BOARDS.values():
+            subprocess.run(["pio", "run", "-e", env], cwd=HERE, check=True)
+            # Checked at once: building another env deletes sdkconfig.esp32.
+            if env == "esp32":
+                check_esp32_bluetooth()
 
     out_dir = args.out / version
     if out_dir.exists():

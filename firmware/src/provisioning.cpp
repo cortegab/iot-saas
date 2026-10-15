@@ -43,6 +43,7 @@ bool provisioningBegin(const DeviceConfig& cfg, String& err) {
   }
   if (provisioned) {
     // Wi-Fi is saved: connect with it; no BLE at all.
+    Serial.println("[WIFI] connecting with the saved Wi-Fi (hold the reset button 5 s to set a new one)");
     esp_wifi_start();
     network_prov_mgr_deinit();
     WiFi.begin();

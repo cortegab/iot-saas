@@ -132,6 +132,9 @@ void netBegin(const DeviceConfig& config) {
   if (config.wifiSsid != nullptr) {
     // Bench test: Wi-Fi typed into the config. It's readable from the flash.
     Serial.printf("[WIFI] connecting to %s\n", config.wifiSsid);
+    // Never into the board's own Wi-Fi store: a later phone-setup config would
+    // find it there and skip BLE.
+    WiFi.persistent(false);
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
     WiFi.begin(config.wifiSsid, config.wifiPassword);
