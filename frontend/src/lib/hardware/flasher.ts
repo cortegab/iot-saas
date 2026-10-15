@@ -142,8 +142,9 @@ export class FlashError extends Error {
   }
 }
 
-/** A raw Web Serial / esptool-js failure, in words. */
-export function explainFlashError(err: unknown, stage: FlashStage): FlashError {
+/** A raw Web Serial / esptool-js failure, in words. `synced`: the board's
+ * bootloader had answered (its chip was identified) before it failed. */
+export function explainFlashError(err: unknown, stage: FlashStage, synced = false): FlashError {
   if (err instanceof FlashError) return err;
   const raw = err instanceof Error ? err.message : String(err);
   const name = err instanceof Error ? err.name : "";
@@ -155,6 +156,12 @@ export function explainFlashError(err: unknown, stage: FlashStage): FlashError {
     );
   if (/device has been lost|disconnected/i.test(raw) || name === "NetworkError")
     return new FlashError("The board disconnected. Check the USB cable, plug the board in again, and try again.", stage, false);
+  if (stage === "connecting" && synced)
+    return new FlashError(
+      "The board answered, then stopped responding. Unplug anything wired to GPIO 0, 2, 12 or 15, use a USB port on the computer itself (not a hub), and try again.",
+      stage,
+      false,
+    );
   if (stage === "connecting")
     return new FlashError(
       "The board didn't answer. Hold its BOOT button while you click Install, and let go once the progress starts.",
@@ -163,6 +170,10 @@ export function explainFlashError(err: unknown, stage: FlashStage): FlashError {
     );
   return new FlashError(raw, stage, stage === "writing");
 }
+
+/** The ROM bootloader's own speed: always works once the board answers. */
+const ROM_BAUDRATE = 115200;
+const LOG_LINES = 80;
 
 /** Flashes the board on `port` and restarts it. Throws a FlashError with a
  * message a person can act on; the port is always released. */
@@ -180,15 +191,37 @@ export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
     stage = p.stage;
     report(p);
   };
-  const log = opts.onLog ?? (() => {});
+  // The last lines of esptool's log, printed to the console when it fails, so
+  // a failed install can be diagnosed from the browser's dev tools.
+  const lines: string[] = [];
+  const log = (line: string) => {
+    lines.push(line);
+    if (lines.length > LOG_LINES) lines.shift();
+    opts.onLog?.(line);
+  };
   const terminal = { clean: () => {}, write: log, writeLine: log };
-  const transport = new Transport(port, false);
+  let transport = new Transport(port, false);
+  let synced = false;
   const t0 = performance.now();
 
   try {
     progress({ stage: "connecting" });
-    const loader = new ESPLoader({ transport, baudrate, terminal });
-    await loader.main();
+    // esptool's main() also loads its stub and switches to `baudrate`. Some
+    // USB-serial bridges (cheap CP2102/CH340 boards, long cables) answer at
+    // 115200 but drop at 921600; then it reconnects once at 115200.
+    let loader = new ESPLoader({ transport, baudrate, terminal });
+    try {
+      await loader.main();
+    } catch (err) {
+      synced = loader.chip != null;
+      if (!synced || baudrate <= ROM_BAUDRATE) throw err;
+      log(`Lost the board at ${baudrate} baud; trying again at ${ROM_BAUDRATE}.`);
+      await transport.disconnect().catch(() => {});
+      transport = new Transport(port, false);
+      loader = new ESPLoader({ transport, baudrate: ROM_BAUDRATE, terminal });
+      await loader.main();
+    }
+    synced = true;
     const chip = loader.chip.CHIP_NAME;
     if (chip !== target.chip) {
       throw new FlashError(`This board is an ${chip}, but you picked ${target.chip}. Pick the matching board and try again.`, stage, false);
@@ -230,7 +263,8 @@ export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
       notes,
     };
   } catch (err) {
-    throw explainFlashError(err, stage);
+    console.warn(`Install failed while ${stage}. esptool log:\n${lines.join("\n")}`);
+    throw explainFlashError(err, stage, synced);
   } finally {
     await transport.disconnect().catch(() => {});
   }

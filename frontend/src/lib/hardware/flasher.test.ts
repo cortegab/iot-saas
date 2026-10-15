@@ -20,6 +20,13 @@ describe("explainFlashError", () => {
     expect(e.retryable).toBe(false);
   });
 
+  it("tells a board that answered, then stopped, something other than BOOT", () => {
+    const e = explainFlashError(new Error("Unable to verify flash chip connection Error: Timeout"), "connecting", true);
+    expect(e.message).toMatch(/answered, then stopped responding/);
+    expect(e.message).not.toMatch(/BOOT/);
+    expect(e.retryable).toBe(false);
+  });
+
   it("says when the board was unplugged", () => {
     const err = Object.assign(new Error("The device has been lost."), { name: "NetworkError" });
     expect(explainFlashError(err, "writing")).toMatchObject({ retryable: false, message: expect.stringMatching(/disconnected/) });
