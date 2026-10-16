@@ -52,9 +52,16 @@ Provisioning reuses the device's **own MQTT credential**. No separate secret exi
 
 ## Security levels
 
-Chosen in the connect flow's Options step.
+> **Security 2 is off for now (2026-10-15).** The connect flow offers Security 1 (PoP) only. Both
+> the generic firmware and the sketch use `espressif/network_provisioning` **1.0.2**, which the
+> Arduino core pins for ESP-IDF 5.x. It never reports `sec_patch_ver`, while ESP-IDF's protocomm
+> runs Security 2 at patch version 1 (the AES-GCM IV fix). The app falls back to patch 0: the
+> handshake succeeds, but it can't decrypt the Wi-Fi scan, so the network list stays empty
+> (ESP BLE Provisioning 2.5.0, ESP32 DevKit). `network_provisioning` 1.0.5 or later fixes it. Turn
+> Security 2 back on once the firmware has it (Arduino core on IDF 6 pins 1.2.4). The firmware still
+> accepts `prov.security: 2`, and `srp6a.ts` and the QR format below are kept for that.
 
-| | Security 1 – PoP | Security 2 – SRP6a (default) |
+| | Security 1 – PoP (used) | Security 2 – SRP6a (off, see above) |
 |---|---|---|
 | Firmware | `NETWORK_PROV_SECURITY_1`, PoP = `MQTT_PASSWORD` | `NETWORK_PROV_SECURITY_2`, `network_prov_security2_params_t` with `SEC2_SALT[]` / `SEC2_VERIFIER[]` |
 | Handshake | Curve25519 + AES-CTR keyed with the PoP | SRP6a (3072-bit group, SHA-512): a captured session can't be used to guess the password offline |
