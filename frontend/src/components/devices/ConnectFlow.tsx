@@ -304,7 +304,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
     <>
       <p className="text-sm text-ink-muted">
         Your sketch for <b className="text-ink">{boardInfo.label}</b>
-        {phone ? `, Wi-Fi from a phone (Security ${security})` : `, Wi-Fi "${ssid}"`}. Download it, add your sensor code, and upload it.
+        {phone ? `, Wi-Fi from a phone (Security ${security} – PoP)` : `, Wi-Fi "${ssid}"`}. Download it, add your sensor code, and upload it.
       </p>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant={installable ? "secondary" : "primary"} disabled={blocked} onClick={downloadSketch}>
@@ -546,7 +546,11 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                     value={wifiMode}
                     onChange={(v) => setWifiMode(v as "ble" | "sketch")}
                     options={[
-                      ["ble", "Set up from a phone", "ESP BLE Provisioning app: scan a QR, pick the network. Nothing about your Wi-Fi in the firmware."],
+                      [
+                        "ble",
+                        "Set up from a phone",
+                        "ESP BLE Provisioning app, Security 1 (PoP): the app proves it holds this device's password, then you pick the network. Nothing about your Wi-Fi in the firmware.",
+                      ],
                       installable
                         ? ["sketch", "Type it in", "Quick for a bench test. Readable from the board's flash."]
                         : ["sketch", "Type it into the sketch", "Quick for a bench test. Readable from the binary."],
@@ -620,7 +624,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                         </li>
                         <li>
                           {phone
-                            ? `Wi-Fi from a phone (Espressif provisioning, Security ${security}), advertised as "${name}". Any Wi-Fi it had saved is erased.`
+                            ? `Wi-Fi from a phone (Espressif provisioning, Security ${security} – PoP), advertised as "${name}". Any Wi-Fi it had saved is erased.`
                             : `Wi-Fi "${ssid || "…"}", typed in.`}
                         </li>
                         {phone && <li>To set a new Wi-Fi later: hold {model.reset.label} for 5 seconds.</li>}
@@ -639,7 +643,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                       </li>
                       <li>
                         {phone
-                          ? `Wi-Fi from a phone (Espressif provisioning, Security ${security}), advertised as "${name}". Needs the Huge APP partition.`
+                          ? `Wi-Fi from a phone (Espressif provisioning, Security ${security} – PoP), advertised as "${name}". Needs the Huge APP partition.`
                           : "Wi-Fi in the firmware. Fits the default partition."}
                       </li>
                       {phone && <li>To set a new Wi-Fi later: hold {boardInfo.resetButton} for 5 seconds.</li>}
