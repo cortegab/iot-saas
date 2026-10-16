@@ -210,8 +210,9 @@ phone" use **Espressif's unified provisioning** (Arduino `WiFiProv`; the generic
 `firmware/` calls ESP-IDF's `network_provisioning` directly, same protocol), so the ESP BLE Provisioning
 app works today and the future app embeds Espressif's libraries. The service name is the device
 name; the QR carries the device's own MQTT credential (`pop` = password, plus `username` = device
-id for Security 2), so rotating the credential means a new sketch and a new QR. Security 1 (PoP)
-or 2 (SRP6a; salt/verifier computed in the browser) — details in `docs/ble-provisioning.md`. It is
+id for Security 2), so rotating the credential means a new sketch and a new QR. Security 1 (PoP);
+Security 2 (SRP6a) is in the contract but **off** until the firmware's `network_provisioning` is
+≥ 1.0.5 (the Arduino core pins 1.0.2) — details in `docs/ble-provisioning.md`. It is
 part of this shared contract: keep it in sync across variants, with boards already flashed in mind.
 
 Commits touching ingestion, rules, commands, or the telemetry schema are tagged `[core]` so they can

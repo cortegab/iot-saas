@@ -62,10 +62,11 @@ test("connect flow: phone provisioning with a QR from the credential, or typed W
   await page.getByRole("button", { name: "Create credential" }).click();
   const password = await storeCredential(page, throwawayDevice.id);
 
-  // Options: no code here; defaults are a phone and Security 2.
+  // Options: no code here; Wi-Fi from a phone by default, always Security 1
+  // (Security 2 is off: docs/ble-provisioning.md).
   await expect(page.getByRole("heading", { name: "Options" })).toBeVisible();
   await expect(page.getByLabel("Generated sketch")).toHaveCount(0);
-  await expect(page.getByRole("radio", { name: /2 – SRP6a/ })).toBeChecked();
+  await expect(page.getByRole("radio", { name: /SRP6a/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Flash: download, plus a collapsed preview that masks the password.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, Download, KeyRound, Loader2 } from "lucide-react";
@@ -33,7 +33,6 @@ import { brokerHostProblem, buildFirmwareConfig } from "@/lib/hardware/device-co
 import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import { hardwareToDraft, wiringGuide, type KeyedRow } from "@/lib/hardware/hardware-draft";
 import { useRealtimeEvents } from "@/lib/realtime-bus";
-import { sec2Credentials } from "@/lib/srp6a";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
@@ -55,13 +54,6 @@ interface CheckItem {
   hint: string;
   /** Set for a command test row. */
   actuator?: CatalogActuator;
-}
-
-interface Sec2 {
-  /** The credential password these were computed for. */
-  forPassword: string;
-  salt: Uint8Array;
-  verifier: Uint8Array;
 }
 
 /** Connect a device (DESIGN.md §8, demo G): credential → options → flash →
@@ -89,12 +81,10 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
   const [rotating, setRotating] = useState(false);
   const [board, setBoard] = useState<SketchBoard>("esp32");
   const [wifiMode, setWifiMode] = useState<"ble" | "sketch">("ble");
-  const [security, setSecurity] = useState<1 | 2>(2);
   const [ssid, setSsid] = useState("");
   const [wifiPassword, setWifiPassword] = useState("");
   const [tls, setTls] = useState(() => typeof window !== "undefined" && window.location.protocol === "https:");
   const [pinOverrides, setPinOverrides] = useState<Record<string, number>>({});
-  const [sec2, setSec2] = useState<Sec2 | null>(null);
   const [live, setLive] = useState<Record<string, CheckState>>({});
 
   const metrics = useMemo(() => template?.metrics ?? [], [template]);
@@ -114,20 +104,10 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
   const hostProblem = brokerHostProblem(host);
   const phone = wifiMode === "ble";
 
-  // Security 2: the SRP6a salt + verifier for this credential, computed once
-  // per credential — a rotation means a new sketch and a new QR.
-  const needSec2 = phone && security === 2 && credential != null;
-  const sec2Ready = !needSec2 || sec2?.forPassword === credential?.password;
-  useEffect(() => {
-    if (!needSec2 || !credential || sec2?.forPassword === credential.password) return;
-    let cancelled = false;
-    void sec2Credentials(credential.username, credential.password).then(({ salt, verifier }) => {
-      if (!cancelled) setSec2({ forPassword: credential.password, salt, verifier });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [needSec2, credential, sec2?.forPassword]);
+  // Phone setup uses provisioning Security 1 (PoP = the device's password).
+  // Security 2 (SRP6a) is off until the firmware's network_provisioning is
+  // >= 1.0.5: on 1.0.2 the app's Wi-Fi list stays empty (docs/ble-provisioning.md).
+  const security = 1;
 
   // The live check: status, first reading per metric, command acks.
   useRealtimeEvents((m) => {
@@ -163,7 +143,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
       actuators,
       credential: cred,
       wifi: phone ? undefined : { ssid, password: wifiPassword },
-      provisioning: phone ? (security === 2 ? { security: 2, salt: sec2?.salt, verifier: sec2?.verifier } : { security: 1 }) : undefined,
+      provisioning: phone ? { security } : undefined,
       pins,
     });
 
@@ -187,7 +167,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
     return binding ? Object.values(binding.pins ?? {})[0] : undefined;
   };
   const installConfig =
-    installable && credential && sec2Ready && !hostProblem && (phone || ssid)
+    installable && credential && !hostProblem && (phone || ssid)
       ? buildFirmwareConfig({
           tenantSlug,
           device,
@@ -199,7 +179,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
           tls,
           credential,
           wifi: phone ? undefined : { ssid, password: wifiPassword },
-          provisioning: phone && security === 2 && sec2 ? { security: 2, salt: sec2.salt, verifier: sec2.verifier } : { security: 1 },
+          provisioning: { security },
         })
       : null;
 
@@ -327,19 +307,14 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
         {phone ? `, Wi-Fi from a phone (Security ${security})` : `, Wi-Fi "${ssid}"`}. Download it, add your sensor code, and upload it.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant={installable ? "secondary" : "primary"} disabled={blocked || !sec2Ready} onClick={downloadSketch}>
+        <Button variant={installable ? "secondary" : "primary"} disabled={blocked} onClick={downloadSketch}>
           <Download aria-hidden size={15} />
           Download {device.slug}.ino
         </Button>
-        <Button variant="secondary" disabled={blocked || !sec2Ready} onClick={() => void copySketch()}>
+        <Button variant="secondary" disabled={blocked} onClick={() => void copySketch()}>
           <Copy aria-hidden size={14} />
           Copy sketch
         </Button>
-        {!sec2Ready && !installable && (
-          <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
-            <Loader2 aria-hidden size={13} className="animate-spin" /> Computing the Security 2 verifier…
-          </span>
-        )}
       </div>
       <details className="overflow-hidden rounded-lg border border-border">
         <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-[13px] text-ink">
@@ -577,17 +552,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                         : ["sketch", "Type it into the sketch", "Quick for a bench test. Readable from the binary."],
                     ]}
                   />
-                  {phone ? (
-                    <OptionGroup
-                      label="Provisioning security"
-                      value={String(security)}
-                      onChange={(v) => setSecurity(v === "1" ? 1 : 2)}
-                      options={[
-                        ["2", "2 – SRP6a", "Stronger handshake: a captured session can't be used to guess the password. Needs ESP BLE Provisioning 2.1 or later."],
-                        ["1", "1 – PoP", "Works with every app version. The proof of possession is the device's password."],
-                      ]}
-                    />
-                  ) : (
+                  {!phone && (
                     <div className="grid grid-cols-2 gap-2">
                       <Field label="Network (2.4 GHz)">
                         <Input value={ssid} autoComplete="off" onChange={(e) => setSsid(e.target.value)} />
@@ -700,11 +665,6 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                     Installs firmware {firmware.version} and {device.name}&apos;s settings on the <b className="text-ink">{model.label}</b>, straight from
                     this page. About a minute.
                   </p>
-                  {!sec2Ready && (
-                    <span className="inline-flex items-center gap-1.5 text-[13px] text-ink-muted">
-                      <Loader2 aria-hidden size={13} className="animate-spin" /> Computing the Security 2 verifier…
-                    </span>
-                  )}
                   <InstallStep
                     config={installConfig}
                     model={model}
@@ -755,7 +715,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                     <a href={APP_LINKS.ios} target="_blank" rel="noreferrer" className="text-accent hover:underline">
                       iOS
                     </a>
-                    ){security === 2 ? ", version 2.1 or later" : ""}.
+                    ).
                   </li>
                   <li>Tap Provision New Device, then scan this QR.</li>
                   <li>Pick a 2.4 GHz network and enter its password.</li>
