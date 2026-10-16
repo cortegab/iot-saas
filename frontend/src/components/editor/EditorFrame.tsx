@@ -160,6 +160,12 @@ export function EditorFrame({
     rootRef.current?.querySelector(`#ps-${CSS.escape(id)}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
   }, []);
 
+  // A link to a section (e.g. /templates/{id}#hardware) lands on it, once.
+  useEffect(() => {
+    const id = window.location.hash.slice(1);
+    if (id && rootRef.current?.querySelector(`#ps-${CSS.escape(id)}`)) jumpTo(id);
+  }, [jumpTo]);
+
   /** Focus the next invalid field after the focused one (wraps). */
   const focusNextError = useCallback(() => {
     const fields = Array.from(bodyRef.current?.querySelectorAll<HTMLElement>('[aria-invalid="true"]') ?? []);

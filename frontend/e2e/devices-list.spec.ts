@@ -22,9 +22,10 @@ test("a device peeks from the list and is edited in its Settings tab", async ({ 
   await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
   // One settings page: stacked sections, one connect action, the danger zone last.
-  for (const heading of ["General", "Rule evaluation", "Template", "Connection", "MQTT topics", "Danger zone"]) {
-    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+  for (const heading of ["General", "Rule evaluation", "Template", "Wiring", "Connection", "Danger zone"]) {
+    await expect(page.getByRole("heading", { level: 3, name: heading, exact: true })).toBeVisible();
   }
+  await expect(page.getByRole("heading", { name: "MQTT topics", exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Connect and get firmware" })).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Delete device…" })).toBeVisible();
 });

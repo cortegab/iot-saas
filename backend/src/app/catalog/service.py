@@ -310,6 +310,8 @@ async def update_catalog_entry(
     # save rather than left pointing at nothing.
     new_hardware = hardware if hardware_set else entry.hardware
     check_hardware(new_hardware, new_metrics, new_actuators)
+    if metrics is not None or actuators is not None:
+        await _check_device_hardware(session, entry, new_metrics, new_actuators)
 
     if name is not None:
         entry.name = name
@@ -333,6 +335,30 @@ def _changed_count(before: list[dict[str, Any]], after: list[dict[str, Any]]) ->
     old = {m.get("key"): m for m in before}
     new = {m.get("key"): m for m in after}
     return sum(1 for k in old.keys() | new.keys() if old.get(k) != new.get(k))
+
+
+async def _check_device_hardware(
+    session: AsyncSession,
+    entry: DeviceCatalogEntry,
+    metrics: list[dict[str, Any]],
+    actuators: list[dict[str, Any]],
+) -> None:
+    """A device with its own wiring is checked against the template's keys
+    too: removing a key that wiring still feeds fails the update, rather
+    than leaving a device whose next Install the firmware rejects at boot."""
+    # Local imports: devices.service imports this module (create_device).
+    from app.devices import service as devices_service
+
+    for name, hardware in await devices_service.list_own_hardware_for_catalog_entry(
+        session, entry.tenant_id, entry.id
+    ):
+        try:
+            check_hardware(hardware, metrics, actuators)
+        except HardwareMappingError as exc:
+            raise HardwareMappingError(
+                f"{name} has its own wiring, and it no longer fits: {exc}. "
+                "Fix that device's wiring or reset it to the template's first."
+            ) from exc
 
 
 async def _notify_template_changed(

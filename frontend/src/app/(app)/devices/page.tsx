@@ -9,6 +9,7 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Tag } from "@/components/ui/Badge";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { KpiStrip } from "@/components/ui/KpiStrip";
@@ -205,7 +206,16 @@ export default function DevicesPage() {
       header: "Template",
       sortable: true,
       hideOnPhone: true,
-      cell: (d) => templateName.get(d.catalog_entry_id) ?? <span className="text-ink-muted">—</span>,
+      cell: (d) => (
+        <>
+          {templateName.get(d.catalog_entry_id) ?? <span className="text-ink-muted">—</span>}
+          {d.hardware && (
+            <Tag size="sm" className="ml-1.5">
+              Own wiring
+            </Tag>
+          )}
+        </>
+      ),
     },
     {
       id: "zone",

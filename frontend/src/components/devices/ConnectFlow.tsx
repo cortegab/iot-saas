@@ -7,7 +7,7 @@ import { AlertTriangle, Check, ChevronLeft, ChevronRight, Copy, Download, KeyRou
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Badge } from "@/components/ui/Badge";
+import { Badge, Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -128,6 +128,11 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
   if (!device || !template) return <LoadingSkeleton rows={4} rowClassName="h-16" />;
 
   const st = DEVICE_STATUS[deviceStatusKey(device)];
+  // Wiring is edited for this device alone (its Settings tab) or for every
+  // device that follows the template.
+  const deviceWiringHref = `/devices/${device.id}?tab=settings#hardware`;
+  const templateWiringHref = `/templates/${template.id}#hardware`;
+  const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
   const neverConnected = device.connection_state === "never_connected";
   const boardInfo = BOARDS[sketchBoard];
   const name = provName(device.name);
@@ -477,17 +482,25 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                     {wiring && firmware && !model ? (
                       <>
                         This device is wired for a board the published firmware doesn&apos;t know (<code className="font-mono">{wiring.board}</code>). Pick
-                        another board in the template&apos;s wiring, or use the sketch.
+                        another board in{" "}
+                        <Link href={device.hardware ? deviceWiringHref : templateWiringHref} className="text-accent hover:underline">
+                          {device.hardware ? "this device's wiring" : "the template's wiring"}
+                        </Link>
+                        , or use the sketch.
                       </>
                     ) : wiring && !firmware ? (
                       "No firmware release is published yet, so this device gets the sketch to upload."
                     ) : (
                       <>
-                        To install from this page with no code,{" "}
-                        <Link href={`/templates/${template.id}#hardware`} className="text-accent hover:underline">
-                          set up the wiring
+                        To install from this page with no code, set up the wiring on the{" "}
+                        <Link href={templateWiringHref} className="text-accent hover:underline">
+                          {template.name} template
                         </Link>{" "}
-                        on the {template.name} template.
+                        for every device of it, or{" "}
+                        <Link href={deviceWiringHref} className="text-accent hover:underline">
+                          for this device alone
+                        </Link>
+                        .
                       </>
                     )}
                   </Callout>
@@ -498,10 +511,19 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                   {installable && guide ? (
                     <div className="flex flex-col gap-2">
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-[13px] font-medium text-ink">Wiring</span>
-                        <Link href={`/templates/${template.id}#hardware`} className="text-xs text-accent hover:underline">
-                          Change the wiring
-                        </Link>
+                        <span className="text-[13px] font-medium text-ink">
+                          Wiring {device.hardware && <Tag size="sm">This device&apos;s own</Tag>}
+                        </span>
+                        <span className="flex gap-3 text-xs">
+                          <Link href={deviceWiringHref} className="text-accent hover:underline">
+                            {device.hardware ? "Change this device's wiring" : "Wire this device differently"}
+                          </Link>
+                          {!device.hardware && (
+                            <Link href={templateWiringHref} className="text-accent hover:underline">
+                              Edit the template&apos;s ({plural(template.device_count, "device")})
+                            </Link>
+                          )}
+                        </span>
                       </div>
                       <p className="text-sm text-ink">
                         {model.label}
@@ -523,7 +545,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
                         <Callout tone="warning">
                           GPIO {unlinkedPins.join(", ")} {unlinkedPins.length === 1 ? "isn't" : "aren't"} linked to a metric, so{" "}
                           {unlinkedPins.length === 1 ? "it won't" : "they won't"} publish anything. Pick the metric in{" "}
-                          <Link href={`/templates/${template.id}#hardware`} className="text-accent hover:underline">
+                          <Link href={device.hardware ? deviceWiringHref : templateWiringHref} className="text-accent hover:underline">
                             the wiring
                           </Link>
                           .
