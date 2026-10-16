@@ -329,3 +329,14 @@ body {
   background: var(--color-ink-muted);
   opacity: 0.12;
 }
+
+/* ProgressBar's indeterminate segment (components/ui/ProgressBar.tsx): 40% wide,
+   it travels from off the left edge to off the right. */
+@keyframes progress-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
