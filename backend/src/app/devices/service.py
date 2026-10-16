@@ -152,6 +152,23 @@ async def list_device_ids_for_catalog_entry(
     return list(result.scalars().all())
 
 
+async def list_own_hardware_for_catalog_entry(
+    session: AsyncSession, tenant_id: uuid.UUID, catalog_entry_id: uuid.UUID
+) -> list[tuple[str, dict[str, Any]]]:
+    """(name, wiring) of each device on this entry that has its own wiring —
+    what a template edit must still line up with (catalog_service.check_hardware)."""
+    result = await session.execute(
+        select(Device.name, Device.hardware)
+        .where(
+            Device.tenant_id == tenant_id,
+            Device.catalog_entry_id == catalog_entry_id,
+            Device.hardware.is_not(None),
+        )
+        .order_by(Device.name)
+    )
+    return [(name, hardware) for name, hardware in result.tuples().all() if hardware is not None]
+
+
 async def get_device(session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID) -> Device:
     result = await session.execute(
         select(Device).where(Device.tenant_id == tenant_id, Device.id == device_id)

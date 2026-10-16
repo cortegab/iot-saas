@@ -194,3 +194,33 @@ async def test_device_own_hardware(client: httpx.AsyncClient) -> None:
     resp = await client.patch(f"/devices/{device['id']}", json={"hardware": None}, headers=headers)
     assert resp.status_code == 200
     assert resp.json()["hardware"] is None
+
+
+async def test_template_edit_must_fit_devices_own_hardware(client: httpx.AsyncClient) -> None:
+    headers = await _headers(client, "hw7@example.com")
+    # The template has no wiring of its own; one device has.
+    template = await _template(client, headers)
+    resp = await client.post(
+        "/devices", json={"name": "Panel 7", "catalog_entry_id": template["id"]}, headers=headers
+    )
+    device = resp.json()["device"]
+    resp = await client.patch(
+        f"/devices/{device['id']}", json={"hardware": HARDWARE}, headers=headers
+    )
+    assert resp.status_code == 200, resp.text
+
+    only_level = [{"name": "Level", "key": "level"}]
+    resp = await client.patch(
+        f"/catalog/{template['id']}", json={"metrics": only_level}, headers=headers
+    )
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "Panel 7" in detail and "door" in detail
+
+    # Back on the template's wiring, the same edit goes through.
+    resp = await client.patch(f"/devices/{device['id']}", json={"hardware": None}, headers=headers)
+    assert resp.status_code == 200
+    resp = await client.patch(
+        f"/catalog/{template['id']}", json={"metrics": only_level}, headers=headers
+    )
+    assert resp.status_code == 200, resp.text

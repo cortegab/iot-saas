@@ -83,6 +83,7 @@ export function DevicePeek({
       }
       facts={[
         ["Template", template ? <Link href={`/templates?peek=${template.id}`} className="text-accent hover:underline">{template.name}</Link> : null],
+        ["Wiring", device.hardware ? "Its own" : template?.hardware ? "The template's" : template ? "None (sketch)" : null],
         ["Zone", zoneName ?? "No zone"],
         ["Last seen", device.last_seen_at ? timeAgo(device.last_seen_at) : "Never"],
         ["Rules", ruleCount ? plural(ruleCount, "rule") : "None"],
