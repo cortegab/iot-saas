@@ -105,8 +105,9 @@ def check_board_models(models: list[dict]) -> None:
 
 
 def check_esp32_bluetooth() -> None:
-    """The ESP32 build's final sdkconfig must be NimBLE on a BLE-only controller:
-    on the dual-mode default the board never advertises (platformio.ini)."""
+    """The ESP32 build's final sdkconfig must be NimBLE on a BLE-only controller
+    with normal-priority interrupts: on the dual-mode default the board never
+    advertises, and with the high-level one it hangs at boot (platformio.ini)."""
     final = HERE / "sdkconfig.esp32"
     if not final.exists():
         fail("sdkconfig.esp32 not found (build the esp32 env first)")
@@ -114,6 +115,8 @@ def check_esp32_bluetooth() -> None:
     for needed in ("CONFIG_BT_NIMBLE_ENABLED=y", "CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y"):
         if needed not in lines:
             fail(f"sdkconfig.esp32 lacks {needed}: BLE provisioning won't start. Check custom_sdkconfig in platformio.ini")
+    if "CONFIG_BTDM_CTRL_HLI=y" in lines:
+        fail("sdkconfig.esp32 has CONFIG_BTDM_CTRL_HLI=y: the board hangs at boot. Check custom_sdkconfig in platformio.ini")
 
 
 def boot_app0() -> Path:
