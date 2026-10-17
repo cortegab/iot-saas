@@ -35,26 +35,12 @@ router = APIRouter(prefix="/catalog", tags=["catalog"])
 
 def _key_error(exc: Exception) -> HTTPException:
     """Maps the service's key-validation errors to a readable 400."""
-    if isinstance(exc, service.HardwareMappingError):
-        detail = str(exc)
-    elif isinstance(exc, service.DuplicateKeyError):
-        detail = f"Duplicate key: {exc}"
-    elif isinstance(exc, service.ReservedMetricKeyError):
-        detail = f"'{exc}' is a reserved metric key"
-    else:
-        detail = (
-            f"Key '{exc}' isn't valid. Use letters, digits, - and _ only "
-            "(no spaces, / + # or a leading $), up to 64 characters."
-        )
-    return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+    return HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST, detail=service.key_error_detail(exc)
+    )
 
 
-_KEY_ERRORS = (
-    service.DuplicateKeyError,
-    service.ReservedMetricKeyError,
-    service.InvalidKeyError,
-    service.HardwareMappingError,
-)
+_KEY_ERRORS = service.KEY_ERRORS
 
 
 def _to_response(entry: DeviceCatalogEntry, device_count: int = 0) -> CatalogEntryResponse:

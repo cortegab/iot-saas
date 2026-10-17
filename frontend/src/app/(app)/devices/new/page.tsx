@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { mutate as revalidate } from "swr";
@@ -10,8 +10,10 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { Breadcrumbs, PageHeader } from "@/components/ui/PageHeader";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
+import { TemplateEditor } from "@/components/catalog/TemplateEditor";
 import { ApiRequestError } from "@/lib/api-client";
 import { handOffCredential } from "@/lib/credential-handoff";
 import type { components } from "@/types/api";
@@ -20,9 +22,41 @@ type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-/** Add a device: name, template, zone. Creating it goes straight to the
- * connect flow with the one-time credential handed over in memory. */
+type From = "template" | "hardware";
+
+/** Add a device, either from a template (name, template, zone) or from the
+ * hardware (board and parts, which make its template too: TemplateEditor's
+ * `onboard`). Either way, creating it goes straight to the connect flow with
+ * the one-time credential handed over in memory. */
 export default function NewDevicePage() {
+  const router = useRouter();
+  const from: From = useSearchParams().get("from") === "hardware" ? "hardware" : "template";
+  const modes = (
+    <SegmentedControl<From>
+      ariaLabel="Start from"
+      size="md"
+      className="mb-4 w-fit"
+      value={from}
+      onChange={(v) => router.replace(v === "hardware" ? "/devices/new?from=hardware" : "/devices/new")}
+      options={[
+        { value: "template", label: "From a template" },
+        { value: "hardware", label: "From the hardware" },
+      ]}
+    />
+  );
+  if (from === "hardware") {
+    return (
+      <>
+        <Breadcrumbs crumbs={[{ href: "/devices", label: "Devices" }, { label: "Add device" }]} />
+        {modes}
+        <TemplateEditor entryId={null} onboard mode="page" />
+      </>
+    );
+  }
+  return <FromTemplate modes={modes} />;
+}
+
+function FromTemplate({ modes }: { modes: ReactNode }) {
   const api = useApi();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,6 +102,7 @@ export default function NewDevicePage() {
         title="Add device"
         description="Name it and pick its template. Next comes the credential and the firmware to flash."
       />
+      {modes}
       <form onSubmit={(e) => void handleSubmit(e)} className="flex max-w-lg flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-card">
         <Field label="Name" hint="Shown in lists and alerts. Its MQTT id is made from it and never changes.">
           <Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. bay1-climate" />

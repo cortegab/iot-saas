@@ -224,3 +224,75 @@ async def test_template_edit_must_fit_devices_own_hardware(client: httpx.AsyncCl
         f"/catalog/{template['id']}", json={"metrics": only_level}, headers=headers
     )
     assert resp.status_code == 200, resp.text
+
+
+NEW_TEMPLATE = {
+    "name": "Door panel",
+    "metrics": [{"name": "Door", "key": "door", "data_type": "bool"}],
+    "actuators": [{"name": "Fan", "key": "fan1"}],
+    "hardware": HARDWARE,
+}
+
+
+async def _counts(client: httpx.AsyncClient, headers: dict[str, str]) -> tuple[int, int]:
+    templates = (await client.get("/catalog", headers=headers)).json()
+    devices = (await client.get("/devices", headers=headers)).json()
+    return len(templates), len(devices)
+
+
+async def test_device_created_with_a_new_template(client: httpx.AsyncClient) -> None:
+    headers = await _headers(client, "hw8@example.com")
+    resp = await client.post(
+        "/devices", json={"name": "Panel 8", "new_template": NEW_TEMPLATE}, headers=headers
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["credential"]["password"]
+    entry = (
+        await client.get(f"/catalog/{body['device']['catalog_entry_id']}", headers=headers)
+    ).json()
+    assert entry["name"] == "Door panel"
+    assert [m["key"] for m in entry["metrics"]] == ["door"]
+    assert entry["hardware"]["outputs"][0]["channels"] == {"value": "fan1"}
+    assert body["device"]["hardware"] is None  # the template's wiring applies
+
+
+async def test_device_with_a_bad_new_template_creates_nothing(
+    client: httpx.AsyncClient,
+) -> None:
+    headers = await _headers(client, "hw9@example.com")
+    before = await _counts(client, headers)
+    bad = {
+        **NEW_TEMPLATE,
+        "hardware": {**HARDWARE, "inputs": [{**DOOR_INPUT, "channels": {"value": "level"}}]},
+    }
+    resp = await client.post(
+        "/devices", json={"name": "Panel 9", "new_template": bad}, headers=headers
+    )
+    assert resp.status_code == 400
+    assert "level" in resp.json()["detail"]
+    # A zone that isn't there fails after the template is made: rolled back too.
+    resp = await client.post(
+        "/devices",
+        json={
+            "name": "Panel 9",
+            "new_template": NEW_TEMPLATE,
+            "zone_id": "00000000-0000-0000-0000-000000000000",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 404
+    assert await _counts(client, headers) == before
+
+
+async def test_device_needs_exactly_one_template(client: httpx.AsyncClient) -> None:
+    headers = await _headers(client, "hw10@example.com")
+    resp = await client.post("/devices", json={"name": "Panel 10"}, headers=headers)
+    assert resp.status_code == 422
+    existing = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+    resp = await client.post(
+        "/devices",
+        json={"name": "Panel 10", "catalog_entry_id": existing, "new_template": NEW_TEMPLATE},
+        headers=headers,
+    )
+    assert resp.status_code == 422

@@ -7,6 +7,7 @@ import {
   blankHardware,
   hardwareToDraft,
   hardwareToRequest,
+  moveToBoard,
   syncI2c,
   takenTargets,
   validateHardware,
@@ -308,5 +309,50 @@ describe("takenTargets", () => {
   it("keeps the first holder when a saved draft feeds one metric twice", () => {
     const h = hardwareToDraft({ ...SAVED, inputs: [SAVED.inputs![0], { ...SAVED.inputs![1], channels: { value: "door" } }] }, rows)!;
     expect(takenTargets(h, "inputs").get("m1")).toBe("hardware.inputs.0.channels.value");
+  });
+});
+
+describe("moveToBoard", () => {
+  const relayAndProbe = () => {
+    let h = blankHardware("esp32-devkit-30");
+    h = { ...h, outputs: [{ ...blankBinding(spec("relay"), h, CATALOG), pins: { pin: 23 } }] };
+    h = { ...h, inputs: [{ ...blankBinding(spec("analog_in"), h, CATALOG), pins: { pin: 34 } }] };
+    return h;
+  };
+
+  it("keeps every pin between the 30- and 38-pin DevKits", () => {
+    const { hardware, moved } = moveToBoard(relayAndProbe(), "esp32-devkit-38", CATALOG);
+    expect(moved).toEqual([]);
+    expect(hardware.board).toBe("esp32-devkit-38");
+    expect(hardware.outputs[0].pins.pin).toBe(23);
+  });
+
+  it("moves pins the C3 doesn't have to free ones that suit their role", () => {
+    const { hardware, moved } = moveToBoard(relayAndProbe(), "esp32c3-supermini", CATALOG);
+    const c3 = MODELS.find((m) => m.id === "esp32c3-supermini")!;
+    const relay = hardware.outputs[0].pins.pin!;
+    const analog = hardware.inputs[0].pins.pin!;
+    expect(c3.pins).toContain(relay);
+    expect([0, 1, 3, 4]).toContain(analog); // ADC1 on the C3
+    expect(relay).not.toBe(analog);
+    expect(moved.map((m) => m.from).sort()).toEqual([23, 34]);
+    const pinErrors = Object.keys(validateHardware(hardware, { metrics: [], actuators: [] }, CATALOG).errors).filter((p) => p.includes(".pins."));
+    expect(pinErrors).toEqual([]);
+  });
+
+  it("puts the I2C bus on the new board's default pins", () => {
+    let h = blankHardware("esp32-devkit-30");
+    h = syncI2c({ ...h, inputs: [blankBinding(spec("mpu6050"), h, CATALOG)] }, CATALOG);
+    expect(h.i2c).toEqual({ sda: 21, scl: 22 });
+    const { hardware } = moveToBoard(h, "esp32c3-supermini", CATALOG);
+    expect(hardware.i2c).toEqual({ sda: 5, scl: 6 });
+  });
+
+  it("leaves a pin empty when the new board has none left", () => {
+    let h = blankHardware("esp32-devkit-30");
+    for (let i = 0; i < 12; i++) h = { ...h, outputs: [...h.outputs, blankBinding(spec("relay"), h, CATALOG)] };
+    const { hardware, moved } = moveToBoard(h, "esp32c3-supermini", CATALOG);
+    expect(hardware.outputs.some((b) => b.pins.pin == null)).toBe(true);
+    expect(moved.some((m) => m.to == null)).toBe(true);
   });
 });
