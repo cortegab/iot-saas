@@ -141,6 +141,26 @@ async def count_devices_by_zone(
     return {zone_id: count for zone_id, count in result.all()}
 
 
+async def create_device_with_template(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    name: str,
+    template_name: str,
+    metrics: list[dict[str, Any]],
+    actuators: list[dict[str, Any]],
+    hardware: dict[str, Any] | None,
+    zone_id: uuid.UUID | None = None,
+) -> tuple[Device, str]:
+    """A new template and its first device, in this session's transaction:
+    if either fails, neither exists. Raises catalog_service.KEY_ERRORS for a
+    bad template, as creating one alone does."""
+    entry = await catalog_service.create_catalog_entry(
+        session, tenant_id, template_name, metrics, actuators, hardware=hardware
+    )
+    await session.flush()
+    return await create_device(session, tenant_id, name, entry.id, zone_id=zone_id)
+
+
 async def list_device_ids_for_catalog_entry(
     session: AsyncSession, tenant_id: uuid.UUID, catalog_entry_id: uuid.UUID
 ) -> list[uuid.UUID]:

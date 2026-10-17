@@ -3,8 +3,9 @@
  * and from the API, and validation. Pure — no React — so it's unit-tested.
  */
 
-import type { DriverSpec } from "@/lib/hardware/driver-catalog";
+import { findDriver, type DriverChannelSpec, type DriverSpec } from "@/lib/hardware/driver-catalog";
 import {
+  takenTargets,
   hardwareToDraft,
   hardwareToRequest,
   validateHardware,
@@ -13,6 +14,7 @@ import {
   type KeyedRow,
 } from "@/lib/hardware/hardware-draft";
 import { slugify } from "@/lib/slug";
+import { UNIT_CATEGORIES } from "@/lib/units";
 import type { components } from "@/types/api";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -323,4 +325,108 @@ export function brokenUsages(
     }
   }
   return out;
+}
+
+const UNIT_SYMBOLS = new Set(UNIT_CATEGORIES.flatMap((c) => c.units.map((u) => u.symbol)));
+
+/** A part's channel as the row it proposes: "Probe 1 (°C)" → name "Probe 1",
+ * unit °C; a part's lone `value` channel takes the part's name ("Relay"). */
+function proposal(spec: DriverSpec, ch: DriverChannelSpec): { name: string; key: string; unit: string | null } {
+  const m = /^(.*?)\s*\(([^)]*)\)\s*$/.exec(ch.label);
+  const lone = ch.key === "value" && spec.channels.length === 1;
+  // "Relay / on-off output" → "Relay".
+  const part = spec.label.split(" / ")[0].trim();
+  const name = lone ? part : (m ? m[1] : ch.label).trim();
+  const unit = m && UNIT_SYMBOLS.has(m[2].trim()) ? m[2].trim() : null;
+  return { name, key: lone ? slugify(part) : ch.key, unit };
+}
+
+/** `base`, else `base_2`, `base_3`… — free of `used` and the reserved keys. */
+function freeKey(base: string, used: Set<string>): string {
+  let key = base;
+  for (let n = 2; used.has(key) || RESERVED_METRIC_KEYS.includes(key); n++) key = `${base}_${n}`;
+  return key;
+}
+
+const snapshot = (row: MetricDraft | ActuatorDraft) => JSON.stringify(row);
+
+/**
+ * Keeps the template's rows in step with its parts (the user's choice: adding
+ * a part creates what it reads or drives). For a part that's new, or whose
+ * driver changed, each channel links to a free row with the same key and type,
+ * else to a new row it proposes. A part that goes, or changes driver, takes its
+ * proposed rows with it — unless they were edited since, or something else
+ * links them. Everything else passes through as `next` has it.
+ */
+export function reconcileParts(prev: TemplateDraft, next: HardwareDraft | null, catalog: HardwareCatalog | undefined): TemplateDraft {
+  if (!catalog) return { ...prev, hardware: next };
+  // Wiring cleared: as if every part went.
+  if (!next) return prev.hardware ? { ...reconcileParts(prev, { ...prev.hardware, inputs: [], outputs: [] }, catalog), hardware: null } : prev;
+  const before = new Map([...(prev.hardware?.inputs ?? []), ...(prev.hardware?.outputs ?? [])].map((b) => [b.uid, b]));
+  let metrics = [...prev.metrics];
+  let actuators = [...prev.actuators];
+
+  // Parts gone, or on another driver: their untouched proposals go.
+  const nextByUid = new Map([...next.inputs, ...next.outputs].map((b) => [b.uid, b]));
+  const dropping = new Set<string>();
+  for (const old of before.values()) {
+    const now = nextByUid.get(old.uid);
+    if (now && now.driver === old.driver) continue;
+    for (const [rowUid, snap] of Object.entries(old.proposed ?? {})) {
+      const row = metrics.find((r) => r.uid === rowUid) ?? actuators.find((r) => r.uid === rowUid);
+      if (row && snapshot(row) === snap) dropping.add(rowUid);
+    }
+  }
+  const stillLinked = new Set(
+    [...next.inputs, ...next.outputs].flatMap((b) => (before.get(b.uid)?.driver === b.driver ? Object.values(b.channels) : [])),
+  );
+  for (const u of stillLinked) dropping.delete(u);
+  metrics = metrics.filter((r) => !dropping.has(r.uid));
+  actuators = actuators.filter((r) => !dropping.has(r.uid));
+
+  // Parts new, or on another driver: link or propose a row per channel.
+  const propose = (kind: "inputs" | "outputs") =>
+    next[kind].map((b) => {
+      const old = before.get(b.uid);
+      const keep = (c: Record<string, string>) => Object.fromEntries(Object.entries(c).map(([ch, ref]) => [ch, dropping.has(ref) ? "" : ref]));
+      if (old && old.driver === b.driver) return { ...b, channels: keep(b.channels) };
+      const spec = findDriver(catalog.drivers, b.driver);
+      if (!spec) return { ...b, proposed: undefined };
+      const channels: Record<string, string> = {};
+      const proposed: Record<string, string> = {};
+      for (const ch of spec.channels) {
+        const p = proposal(spec, ch);
+        const taken = takenTargets({ ...next, [kind]: next[kind].filter((x) => x.uid !== b.uid) }, kind);
+        if (kind === "inputs") {
+          const type = ch.data_type ?? "float";
+          const free = metrics.find((r) => r.key.trim() === p.key && r.data_type === type && !taken.has(r.uid) && !Object.values(channels).includes(r.uid));
+          if (free) {
+            channels[ch.key] = free.uid;
+            continue;
+          }
+          const key = freeKey(p.key, new Set(metrics.map((r) => r.key.trim())));
+          const row: MetricDraft = { ...blankMetric(), name: key === p.key ? p.name : `${p.name} ${key.slice(p.key.length + 1)}`, key, keyAuto: false, data_type: type, unit: p.unit };
+          metrics.push(row);
+          channels[ch.key] = row.uid;
+          proposed[row.uid] = snapshot(row);
+        } else {
+          const type = ch.value_type ?? "bool";
+          const free = actuators.find((r) => r.key.trim() === p.key && r.value_type === type && !taken.has(r.uid) && !Object.values(channels).includes(r.uid));
+          if (free) {
+            channels[ch.key] = free.uid;
+            continue;
+          }
+          const key = freeKey(p.key, new Set(actuators.map((r) => r.key.trim())));
+          const base: ActuatorDraft = { ...blankActuator(), name: key === p.key ? p.name : `${p.name} ${key.slice(p.key.length + 1)}`, key, keyAuto: false, value_type: type };
+          const row = type === "bool" ? base : { ...base, on: "", off: "" };
+          actuators.push(row);
+          channels[ch.key] = row.uid;
+          proposed[row.uid] = snapshot(row);
+        }
+      }
+      return { ...b, channels, proposed };
+    });
+  const inputs = propose("inputs");
+  const outputs = propose("outputs");
+  return { ...prev, metrics, actuators, hardware: { ...next, inputs, outputs } };
 }
