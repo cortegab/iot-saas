@@ -93,9 +93,28 @@ async def create_device(
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DeviceCreateResponse:
     try:
-        device, secret = await service.create_device(
-            session, ctx.tenant_id, body.name, body.catalog_entry_id, zone_id=body.zone_id
-        )
+        if body.new_template is not None:
+            t = body.new_template
+            device, secret = await service.create_device_with_template(
+                session,
+                ctx.tenant_id,
+                body.name,
+                t.name,
+                [m.model_dump(mode="json") for m in t.metrics],
+                [a.model_dump(mode="json") for a in t.actuators],
+                t.hardware.model_dump(mode="json") if t.hardware else None,
+                zone_id=body.zone_id,
+            )
+        else:
+            assert body.catalog_entry_id is not None  # DeviceCreateRequest checks one is set
+            device, secret = await service.create_device(
+                session, ctx.tenant_id, body.name, body.catalog_entry_id, zone_id=body.zone_id
+            )
+    except catalog_service.KEY_ERRORS as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=catalog_service.key_error_detail(exc),
+        ) from exc
     except zones_service.ZoneNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found") from exc
     except catalog_service.CatalogEntryNotFoundError as exc:

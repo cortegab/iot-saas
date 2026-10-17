@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
 import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Copy, Lock, Plus, Trash2 } from "lucide-react";
@@ -25,7 +26,9 @@ import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { ApiRequestError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
+import { handOffCredential } from "@/lib/credential-handoff";
 import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
+import { blankHardware } from "@/lib/hardware/hardware-draft";
 import {
   blankActuator,
   blankMetric,
@@ -33,6 +36,7 @@ import {
   brokenUsages,
   draftToRequest,
   keyedRows,
+  reconcileParts,
   renamed,
   templateToDraft,
   usageText,
@@ -45,6 +49,17 @@ import type { components } from "@/types/api";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogUsageResponse = components["schemas"]["CatalogUsageResponse"];
+type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
+type ZoneResponse = components["schemas"]["ZoneResponse"];
+
+/** Onboarding "from the hardware": the device created with the template. */
+interface OnboardDevice {
+  name: string;
+  zoneId: string;
+  /** The template name still follows the device name (until edited). */
+  templateNameAuto: boolean;
+}
+type Draft = TemplateDraft & { device?: OnboardDevice };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -67,16 +82,23 @@ const CONTROL_LABEL = { bool: "On/off switch", float: "Level (number)", string: 
  * General · Metrics · Actuators. Keys follow the name until edited, used keys
  * are locked (with a rename warning when unlocked), every key shows its MQTT
  * topic, and saving a change that disconnects rules or widgets asks first.
+ *
+ * `onboard`: adding a device "from the hardware" (/devices/new?from=hardware).
+ * The same editor, with the device's name and zone on top and the wiring
+ * first; its parts bring their metrics and actuators (reconcileParts), and
+ * saving creates the template and the device in one call.
  */
 export function TemplateEditor({
   entryId,
   duplicateOf,
   mode = "page",
+  onboard = false,
 }: {
   /** null = new template. */
   entryId: string | null;
   duplicateOf?: string | null;
   mode?: EditorMode;
+  onboard?: boolean;
 }) {
   const api = useApi();
   const router = useRouter();
@@ -91,18 +113,29 @@ export function TemplateEditor({
   const { data: usage } = useApiSWR<CatalogUsageResponse>(entryId ? `/catalog/${entryId}/usage` : null);
   const { data: catalog, error: catalogError, isLoading: catalogLoading } = useDriverCatalog();
   const drivers = catalog?.drivers;
+  const { data: zones } = useApiSWR<ZoneResponse[]>(onboard ? "/zones" : null);
 
   const isNew = entryId == null;
-  const initial = useMemo<TemplateDraft | null>(() => {
+  const initial = useMemo<Draft | null>(() => {
+    if (onboard) return { ...blankTemplate(), metrics: [], hardware: blankHardware(), device: { name: "", zoneId: "", templateNameAuto: true } };
     if (!isNew) return entry ? templateToDraft(entry) : null;
     if (duplicateOf) return source ? templateToDraft(source, { duplicate: true }) : null;
     return blankTemplate();
-  }, [isNew, entry, duplicateOf, source]);
+  }, [onboard, isNew, entry, duplicateOf, source]);
 
   const otherNames = useMemo(() => (all ?? []).filter((e) => e.id !== entryId).map((e) => e.name), [all, entryId]);
-  const validate = useCallback((d: TemplateDraft) => validateTemplate(d, { otherNames, usage, catalog }), [otherNames, usage, catalog]);
-  const editor = useRecordEditor({ source: initial, isNew, validate });
-  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, entry?.name ?? "this template");
+  const validate = useCallback(
+    (d: Draft) => {
+      const v = validateTemplate(d, { otherNames, usage, catalog });
+      if (!d.device) return v;
+      const name = d.device.name.trim();
+      const deviceError = !name ? "Give the device a name." : name.length > 100 ? "Keep the name under 100 characters." : null;
+      return deviceError ? { ...v, errors: { ...v.errors, "general.device": deviceError } } : v;
+    },
+    [otherNames, usage, catalog],
+  );
+  const editor = useRecordEditor<Draft>({ source: initial, isNew, validate });
+  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, onboard ? "this device" : (entry?.name ?? "this template"));
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [allOpen, setAllOpen] = useState<{ metrics: boolean | null; actuators: boolean | null }>({ metrics: null, actuators: null });
@@ -128,7 +161,7 @@ export function TemplateEditor({
     );
   }
 
-  const set = (next: TemplateDraft) => editor.set(next);
+  const set = (next: Draft) => editor.set(next);
   const setMetric = (i: number, m: MetricDraft) => set({ ...d, metrics: d.metrics.map((x, j) => (j === i ? m : x)) });
   const setActuator = (i: number, a: ActuatorDraft) => set({ ...d, actuators: d.actuators.map((x, j) => (j === i ? a : x)) });
   const f = (path: string) => ({ error: editor.errorFor(path), warning: editor.warningFor(path) });
@@ -170,7 +203,22 @@ export function TemplateEditor({
       .save(async (draft) => {
         const body = draftToRequest(draft, drivers);
         try {
-          if (isNew) {
+          if (draft.device) {
+            const result = await api.post<DeviceCreateResponse>("/devices", {
+              name: draft.device.name.trim(),
+              ...(draft.device.zoneId ? { zone_id: draft.device.zoneId } : {}),
+              new_template: {
+                name: body.name,
+                metrics: body.metrics as unknown as Record<string, unknown>[],
+                actuators: body.actuators as unknown as Record<string, unknown>[],
+                hardware: body.hardware as unknown as Record<string, unknown> | null,
+              },
+            });
+            void revalidate("/devices");
+            void revalidate("/catalog");
+            handOffCredential(result.device.id, result.credential);
+            router.push(`/devices/${result.device.id}/connect`);
+          } else if (isNew) {
             const created = await api.post<CatalogEntryResponse>("/catalog", {
               name: body.name,
               metrics: body.metrics as unknown as Record<string, unknown>[],
@@ -222,13 +270,47 @@ export function TemplateEditor({
   }
 
   const devices = entry?.device_count ?? 0;
-  const consequence = isNew
+  const consequence = d.device
+    ? "Creating it makes the device and its template together; next comes its credential and Install."
+    : isNew
     ? d.enabled
       ? "Creating it makes it available in Add device."
       : "It's created disabled, so it won't be offered in Add device yet."
     : devices
       ? `Saving updates ${plural(devices, "device")} and re-sends their telemetry profile within seconds.`
       : "No devices use it yet.";
+
+  // Wiring comes last when editing a template, first when onboarding from
+  // the hardware. Adding a part brings its metrics and actuators (reconcileParts).
+  const wiringSection = (
+    <EditorSection
+      id="hardware"
+      title="Wiring"
+      lead={
+        d.device
+          ? "Pick the board, then add each part. Every part brings its metrics or actuators below; rename or delete them as you like."
+          : "How the board is wired: which sensor reads each metric and which output drives each actuator. Adding a part also adds its metrics or actuators. Optional, but with it every device installs from the browser with no code."
+      }
+    >
+      <HardwareSection
+        hardware={d.hardware}
+        rows={keyedRows(d)}
+        catalog={{ data: catalog, loading: catalogLoading, error: !!catalogError }}
+        readOnly={readOnly}
+        onChange={(hardware) => set({ ...reconcileParts(d, hardware, catalog), device: d.device })}
+        field={(path) => ({ ...f(path), onBlur: blur(path) })}
+      />
+      {d.device && !catalogLoading && !catalog && (
+        <p className="text-sm text-ink-muted">
+          Until a firmware release is published, add the device{" "}
+          <Link href="/devices/new" className="text-accent hover:underline">
+            from a template
+          </Link>
+          .
+        </p>
+      )}
+    </EditorSection>
+  );
 
   const keyField = (kind: "metrics" | "actuators", i: number, row: MetricDraft | ActuatorDraft, topic: string) => {
     const path = `${kind}.${i}.key`;
@@ -348,25 +430,34 @@ export function TemplateEditor({
     <>
       <EditorFrame
         mode={mode}
-        noun="device template"
-        title={isNew ? (d.name.trim() || "New device template") : d.name.trim() || entry!.name}
+        noun={d.device ? "device" : "device template"}
+        title={d.device ? d.device.name.trim() || "New device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
         eyebrow={
           <>
-            Device template
+            {d.device ? "Device, from the hardware" : "Device template"}
             {!isNew && (d.enabled ? <Badge tone="online" label="Enabled" /> : <Badge tone="unknown" shape="square" label="Disabled" />)}
             {!isNew && <span>· {plural(devices, "device")}</span>}
           </>
         }
         consequence={consequence}
-        sections={[
-          { id: "general", label: "General", description: "Name and availability" },
-          { id: "metrics", label: "Metrics", count: d.metrics.length, description: "What the device publishes" },
-          { id: "actuators", label: "Actuators", count: d.actuators.length, description: "What the platform can switch" },
-          { id: "hardware", label: "Wiring", description: "For installing from the browser" },
-        ]}
+        sections={
+          d.device
+            ? [
+                { id: "general", label: "General", description: "Device and template names" },
+                { id: "hardware", label: "Wiring", description: "The board and its parts" },
+                { id: "metrics", label: "Metrics", count: d.metrics.length, description: "What its parts read" },
+                { id: "actuators", label: "Actuators", count: d.actuators.length, description: "What its parts switch" },
+              ]
+            : [
+                { id: "general", label: "General", description: "Name and availability" },
+                { id: "metrics", label: "Metrics", count: d.metrics.length, description: "What the device publishes" },
+                { id: "actuators", label: "Actuators", count: d.actuators.length, description: "What the platform can switch" },
+                { id: "hardware", label: "Wiring", description: "For installing from the browser" },
+              ]
+        }
         status={editor}
         readOnly={readOnly}
-        saveLabel={isNew ? "Create template" : "Save"}
+        saveLabel={d.device ? "Create device" : isNew ? "Create template" : "Save"}
         onSave={onSave}
         onDiscard={editor.discard}
         headerActions={
@@ -381,15 +472,49 @@ export function TemplateEditor({
       >
         <EditorSection id="general" title="General">
           <div className="grid gap-3.5 @[640px]:grid-cols-2">
-            <Field label="Template name" {...f("general.name")}>
+            {d.device && (
+              <>
+                <Field label="Device name" hint="Shown in lists and alerts. Its MQTT id is made from it and never changes." {...f("general.device")}>
+                  <Input
+                    autoFocus
+                    value={d.device.name}
+                    disabled={readOnly}
+                    placeholder="e.g. bay1-climate"
+                    onChange={(e) => {
+                      const device = { ...d.device!, name: e.target.value };
+                      set({ ...d, device, name: device.templateNameAuto ? e.target.value : d.name });
+                    }}
+                    onBlur={blur("general.device")}
+                  />
+                </Field>
+                {zones && zones.length > 0 && (
+                  <Field label="Zone" optional>
+                    <Select value={d.device.zoneId} disabled={readOnly} onChange={(e) => set({ ...d, device: { ...d.device!, zoneId: e.target.value } })}>
+                      <option value="">No zone</option>
+                      {zones.map((z) => (
+                        <option key={z.id} value={z.id}>
+                          {z.name}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                )}
+              </>
+            )}
+            <Field
+              label="Template name"
+              hint={d.device ? "Saved as a template too, so the next board like this one is Add device → From a template." : undefined}
+              {...f("general.name")}
+            >
               <Input
                 value={d.name}
                 disabled={readOnly}
                 placeholder="e.g. Climate sensor v2"
-                onChange={(e) => set({ ...d, name: e.target.value })}
+                onChange={(e) => set({ ...d, name: e.target.value, ...(d.device ? { device: { ...d.device, templateNameAuto: false } } : {}) })}
                 onBlur={blur("general.name")}
               />
             </Field>
+            {!d.device && (
             <SwitchField
               label="Status"
               checked={d.enabled}
@@ -400,8 +525,11 @@ export function TemplateEditor({
               onHint="Offered in Add device."
               offHint="Hidden from Add device. Devices that already use it keep working."
             />
+            )}
           </div>
         </EditorSection>
+
+        {d.device && wiringSection}
 
         <EditorSection
           id="metrics"
@@ -587,20 +715,7 @@ export function TemplateEditor({
           </div>
         </EditorSection>
 
-        <EditorSection
-          id="hardware"
-          title="Wiring"
-          lead="How the board is wired: which sensor reads each metric and which output drives each actuator. Optional, but with it every device installs from the browser with no code."
-        >
-          <HardwareSection
-            hardware={d.hardware}
-            rows={keyedRows(d)}
-            catalog={{ data: catalog, loading: catalogLoading, error: !!catalogError }}
-            readOnly={readOnly}
-            onChange={(hardware) => set({ ...d, hardware })}
-            field={(path) => ({ ...f(path), onBlur: blur(path) })}
-          />
-        </EditorSection>
+        {!d.device && wiringSection}
       </EditorFrame>
       {confirmDialog}
       {guardDialog}

@@ -97,6 +97,26 @@ class HardwareMappingError(Exception):
     the user-facing reason."""
 
 
+# The errors a template's keys or wiring can fail with — a 400 wherever a
+# template is created or edited (the catalog routes, and a device created
+# with a new template).
+KEY_ERRORS = (DuplicateKeyError, ReservedMetricKeyError, InvalidKeyError, HardwareMappingError)
+
+
+def key_error_detail(exc: Exception) -> str:
+    """The user-facing reason for one of KEY_ERRORS."""
+    if isinstance(exc, HardwareMappingError):
+        return str(exc)
+    if isinstance(exc, DuplicateKeyError):
+        return f"Duplicate key: {exc}"
+    if isinstance(exc, ReservedMetricKeyError):
+        return f"'{exc}' is a reserved metric key"
+    return (
+        f"Key '{exc}' isn't valid. Use letters, digits, - and _ only "
+        "(no spaces, / + # or a leading $), up to 64 characters."
+    )
+
+
 def check_hardware(
     hardware: dict[str, Any] | None,
     metrics: list[dict[str, Any]],

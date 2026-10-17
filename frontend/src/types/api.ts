@@ -1439,11 +1439,9 @@ export interface components {
         DeviceCreateRequest: {
             /** Name */
             name: string;
-            /**
-             * Catalog Entry Id
-             * Format: uuid
-             */
-            catalog_entry_id: string;
+            /** Catalog Entry Id */
+            catalog_entry_id?: string | null;
+            new_template?: components["schemas"]["CatalogEntryCreateRequest"] | null;
             /** Zone Id */
             zone_id?: string | null;
         };

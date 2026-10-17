@@ -25,6 +25,10 @@ export interface BindingDraft {
   params: Record<string, ParamValue>;
   /** Driver channel → metric/actuator row uid ("" = not used). */
   channels: Record<string, string>;
+  /** Draft-only, never saved: rows this part created when it was added, by
+   * uid, each with its snapshot then, so an untouched one goes when the part
+   * does (template-draft.ts's reconcileParts). */
+  proposed?: Record<string, string>;
 }
 
 export interface HardwareDraft {
@@ -363,4 +367,59 @@ export function wiringGuide(
       }
     : null;
   return { board, pins, notes: [...notes].map(([driver, lines]) => ({ driver, lines })) };
+}
+
+export interface MovedPin {
+  /** "DHT22 temperature/humidity data", "the I2C bus (SDA)". */
+  owner: string;
+  from: number;
+  /** null: no suitable pin was left on the new board. */
+  to: number | null;
+}
+
+/** The wiring on another board: every pin that still suits its role there
+ * stays, the rest move to the first free suitable pin in the board's
+ * preferred order (as blankBinding picks), and the I2C bus takes the new
+ * board's default pins. `moved` lists what changed, for the author to rewire. */
+export function moveToBoard(h: HardwareDraft, board: string, catalog: HardwareCatalog): { hardware: HardwareDraft; moved: MovedPin[] } {
+  const model = resolveModel(catalog.models, board);
+  if (!model) return { hardware: { ...h, board, i2c: null }, moved: [] };
+  const moved: MovedPin[] = [];
+  const taken = new Set<number>();
+  // The bus first: its default pins are the board's, so parts move off them.
+  const i2c = usesI2c(h, catalog) && model.i2c ? { ...model.i2c } : null;
+  if (i2c) {
+    taken.add(i2c.sda);
+    taken.add(i2c.scl);
+    if (h.i2c && h.i2c.sda !== i2c.sda) moved.push({ owner: "the I2C bus (SDA)", from: h.i2c.sda, to: i2c.sda });
+    if (h.i2c && h.i2c.scl !== i2c.scl) moved.push({ owner: "the I2C bus (SCL)", from: h.i2c.scl, to: i2c.scl });
+  }
+  const roles = (kind: "inputs" | "outputs") =>
+    h[kind].flatMap((b, i) => {
+      const spec = findDriver(catalog.drivers, b.driver);
+      return Object.entries(b.pins).map(([role, pin]) => {
+        const p = spec?.pins.find((x) => x.role === role);
+        return { kind, i, role, pin, needs: p?.needs ?? ("input" as const), owner: `${spec?.label ?? b.driver} ${(p?.label ?? role).toLowerCase()}` };
+      });
+    });
+  const all = [...roles("inputs"), ...roles("outputs")];
+  const placed = new Map<string, number | null>();
+  // Keep what still fits, then place the rest.
+  for (const r of all) {
+    if (r.pin != null && !taken.has(r.pin) && !pinProblem(model, r.needs, r.pin)) {
+      placed.set(`${r.kind}.${r.i}.${r.role}`, r.pin);
+      taken.add(r.pin);
+    }
+  }
+  for (const r of all) {
+    const key = `${r.kind}.${r.i}.${r.role}`;
+    if (placed.has(key)) continue;
+    const to = preferredPins(model, r.needs).find((n) => !taken.has(n)) ?? null;
+    if (to != null) taken.add(to);
+    placed.set(key, to);
+    if (r.pin != null) moved.push({ owner: r.owner, from: r.pin, to });
+  }
+  const rebind = (kind: "inputs" | "outputs") =>
+    h[kind].map((b, i) => ({ ...b, pins: Object.fromEntries(Object.keys(b.pins).map((role) => [role, placed.get(`${kind}.${i}.${role}`) ?? null])) }));
+  return { hardware: { ...h, board: model.id, i2c, inputs: rebind("inputs"), outputs: rebind("outputs") }, moved };
 }

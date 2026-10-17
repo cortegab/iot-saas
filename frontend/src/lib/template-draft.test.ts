@@ -1,10 +1,14 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import type { BoardModel, DriverSpec } from "@/lib/hardware/driver-catalog";
+import { blankBinding, blankHardware, type HardwareCatalog } from "@/lib/hardware/hardware-draft";
 import {
   blankActuator,
   blankMetric,
   blankTemplate,
   brokenUsages,
   draftToRequest,
+  reconcileParts,
   renamed,
   templateToDraft,
   validateTemplate,
@@ -83,5 +87,77 @@ describe("template draft", () => {
   it("rejects a name another template already has", () => {
     const d = { ...blankTemplate(), name: "climate" };
     expect(validateTemplate(d, { otherNames: ["Climate"] }).errors["general.name"]).toMatch(/already/);
+  });
+});
+
+describe("reconcileParts", () => {
+  const read = <T,>(file: string) => JSON.parse(readFileSync(new URL(`../../../firmware/${file}`, import.meta.url), "utf8")) as T;
+  const CATALOG: HardwareCatalog = { drivers: read<{ drivers: DriverSpec[] }>("drivers.json").drivers, models: read<{ models: BoardModel[] }>("boards.json").models };
+  const spec = (id: string) => CATALOG.drivers.find((d) => d.id === id)!;
+  const empty = (): TemplateDraft => ({ ...blankTemplate(), name: "Bench", metrics: [], hardware: blankHardware() });
+  /** The draft after adding a part of `driver` (as the Wiring section's Add does). */
+  const add = (d: TemplateDraft, driver: string) => {
+    const s = spec(driver);
+    const kind = s.kind === "input" ? "inputs" : "outputs";
+    const h = d.hardware!;
+    return reconcileParts(d, { ...h, [kind]: [...h[kind], blankBinding(s, h, CATALOG)] }, CATALOG);
+  };
+
+  it("a DHT22 brings temperature °C and humidity %, linked", () => {
+    const d = add(empty(), "dht22");
+    expect(d.metrics.map((m) => [m.name, m.key, m.unit])).toEqual([
+      ["Temperature", "temperature", "°C"],
+      ["Humidity", "humidity", "%"],
+    ]);
+    const ch = d.hardware!.inputs[0].channels;
+    expect(ch).toEqual({ temperature: d.metrics[0].uid, humidity: d.metrics[1].uid });
+    expect(validateTemplate(d, { otherNames: [], catalog: CATALOG }).errors).toEqual({});
+  });
+
+  it("a relay brings an on/off actuator named after it; a servo a numeric one", () => {
+    const d = add(add(empty(), "relay"), "servo");
+    expect(d.actuators.map((a) => [a.name, a.key, a.value_type])).toEqual([
+      ["Relay", "relay", "bool"],
+      ["Servo", "servo", "float"],
+    ]);
+    expect(validateTemplate(d, { otherNames: [], catalog: CATALOG }).errors).toEqual({});
+  });
+
+  it("every channel of an MPU-6050 becomes a metric", () => {
+    expect(add(empty(), "mpu6050").metrics).toHaveLength(10);
+  });
+
+  it("a second part of the same kind gets suffixed keys", () => {
+    const d = add(add(empty(), "dht22"), "dht22");
+    expect(d.metrics.map((m) => m.key)).toEqual(["temperature", "humidity", "temperature_2", "humidity_2"]);
+    expect(d.metrics[2].name).toBe("Temperature 2");
+  });
+
+  it("links a free row with the same key and type instead of adding one", () => {
+    const own = { ...blankMetric(), name: "Air temp", key: "temperature", keyAuto: false };
+    const d = add({ ...empty(), metrics: [own] }, "dht22");
+    expect(d.metrics.map((m) => m.key)).toEqual(["temperature", "humidity"]);
+    expect(d.hardware!.inputs[0].channels.temperature).toBe(own.uid);
+  });
+
+  it("removing a part takes its untouched rows, and keeps edited ones", () => {
+    const d = add(empty(), "dht22");
+    const edited = { ...d, metrics: d.metrics.map((m, i) => (i === 0 ? { ...m, name: "Air" } : m)) };
+    const gone = reconcileParts(edited, { ...edited.hardware!, inputs: [] }, CATALOG);
+    expect(gone.metrics.map((m) => m.name)).toEqual(["Air"]);
+  });
+
+  it("changing a part's driver swaps its untouched rows", () => {
+    const d = add(empty(), "dht22");
+    const b = d.hardware!.inputs[0];
+    const swapped = { ...blankBinding(spec("hcsr04"), { ...d.hardware!, inputs: [] }, CATALOG), uid: b.uid };
+    const next = reconcileParts(d, { ...d.hardware!, inputs: [swapped] }, CATALOG);
+    expect(next.metrics.map((m) => [m.key, m.unit])).toEqual([["distance_cm", "cm"]]);
+  });
+
+  it("leaves existing wiring alone", () => {
+    const d = add(empty(), "dht22");
+    const again = reconcileParts(d, d.hardware, CATALOG);
+    expect(again.metrics).toEqual(d.metrics);
   });
 });

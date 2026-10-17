@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Cpu, Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -16,6 +16,7 @@ import { findDriver, type DriverCatalog, type DriverParamSpec } from "@/lib/hard
 import {
   blankBinding,
   blankHardware,
+  moveToBoard,
   syncI2c,
   takenTargets,
   usedPins,
@@ -23,6 +24,7 @@ import {
   type BindingDraft,
   type HardwareDraft,
   type KeyedRow,
+  type MovedPin,
 } from "@/lib/hardware/hardware-draft";
 
 type Kind = "inputs" | "outputs";
@@ -50,6 +52,8 @@ export function HardwareSection({
   /** Error/warning props and blur handler for a field path. */
   field: (path: string) => { error?: string; warning?: string; onBlur: () => void };
 }) {
+  // What the last board change moved, for the author to rewire.
+  const [moved, setMoved] = useState<{ board: string; pins: MovedPin[] } | null>(null);
   if (catalog.loading) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
 
   const fw = catalog.data;
@@ -112,8 +116,16 @@ export function HardwareSection({
           hint={`${model?.description ? `${model.description} ` : ""}Pins are checked for this board. Firmware ${fw.version}.`}
         >
           {/* A saved chip id ("esp32") shows as its model until the board is picked again. */}
-          {/* A new board moves the I2C bus to that board's default pins. */}
-          <Select value={model?.id ?? h.board} disabled={readOnly} onChange={(e) => commit({ ...h, board: e.target.value, i2c: null })}>
+          {/* A new board keeps every pin that still fits and moves the rest (moveToBoard). */}
+          <Select
+            value={model?.id ?? h.board}
+            disabled={readOnly}
+            onChange={(e) => {
+              const next = moveToBoard(h, e.target.value, fw);
+              setMoved({ board: fw.models.find((m) => m.id === e.target.value)?.label ?? e.target.value, pins: next.moved });
+              commit(next.hardware);
+            }}
+          >
             {!model && <option value={h.board}>{h.board} (not in this firmware)</option>}
             {fw.models.map((m) => (
               <option key={m.id} value={m.id}>
@@ -127,6 +139,19 @@ export function HardwareSection({
           published or switched.
         </p>
       </div>
+
+      {moved && moved.pins.length > 0 && (
+        <Callout tone="warning" title={`Moved for the ${moved.board}`}>
+          <ul className="list-disc pl-4">
+            {moved.pins.map((m) => (
+              <li key={`${m.owner}-${m.from}`}>
+                {m.owner}: GPIO {m.from} → {m.to == null ? "no free pin left, pick one" : pinName(model, m.to)}
+              </li>
+            ))}
+          </ul>
+          Rewire those as the wiring guide below shows.
+        </Callout>
+      )}
 
       {h.i2c && (
         <div className="flex flex-col gap-2">
