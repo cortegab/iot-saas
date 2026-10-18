@@ -95,8 +95,9 @@ need attribution plus relinking terms; GPL ones are refused (write the driver in
    - `channels()` lists the channel names a template can map.
    - Outputs apply their safe boot state in `begin()`, before Wi-Fi comes up.
    - Allocate in `begin()`, never per loop.
-4. **Register it:** one line in `firmware/src/drivers/registry.cpp`, plus the `make…()`
-   declaration above it.
+4. **Register it:** one entry in `firmware/src/drivers/registry.cpp` behind its own
+   `#ifdef IOD_DRIVER_<ID>`, plus the `make…()` declaration above it. `driver_flags.py` defines
+   the flag for each chip whose build carries the driver.
 5. **Describe it** in `firmware/drivers.json`:
    - id, kind, label, description
    - pins: each with a role and `needs` (`input`, `output`, `adc1`, or `bus`), or none plus
@@ -104,6 +105,10 @@ need attribution plus relinking terms; GPL ones are refused (write the driver in
    - params: type, default, range
    - channels: with `data_type` (inputs) or `value_type` (outputs)
    - wiring notes
+   - `chips` (optional): the chips it works on, e.g. `["esp32", "esp32s3"]` for a part that needs
+     a peripheral the others lack. Absent means every chip. Only those builds carry it, and the
+     dashboard offers it only for their boards. If its code doesn't even compile on other chips,
+     wrap its `.cpp` in the same `#ifdef`.
 
    The dashboard builds its editor, validation and wiring guide from this file, so a new driver
    needs no frontend change.

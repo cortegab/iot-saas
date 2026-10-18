@@ -12,7 +12,7 @@ import { SwitchField } from "@/components/ui/Switch";
 import { Table } from "@/components/ui/Table";
 import { SECTION_LABEL } from "@/components/rules/editor/fields";
 import { pinName, pinsFor, resolveModel } from "@/lib/hardware/board-pins";
-import { findDriver, type DriverCatalog, type DriverParamSpec } from "@/lib/hardware/driver-catalog";
+import { driversFor, findDriver, runsOn, type DriverCatalog, type DriverParamSpec } from "@/lib/hardware/driver-catalog";
 import {
   blankBinding,
   blankHardware,
@@ -53,7 +53,7 @@ export function HardwareSection({
   field: (path: string) => { error?: string; warning?: string; onBlur: () => void };
 }) {
   // What the last board change moved, for the author to rewire.
-  const [moved, setMoved] = useState<{ board: string; pins: MovedPin[] } | null>(null);
+  const [moved, setMoved] = useState<{ board: string; pins: MovedPin[]; unsupported: string[] } | null>(null);
   if (catalog.loading) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
 
   const fw = catalog.data;
@@ -92,7 +92,7 @@ export function HardwareSection({
   // the I2C drivers.
   const commit = (next: HardwareDraft) => onChange(syncI2c(next, fw));
   const setBinding = (kind: Kind, i: number, b: BindingDraft) => commit({ ...h, [kind]: h[kind].map((x, j) => (j === i ? b : x)) });
-  const firstOf = (kind: Kind) => fw.drivers.find((d) => d.kind === (kind === "inputs" ? "input" : "output"));
+  const firstOf = (kind: Kind) => driversFor(fw.drivers, model).find((d) => d.kind === (kind === "inputs" ? "input" : "output"));
   const add = (kind: Kind) => {
     const spec = firstOf(kind);
     if (spec) commit({ ...h, [kind]: [...h[kind], blankBinding(spec, h, fw)] });
@@ -122,7 +122,7 @@ export function HardwareSection({
             disabled={readOnly}
             onChange={(e) => {
               const next = moveToBoard(h, e.target.value, fw);
-              setMoved({ board: fw.models.find((m) => m.id === e.target.value)?.label ?? e.target.value, pins: next.moved });
+              setMoved({ board: fw.models.find((m) => m.id === e.target.value)?.label ?? e.target.value, pins: next.moved, unsupported: next.unsupported });
               commit(next.hardware);
             }}
           >
@@ -140,16 +140,20 @@ export function HardwareSection({
         </p>
       </div>
 
-      {moved && moved.pins.length > 0 && (
-        <Callout tone="warning" title={`Moved for the ${moved.board}`}>
+      {/* One summary of a board change: pins that moved, and parts it can't run. */}
+      {moved && (moved.pins.length > 0 || moved.unsupported.length > 0) && (
+        <Callout tone="warning" title={`Changed for the ${moved.board}`}>
           <ul className="list-disc pl-4">
             {moved.pins.map((m) => (
               <li key={`${m.owner}-${m.from}`}>
                 {m.owner}: GPIO {m.from} → {m.to == null ? "no free pin left, pick one" : pinName(model, m.to)}
               </li>
             ))}
+            {moved.unsupported.map((label) => (
+              <li key={label}>{label}: not in this board&apos;s firmware. Pick another part, or remove it.</li>
+            ))}
           </ul>
-          Rewire those as the wiring guide below shows.
+          {moved.pins.length > 0 && "Rewire those as the wiring guide below shows."}
         </Callout>
       )}
 
@@ -280,7 +284,9 @@ function BindingCard({
   const spec = findDriver(drivers, binding.driver);
   const p = `hardware.${kind}.${index}.`;
   const noun = kind === "inputs" ? "Input" : "Output";
-  const choices = drivers.filter((d) => d.kind === (kind === "inputs" ? "input" : "output"));
+  // Only what this board's firmware carries, plus the current driver if it
+  // isn't (so the card still shows it, with validateHardware's error).
+  const choices = drivers.filter((d) => d.kind === (kind === "inputs" ? "input" : "output") && (runsOn(d, model) || d.id === binding.driver));
   // What else holds each pin, for the picker's labels.
   const others = new Map(usedPins(hardware).filter((u) => !u.path.startsWith(p)).map((u) => [u.pin, u.owner]));
 

@@ -8,7 +8,7 @@
  * draft no longer has stays as `key:<key>` and shows as an error.
  */
 import { hasInternalPull, pinName, pinProblem, preferredPins, resolveModel } from "@/lib/hardware/board-pins";
-import { findDriver, type DriverCatalog, type DriverSpec } from "@/lib/hardware/driver-catalog";
+import { findDriver, runsOn, type DriverCatalog, type DriverSpec } from "@/lib/hardware/driver-catalog";
 import type { components } from "@/types/api";
 
 type HardwareConfig = components["schemas"]["HardwareConfig"];
@@ -253,6 +253,8 @@ export function validateHardware(
       if (drivers && !spec) errors[p + "driver"] = `This firmware has no “${b.driver}” driver. Pick another, or update the firmware.`;
       else if (spec && spec.kind !== (kind === "inputs" ? "input" : "output"))
         errors[p + "driver"] = `${spec.label} is ${article(spec.kind)} ${spec.kind}, not ${kind === "inputs" ? "an input" : "an output"}.`;
+      else if (spec && model && !runsOn(spec, model))
+        errors[p + "driver"] = `The ${model.label}'s firmware doesn't include ${spec.label}. Pick another part, or another board.`;
 
       for (const role of spec?.pins ?? []) {
         const path = `${p}pins.${role.role}`;
@@ -380,10 +382,24 @@ export interface MovedPin {
 /** The wiring on another board: every pin that still suits its role there
  * stays, the rest move to the first free suitable pin in the board's
  * preferred order (as blankBinding picks), and the I2C bus takes the new
- * board's default pins. `moved` lists what changed, for the author to rewire. */
-export function moveToBoard(h: HardwareDraft, board: string, catalog: HardwareCatalog): { hardware: HardwareDraft; moved: MovedPin[] } {
+ * board's default pins. `moved` lists what changed, for the author to rewire,
+ * and `unsupported` the parts the new board's firmware doesn't carry (they
+ * stay, flagged by validateHardware, for the author to swap or remove). */
+export function moveToBoard(
+  h: HardwareDraft,
+  board: string,
+  catalog: HardwareCatalog,
+): { hardware: HardwareDraft; moved: MovedPin[]; unsupported: string[] } {
   const model = resolveModel(catalog.models, board);
-  if (!model) return { hardware: { ...h, board, i2c: null }, moved: [] };
+  if (!model) return { hardware: { ...h, board, i2c: null }, moved: [], unsupported: [] };
+  const unsupported = [
+    ...new Set(
+      [...h.inputs, ...h.outputs]
+        .map((b) => findDriver(catalog.drivers, b.driver))
+        .filter((s): s is DriverSpec => !!s && !runsOn(s, model))
+        .map((s) => s.label),
+    ),
+  ];
   const moved: MovedPin[] = [];
   const taken = new Set<number>();
   // The bus first: its default pins are the board's, so parts move off them.
@@ -421,5 +437,5 @@ export function moveToBoard(h: HardwareDraft, board: string, catalog: HardwareCa
   }
   const rebind = (kind: "inputs" | "outputs") =>
     h[kind].map((b, i) => ({ ...b, pins: Object.fromEntries(Object.keys(b.pins).map((role) => [role, placed.get(`${kind}.${i}.${role}`) ?? null])) }));
-  return { hardware: { ...h, board: model.id, i2c, inputs: rebind("inputs"), outputs: rebind("outputs") }, moved };
+  return { hardware: { ...h, board: model.id, i2c, inputs: rebind("inputs"), outputs: rebind("outputs") }, moved, unsupported };
 }

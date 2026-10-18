@@ -50,6 +50,18 @@ export interface DriverSpec {
   bus?: "i2c";
   /** The I2C addresses this part can be set to. */
   addresses?: string[];
+  /** The chips whose firmware build carries this driver; absent = every chip. */
+  chips?: SketchBoard[];
+}
+
+/** Whether this board's firmware build carries the driver. */
+export function runsOn(spec: Pick<DriverSpec, "chips">, model: Pick<BoardModel, "chip"> | undefined): boolean {
+  return !model || !spec.chips || spec.chips.includes(model.chip);
+}
+
+/** The drivers this board's firmware build carries (all of them while no board resolves). */
+export function driversFor(drivers: DriverSpec[], model: Pick<BoardModel, "chip"> | undefined): DriverSpec[] {
+  return drivers.filter((d) => runsOn(d, model));
 }
 
 export interface DriverCatalog {
