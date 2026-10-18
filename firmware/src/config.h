@@ -5,6 +5,8 @@
 
 #include <vector>
 
+#include "board.h"
+
 // The per-device config the dashboard writes into the `cfg` partition.
 //
 // Layout (all little-endian), then 0xFF padding to the end of the partition:
@@ -41,6 +43,13 @@ struct DeviceConfig {
 
   int i2cSda;  // -1 = no I2C bus
   int i2cScl;
+
+  // The board model's reset button and status LED (`board_io`); the chip's
+  // defaults (board.h) for a config written before board_io existed.
+  int resetPin;
+  LedType ledType;
+  int ledPin;  // -1 with LedType::None
+  bool ledActiveLow;
 
   JsonArrayConst metrics;    // [{key, bool, publish, interval_s, deadband}]
   JsonArrayConst actuators;  // [{key, type}]

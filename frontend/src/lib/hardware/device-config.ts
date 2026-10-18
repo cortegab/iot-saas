@@ -57,6 +57,11 @@ export function buildFirmwareConfig(input: DeviceConfigInput): FirmwareConfig {
     },
     ...(input.wifi ? { wifi: input.wifi } : {}),
     ...(input.wiring.i2c ? { i2c: input.wiring.i2c } : {}),
+    // The model's own reset button and LED; firmware before 0.6.0 ignores it.
+    board_io: {
+      reset_pin: input.model.reset.pin,
+      led: { type: input.model.led.type ?? "gpio", pin: input.model.led.pin, active_low: input.model.led.active_low },
+    },
     metrics: input.metrics.map((m) => ({
       key: wireId(m),
       ...(m.data_type === "bool" ? { bool: true } : {}),

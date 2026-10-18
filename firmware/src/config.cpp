@@ -127,6 +127,34 @@ bool loadConfig(DeviceConfig& out, String& err) {
   out.i2cSda = i2c["sda"] | -1;
   out.i2cScl = i2c["scl"] | -1;
 
+  // Optional and additive, so older firmware ignores it and this one reads
+  // older configs: without it, the chip's defaults.
+  JsonObjectConst io = root["board_io"];
+  out.resetPin = io["reset_pin"] | DEFAULT_RESET_PIN;
+  out.ledType = DEFAULT_LED_TYPE;
+  out.ledPin = DEFAULT_LED_PIN;
+  out.ledActiveLow = DEFAULT_LED_ACTIVE_LOW;
+  JsonObjectConst led = io["led"];
+  if (!led.isNull()) {
+    const char* type = led["type"] | "gpio";
+    if (strcmp(type, "gpio") == 0) {
+      out.ledType = LedType::Gpio;
+    } else if (strcmp(type, "rgb") == 0) {
+      out.ledType = LedType::Rgb;
+    } else if (strcmp(type, "none") == 0) {
+      out.ledType = LedType::None;
+    } else {
+      err = "board_io.led.type must be gpio, rgb or none";
+      return false;
+    }
+    out.ledPin = out.ledType == LedType::None ? -1 : (led["pin"] | -1);
+    if (out.ledType != LedType::None && out.ledPin < 0) {
+      err = "board_io.led needs a pin";
+      return false;
+    }
+    out.ledActiveLow = led["active_low"] | false;
+  }
+
   out.metrics = root["metrics"];
   out.actuators = root["actuators"];
   out.inputs = root["inputs"];

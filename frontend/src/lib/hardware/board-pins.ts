@@ -1,7 +1,9 @@
 /** Which GPIOs a binding may use, and for what.
  *
  * Two layers. CHIP_PINS are the chip's rules and mirror firmware/src/pins.cpp,
- * which refuses the same things at boot; keep the two in step. A board model
+ * which refuses the same things at boot; release.py fails when the two
+ * disagree, so keep this object's shape (one `chip: { usable, adc1,
+ * inputOnly }` per chip) that it reads. A board model
  * (firmware/boards.json, published in the manifest) then narrows them to the
  * pins on that board's header and gives them their printed labels. Never
  * strapping, flash, USB or the provisioning-reset button's pin. */

@@ -30,7 +30,12 @@ const PLACEHOLDER_METRIC: SketchMetric = { name: "temperature", key: null };
 const CREDENTIAL_PLACEHOLDER = "<paste your device credential here>";
 const FW_VERSION = "1.0.0";
 
-export type SketchBoard = "esp32" | "esp32c3";
+/** Every chip the firmware builds for and the sketch supports, in the order
+ * they're offered. Adding one means a block in firmware/src/board.h and
+ * pins.cpp, here in BOARDS, and in CHIP_PINS (lib/hardware/board-pins.ts);
+ * release.py checks they agree. */
+export const CHIPS = ["esp32", "esp32c3"] as const;
+export type SketchBoard = (typeof CHIPS)[number];
 
 /** What differs per board: the Arduino IDE settings, the provisioning-reset button, the BLE
  * memory handler WiFiProv frees after provisioning, and the GPIOs handed out —
@@ -38,10 +43,22 @@ export type SketchBoard = "esp32" | "esp32c3";
  * things to one pin. No strapping, flash or USB pins. */
 export const BOARDS: Record<
   SketchBoard,
-  { label: string; arduinoBoard: string; ideSettings: string[]; resetPin: number; resetButton: string; bleHandler: string; inputs: number[]; outputs: number[] }
+  {
+    label: string;
+    /** One line for the sketch's board choice. */
+    blurb: string;
+    arduinoBoard: string;
+    ideSettings: string[];
+    resetPin: number;
+    resetButton: string;
+    bleHandler: string;
+    inputs: number[];
+    outputs: number[];
+  }
 > = {
   esp32: {
     label: "ESP32 DevKit",
+    blurb: "Classic ESP32, 30/38-pin dev boards.",
     arduinoBoard: "ESP32 Dev Module",
     ideSettings: [],
     // A button between GPIO 19 and GND: on the header of both the 30- and the
@@ -59,6 +76,7 @@ export const BOARDS: Record<
   },
   esp32c3: {
     label: "ESP32-C3",
+    blurb: "ESP32-C3 DevKitM, Super Mini and similar.",
     arduinoBoard: "ESP32C3 Dev Module",
     ideSettings: ["USB CDC On Boot: Enabled", "Flash Mode: DIO"],
     resetPin: 9,

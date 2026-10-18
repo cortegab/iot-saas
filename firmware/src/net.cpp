@@ -71,7 +71,7 @@ void onWifiEvent(arduino_event_t* e) {
 // Hold the reset button 5 s while running: forget the Wi-Fi and provision
 // again. (Holding it while powering up starts the bootloader instead.)
 void watchProvisioningReset() {
-  if (digitalRead(RESET_PIN) != LOW) {
+  if (digitalRead(cfg->resetPin) != LOW) {
     resetDownSince = 0;
     return;
   }
@@ -144,7 +144,7 @@ void netBegin(const DeviceConfig& config) {
 #if CONFIG_IDF_TARGET_ESP32C3
   esp_log_level_set("protocomm_nimble", ESP_LOG_NONE);
 #endif
-  pinMode(RESET_PIN, INPUT_PULLUP);
+  pinMode(config.resetPin, INPUT_PULLUP);
   // Connects with the Wi-Fi stored in NVS, or advertises over BLE if there is
   // none. Returns at once; netLoop() waits for the connection.
   String err;

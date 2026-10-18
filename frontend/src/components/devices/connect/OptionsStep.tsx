@@ -10,7 +10,7 @@ import { Select } from "@/components/ui/Select";
 import { Table } from "@/components/ui/Table";
 import { OptionGroup, plural, StepNav } from "@/components/devices/connect/parts";
 import type { ConnectFlow, InstallPath } from "@/components/devices/connect/useConnectFlow";
-import { BOARDS, pinChoices, type SketchBoard } from "@/lib/firmware-sketch";
+import { BOARDS, CHIPS, pinChoices, type SketchBoard } from "@/lib/firmware-sketch";
 import { wireId } from "@/lib/wire-id";
 
 /** Step 2: wiring (or board and pins, for the sketch), Wi-Fi and broker. */
@@ -29,10 +29,7 @@ export function OptionsStep({ flow }: { flow: ConnectFlow }) {
               label="Board"
               value={flow.board}
               onChange={(v) => flow.changeBoard(v as SketchBoard)}
-              options={[
-                ["esp32", BOARDS.esp32.label, "Classic ESP32, 30/38-pin dev boards."],
-                ["esp32c3", BOARDS.esp32c3.label, "ESP32-C3 DevKitM, Super Mini and similar."],
-              ]}
+              options={CHIPS.map((c) => [c, BOARDS[c].label, BOARDS[c].blurb] as const)}
             />
           )}
           <WifiOptions flow={flow} />
