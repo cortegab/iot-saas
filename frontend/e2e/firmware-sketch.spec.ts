@@ -19,22 +19,33 @@ async function apiHeaders(request: APIRequestContext) {
 }
 
 // The connect flow rotates the credential — never point this at a real board.
+// Its own template has no wiring, so the flow takes the sketch path whatever
+// the workspace's other templates hold.
 const test = withLogin.extend<{ throwawayDevice: { id: string; name: string } }>({
   throwawayDevice: async ({ request }, use) => {
     const headers = await apiHeaders(request);
-    const catalog = await (await request.get(`${API_URL}/catalog`, { headers })).json();
+    const stamp = Date.now();
+    const template = await (
+      await request.post(`${API_URL}/catalog`, {
+        headers,
+        data: { name: `E2E sketch ${stamp}`, metrics: [{ key: "temperature", name: "Temperature", unit: "°C" }], actuators: [] },
+      })
+    ).json();
     const created = await request.post(`${API_URL}/devices`, {
       headers,
-      data: { name: `E2E sketch ${Date.now()}`, catalog_entry_id: catalog[0].id },
+      data: { name: `E2E sketch ${stamp}`, catalog_entry_id: template.id },
     });
     expect(created.ok(), `POST /devices failed: ${created.status()}`).toBeTruthy();
     const device = (await created.json()).device;
     await use({ id: device.id, name: device.name });
     await request.delete(`${API_URL}/devices/${device.id}`, { headers });
+    await request.delete(`${API_URL}/catalog/${template.id}`, { headers });
   },
 });
 
-/** Reads the one-time credential and continues to Options; returns the password. */
+/** Reads the one-time credential and continues to Options; returns the password.
+ * The broker host defaults to this page's (localhost here), which Options
+ * refuses because a board can't reach it, so it gets a LAN address. */
 async function storeCredential(page: Page, deviceId: string): Promise<string> {
   const reveal = page.getByRole("region", { name: "One-time secret" });
   await expect(reveal.getByText(deviceId, { exact: true })).toBeVisible();
@@ -43,6 +54,7 @@ async function storeCredential(page: Page, deviceId: string): Promise<string> {
   expect(password.length).toBeGreaterThan(10);
   await reveal.getByLabel("I've stored it").check();
   await reveal.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Broker host").fill("192.168.1.10");
   return password;
 }
 
@@ -78,28 +90,15 @@ test("connect flow: phone provisioning with a QR from the credential, or typed W
   await expect(sketch).toContainText(`MQTT_USERNAME = "${throwawayDevice.id}"`);
   await expect(sketch).toContainText('MQTT_PASSWORD = "••••••••"');
   await expect(sketch).not.toContainText(password);
-  await expect(sketch).toContainText("NETWORK_PROV_SECURITY_2, (const char*)&SEC2_PARAMS");
-  await expect(sketch).toContainText("SEC2_VERIFIER");
+  await expect(sketch).toContainText("NETWORK_PROV_SECURITY_1, MQTT_PASSWORD");
+  await expect(sketch).not.toContainText("SEC2_VERIFIER");
   await expect(sketch).not.toContainText(OLD_GATT_UUID);
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Wi-Fi from your phone: the QR is the device name + its credential.
+  // Security 1: no username, the password is the PoP.
   await expect(page.getByRole("heading", { name: "Wi-Fi from your phone" })).toBeVisible();
   await expect(page.getByRole("img", { name: `Provisioning QR for ${throwawayDevice.name}` })).toBeVisible();
-  expect(await qrPayload(page)).toEqual({
-    ver: "v1",
-    name: throwawayDevice.name,
-    username: throwawayDevice.id,
-    pop: password,
-    transport: "ble",
-    network: "wifi",
-    security: 2,
-  });
-
-  // Security 1: no username, the password is the PoP.
-  await stepButton(page, /Options/).click();
-  await page.getByRole("radio", { name: /1 – PoP/ }).check();
-  await stepButton(page, /From your phone/).click();
   expect(await qrPayload(page)).toEqual({ ver: "v1", name: throwawayDevice.name, pop: password, transport: "ble", network: "wifi", security: 1 });
 
   // Typed Wi-Fi: no provisioning in the sketch, and step 4 is skipped.
