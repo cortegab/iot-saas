@@ -69,6 +69,15 @@ export interface TemplateDraft {
   hardware: HardwareDraft | null;
 }
 
+export type TemplateSectionId = "general" | "hardware" | "metrics" | "actuators";
+
+/** The editor's sections, in order: one list, so every way into the editor
+ * agrees. Onboarding from the hardware puts the wiring right after General,
+ * since parts bring the metrics and actuators; editing a template keeps it last. */
+export function templateSectionOrder({ onboarding }: { onboarding: boolean }): TemplateSectionId[] {
+  return onboarding ? ["general", "hardware", "metrics", "actuators"] : ["general", "metrics", "actuators", "hardware"];
+}
+
 /** The metric and actuator rows wiring can point at. */
 export function keyedRows(d: Pick<TemplateDraft, "metrics" | "actuators">): { metrics: KeyedRow[]; actuators: KeyedRow[] } {
   return {
