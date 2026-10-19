@@ -84,6 +84,22 @@
         "Plug it in by the USB port labelled UART (the other is the chip's own USB).",
         "Only GPIO 0-3 and 6 read analog while Wi-Fi is on."
       ]
+    },
+    {
+      "id": "lolin-s2-mini",
+      "chip": "esp32s2",
+      "label": "Lolin S2 Mini",
+      "description": "Wemos/Lolin S2 Mini (ESP32-S2, USB-C). No Bluetooth: its Wi-Fi is typed in at Install.",
+      "pins": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 21, 33, 34, 35, 36, 37, 38, 39, 40],
+      "i2c": { "sda": 33, "scl": 35 },
+      "reset": { "pin": 0, "label": "the 0 (BOOT) button" },
+      "led": { "type": "gpio", "pin": 15, "active_low": false },
+      "capabilities": [],
+      "notes": [
+        "To install, put it in download mode first: hold the 0 button, press and release RST, then release 0. It shows up as a new port; pick that one.",
+        "After Install, press RST once to start the new firmware.",
+        "No Bluetooth, so no phone setup: to change its Wi-Fi, run Install (or Update config only) again with the new network."
+      ]
     }
   ]
 }

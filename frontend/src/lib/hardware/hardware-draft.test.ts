@@ -381,7 +381,8 @@ describe("hasCapability", () => {
     expect(hasCapability({ capabilities: ["ble"] }, "ble")).toBe(true);
     expect(hasCapability({ capabilities: [] }, "ble")).toBe(false);
     expect(hasCapability({}, "ble")).toBe(true);
-    expect(MODELS.every((m) => hasCapability(m, "ble"))).toBe(true);
+    // Every board but the S2 (no Bluetooth) sets up Wi-Fi from a phone.
+    expect(MODELS.filter((m) => m.chip !== "esp32s2").every((m) => hasCapability(m, "ble"))).toBe(true);
   });
 });
 
@@ -422,5 +423,16 @@ describe("drivers per chip in the shipped catalog", () => {
     expect(ids("esp32c6-devkitc-1")).not.toContain("ds18b20");
     expect(ids("esp32-devkit-30")).toContain("ds18b20");
     expect(ids("esp32s3-devkitc-1")).toContain("ds18b20");
+    expect(ids("lolin-s2-mini")).toContain("ds18b20");
+  });
+});
+
+describe("Lolin S2 Mini", () => {
+  it("has no phone setup, and keeps its LED and BOOT out of wiring", () => {
+    const s2 = MODELS.find((m) => m.id === "lolin-s2-mini")!;
+    expect(hasCapability(s2, "ble")).toBe(false);
+    expect(pinsFor(s2, "output")).not.toContain(15);
+    expect(pinsFor(s2, "input")).not.toContain(0);
+    expect(pinsFor(s2, "adc1")).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
   });
 });
