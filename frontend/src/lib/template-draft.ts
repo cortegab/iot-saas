@@ -60,22 +60,27 @@ export interface ActuatorDraft {
   saved: { on: Scalar | null; off: Scalar | null; allowed: Scalar[] | null };
 }
 
+/** How a template's devices run (DESIGN.md §8 "Runs on"): our generic
+ * firmware, wired here, or the device's own code / a gateway (no wiring). */
+export type RunsOn = "generic_firmware" | "own_code";
+
 export interface TemplateDraft {
   name: string;
   enabled: boolean;
+  runsOn: RunsOn;
   metrics: MetricDraft[];
   actuators: ActuatorDraft[];
-  /** Wiring for the generic firmware; null = none (devices use the sketch). */
+  /** Wiring for the generic firmware; null = none yet (devices use the sketch). Always null for own code. */
   hardware: HardwareDraft | null;
 }
 
 export type TemplateSectionId = "general" | "hardware" | "metrics" | "actuators";
 
 /** The editor's sections, in order: one list, so every way into the editor
- * agrees. Onboarding from the hardware puts the wiring right after General,
- * since parts bring the metrics and actuators; editing a template keeps it last. */
-export function templateSectionOrder({ onboarding }: { onboarding: boolean }): TemplateSectionId[] {
-  return onboarding ? ["general", "hardware", "metrics", "actuators"] : ["general", "metrics", "actuators", "hardware"];
+ * agrees (DESIGN.md §8). On our firmware the wiring comes right after
+ * General, since parts bring the metrics and actuators; own code has none. */
+export function templateSectionOrder({ runsOn }: { runsOn: RunsOn }): TemplateSectionId[] {
+  return runsOn === "generic_firmware" ? ["general", "hardware", "metrics", "actuators"] : ["general", "metrics", "actuators"];
 }
 
 /** The metric and actuator rows wiring can point at. */
@@ -123,8 +128,10 @@ export function blankActuator(): ActuatorDraft {
   };
 }
 
-export function blankTemplate(): TemplateDraft {
-  return { name: "", enabled: true, metrics: [blankMetric()], actuators: [], hardware: null };
+/** A new template. On our firmware the parts bring the metrics, so it starts
+ * with none; own code starts with one to fill in. */
+export function blankTemplate(runsOn: RunsOn = "generic_firmware"): TemplateDraft {
+  return { name: "", enabled: true, runsOn, metrics: runsOn === "own_code" ? [blankMetric()] : [], actuators: [], hardware: null };
 }
 
 /** Saved entry → draft. `duplicate` drops the saved keys' identity. */
@@ -137,6 +144,7 @@ function templateRows(e: CatalogEntryResponse, duplicate: boolean): Omit<Templat
   return {
     name: duplicate ? `${e.name} (copy)` : e.name,
     enabled: duplicate ? true : e.status === "active",
+    runsOn: e.runs_on,
     metrics: e.metrics.map((m) => ({
       uid: uid(),
       name: m.name,
@@ -186,6 +194,7 @@ export function draftToRequest(
 ): {
   name: string;
   status: "active" | "disabled";
+  runs_on: RunsOn;
   metrics: CatalogMetric[];
   actuators: CatalogActuator[];
   hardware: HardwareConfig | null;
@@ -193,7 +202,9 @@ export function draftToRequest(
   return {
     name: d.name.trim(),
     status: d.enabled ? "active" : "disabled",
-    hardware: hardwareToRequest(d.hardware, keyedRows(d), drivers),
+    runs_on: d.runsOn,
+    // Own code is never wired (the backend refuses it).
+    hardware: d.runsOn === "own_code" ? null : hardwareToRequest(d.hardware, keyedRows(d), drivers),
     metrics: d.metrics.map((m) => ({
       name: m.name.trim(),
       key: m.key.trim() || null,

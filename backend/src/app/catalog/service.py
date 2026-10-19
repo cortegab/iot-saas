@@ -97,16 +97,29 @@ class HardwareMappingError(Exception):
     the user-facing reason."""
 
 
+class RunsOnHardwareError(Exception):
+    """Raised when a template that runs its own code would keep wiring: only
+    templates on the generic firmware are wired (DESIGN.md §8 "Runs on")."""
+
+
 # The errors a template's keys or wiring can fail with — a 400 wherever a
 # template is created or edited (the catalog routes, and a device created
 # with a new template).
-KEY_ERRORS = (DuplicateKeyError, ReservedMetricKeyError, InvalidKeyError, HardwareMappingError)
+KEY_ERRORS = (
+    DuplicateKeyError,
+    ReservedMetricKeyError,
+    InvalidKeyError,
+    HardwareMappingError,
+    RunsOnHardwareError,
+)
 
 
 def key_error_detail(exc: Exception) -> str:
     """The user-facing reason for one of KEY_ERRORS."""
     if isinstance(exc, HardwareMappingError):
         return str(exc)
+    if isinstance(exc, RunsOnHardwareError):
+        return "A template that runs its own code has no wiring. Remove the wiring, or set it to run our firmware."
     if isinstance(exc, DuplicateKeyError):
         return f"Duplicate key: {exc}"
     if isinstance(exc, ReservedMetricKeyError):
@@ -115,6 +128,11 @@ def key_error_detail(exc: Exception) -> str:
         f"Key '{exc}' isn't valid. Use letters, digits, - and _ only "
         "(no spaces, / + # or a leading $), up to 64 characters."
     )
+
+
+def _check_runs_on(runs_on: str, hardware: dict[str, Any] | None) -> None:
+    if runs_on == "own_code" and hardware is not None:
+        raise RunsOnHardwareError
 
 
 def check_hardware(
@@ -260,16 +278,20 @@ async def create_catalog_entry(
     actuators: list[dict[str, Any]],
     is_legacy: bool = False,
     hardware: dict[str, Any] | None = None,
+    runs_on: str | None = None,
 ) -> DeviceCatalogEntry:
     normalized_metrics = _normalize_metrics(metrics)
     normalized_actuators = _normalize_actuators(actuators)
     check_hardware(hardware, normalized_metrics, normalized_actuators)
+    runs_on = runs_on or ("generic_firmware" if hardware is not None else "own_code")
+    _check_runs_on(runs_on, hardware)
     entry = DeviceCatalogEntry(
         tenant_id=tenant_id,
         name=name,
         metrics=normalized_metrics,
         actuators=normalized_actuators,
         hardware=hardware,
+        runs_on=runs_on,
         is_legacy=is_legacy,
     )
     session.add(entry)
@@ -313,6 +335,7 @@ async def update_catalog_entry(
     entry_status: str | None,
     hardware: dict[str, Any] | None = None,
     hardware_set: bool = False,
+    runs_on: str | None = None,
 ) -> DeviceCatalogEntry:
     before_metrics, before_actuators = list(entry.metrics), list(entry.actuators)
     new_metrics = (
@@ -330,6 +353,7 @@ async def update_catalog_entry(
     # save rather than left pointing at nothing.
     new_hardware = hardware if hardware_set else entry.hardware
     check_hardware(new_hardware, new_metrics, new_actuators)
+    _check_runs_on(runs_on or entry.runs_on, new_hardware)
     if metrics is not None or actuators is not None:
         await _check_device_hardware(session, entry, new_metrics, new_actuators)
 
@@ -343,6 +367,8 @@ async def update_catalog_entry(
         entry.actuators = new_actuators
     if hardware_set:
         entry.hardware = hardware
+    if runs_on is not None:
+        entry.runs_on = runs_on
     if entry_status is not None:
         entry.status = entry_status
     if entry.metrics != before_metrics or entry.actuators != before_actuators:

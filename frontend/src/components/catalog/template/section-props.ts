@@ -2,7 +2,7 @@ import type { EditorMode } from "@/components/editor/EditorFrame";
 import type { RecordEditor } from "@/components/editor/useRecordEditor";
 import type { KeyUsage, TemplateDraft } from "@/lib/template-draft";
 
-/** Onboarding "from the hardware": the device created with the template. */
+/** Onboarding "Something new": the device created with the template. */
 export interface OnboardDevice {
   name: string;
   zoneId: string;

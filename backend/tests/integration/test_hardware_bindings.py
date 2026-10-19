@@ -296,3 +296,63 @@ async def test_device_needs_exactly_one_template(client: httpx.AsyncClient) -> N
         headers=headers,
     )
     assert resp.status_code == 422
+
+
+async def test_runs_on_follows_the_wiring_unless_given(client: httpx.AsyncClient) -> None:
+    headers = await _headers(client, "runs1@example.com")
+    assert (await _template(client, headers, hardware=HARDWARE))["runs_on"] == "generic_firmware"
+    assert (await _template(client, headers))["runs_on"] == "own_code"
+    # Our firmware, not wired yet: allowed (the wiring comes later).
+    assert (await _template(client, headers, runs_on="generic_firmware"))[
+        "runs_on"
+    ] == "generic_firmware"
+
+
+async def test_a_template_running_its_own_code_has_no_wiring(client: httpx.AsyncClient) -> None:
+    headers = await _headers(client, "runs2@example.com")
+    resp = await client.post(
+        "/catalog",
+        json={
+            "name": "Mixed",
+            "metrics": [{"name": "Door", "key": "door"}],
+            "hardware": {**HARDWARE, "inputs": [], "outputs": []},
+            "runs_on": "own_code",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 400
+    assert "own code has no wiring" in resp.json()["detail"]
+
+    wired = await _template(client, headers, hardware=HARDWARE)
+    refused = await client.patch(
+        f"/catalog/{wired['id']}", json={"runs_on": "own_code"}, headers=headers
+    )
+    assert refused.status_code == 400
+    # Dropping the wiring in the same save is the way to switch.
+    switched = await client.patch(
+        f"/catalog/{wired['id']}", json={"runs_on": "own_code", "hardware": None}, headers=headers
+    )
+    assert switched.status_code == 200, switched.text
+    assert switched.json()["runs_on"] == "own_code"
+    assert switched.json()["hardware"] is None
+
+
+async def test_a_device_with_a_new_template_takes_its_runs_on(client: httpx.AsyncClient) -> None:
+    headers = await _headers(client, "runs3@example.com")
+    resp = await client.post(
+        "/devices",
+        json={
+            "name": "Gateway 1",
+            "new_template": {
+                "name": "Gateway",
+                "metrics": [{"name": "Flow", "key": "flow"}],
+                "runs_on": "own_code",
+            },
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    entry = await client.get(
+        f"/catalog/{resp.json()['device']['catalog_entry_id']}", headers=headers
+    )
+    assert entry.json()["runs_on"] == "own_code"

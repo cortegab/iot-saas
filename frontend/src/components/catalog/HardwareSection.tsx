@@ -43,6 +43,8 @@ export function HardwareSection({
   readOnly,
   onChange,
   field,
+  onRenameTarget,
+  targetError,
 }: {
   hardware: HardwareDraft | null;
   rows: { metrics: KeyedRow[]; actuators: KeyedRow[] };
@@ -51,6 +53,11 @@ export function HardwareSection({
   onChange: (next: HardwareDraft | null) => void;
   /** Error/warning props and blur handler for a field path. */
   field: (path: string) => { error?: string; warning?: string; onBlur: () => void };
+  /** Renames the metric or actuator a reading feeds, right on the part card
+   * (a template's editor; a device's own wiring can't rename them). */
+  onRenameTarget?: (kind: Kind, uid: string, name: string) => void;
+  /** The key problem (clash, reserved, invalid) of the row a reading feeds. */
+  targetError?: (kind: Kind, uid: string) => string | undefined;
 }) {
   // What the last board change moved, for the author to rewire.
   const [moved, setMoved] = useState<{ board: string; pins: MovedPin[]; unsupported: string[] } | null>(null);
@@ -103,8 +110,13 @@ export function HardwareSection({
   // One metric is fed, and one actuator driven, by one channel: the pickers
   // offer only what's still free.
   const taken = { inputs: takenTargets(h, "inputs"), outputs: takenTargets(h, "outputs") };
-  const wiredMetrics = new Set(h.inputs.flatMap((b) => Object.values(b.channels)).filter(Boolean)).size;
-  const wiredActuators = new Set(h.outputs.flatMap((b) => Object.values(b.channels)).filter(Boolean)).size;
+  const fedUids = new Set(h.inputs.flatMap((b) => Object.values(b.channels)).filter(Boolean));
+  const drivenUids = new Set(h.outputs.flatMap((b) => Object.values(b.channels)).filter(Boolean));
+  const wiredMetrics = fedUids.size;
+  const wiredActuators = drivenUids.size;
+  // "What you'll see": the metrics and actuators the parts produce, by name.
+  const seen = rows.metrics.filter((r) => fedUids.has(r.uid)).map((r) => r.name || r.key || "Unnamed");
+  const switched = rows.actuators.filter((r) => drivenUids.has(r.uid)).map((r) => r.name || r.key || "Unnamed");
   const boardField = field("hardware.board");
 
   return (
@@ -204,6 +216,8 @@ export function HardwareSection({
               field={field}
               onChange={(next) => setBinding(kind, i, next)}
               onRemove={() => commit({ ...h, [kind]: h[kind].filter((x) => x.uid !== b.uid) })}
+              onRenameTarget={onRenameTarget}
+              targetError={targetError}
             />
           ))}
           {!readOnly && (
@@ -214,6 +228,20 @@ export function HardwareSection({
           )}
         </div>
       ))}
+
+      {(seen.length > 0 || switched.length > 0) && (
+        <p className="rounded-lg bg-canvas px-3.5 py-2.5 text-[13px] text-ink-muted">
+          <b className="font-medium text-ink">What you&apos;ll see: </b>
+          {seen.length > 0 ? seen.join(", ") : "no readings yet"}
+          {switched.length > 0 && (
+            <>
+              {" · "}
+              <b className="font-medium text-ink">and switch: </b>
+              {switched.join(", ")}
+            </>
+          )}
+        </p>
+      )}
 
       {guide.pins.length > 0 && (
         <div className="flex flex-col gap-2">
@@ -265,6 +293,8 @@ function BindingCard({
   field,
   onChange,
   onRemove,
+  onRenameTarget,
+  targetError,
 }: {
   kind: Kind;
   index: number;
@@ -278,6 +308,8 @@ function BindingCard({
   field: (path: string) => { error?: string; warning?: string; onBlur: () => void };
   onChange: (b: BindingDraft) => void;
   onRemove: () => void;
+  onRenameTarget?: (kind: Kind, uid: string, name: string) => void;
+  targetError?: (kind: Kind, uid: string) => string | undefined;
 }) {
   const drivers = catalog.drivers;
   const model = resolveModel(catalog.models, hardware.board);
@@ -424,22 +456,38 @@ function BindingCard({
                 // Rows another channel already holds are left out; this
                 // picker's own choice always stays.
                 const free = targets.filter((t) => t.uid === current || !taken.has(t.uid));
+                const linked = targets.find((t) => t.uid === current);
+                const keyProblem = linked && targetError?.(kind, linked.uid);
                 return (
-                  <Field key={ch.key} inline label={ch.label} error={error} warning={warning}>
-                    <Select
-                      value={current}
-                      disabled={readOnly}
-                      onChange={(e) => onChange({ ...binding, channels: { ...binding.channels, [ch.key]: e.target.value } })}
-                    >
-                      <option value="">{kind === "inputs" ? "Not used" : "Pick an actuator"}</option>
-                      {current && !targets.some((t) => t.uid === current) && <option value={current}>Missing</option>}
-                      {free.map((t) => (
-                        <option key={t.uid} value={t.uid}>
-                          {t.name || "Unnamed"}
-                          {t.key ? ` (${t.key})` : ""}
-                        </option>
-                      ))}
-                    </Select>
+                  <Field key={ch.key} inline label={ch.label} error={error ?? keyProblem} warning={warning}>
+                    <div className="flex flex-col gap-1.5">
+                      <Select
+                        value={current}
+                        disabled={readOnly}
+                        onChange={(e) => onChange({ ...binding, channels: { ...binding.channels, [ch.key]: e.target.value } })}
+                      >
+                        <option value="">{kind === "inputs" ? "Not used" : "Pick an actuator"}</option>
+                        {current && !targets.some((t) => t.uid === current) && <option value={current}>Missing</option>}
+                        {free.map((t) => (
+                          <option key={t.uid} value={t.uid}>
+                            {t.name || "Unnamed"}
+                            {t.key ? ` (${t.key})` : ""}
+                          </option>
+                        ))}
+                      </Select>
+                      {/* Named right here (DESIGN.md §8): what the dashboards call it. */}
+                      {linked && onRenameTarget && !readOnly && (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            aria-label={`Name of what ${ch.label} ${kind === "inputs" ? "feeds" : "drives"}`}
+                            value={linked.name}
+                            placeholder="Name"
+                            onChange={(e) => onRenameTarget(kind, linked.uid, e.target.value)}
+                          />
+                          <span className="shrink-0 font-mono text-xs text-ink-muted">{linked.key || "key"}</span>
+                        </div>
+                      )}
+                    </div>
                   </Field>
                 );
               })}

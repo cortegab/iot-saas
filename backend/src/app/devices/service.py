@@ -150,12 +150,13 @@ async def create_device_with_template(
     actuators: list[dict[str, Any]],
     hardware: dict[str, Any] | None,
     zone_id: uuid.UUID | None = None,
+    runs_on: str | None = None,
 ) -> tuple[Device, str]:
     """A new template and its first device, in this session's transaction:
     if either fails, neither exists. Raises catalog_service.KEY_ERRORS for a
     bad template, as creating one alone does."""
     entry = await catalog_service.create_catalog_entry(
-        session, tenant_id, template_name, metrics, actuators, hardware=hardware
+        session, tenant_id, template_name, metrics, actuators, hardware=hardware, runs_on=runs_on
     )
     await session.flush()
     return await create_device(session, tenant_id, name, entry.id, zone_id=zone_id)
