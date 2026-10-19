@@ -10,6 +10,7 @@ import {
   draftToRequest,
   reconcileParts,
   renamed,
+  templateSectionOrder,
   templateToDraft,
   validateTemplate,
   type TemplateDraft,
@@ -159,5 +160,12 @@ describe("reconcileParts", () => {
     const d = add(empty(), "dht22");
     const again = reconcileParts(d, d.hardware, CATALOG);
     expect(again.metrics).toEqual(d.metrics);
+  });
+});
+
+describe("templateSectionOrder", () => {
+  it("puts the wiring after General when onboarding, last when editing", () => {
+    expect(templateSectionOrder({ onboarding: true })).toEqual(["general", "hardware", "metrics", "actuators"]);
+    expect(templateSectionOrder({ onboarding: false })).toEqual(["general", "metrics", "actuators", "hardware"]);
   });
 });

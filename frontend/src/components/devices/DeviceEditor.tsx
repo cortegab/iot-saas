@@ -23,7 +23,7 @@ import { useToast } from "@/components/ui/Toast";
 import { EditorFrame, EditorSection } from "@/components/editor/EditorFrame";
 import { useRecordEditor, type Validation } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
-import { HardwareSection } from "@/components/catalog/HardwareSection";
+import { WiringSection } from "@/components/catalog/WiringSection";
 import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
 import { useDriverCatalog, type DriverSpec } from "@/lib/hardware/driver-catalog";
@@ -102,7 +102,7 @@ export function DeviceEditor({ deviceId, embedded = false }: { deviceId: string;
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
   const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
   const zoneName = useMemo(() => new Map((zones ?? []).map((z) => [z.id, z.name])), [zones]);
-  const { data: catalog, error: catalogError, isLoading: catalogLoading } = useDriverCatalog();
+  const { data: catalog } = useDriverCatalog();
   const rows = useMemo(() => templateRows(template), [template]);
   const templateWiring = useMemo(() => hardwareToDraft(template?.hardware, rows), [template, rows]);
 
@@ -317,83 +317,69 @@ export function DeviceEditor({ deviceId, embedded = false }: { deviceId: string;
           )}
         </EditorSection>
 
-        {template && (
-          <EditorSection
-            id="hardware"
-            title="Wiring"
+        {template && d.wiring && (
+          <WiringSection
             card={card}
-            lead={
-              d.wiring
-                ? "This device is wired its own way. Template edits to the wiring don't reach it; its metrics and actuators still come from the template."
-                : "How this board is wired, for installing from the browser. It follows the template unless this one is built differently: another board, a moved pin, a different sensor."
-            }
+            lead="This device is wired its own way. Template edits to the wiring don't reach it; its metrics and actuators still come from the template."
+            hardware={d.wiring}
+            rows={rows}
+            readOnly={readOnly}
+            onChange={(wiring) => editor.set({ ...d, wiring })}
+            field={(path) => ({ error: editor.errorFor(path), warning: editor.warningFor(path), onBlur: () => editor.touch(path) })}
           >
-            {d.wiring ? (
-              <>
-                <HardwareSection
-                  hardware={d.wiring}
-                  rows={rows}
-                  catalog={{ data: catalog, loading: catalogLoading, error: !!catalogError }}
-                  readOnly={readOnly}
-                  onChange={(wiring) => editor.set({ ...d, wiring })}
-                  field={(path) => ({ error: editor.errorFor(path), warning: editor.warningFor(path), onBlur: () => editor.touch(path) })}
-                />
-                {!readOnly && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button variant="secondary" onClick={() => editor.set({ ...d, wiring: null })}>
-                      <RotateCcw aria-hidden size={14} />
-                      Use the template&apos;s wiring
-                    </Button>
-                    {device.hardware && !editor.dirty && (
-                      <Button variant="secondary" onClick={() => void saveWiringToTemplate()}>
-                        <Upload aria-hidden size={14} />
-                        Save to {template.name}…
-                      </Button>
-                    )}
-                  </div>
+            {!readOnly && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button variant="secondary" onClick={() => editor.set({ ...d, wiring: null })}>
+                  <RotateCcw aria-hidden size={14} />
+                  Use the template&apos;s wiring
+                </Button>
+                {device.hardware && !editor.dirty && (
+                  <Button variant="secondary" onClick={() => void saveWiringToTemplate()}>
+                    <Upload aria-hidden size={14} />
+                    Save to {template.name}…
+                  </Button>
                 )}
-              </>
-            ) : (
-              <>
-                {templateWiring ? (
-                  <HardwareSection
-                    hardware={templateWiring}
-                    rows={rows}
-                    catalog={{ data: catalog, loading: catalogLoading, error: !!catalogError }}
-                    readOnly
-                    onChange={() => undefined}
-                    field={() => ({ onBlur: () => undefined })}
-                  />
-                ) : (
-                  <Callout>
-                    {template.name} has no wiring, so this device gets a sketch to edit and upload. Wire this device alone, or{" "}
-                    <Link href={`/templates/${template.id}#hardware`} className="text-accent hover:underline">
-                      set up the template&apos;s wiring
-                    </Link>{" "}
-                    for every device of it.
-                  </Callout>
-                )}
-                {!readOnly && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant="secondary"
-                      disabled={!catalog && !template.hardware}
-                      // A fresh copy: its own row ids, apart from the read-only view's.
-                      onClick={() => editor.set({ ...d, wiring: hardwareToDraft(template.hardware, rows) ?? blankHardware(catalog?.models[0]?.id) })}
-                    >
-                      <Cpu aria-hidden size={14} />
-                      Wire this device differently
-                    </Button>
-                    {template.hardware && (
-                      <Link href={`/templates/${template.id}#hardware`} className={buttonClassName({ variant: "secondary" })}>
-                        Edit the template&apos;s wiring
-                      </Link>
-                    )}
-                  </div>
-                )}
-              </>
+              </div>
             )}
-          </EditorSection>
+          </WiringSection>
+        )}
+
+        {template && !d.wiring && (
+          <WiringSection
+            card={card}
+            lead="How this board is wired, for installing from the browser. It follows the template unless this one is built differently: another board, a moved pin, a different sensor."
+            hardware={templateWiring ?? undefined}
+            rows={rows}
+            readOnly
+          >
+            {!templateWiring && (
+              <Callout>
+                {template.name} has no wiring, so this device gets a sketch to edit and upload. Wire this device alone, or{" "}
+                <Link href={`/templates/${template.id}#hardware`} className="text-accent hover:underline">
+                  set up the template&apos;s wiring
+                </Link>{" "}
+                for every device of it.
+              </Callout>
+            )}
+            {!readOnly && (
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  variant="secondary"
+                  disabled={!catalog && !template.hardware}
+                  // A fresh copy: its own row ids, apart from the read-only view's.
+                  onClick={() => editor.set({ ...d, wiring: hardwareToDraft(template.hardware, rows) ?? blankHardware(catalog?.models[0]?.id) })}
+                >
+                  <Cpu aria-hidden size={14} />
+                  Wire this device differently
+                </Button>
+                {template.hardware && (
+                  <Link href={`/templates/${template.id}#hardware`} className={buttonClassName({ variant: "secondary" })}>
+                    Edit the template&apos;s wiring
+                  </Link>
+                )}
+              </div>
+            )}
+          </WiringSection>
         )}
 
         {embedded && (
