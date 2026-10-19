@@ -69,6 +69,21 @@
       "led": { "type": "rgb", "pin": 38, "active_low": false },
       "capabilities": ["ble", "rgb_led"],
       "notes": ["Plug it in by the USB port labelled UART (the other is the chip's own USB)."]
+    },
+    {
+      "id": "esp32c6-devkitc-1",
+      "chip": "esp32c6",
+      "label": "ESP32-C6 DevKitC-1",
+      "description": "Espressif's ESP32-C6 DevKitC-1 and clones: Wi-Fi 6 (2.4 GHz), RGB LED on GPIO 8.",
+      "pins": [0, 1, 2, 3, 6, 7, 10, 11, 14, 18, 19, 20, 21, 22, 23],
+      "i2c": { "sda": 23, "scl": 22 },
+      "reset": { "pin": 9, "label": "the BOOT button" },
+      "led": { "type": "rgb", "pin": 8, "active_low": false },
+      "capabilities": ["ble", "rgb_led"],
+      "notes": [
+        "Plug it in by the USB port labelled UART (the other is the chip's own USB).",
+        "Only GPIO 0-3 and 6 read analog while Wi-Fi is on."
+      ]
     }
   ]
 }

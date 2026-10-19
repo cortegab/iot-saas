@@ -30,6 +30,7 @@ BOARDS = {
     "esp32": ("esp32", "ESP32", 0x1000),
     "esp32c3": ("esp32c3", "ESP32-C3", 0x0),
     "esp32s3": ("esp32s3", "ESP32-S3", 0x0),
+    "esp32c6": ("esp32c6", "ESP32-C6", 0x0),
 }
 PARTITIONS_OFFSET = 0x8000
 OTADATA_OFFSET = 0xE000

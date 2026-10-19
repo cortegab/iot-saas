@@ -1,6 +1,11 @@
 // DS18B20 1-Wire temperature probes: up to 4 on one pin, as temp_1..temp_4 in
 // address order. Conversions run in the background: request, then read once
 // the resolution's conversion time has passed, so the loop never waits.
+//
+// Not on every chip: OneWire 2.3.8's direct GPIO access doesn't build for the
+// ESP32-C6 (drivers.json "chips"; platformio.ini ignores the library there).
+#ifdef IOD_DRIVER_DS18B20
+
 #include <DallasTemperature.h>
 #include <OneWire.h>
 
@@ -97,3 +102,5 @@ class Ds18b20 : public InputDriver {
 }  // namespace
 
 InputDriver* makeDs18b20() { return new Ds18b20(); }
+
+#endif  // IOD_DRIVER_DS18B20

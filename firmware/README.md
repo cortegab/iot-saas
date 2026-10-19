@@ -97,13 +97,21 @@ labelled, and that lives in `boards.json`.
 
 ## Size
 
-| Board | App (0.9.0) | Share of a 1.875 MB OTA slot |
+| Board | App (0.10.0) | Share of a 1.875 MB OTA slot |
 |---|---|---|
 | ESP32 | 1.39 MB | 71% |
 | ESP32-C3 | 1.55 MB | 79% |
 | ESP32-S3 | 1.40 MB | 71% |
+| ESP32-C6 | 1.70 MB | 87% |
 
-The S3's prebuilt libraries already use NimBLE, so `[env:esp32s3]` needs no `custom_sdkconfig`.
+The S3's and C6's prebuilt libraries already use NimBLE, so their envs need no `custom_sdkconfig`.
+**The C6 is the tightest**, close to the 90% warning: its prebuilt libraries carry 802.15.4
+(Thread/Zigbee) support we don't use. If a driver pushes it over, trim that with a `custom_sdkconfig`
+the way `[env:esp32]` drops Bluedroid.
+
+**Not every driver builds everywhere.** OneWire 2.3.8 doesn't support the C6, so its build has no
+DS18B20 (`"chips"` in `drivers.json`, `lib_ignore` in `[env:esp32c6]`, and the driver's own
+`#ifdef`). The dashboard doesn't offer it for C6 boards.
 
 **The ESP32 builds with NimBLE, not Bluedroid.** The prebuilt Arduino libraries for the ESP32 use
 Bluedroid (BLE + Classic BT), and provisioning only needs BLE. Up to 0.3.x that put the ESP32 at

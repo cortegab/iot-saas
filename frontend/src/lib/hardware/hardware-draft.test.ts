@@ -404,3 +404,23 @@ describe("board models", () => {
     expect(pinsFor(v11, "output")).not.toContain(38);
   });
 });
+
+describe("ESP32-C6", () => {
+  it("reads analog only on ADC1's GPIO 0-3 and 6, and keeps BOOT and its LED out of wiring", () => {
+    const c6 = MODELS.find((m) => m.id === "esp32c6-devkitc-1")!;
+    expect(pinsFor(c6, "adc1")).toEqual([0, 1, 2, 3, 6]);
+    expect(pinsFor(c6, "input")).not.toContain(8);
+    expect(pinsFor(c6, "input")).not.toContain(9);
+    // An I2C part lands on the C6's default bus.
+    expect(moveToBoard(syncI2c({ ...blankHardware("esp32-devkit-30"), inputs: [blankBinding(spec("mpu6050"), blankHardware("esp32-devkit-30"), CATALOG)] }, CATALOG), "esp32c6-devkitc-1", CATALOG).hardware.i2c).toEqual({ sda: 23, scl: 22 });
+  });
+});
+
+describe("drivers per chip in the shipped catalog", () => {
+  it("the C6 build has no DS18B20 (OneWire doesn't build for it); the others do", () => {
+    const ids = (id: string) => driversFor(DRIVERS, MODELS.find((m) => m.id === id)).map((d) => d.id);
+    expect(ids("esp32c6-devkitc-1")).not.toContain("ds18b20");
+    expect(ids("esp32-devkit-30")).toContain("ds18b20");
+    expect(ids("esp32s3-devkitc-1")).toContain("ds18b20");
+  });
+});

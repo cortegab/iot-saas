@@ -40,6 +40,7 @@
       "kind": "input",
       "label": "DS18B20 temperature",
       "description": "1-Wire temperature probes, up to 4 on one pin.",
+      "chips": ["esp32", "esp32c3", "esp32s3"],
       "pins": [{ "role": "pin", "label": "Data", "needs": "bus" }],
       "params": [
         { "key": "resolution", "label": "Resolution (bits)", "type": "int", "default": 12, "min": 9, "max": 12 },
