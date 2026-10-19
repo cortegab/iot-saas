@@ -78,7 +78,9 @@ labelled, and that lives in `boards.json`.
    - `reset`: its provisioning-reset button (`pin`, and a `label` people read)
    - `led`: its status LED, `type` `gpio`, `rgb` (addressable, like the S3/C6 DevKits) or `none`,
      plus `pin` and `active_low`. Both may differ from the chip's defaults in `src/board.h`.
-   - `capabilities`: `ble` when Wi-Fi can be set up from a phone, `rgb_led` when `led.type` is `rgb`
+   - `capabilities`: `ble` when Wi-Fi can be set up from a phone, `rgb_led` when `led.type` is `rgb`.
+     Without `ble` (the S2), the dashboard offers only Wi-Fi typed in at Install, and the firmware
+     builds no provisioning code (`SOC_BT_SUPPORTED`) and refuses a config without `wifi`.
    - `notes`: anything a person wiring it should know
 2. Bump `FW_VERSION`, then run `release.py`. It refuses pins the firmware wouldn't accept.
 3. Deploy. The dashboard offers the model as soon as the release is live.

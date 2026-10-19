@@ -47,6 +47,8 @@ export const BOARDS: Record<
     label: string;
     /** One line for the sketch's board choice. */
     blurb: string;
+    /** Has Bluetooth, so Wi-Fi can come from a phone; without, it's typed in. */
+    ble: boolean;
     arduinoBoard: string;
     ideSettings: string[];
     resetPin: number;
@@ -59,6 +61,7 @@ export const BOARDS: Record<
   esp32: {
     label: "ESP32 DevKit",
     blurb: "Classic ESP32, 30/38-pin dev boards.",
+    ble: true,
     arduinoBoard: "ESP32 Dev Module",
     ideSettings: [],
     // A button between GPIO 19 and GND: on the header of both the 30- and the
@@ -77,6 +80,7 @@ export const BOARDS: Record<
   esp32c3: {
     label: "ESP32-C3",
     blurb: "ESP32-C3 DevKitM, Super Mini and similar.",
+    ble: true,
     arduinoBoard: "ESP32C3 Dev Module",
     ideSettings: ["USB CDC On Boot: Enabled", "Flash Mode: DIO"],
     resetPin: 9,

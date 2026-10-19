@@ -3,6 +3,7 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <soc/soc_caps.h>
 
 #include "board.h"
 #include "io.h"
@@ -10,8 +11,10 @@
 #include "root_ca.h"
 #include "version.h"
 
+#if SOC_BT_SUPPORTED
 // Keep the Bluetooth controller's RAM reserved, or BLE provisioning crashes at boot.
 extern "C" bool btInUse() { return true; }
+#endif
 
 namespace {
 
@@ -141,6 +144,7 @@ void netBegin(const DeviceConfig& config) {
     return;
   }
 
+#if SOC_BT_SUPPORTED
 #if CONFIG_IDF_TARGET_ESP32C3
   esp_log_level_set("protocomm_nimble", ESP_LOG_NONE);
 #endif
@@ -152,6 +156,8 @@ void netBegin(const DeviceConfig& config) {
     // The LED stays on its connecting pattern; the reset button still works.
     Serial.printf("[PROV] %s; hold the reset button 5 s to try again\n", err.c_str());
   }
+#endif
+  // Without Bluetooth, loadConfig() already refused a config with no Wi-Fi.
 }
 
 void netLoop() {

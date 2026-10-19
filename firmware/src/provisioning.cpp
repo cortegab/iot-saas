@@ -1,5 +1,11 @@
 #include "provisioning.h"
 
+#include <soc/soc_caps.h>
+
+// Phone setup is BLE only: a chip without Bluetooth (the S2) builds none of
+// this, and its config must carry the Wi-Fi (config.cpp).
+#if SOC_BT_SUPPORTED
+
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <network_provisioning/manager.h>
@@ -71,3 +77,5 @@ bool provisioningBegin(const DeviceConfig& cfg, String& err) {
   }
   return true;
 }
+
+#endif  // SOC_BT_SUPPORTED

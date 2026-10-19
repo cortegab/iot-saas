@@ -13,7 +13,7 @@ import { BOARDS, buildSketch, defaultPins, pinClashes, provName, type SketchBoar
 import { resolveModel } from "@/lib/hardware/board-pins";
 import type { FirmwareConfig } from "@/lib/hardware/config-blob";
 import { brokerHostProblem, buildFirmwareConfig } from "@/lib/hardware/device-config";
-import { useDriverCatalog, type BoardModel, type DriverCatalog } from "@/lib/hardware/driver-catalog";
+import { hasCapability, useDriverCatalog, type BoardModel, type DriverCatalog } from "@/lib/hardware/driver-catalog";
 import { hardwareToDraft, wiringGuide, type KeyedRow, type WiringGuide } from "@/lib/hardware/hardware-draft";
 import { useRealtimeEvents } from "@/lib/realtime-bus";
 import { wireId } from "@/lib/wire-id";
@@ -85,6 +85,8 @@ export function useConnectFlow(deviceId: string) {
   const model = wiring ? resolveModel(firmware?.models, wiring.board) : undefined;
   const installable = wiring != null && model != null && firmware != null;
   const sketchBoard: SketchBoard = installable ? model.chip : board;
+  // Phone setup needs Bluetooth; a board without it (the S2) only takes Wi-Fi typed in.
+  const phoneSetup = installable ? hasCapability(model, "ble") : BOARDS[sketchBoard].ble;
   const pins = useMemo(() => ({ ...defaultPins(metrics, actuators, sketchBoard), ...pinOverrides }), [metrics, actuators, sketchBoard, pinOverrides]);
 
   // The live check: status, first reading per metric, command acks.
@@ -108,7 +110,7 @@ export function useConnectFlow(deviceId: string) {
   const clashes = pinClashes(pins);
   const blocked = !installable && Object.keys(clashes).length > 0;
   const hostProblem = brokerHostProblem(host);
-  const phone = wifiMode === "ble";
+  const phone = phoneSetup && wifiMode === "ble";
   // Phone setup uses provisioning Security 1 (PoP = the device's password).
   // Security 2 (SRP6a) is off until the firmware's network_provisioning is
   // >= 1.0.5: on 1.0.2 the app's Wi-Fi list stays empty (docs/ble-provisioning.md).
@@ -264,6 +266,7 @@ export function useConnectFlow(deviceId: string) {
       changeBoard,
       wifiMode,
       setWifiMode,
+      phoneSetup,
       phone,
       ssid,
       setSsid,

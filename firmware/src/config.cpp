@@ -2,6 +2,7 @@
 
 #include <esp_partition.h>
 #include <mbedtls/base64.h>
+#include <soc/soc_caps.h>
 
 #include "board.h"
 #include "crc32.h"
@@ -108,6 +109,13 @@ bool loadConfig(DeviceConfig& out, String& err) {
     if (!requireText(wifi, "ssid", "wifi", out.wifiSsid, err)) return false;
     out.wifiPassword = wifi["password"] | "";
   }
+#if !SOC_BT_SUPPORTED
+  // No Bluetooth, so no phone setup: the Wi-Fi must be typed in at Install.
+  if (out.wifiSsid == nullptr) {
+    err = "this board has no Bluetooth, so its Wi-Fi can't come from a phone: install the config with the Wi-Fi typed in";
+    return false;
+  }
+#endif
 
   JsonObjectConst prov = root["prov"];
   out.provName = prov["name"] | out.device;
