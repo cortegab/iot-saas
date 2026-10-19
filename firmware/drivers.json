@@ -137,13 +137,13 @@
         { "key": "tilt_x", "label": "Tilt X (°)", "data_type": "float" },
         { "key": "tilt_y", "label": "Tilt Y (°)", "data_type": "float" },
         { "key": "vibration_rms", "label": "Vibration (g RMS)", "data_type": "float" },
-        { "key": "temperature", "label": "Chip temperature (°C)", "data_type": "float" },
-        { "key": "accel_x", "label": "Accel X (g)", "data_type": "float" },
-        { "key": "accel_y", "label": "Accel Y (g)", "data_type": "float" },
-        { "key": "accel_z", "label": "Accel Z (g)", "data_type": "float" },
-        { "key": "gyro_x", "label": "Gyro X (°/s)", "data_type": "float" },
-        { "key": "gyro_y", "label": "Gyro Y (°/s)", "data_type": "float" },
-        { "key": "gyro_z", "label": "Gyro Z (°/s)", "data_type": "float" }
+        { "key": "temperature", "label": "Chip temperature (°C)", "data_type": "float", "common": false },
+        { "key": "accel_x", "label": "Accel X (g)", "data_type": "float", "common": false },
+        { "key": "accel_y", "label": "Accel Y (g)", "data_type": "float", "common": false },
+        { "key": "accel_z", "label": "Accel Z (g)", "data_type": "float", "common": false },
+        { "key": "gyro_x", "label": "Gyro X (°/s)", "data_type": "float", "common": false },
+        { "key": "gyro_y", "label": "Gyro Y (°/s)", "data_type": "float", "common": false },
+        { "key": "gyro_z", "label": "Gyro Z (°/s)", "data_type": "float", "common": false }
       ],
       "wiring": [
         "Connect VCC to 3.3 V, GND to GND, SDA and SCL to the board's I2C pins (set in the I2C bus row). The GY-521 has its own pull-ups.",

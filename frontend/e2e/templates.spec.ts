@@ -30,3 +30,27 @@ test("new template: the key follows the name until edited, and bad keys are refu
   await expect(page.getByText("Give the template a name.")).toBeVisible();
   await expect(page).toHaveURL("/templates/new");
 });
+
+test("a part with many readings asks which to keep, and a wired part collapses to one line", async ({ page }) => {
+  await page.goto("/templates/new");
+  await page.getByRole("button", { name: "Set up wiring" }).click();
+  await page.getByRole("button", { name: "Add input" }).click();
+  await page.getByLabel("Driver").first().selectOption({ label: "MPU6050 / GY-521 motion" });
+
+  // Only the common readings make metrics; the raw axes start not kept.
+  const metrics = page.locator('[data-editor-section="metrics"]');
+  await expect(metrics.getByText("tilt_x")).toBeVisible();
+  await expect(page.getByLabel("Keep Accel X (g)")).not.toBeChecked();
+  await expect(metrics.getByText("accel_x")).toHaveCount(0);
+
+  // Keeping one makes its metric; dropping it again removes it.
+  await page.getByLabel("Keep Accel X (g)").check();
+  await expect(metrics.getByText("accel_x")).toBeVisible();
+  await page.getByLabel("Keep Accel X (g)").uncheck();
+  await expect(metrics.getByText("accel_x")).toHaveCount(0);
+
+  // Collapsed: driver · bus · what it feeds, on one line.
+  await page.getByRole("button", { name: "Collapse input 1" }).click();
+  await expect(page.getByText(/MPU6050 \/ GY-521 motion · I2C · Tilt X/)).toBeVisible();
+  await expect(page.getByLabel("Keep Accel X (g)")).toHaveCount(0);
+});

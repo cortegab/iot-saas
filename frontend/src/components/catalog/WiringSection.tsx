@@ -19,6 +19,7 @@ export function WiringSection({
   field = () => ({ onBlur: () => undefined }),
   onRenameTarget,
   targetError,
+  onKeepReading,
   children,
 }: {
   lead: ReactNode;
@@ -33,6 +34,7 @@ export function WiringSection({
   /** A template's editor only: name a reading's metric on its part card. */
   onRenameTarget?: (kind: "inputs" | "outputs", uid: string, name: string) => void;
   targetError?: (kind: "inputs" | "outputs", uid: string) => string | undefined;
+  onKeepReading?: (bindingUid: string, channel: string, keep: boolean) => void;
   children?: ReactNode;
 }) {
   const { data, error, isLoading } = useDriverCatalog();
@@ -48,6 +50,7 @@ export function WiringSection({
           field={field}
           onRenameTarget={onRenameTarget}
           targetError={targetError}
+          onKeepReading={onKeepReading}
         />
       )}
       {children}

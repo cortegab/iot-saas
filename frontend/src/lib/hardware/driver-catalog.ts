@@ -34,6 +34,9 @@ export interface DriverChannelSpec {
   data_type?: "float" | "bool";
   /** Outputs: the kind of command value it takes. */
   value_type?: "bool" | "float" | "string";
+  /** false: an uncommon reading (a motion sensor's raw axes). Adding the part
+   * doesn't make a metric for it until it's kept. Absent = common. */
+  common?: boolean;
 }
 
 export interface DriverSpec {

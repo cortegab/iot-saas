@@ -8,6 +8,7 @@ import {
   blankTemplate,
   brokenUsages,
   draftToRequest,
+  keepReading,
   reconcileParts,
   renamed,
   templateSectionOrder,
@@ -125,8 +126,31 @@ describe("reconcileParts", () => {
     expect(validateTemplate(d, { otherNames: [], catalog: CATALOG }).errors).toEqual({});
   });
 
-  it("every channel of an MPU-6050 becomes a metric", () => {
-    expect(add(empty(), "mpu6050").metrics).toHaveLength(10);
+  it("an MPU-6050 brings only its common readings; the raw axes start not kept", () => {
+    const d = add(empty(), "mpu6050");
+    expect(d.metrics.map((m) => m.key)).toEqual(["tilt_x", "tilt_y", "vibration_rms"]);
+    expect(d.hardware!.inputs[0].channels.accel_x).toBe("");
+  });
+
+  it("keeping a reading makes its metric; dropping an untouched one removes it again", () => {
+    const d = add(empty(), "mpu6050");
+    const part = d.hardware!.inputs[0].uid;
+    const kept = keepReading(d, part, "accel_x", true, CATALOG);
+    const row = kept.metrics.find((m) => m.key === "accel_x")!;
+    expect(kept.hardware!.inputs[0].channels.accel_x).toBe(row.uid);
+
+    const dropped = keepReading(kept, part, "accel_x", false, CATALOG);
+    expect(dropped.metrics.map((m) => m.key)).not.toContain("accel_x");
+    expect(dropped.hardware!.inputs[0].channels.accel_x).toBe("");
+  });
+
+  it("dropping a reading whose metric was edited keeps the metric, unlinked", () => {
+    const d = add(empty(), "dht22");
+    const part = d.hardware!.inputs[0].uid;
+    const edited = { ...d, metrics: d.metrics.map((m, i) => (i === 0 ? { ...m, name: "Air" } : m)) };
+    const dropped = keepReading(edited, part, "temperature", false, CATALOG);
+    expect(dropped.metrics.map((m) => m.name)).toContain("Air");
+    expect(dropped.hardware!.inputs[0].channels.temperature).toBe("");
   });
 
   it("a second part of the same kind gets suffixed keys", () => {
