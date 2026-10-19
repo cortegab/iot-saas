@@ -126,7 +126,7 @@ function SketchBlock({ flow }: { flow: ConnectFlow }) {
           </li>
         </ol>
         <p className="mt-2 text-xs text-ink-muted">
-          PlatformIO works too: <code className="font-mono">board = {sketchBoard === "esp32c3" ? "esp32-c3-devkitm-1" : "esp32dev"}</code>, same libraries.
+          PlatformIO works too: <code className="font-mono">board = {boardInfo.pioBoard}</code>, same libraries.
         </p>
       </div>
     </>

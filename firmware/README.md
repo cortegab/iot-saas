@@ -97,10 +97,13 @@ labelled, and that lives in `boards.json`.
 
 ## Size
 
-| Board | App (0.5.0) | Share of a 1.875 MB OTA slot |
+| Board | App (0.9.0) | Share of a 1.875 MB OTA slot |
 |---|---|---|
-| ESP32 | 1.43 MB | 73% |
+| ESP32 | 1.39 MB | 71% |
 | ESP32-C3 | 1.55 MB | 79% |
+| ESP32-S3 | 1.40 MB | 71% |
+
+The S3's prebuilt libraries already use NimBLE, so `[env:esp32s3]` needs no `custom_sdkconfig`.
 
 **The ESP32 builds with NimBLE, not Bluedroid.** The prebuilt Arduino libraries for the ESP32 use
 Bluedroid (BLE + Classic BT), and provisioning only needs BLE. Up to 0.3.x that put the ESP32 at
@@ -119,7 +122,8 @@ Bluedroid-only Arduino BLE libraries out of the build.
 ## Status LED
 
 The board's built-in LED is reserved for the firmware (ESP32 DevKits: GPIO 2; ESP32-C3 Super
-Mini: GPIO 8; each model's `led` in `boards.json`). It's never offered for wiring. An RGB LED
+Mini: GPIO 8; ESP32-S3 DevKitC-1: the RGB LED on GPIO 48, or 38 on v1.1; each model's `led` in
+`boards.json`). It's never offered for wiring. An RGB LED
 blinks dim blue. It shows where the board is, so you don't need a serial monitor:
 
 | LED | Meaning | What to do |

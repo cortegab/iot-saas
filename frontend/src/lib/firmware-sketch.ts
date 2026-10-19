@@ -34,7 +34,7 @@ const FW_VERSION = "1.0.0";
  * they're offered. Adding one means a block in firmware/src/board.h and
  * pins.cpp, here in BOARDS, and in CHIP_PINS (lib/hardware/board-pins.ts);
  * release.py checks they agree. */
-export const CHIPS = ["esp32", "esp32c3"] as const;
+export const CHIPS = ["esp32", "esp32c3", "esp32s3"] as const;
 export type SketchBoard = (typeof CHIPS)[number];
 
 /** What differs per board: the Arduino IDE settings, the provisioning-reset button, the BLE
@@ -50,6 +50,8 @@ export const BOARDS: Record<
     /** Has Bluetooth, so Wi-Fi can come from a phone; without, it's typed in. */
     ble: boolean;
     arduinoBoard: string;
+    /** PlatformIO's `board =` for the same chip. */
+    pioBoard: string;
     ideSettings: string[];
     resetPin: number;
     resetButton: string;
@@ -63,6 +65,7 @@ export const BOARDS: Record<
     blurb: "Classic ESP32, 30/38-pin dev boards.",
     ble: true,
     arduinoBoard: "ESP32 Dev Module",
+    pioBoard: "esp32dev",
     ideSettings: [],
     // A button between GPIO 19 and GND: on the header of both the 30- and the
     // 38-pin DevKit (GPIO 0, the BOOT button, isn't on the 30-pin header).
@@ -82,6 +85,7 @@ export const BOARDS: Record<
     blurb: "ESP32-C3 DevKitM, Super Mini and similar.",
     ble: true,
     arduinoBoard: "ESP32C3 Dev Module",
+    pioBoard: "esp32-c3-devkitm-1",
     ideSettings: ["USB CDC On Boot: Enabled", "Flash Mode: DIO"],
     resetPin: 9,
     resetButton: "BOOT",
@@ -90,6 +94,22 @@ export const BOARDS: Record<
     // are free with USB CDC on boot and go last.
     inputs: [4, 5, 6, 7, 10],
     outputs: [3, 1, 0, 20, 21],
+  },
+  esp32s3: {
+    label: "ESP32-S3",
+    blurb: "ESP32-S3 DevKitC-1 and similar.",
+    ble: true,
+    arduinoBoard: "ESP32S3 Dev Module",
+    pioBoard: "esp32-s3-devkitc-1",
+    ideSettings: [],
+    resetPin: 0,
+    resetButton: "BOOT",
+    bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BLE",
+    // Left out: strapping 0, 3, 45, 46; USB 19, 20; flash/PSRAM 26–37; UART0
+    // 43/44; and 38 and 48, a DevKitC-1 revision's RGB LED each.
+    inputs: [4, 5, 6, 7, 15, 16, 17, 18],
+    // 8/9 are the default I2C pins (SDA/SCL), so they're handed out last.
+    outputs: [10, 11, 12, 13, 14, 21, 47, 8, 9],
   },
 };
 
