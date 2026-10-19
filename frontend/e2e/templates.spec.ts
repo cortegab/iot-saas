@@ -54,3 +54,20 @@ test("a part with many readings asks which to keep, and a wired part collapses t
   await expect(page.getByText(/MPU6050 \/ GY-521 motion · I2C · Tilt X/)).toBeVisible();
   await expect(page.getByLabel("Keep Accel X (g)")).toHaveCount(0);
 });
+
+test("replacing a part keeps the metric it fed, and a metric no part feeds is tagged Not wired", async ({ page }) => {
+  await page.goto("/templates/new");
+  await page.getByRole("button", { name: "Set up wiring" }).click();
+  await page.getByRole("button", { name: "Add input" }).click();
+  await page.getByLabel("Driver").first().selectOption({ label: "DHT22 / AM2302" });
+  await page.getByLabel(/^Name of what Temperature .*feeds$/).fill("Air");
+
+  // Replace part: a DS18B20's °C probe takes over the °C metric, name and all.
+  await page.getByLabel("Driver").first().selectOption({ label: "DS18B20 temperature" });
+  await expect(page.getByLabel(/^Name of what .*1.* feeds$/)).toHaveValue("Air");
+
+  // A metric typed in by hand, that no part feeds.
+  const metrics = page.locator('[data-editor-section="metrics"]');
+  await metrics.getByRole("button", { name: "Add metric" }).click();
+  await expect(metrics.getByText("Not wired")).toBeVisible();
+});

@@ -86,3 +86,32 @@ test("older links to Add device from the hardware still start on our firmware", 
   await expect(page.getByRole("radio", { name: "Something new" })).toBeChecked();
   await expect(page.getByRole("heading", { level: 3, name: "Wiring", exact: true })).toBeVisible();
 });
+
+test("a new device just like an existing template offers that template, and uses it", async ({ page, request }) => {
+  const { accessToken, tenantId } = await login(request);
+  const headers = { authorization: `Bearer ${accessToken}`, "x-tenant-id": tenantId };
+  const stamp = Date.now();
+  const key = `e2e-flow-${stamp}`;
+  const template = await (
+    await request.post(`${API_URL}/catalog`, { headers, data: { name: `E2E twin ${stamp}`, runs_on: "own_code", metrics: [{ name: "Flow", key }] } })
+  ).json();
+  let deviceId: string | undefined;
+
+  try {
+    await page.goto("/devices/new?from=new&runs=own");
+    await page.getByLabel("Device name").fill(`E2E twin dev ${stamp}`);
+    await page.getByLabel("Name", { exact: true }).fill("Flow");
+    await page.getByLabel(/^Key/).fill(key);
+    await page.getByRole("button", { name: "Create device" }).click();
+
+    await expect(page.getByRole("alertdialog")).toContainText(`Matches ${template.name}`);
+    await page.getByRole("button", { name: `Use ${template.name}` }).click();
+    await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\/connect$/);
+    deviceId = page.url().match(/devices\/([0-9a-f-]{36})/)![1];
+    const device = await (await request.get(`${API_URL}/devices/${deviceId}`, { headers })).json();
+    expect(device.catalog_entry_id).toBe(template.id);
+  } finally {
+    if (deviceId) await request.delete(`${API_URL}/devices/${deviceId}`, { headers });
+    await request.delete(`${API_URL}/catalog/${template.id}`, { headers });
+  }
+});

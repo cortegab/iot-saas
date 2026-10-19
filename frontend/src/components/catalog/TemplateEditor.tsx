@@ -32,10 +32,13 @@ import {
   draftToRequest,
   keepReading,
   keyedRows,
+  matchingTemplate,
   reconcileParts,
   renamed,
   templateSectionOrder,
   templateToDraft,
+  unfedRows,
+  usageText,
   validateTemplate,
   type RunsOn,
   type TemplateDraft,
@@ -190,6 +193,19 @@ export function TemplateEditor({
       });
       if (!ok) return true;
     }
+    // A new device just like an existing template's: offer that template
+    // instead of another copy (DESIGN.md §8, templates surface on reuse).
+    let twin: CatalogEntryResponse | undefined;
+    const match = d!.device && Object.keys(editor.errors).length === 0 ? matchingTemplate(d!, all ?? [], drivers) : undefined;
+    if (match) {
+      const ok = await confirm(`${match.name} has the same parts and data. Add this device to it, rather than make another template?`, {
+        title: `Matches ${match.name}`,
+        confirmLabel: `Use ${match.name}`,
+        cancelLabel: "Make a new template",
+        danger: false,
+      });
+      if (ok) twin = match;
+    }
     return editor
       .save(async (draft) => {
         const body = draftToRequest(draft, drivers);
@@ -204,7 +220,7 @@ export function TemplateEditor({
             const result = await api.post<DeviceCreateResponse>("/devices", {
               name: draft.device.name.trim(),
               ...(draft.device.zoneId ? { zone_id: draft.device.zoneId } : {}),
-              new_template: { name: body.name, ...parts },
+              ...(twin ? { catalog_entry_id: twin.id } : { new_template: { name: body.name, ...parts } }),
             });
             void revalidate("/devices");
             void revalidate("/catalog");
@@ -263,6 +279,30 @@ export function TemplateEditor({
       : "No devices use it yet.";
 
   // A reading's metric (or a command's actuator), renamed on its part card.
+  // Removing or replacing a part, or dropping a reading, names what rules and
+  // dashboards lose before it happens (DESIGN.md §8). The metrics stay.
+  const guardUnfed = (next: Draft) => {
+    const hit = unfedRows(d, next)
+      .map(({ kind, row }) => ({ row, used: row.origKey ? usageText(usage?.[kind][row.origKey]) : "" }))
+      .filter((x) => x.used);
+    if (hit.length === 0) return set(next);
+    void confirm("They keep their history, but get no new data until a part feeds them again.", {
+      title: "Stop feeding what rules and dashboards use?",
+      confirmLabel: "Change the wiring",
+      details: (
+        <ul>
+          {hit.map(({ row, used }) => (
+            <li key={row.uid}>
+              {row.name || row.key} ({row.key}): used by {used}
+            </li>
+          ))}
+        </ul>
+      ),
+    }).then((ok) => {
+      if (ok) set(next);
+    });
+  };
+
   const renameTarget = (kind: "inputs" | "outputs", uid: string, name: string) =>
     kind === "inputs"
       ? set({ ...d, metrics: d.metrics.map((m) => (m.uid === uid ? renamed(m, name) : m)) })
@@ -281,11 +321,11 @@ export function TemplateEditor({
       hardware={d.hardware}
       rows={keyedRows(d)}
       readOnly={readOnly}
-      onChange={(hardware) => set({ ...reconcileParts(d, hardware, catalog), device: d.device })}
+      onChange={(hardware) => guardUnfed({ ...reconcileParts(d, hardware, catalog), device: d.device })}
       field={(path) => ({ ...f(path), onBlur: blur(path) })}
       onRenameTarget={renameTarget}
       targetError={targetError}
-      onKeepReading={(bindingUid, channel, keep) => set({ ...keepReading(d, bindingUid, channel, keep, catalog), device: d.device })}
+      onKeepReading={(bindingUid, channel, keep) => guardUnfed({ ...keepReading(d, bindingUid, channel, keep, catalog), device: d.device })}
     >
       {!catalogLoading && !catalog && (
         <p className="text-sm text-ink-muted">

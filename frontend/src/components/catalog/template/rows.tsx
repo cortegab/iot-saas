@@ -143,6 +143,7 @@ export function RowSummary({ kind, i, row, desc, onOpen, props }: { kind: RowKin
           {row.key}
         </Tag>
       )}
+      {notWired(kind, row, props) && <NotWiredTag />}
       {used && <span className="whitespace-nowrap text-[11.5px] text-ink-muted max-sm:hidden">used by {used}</span>}
       {hasErr && <AlertCircle aria-label="Has errors" size={15} className="text-status-error" />}
       {!hasErr && hasWarn && <AlertTriangle aria-label="Has warnings" size={15} className="text-status-pending" />}
@@ -154,8 +155,39 @@ export function RowSummary({ kind, i, row, desc, onOpen, props }: { kind: RowKin
   );
 }
 
+/** In an our-firmware template with wiring, a row no part feeds (or drives):
+ * the firmware won't publish it unless something else does (DESIGN.md §8). */
+export function notWired(kind: RowKind, row: Row, { d }: Pick<SectionProps, "d">): boolean {
+  if (d.runsOn !== "generic_firmware" || !d.hardware) return false;
+  const bindings = kind === "metrics" ? d.hardware.inputs : d.hardware.outputs;
+  return !bindings.some((b) => Object.values(b.channels).includes(row.uid));
+}
+
+function NotWiredTag() {
+  return (
+    <span title="No part feeds this. Your firmware must publish it.">
+      <Tag size="sm">Not wired</Tag>
+    </span>
+  );
+}
+
 /** An open row: its fields in a card with Collapse and Remove. */
-export function RowCard({ title, onCollapse, onRemove, readOnly, children }: { title: string; onCollapse: () => void; onRemove: () => void; readOnly: boolean; children: ReactNode }) {
+export function RowCard({
+  title,
+  onCollapse,
+  onRemove,
+  readOnly,
+  unwired = false,
+  children,
+}: {
+  title: string;
+  onCollapse: () => void;
+  onRemove: () => void;
+  readOnly: boolean;
+  /** Tag it "Not wired" (see notWired). */
+  unwired?: boolean;
+  children: ReactNode;
+}) {
   return (
     <fieldset className="min-w-0 rounded-xl border border-border bg-surface px-3.5 pb-3.5 pt-3">
       <legend className="sr-only">{title}</legend>
@@ -164,6 +196,7 @@ export function RowCard({ title, onCollapse, onRemove, readOnly, children }: { t
           <ChevronDown aria-hidden size={15} />
         </button>
         <span className="flex-1 truncate text-sm font-medium text-ink">{title}</span>
+        {unwired && <NotWiredTag />}
         {!readOnly && (
           <Button variant="link-danger" className="text-[12.5px]" onClick={onRemove}>
             Remove

@@ -24,8 +24,9 @@ export function LiveCheckStep({ flow }: { flow: ConnectFlow }) {
           <Button onClick={() => flow.leave(`/devices/${deviceId}`)}>
             Open device <ChevronRight aria-hidden size={14} />
           </Button>
-          <Button variant="secondary" onClick={() => flow.leave("/devices/new")}>
-            Set up another device
+          {/* Same as a device I have, with this one's template picked (DESIGN.md §8). */}
+          <Button variant="secondary" onClick={() => flow.leave(`/devices/new?catalog_entry_id=${flow.template.id}`)}>
+            Add another like this
           </Button>
         </div>
       )}
