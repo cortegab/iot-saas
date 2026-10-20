@@ -17,6 +17,13 @@ const int8_t INPUT_ONLY[] = {-1};
 const int8_t USABLE[] = {4, 13, 14, 16, 17, 18, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39};
 const int8_t ADC1[] = {32, 33, 34, 35, 36, 39};
 const int8_t INPUT_ONLY[] = {34, 35, 36, 39};
+#elif CONFIG_IDF_TARGET_ESP32S3
+// Left out: strapping 0, 3, 45, 46; USB 19, 20; flash and octal PSRAM 26–37;
+// the USB-UART bridge 43, 44. 38 and 48 are each a DevKitC-1 revision's RGB
+// LED: the model that has its LED there doesn't offer it (boards.json).
+const int8_t USABLE[] = {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48};
+const int8_t ADC1[] = {1, 2, 4, 5, 6, 7, 8, 9, 10};
+const int8_t INPUT_ONLY[] = {-1};
 #else
 #error "No pin rules for this chip in src/pins.cpp"
 #endif

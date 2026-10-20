@@ -42,6 +42,33 @@
         "Some Super Mini boards need BOOT held while plugging in before they can be flashed.",
         "I2C here is on GPIO 5 (SDA) and 6 (SCL): GPIO 8 and 9, often printed as SDA/SCL, are this board's LED and BOOT button."
       ]
+    },
+    {
+      "id": "esp32s3-devkitc-1",
+      "chip": "esp32s3",
+      "label": "ESP32-S3 DevKitC-1",
+      "description": "Espressif's ESP32-S3 DevKitC-1 (v1.0) and most clones: RGB LED on GPIO 48.",
+      "pins": [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47],
+      "i2c": { "sda": 8, "scl": 9 },
+      "reset": { "pin": 0, "label": "the BOOT button" },
+      "led": { "type": "rgb", "pin": 48, "active_low": false },
+      "capabilities": ["ble", "rgb_led"],
+      "notes": [
+        "Plug it in by the USB port labelled UART (the other is the chip's own USB).",
+        "If its RGB LED stays dark while the board runs, it's a v1.1 board: pick ESP32-S3 DevKitC-1 v1.1."
+      ]
+    },
+    {
+      "id": "esp32s3-devkitc-1-v11",
+      "chip": "esp32s3",
+      "label": "ESP32-S3 DevKitC-1 v1.1",
+      "description": "The v1.1 revision, with its RGB LED moved to GPIO 38.",
+      "pins": [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 39, 40, 41, 42, 47, 48],
+      "i2c": { "sda": 8, "scl": 9 },
+      "reset": { "pin": 0, "label": "the BOOT button" },
+      "led": { "type": "rgb", "pin": 38, "active_low": false },
+      "capabilities": ["ble", "rgb_led"],
+      "notes": ["Plug it in by the USB port labelled UART (the other is the chip's own USB)."]
     }
   ]
 }

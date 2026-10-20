@@ -1,3 +1,4 @@
+import { pinsFor } from "./board-pins";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { driversFor, hasCapability, type BoardModel, type DriverSpec } from "./driver-catalog";
@@ -381,5 +382,25 @@ describe("hasCapability", () => {
     expect(hasCapability({ capabilities: [] }, "ble")).toBe(false);
     expect(hasCapability({}, "ble")).toBe(true);
     expect(MODELS.every((m) => hasCapability(m, "ble"))).toBe(true);
+  });
+});
+
+describe("board models", () => {
+  it("never offer their own reset button or status LED for wiring, on any chip", () => {
+    for (const m of MODELS) {
+      const offered = new Set([...pinsFor(m, "input"), ...pinsFor(m, "output")]);
+      expect(offered.has(m.reset.pin), `${m.id} reset`).toBe(false);
+      if (m.led.type !== "none") expect(offered.has(m.led.pin), `${m.id} LED`).toBe(false);
+    }
+  });
+
+  it("an ESP32-S3 DevKitC-1 reads analog on ADC1 and keeps its RGB LED to itself", () => {
+    const s3 = MODELS.find((m) => m.id === "esp32s3-devkitc-1")!;
+    expect(hasCapability(s3, "rgb_led")).toBe(true);
+    expect(pinsFor(s3, "adc1")).toEqual([1, 2, 4, 5, 6, 7, 8, 9, 10]);
+    expect(pinsFor(s3, "output")).not.toContain(48);
+    const v11 = MODELS.find((m) => m.id === "esp32s3-devkitc-1-v11")!;
+    expect(pinsFor(v11, "output")).toContain(48);
+    expect(pinsFor(v11, "output")).not.toContain(38);
   });
 });

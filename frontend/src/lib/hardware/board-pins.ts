@@ -21,6 +21,11 @@ export const CHIP_PINS: Record<SketchBoard, { usable: number[]; adc1: number[]; 
     adc1: [0, 1, 3, 4],
     inputOnly: [],
   },
+  esp32s3: {
+    usable: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48],
+    adc1: [1, 2, 4, 5, 6, 7, 8, 9, 10],
+    inputOnly: [],
+  },
 };
 
 /** The model this id names. Configs saved before board models existed hold a
