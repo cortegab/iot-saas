@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { explainFlashError, FlashError, nextAttempt, nextSlower, overallFraction } from "./flasher";
+import { chipForName, explainFlashError, FlashError, nextAttempt, nextSlower, overallFraction } from "./flasher";
 
 describe("explainFlashError", () => {
   it("names a busy COM port, the bench's most common failure", () => {
@@ -78,5 +78,13 @@ describe("overallFraction", () => {
     expect(overallFraction(sizes, 1, 30, 60)).toBeCloseTo(0.5);
     expect(overallFraction([0, 0], 0, 0, 0)).toBe(1);
     expect(overallFraction(sizes, 0, 0, 0)).toBeCloseTo(0.2);
+  });
+});
+
+describe("chipForName", () => {
+  it("finds the release build for the chip esptool reports", () => {
+    const manifest = { boards: { esp32: { chip: "ESP32" }, esp32c3: { chip: "ESP32-C3" } } } as never;
+    expect(chipForName(manifest, "ESP32-C3")).toBe("esp32c3");
+    expect(chipForName(manifest, "ESP32-S3")).toBeNull();
   });
 });

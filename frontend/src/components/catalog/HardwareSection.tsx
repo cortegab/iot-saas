@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Cpu, Plus } from "lucide-react";
+import { AlertCircle, ChevronDown, ChevronRight, Cpu, Plus, Usb } from "lucide-react";
+import { Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Field } from "@/components/ui/Field";
@@ -11,8 +12,11 @@ import { Select } from "@/components/ui/Select";
 import { SwitchField } from "@/components/ui/Switch";
 import { Table } from "@/components/ui/Table";
 import { SECTION_LABEL } from "@/components/rules/editor/fields";
+import { cn } from "@/lib/cn";
 import { pinName, pinsFor, resolveModel } from "@/lib/hardware/board-pins";
-import { driversFor, findDriver, runsOn, type DriverCatalog, type DriverParamSpec } from "@/lib/hardware/driver-catalog";
+import { CHIPS, type SketchBoard } from "@/lib/firmware-sketch";
+import { driversFor, findDriver, hasCapability, runsOn, type DriverCatalog, type DriverParamSpec } from "@/lib/hardware/driver-catalog";
+import { chipForName, detectChip, webSerialSupported } from "@/lib/hardware/flasher";
 import {
   blankBinding,
   blankHardware,
@@ -45,6 +49,7 @@ export function HardwareSection({
   field,
   onRenameTarget,
   targetError,
+  onKeepReading,
 }: {
   hardware: HardwareDraft | null;
   rows: { metrics: KeyedRow[]; actuators: KeyedRow[] };
@@ -58,9 +63,15 @@ export function HardwareSection({
   onRenameTarget?: (kind: Kind, uid: string, name: string) => void;
   /** The key problem (clash, reserved, invalid) of the row a reading feeds. */
   targetError?: (kind: Kind, uid: string) => string | undefined;
+  /** Keep or drop one of a part's readings (a template's editor: it makes or
+   * removes the metric). Parts with many readings get a checkbox for each. */
+  onKeepReading?: (bindingUid: string, channel: string, keep: boolean) => void;
 }) {
   // What the last board change moved, for the author to rewire.
   const [moved, setMoved] = useState<{ board: string; pins: MovedPin[]; unsupported: string[] } | null>(null);
+  // "Detect my board": the chip the plugged-in board reported, and the attempt.
+  const [detected, setDetected] = useState<{ name: string; chip: SketchBoard | null } | null>(null);
+  const [detectState, setDetect] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
   if (catalog.loading) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
 
   const fw = catalog.data;
@@ -119,32 +130,86 @@ export function HardwareSection({
   const switched = rows.actuators.filter((r) => drivenUids.has(r.uid)).map((r) => r.name || r.key || "Unnamed");
   const boardField = field("hardware.board");
 
+  // A new board keeps every pin that still fits and moves the rest (moveToBoard).
+  const changeBoard = (id: string) => {
+    const next = moveToBoard(h, id, fw);
+    setMoved({ board: fw.models.find((m) => m.id === id)?.label ?? id, pins: next.moved, unsupported: next.unsupported });
+    commit(next.hardware);
+  };
+  // The board list, grouped by chip (DESIGN.md §8); narrowed to one chip once detected.
+  const groups = CHIPS.map((chip) => ({ chip, name: fw.manifest.boards[chip]?.chip ?? chip, models: fw.models.filter((m) => m.chip === chip) })).filter(
+    (g) => g.models.length > 0 && (!detected?.chip || g.chip === detected.chip),
+  );
+
+  async function detect() {
+    setDetect({ busy: false, error: null });
+    // The port picker needs this click's user gesture: ask before any await.
+    let port: SerialPort;
+    try {
+      port = await navigator.serial.requestPort();
+    } catch {
+      return; // picker closed
+    }
+    setDetect({ busy: true, error: null });
+    try {
+      const name = await detectChip(port);
+      const chip = chipForName(fw!.manifest, name);
+      setDetected({ name, chip });
+      const first = chip && model?.chip !== chip ? fw!.models.find((m) => m.chip === chip) : undefined;
+      if (first) changeBoard(first.id);
+      setDetect({ busy: false, error: null });
+    } catch (err) {
+      setDetect({ busy: false, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="grid gap-3.5 @[640px]:grid-cols-2">
         <Field
           label="Board"
-          error={boardField.error}
+          error={boardField.error ?? detectState.error ?? undefined}
           hint={`${model?.description ? `${model.description} ` : ""}Pins are checked for this board. Firmware ${fw.version}.`}
         >
-          {/* A saved chip id ("esp32") shows as its model until the board is picked again. */}
-          {/* A new board keeps every pin that still fits and moves the rest (moveToBoard). */}
-          <Select
-            value={model?.id ?? h.board}
-            disabled={readOnly}
-            onChange={(e) => {
-              const next = moveToBoard(h, e.target.value, fw);
-              setMoved({ board: fw.models.find((m) => m.id === e.target.value)?.label ?? e.target.value, pins: next.moved, unsupported: next.unsupported });
-              commit(next.hardware);
-            }}
-          >
-            {!model && <option value={h.board}>{h.board} (not in this firmware)</option>}
-            {fw.models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </Select>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              {/* A saved chip id ("esp32") shows as its model until the board is picked again. */}
+              <Select value={model?.id ?? h.board} disabled={readOnly} onChange={(e) => changeBoard(e.target.value)}>
+                {!model && <option value={h.board}>{h.board} (not in this firmware)</option>}
+                {model && !groups.some((g) => g.chip === model.chip) && <option value={model.id}>{model.label}</option>}
+                {groups.map((g) => (
+                  <optgroup key={g.chip} label={g.name}>
+                    {g.models.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.label}
+                        {hasCapability(m, "ble") ? "" : " · no phone setup"}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </Select>
+              {!readOnly && webSerialSupported() && (
+                <Button variant="secondary" className="shrink-0" disabled={detectState.busy} onClick={() => void detect()}>
+                  <Usb aria-hidden size={14} />
+                  {detectState.busy ? "Detecting…" : "Detect my board"}
+                </Button>
+              )}
+            </div>
+            {model && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {hasCapability(model, "ble") ? <Tag size="sm">Phone setup</Tag> : <Tag size="sm">Wi-Fi typed in</Tag>}
+                {hasCapability(model, "rgb_led") && <Tag size="sm">RGB LED</Tag>}
+              </div>
+            )}
+            {detected && (
+              <p className="text-[13px] text-ink-muted">
+                {detected.chip ? `Detected an ${detected.name}. Boards with the same chip look alike, so pick your model.` : `This board is an ${detected.name}, which firmware ${fw.version} doesn't support yet.`}{" "}
+                <Button variant="link" className="text-[13px]" onClick={() => setDetected(null)}>
+                  Show all boards
+                </Button>
+              </p>
+            )}
+          </div>
         </Field>
         <p className="self-end pb-2 text-[13px] text-ink-muted">
           {wiredMetrics} of {rows.metrics.length} metrics and {wiredActuators} of {rows.actuators.length} actuators wired. Anything not wired isn&apos;t
@@ -218,6 +283,7 @@ export function HardwareSection({
               onRemove={() => commit({ ...h, [kind]: h[kind].filter((x) => x.uid !== b.uid) })}
               onRenameTarget={onRenameTarget}
               targetError={targetError}
+              onKeepReading={onKeepReading}
             />
           ))}
           {!readOnly && (
@@ -295,6 +361,7 @@ function BindingCard({
   onRemove,
   onRenameTarget,
   targetError,
+  onKeepReading,
 }: {
   kind: Kind;
   index: number;
@@ -310,7 +377,10 @@ function BindingCard({
   onRemove: () => void;
   onRenameTarget?: (kind: Kind, uid: string, name: string) => void;
   targetError?: (kind: Kind, uid: string) => string | undefined;
+  onKeepReading?: (bindingUid: string, channel: string, keep: boolean) => void;
 }) {
+  // Wired parts collapse to one line (DESIGN.md §8); a card with errors stays open.
+  const [collapsed, setCollapsed] = useState(false);
   const drivers = catalog.drivers;
   const model = resolveModel(catalog.models, hardware.board);
   const spec = findDriver(drivers, binding.driver);
@@ -373,22 +443,48 @@ function BindingCard({
     );
   };
 
+  // Any problem on this card keeps it open.
+  const paths = [p + "driver", ...pins.map((r) => `${p}pins.${r.role}`), ...params.map((x) => `${p}params.${x.key}`), ...channels.map((c) => `${p}channels.${c.key}`)];
+  const hasError = paths.some((path) => field(path).error);
+  const open = !collapsed || hasError;
+  // The one-line summary: driver · pins · what its readings feed.
+  const fed = channels.map((c) => targets.find((t) => t.uid === binding.channels[c.key])).filter((t): t is KeyedRow => !!t);
+  const summary = [
+    spec?.label ?? binding.driver,
+    i2c ? "I2C" : Object.values(binding.pins).filter((n): n is number => n != null).map((n) => pinName(model, n)).join(", ") || "no pin",
+    fed.length ? fed.map((t) => t.name || t.key).join(", ") : kind === "inputs" ? "feeds nothing" : "drives nothing",
+  ].join(" · ");
+  // A part with many readings asks which to keep (DESIGN.md §8).
+  const choosing = !!onKeepReading && kind === "inputs" && channels.length > 2 && !readOnly;
+
   return (
     <fieldset className="min-w-0 rounded-xl border border-border bg-surface px-3.5 pb-3.5 pt-3">
       <legend className="sr-only">
         {noun} {index + 1}
       </legend>
-      <div className="mb-3 flex items-center gap-2">
+      <div className={cn("flex items-center gap-2", open && "mb-3")}>
+        <button
+          type="button"
+          onClick={() => setCollapsed(open)}
+          disabled={hasError}
+          aria-expanded={open}
+          aria-label={open ? `Collapse ${noun.toLowerCase()} ${index + 1}` : `Expand ${noun.toLowerCase()} ${index + 1}`}
+          className="-ml-1.5 grid h-7 w-7 place-items-center rounded-md text-ink-muted hover:bg-surface-raised disabled:opacity-50"
+        >
+          {open ? <ChevronDown aria-hidden size={15} /> : <ChevronRight aria-hidden size={15} />}
+        </button>
         <span className="flex-1 truncate text-sm font-medium text-ink">
           {noun} {index + 1}
-          {spec && <span className="font-normal text-ink-muted"> · {spec.description}</span>}
+          <span className="font-normal text-ink-muted"> · {open ? spec?.description : summary}</span>
         </span>
+        {hasError && <AlertCircle aria-label="Has errors" size={15} className="text-status-error" />}
         {!readOnly && (
           <Button variant="link-danger" className="text-[12.5px]" onClick={onRemove}>
             Remove
           </Button>
         )}
       </div>
+      {open && (
       <div className="flex flex-col gap-4">
         <div className="grid gap-3.5 @[640px]:grid-cols-2">
           <Field label="Driver" error={field(p + "driver").error}>
@@ -458,9 +554,23 @@ function BindingCard({
                 const free = targets.filter((t) => t.uid === current || !taken.has(t.uid));
                 const linked = targets.find((t) => t.uid === current);
                 const keyProblem = linked && targetError?.(kind, linked.uid);
+                const kept = !choosing || current !== "";
                 return (
                   <Field key={ch.key} inline label={ch.label} error={error ?? keyProblem} warning={warning}>
                     <div className="flex flex-col gap-1.5">
+                      {choosing && (
+                        <label className="flex items-center gap-2 text-[13px] text-ink">
+                          <input
+                            type="checkbox"
+                            aria-label={`Keep ${ch.label}`}
+                            checked={kept}
+                            onChange={(e) => onKeepReading!(binding.uid, ch.key, e.target.checked)}
+                            className="accent-[var(--color-accent)]"
+                          />
+                          {kept ? "Keep" : "Not kept: no metric"}
+                        </label>
+                      )}
+                      {kept && (
                       <Select
                         value={current}
                         disabled={readOnly}
@@ -475,6 +585,7 @@ function BindingCard({
                           </option>
                         ))}
                       </Select>
+                      )}
                       {/* Named right here (DESIGN.md §8): what the dashboards call it. */}
                       {linked && onRenameTarget && !readOnly && (
                         <div className="flex items-center gap-2">
@@ -504,6 +615,7 @@ function BindingCard({
           </Block>
         )}
       </div>
+      )}
     </fieldset>
   );
 }

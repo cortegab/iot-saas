@@ -404,7 +404,8 @@ export function reconcileParts(prev: TemplateDraft, next: HardwareDraft | null, 
   metrics = metrics.filter((r) => !dropping.has(r.uid));
   actuators = actuators.filter((r) => !dropping.has(r.uid));
 
-  // Parts new, or on another driver: link or propose a row per channel.
+  // Parts new, or on another driver: link or propose a row per channel. A
+  // reading marked uncommon (a motion sensor's raw axes) starts not kept.
   const propose = (kind: "inputs" | "outputs") =>
     next[kind].map((b) => {
       const old = before.get(b.uid);
@@ -415,38 +416,90 @@ export function reconcileParts(prev: TemplateDraft, next: HardwareDraft | null, 
       const channels: Record<string, string> = {};
       const proposed: Record<string, string> = {};
       for (const ch of spec.channels) {
-        const p = proposal(spec, ch);
-        const taken = takenTargets({ ...next, [kind]: next[kind].filter((x) => x.uid !== b.uid) }, kind);
-        if (kind === "inputs") {
-          const type = ch.data_type ?? "float";
-          const free = metrics.find((r) => r.key.trim() === p.key && r.data_type === type && !taken.has(r.uid) && !Object.values(channels).includes(r.uid));
-          if (free) {
-            channels[ch.key] = free.uid;
-            continue;
-          }
-          const key = freeKey(p.key, new Set(metrics.map((r) => r.key.trim())));
-          const row: MetricDraft = { ...blankMetric(), name: key === p.key ? p.name : `${p.name} ${key.slice(p.key.length + 1)}`, key, keyAuto: false, data_type: type, unit: p.unit };
-          metrics.push(row);
-          channels[ch.key] = row.uid;
-          proposed[row.uid] = snapshot(row);
-        } else {
-          const type = ch.value_type ?? "bool";
-          const free = actuators.find((r) => r.key.trim() === p.key && r.value_type === type && !taken.has(r.uid) && !Object.values(channels).includes(r.uid));
-          if (free) {
-            channels[ch.key] = free.uid;
-            continue;
-          }
-          const key = freeKey(p.key, new Set(actuators.map((r) => r.key.trim())));
-          const base: ActuatorDraft = { ...blankActuator(), name: key === p.key ? p.name : `${p.name} ${key.slice(p.key.length + 1)}`, key, keyAuto: false, value_type: type };
-          const row = type === "bool" ? base : { ...base, on: "", off: "" };
-          actuators.push(row);
-          channels[ch.key] = row.uid;
-          proposed[row.uid] = snapshot(row);
+        if (ch.common === false) {
+          channels[ch.key] = "";
+          continue;
         }
+        const taken = takenTargets({ ...next, [kind]: next[kind].filter((x) => x.uid !== b.uid) }, kind);
+        const hit = rowForChannel(kind, spec, ch, { metrics, actuators }, (uid) => taken.has(uid) || Object.values(channels).includes(uid));
+        if (hit.created) {
+          if (kind === "inputs") metrics.push(hit.created as MetricDraft);
+          else actuators.push(hit.created as ActuatorDraft);
+          proposed[hit.created.uid] = snapshot(hit.created);
+        }
+        channels[ch.key] = hit.uid;
       }
       return { ...b, channels, proposed };
     });
   const inputs = propose("inputs");
   const outputs = propose("outputs");
   return { ...prev, metrics, actuators, hardware: { ...next, inputs, outputs } };
+}
+
+/** The row a channel links to: a free one with its key and type, else a new
+ * one proposed from the driver's catalog (name, key, unit). `busy` says which
+ * rows are already linked elsewhere. */
+function rowForChannel(
+  kind: "inputs" | "outputs",
+  spec: DriverSpec,
+  ch: DriverChannelSpec,
+  rows: Pick<TemplateDraft, "metrics" | "actuators">,
+  busy: (uid: string) => boolean,
+): { uid: string; created?: MetricDraft | ActuatorDraft } {
+  const p = proposal(spec, ch);
+  const name = (key: string) => (key === p.key ? p.name : `${p.name} ${key.slice(p.key.length + 1)}`);
+  if (kind === "inputs") {
+    const type = ch.data_type ?? "float";
+    const free = rows.metrics.find((r) => r.key.trim() === p.key && r.data_type === type && !busy(r.uid));
+    if (free) return { uid: free.uid };
+    const key = freeKey(p.key, new Set(rows.metrics.map((r) => r.key.trim())));
+    const row: MetricDraft = { ...blankMetric(), name: name(key), key, keyAuto: false, data_type: type, unit: p.unit };
+    return { uid: row.uid, created: row };
+  }
+  const type = ch.value_type ?? "bool";
+  const free = rows.actuators.find((r) => r.key.trim() === p.key && r.value_type === type && !busy(r.uid));
+  if (free) return { uid: free.uid };
+  const key = freeKey(p.key, new Set(rows.actuators.map((r) => r.key.trim())));
+  const base: ActuatorDraft = { ...blankActuator(), name: name(key), key, keyAuto: false, value_type: type };
+  const row = type === "bool" ? base : { ...base, on: "", off: "" };
+  return { uid: row.uid, created: row };
+}
+
+/**
+ * "Which readings to keep" (DESIGN.md §8): keeping a part's reading links it
+ * to a metric (a free one with its key, else a new proposed one); dropping it
+ * unlinks it, and its metric goes too while it's an untouched proposal that
+ * nothing else feeds. Unknown parts or readings leave the draft as it is.
+ */
+export function keepReading(
+  d: TemplateDraft,
+  bindingUid: string,
+  channel: string,
+  keep: boolean,
+  catalog: HardwareCatalog | undefined,
+): TemplateDraft {
+  const h = d.hardware;
+  const b = h?.inputs.find((x) => x.uid === bindingUid);
+  const spec = b && findDriver(catalog?.drivers, b.driver);
+  const ch = spec?.channels.find((c) => c.key === channel);
+  if (!h || !b || !spec || !ch) return d;
+  const withChannel = (ref: string, proposed: Record<string, string> | undefined): TemplateDraft => ({
+    ...d,
+    hardware: { ...h, inputs: h.inputs.map((x) => (x.uid === b.uid ? { ...x, channels: { ...x.channels, [channel]: ref }, proposed } : x)) },
+  });
+  if (keep) {
+    if (b.channels[channel]) return d;
+    const taken = takenTargets(h, "inputs");
+    const hit = rowForChannel("inputs", spec, ch, d, (uid) => taken.has(uid));
+    const next = withChannel(hit.uid, hit.created ? { ...b.proposed, [hit.uid]: snapshot(hit.created) } : b.proposed);
+    return hit.created ? { ...next, metrics: [...d.metrics, hit.created as MetricDraft] } : next;
+  }
+  const ref = b.channels[channel];
+  if (!ref) return d;
+  const row = d.metrics.find((r) => r.uid === ref);
+  const untouched = row != null && b.proposed?.[ref] === snapshot(row);
+  const fedElsewhere = h.inputs.some((x) => x.uid !== b.uid && Object.values(x.channels).includes(ref));
+  const proposed = Object.fromEntries(Object.entries(b.proposed ?? {}).filter(([uid]) => uid !== ref));
+  const next = withChannel("", untouched ? proposed : b.proposed);
+  return untouched && !fedElsewhere ? { ...next, metrics: d.metrics.filter((r) => r.uid !== ref) } : next;
 }

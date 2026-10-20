@@ -30,6 +30,7 @@ import {
   blankTemplate,
   brokenUsages,
   draftToRequest,
+  keepReading,
   keyedRows,
   reconcileParts,
   renamed,
@@ -284,6 +285,7 @@ export function TemplateEditor({
       field={(path) => ({ ...f(path), onBlur: blur(path) })}
       onRenameTarget={renameTarget}
       targetError={targetError}
+      onKeepReading={(bindingUid, channel, keep) => set({ ...keepReading(d, bindingUid, channel, keep, catalog), device: d.device })}
     >
       {!catalogLoading && !catalog && (
         <p className="text-sm text-ink-muted">

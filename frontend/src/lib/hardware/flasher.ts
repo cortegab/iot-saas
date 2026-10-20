@@ -212,6 +212,34 @@ export function overallFraction(sizes: number[], index: number, written: number,
   return Math.min(1, (sum(sizes.slice(0, index)) + (sizes[index] ?? 0) * part) / all);
 }
 
+/** The release build for the chip esptool reports ("ESP32-C3"), if any. */
+export function chipForName(manifest: Pick<FirmwareManifest, "boards">, chipName: string): SketchBoard | null {
+  const hit = Object.entries(manifest.boards).find(([, b]) => b.chip === chipName);
+  return hit ? (hit[0] as SketchBoard) : null;
+}
+
+/** "Detect my board" (DESIGN.md §8): asks the board on `port` which chip it is
+ * and restarts it, writing nothing. Returns esptool's chip name ("ESP32-C3").
+ * Boards with the same chip look alike, so this narrows the model list; the
+ * person still picks the model. Throws a FlashError a person can act on. */
+export async function detectChip(port: SerialPort): Promise<string> {
+  const { ESPLoader, Transport } = await import("esptool-js");
+  const quiet = { clean: () => {}, write: () => {}, writeLine: () => {} };
+  const transport = new Transport(port, false);
+  let loader: InstanceType<typeof ESPLoader> | null = null;
+  try {
+    loader = new ESPLoader({ transport, baudrate: 115200, terminal: quiet });
+    await loader.main();
+    const name = loader.chip.CHIP_NAME;
+    await loader.after("hard_reset");
+    return name;
+  } catch (err) {
+    throw explainFlashError(err, "connecting", loader?.chip != null);
+  } finally {
+    await transport.disconnect().catch(() => {});
+  }
+}
+
 // The speed that last worked for each plugged-in board (Chrome keeps the same
 // SerialPort until it's unplugged), so a board that drops at full speed
 // doesn't pay for the failed attempts again. Forgotten on reload.
