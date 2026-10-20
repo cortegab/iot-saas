@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import type { BoardModel, DriverSpec } from "./driver-catalog";
+import { driversFor, type BoardModel, type DriverSpec } from "./driver-catalog";
 import type { components } from "@/types/api";
 import {
   blankBinding,
@@ -348,11 +348,29 @@ describe("moveToBoard", () => {
     expect(hardware.i2c).toEqual({ sda: 5, scl: 6 });
   });
 
+  it("lists parts the new board's firmware doesn't carry, and validation flags them", () => {
+    // As if the relay driver were built for the classic ESP32 only.
+    const esp32Only: HardwareCatalog = { ...CATALOG, drivers: DRIVERS.map((d) => (d.id === "relay" ? { ...d, chips: ["esp32" as const] } : d)) };
+    const { hardware, unsupported } = moveToBoard(relayAndProbe(), "esp32c3-supermini", esp32Only);
+    expect(unsupported).toEqual([spec("relay").label]);
+    expect(validateHardware(hardware, rows, esp32Only).errors["hardware.outputs.0.driver"]).toMatch(/doesn't include/);
+    expect(moveToBoard(relayAndProbe(), "esp32-devkit-38", esp32Only).unsupported).toEqual([]);
+  });
+
   it("leaves a pin empty when the new board has none left", () => {
     let h = blankHardware("esp32-devkit-30");
     for (let i = 0; i < 12; i++) h = { ...h, outputs: [...h.outputs, blankBinding(spec("relay"), h, CATALOG)] };
     const { hardware, moved } = moveToBoard(h, "esp32c3-supermini", CATALOG);
     expect(hardware.outputs.some((b) => b.pins.pin == null)).toBe(true);
     expect(moved.some((m) => m.to == null)).toBe(true);
+  });
+});
+
+describe("driversFor", () => {
+  it("offers a driver only on the chips that carry it; no chips means all", () => {
+    const c3 = MODELS.find((m) => m.id === "esp32c3-supermini")!;
+    const drivers = [{ ...spec("relay"), chips: ["esp32" as const] }, spec("pwm")];
+    expect(driversFor(drivers, c3).map((d) => d.id)).toEqual(["pwm"]);
+    expect(driversFor(drivers, undefined).map((d) => d.id)).toEqual(["relay", "pwm"]);
   });
 });

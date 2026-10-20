@@ -31,6 +31,10 @@ export interface FirmwareManifest {
       cfg: { offset: number; size: number };
       /** Where saved Wi-Fi lives. Missing from releases before 0.3.1. */
       nvs?: { offset: number; size: number };
+      /** The driver ids this build carries. Missing from releases before
+       * 0.7.0, which carried every driver; the dashboard filters by each
+       * driver's `chips`, which says the same. */
+      drivers?: string[];
     }
   >;
   /** The board models people pick (firmware/boards.json). Missing from

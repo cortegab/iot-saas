@@ -25,7 +25,8 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 BOARDS = {
-    # board id: (PlatformIO env, chip name esptool reports, bootloader offset)
+    # board id: (PlatformIO env, chip name esptool reports, bootloader offset).
+    # The env is named after the board id: driver_flags.py relies on it.
     "esp32": ("esp32", "ESP32", 0x1000),
     "esp32c3": ("esp32c3", "ESP32-C3", 0x0),
 }
@@ -57,7 +58,9 @@ def read_partitions() -> dict[str, tuple[int, int]]:
 
 
 def check_driver_ids(catalog: dict) -> None:
-    """drivers.json and the firmware's registry must list the same ids."""
+    """drivers.json and the firmware's registry must list the same ids, each
+    registry entry behind its own IOD_DRIVER_<ID> (driver_flags.py), and a
+    driver's `chips` must name chips built here."""
     registry = (HERE / "src/drivers/registry.cpp").read_text()
     registered = set(re.findall(r'\{"([a-z0-9_:]+)",\s*make\w+\}', registry))
     described = {d["id"] for d in catalog["drivers"]}
@@ -67,6 +70,20 @@ def check_driver_ids(catalog: dict) -> None:
             f"only in drivers.json {sorted(described - registered)}, "
             f"only in the registry {sorted(registered - described)}"
         )
+    guarded = {
+        driver for guard, driver in re.findall(r'#ifdef IOD_DRIVER_(\w+)\s*\{"([a-z0-9_:]+)"', registry) if guard == driver.upper()
+    }
+    if guarded != registered:
+        fail(f"src/drivers/registry.cpp: put {sorted(registered - guarded)} behind their own #ifdef IOD_DRIVER_<ID>")
+    for d in catalog["drivers"]:
+        unknown = set(d.get("chips", [])) - set(BOARDS)
+        if unknown:
+            fail(f"drivers.json: {d['id']} names chips {sorted(unknown)}, which have no build here")
+
+
+def drivers_for(catalog: dict, board: str) -> list[str]:
+    """The driver ids a chip's build carries: the same rule as driver_flags.py."""
+    return [d["id"] for d in catalog["drivers"] if board in d.get("chips", [board])]
 
 
 def chip_blocks(path: str) -> dict[str, str]:
@@ -98,6 +115,9 @@ def firmware_pins() -> dict[str, dict[str, set[int]]]:
 def check_chips(pins: dict[str, dict[str, set[int]]]) -> None:
     """Every build here has a block in board.h and pins.cpp, and the dashboard's
     CHIP_PINS (frontend/src/lib/hardware/board-pins.ts) says what pins.cpp says."""
+    for board, (env, _chip, _boot) in BOARDS.items():
+        if env != board:
+            fail(f"release.py BOARDS: {board}'s PlatformIO env must be named {board} (driver_flags.py keys on it)")
     for path, chips in (("src/board.h", set(chip_blocks("src/board.h"))), ("src/pins.cpp", set(pins))):
         if chips != set(BOARDS):
             fail(f"{path} has blocks for {sorted(chips)}, but release.py builds {sorted(BOARDS)}")
@@ -237,6 +257,9 @@ def main() -> None:
             # Where saved Wi-Fi lives: a first-time install blanks it (0xFF is
             # an empty NVS), so a reused board starts at phone setup.
             "nvs": {"offset": nvs_offset, "size": nvs_size},
+            # What this build carries (drivers.json "chips"); the dashboard
+            # offers a board only these.
+            "drivers": drivers_for(catalog, board),
         }
 
     manifest = {
