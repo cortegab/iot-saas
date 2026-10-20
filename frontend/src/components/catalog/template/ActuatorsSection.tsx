@@ -6,7 +6,7 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { EditorSection } from "@/components/editor/EditorFrame";
-import { KeyField, RowCard, RowSummary, useRowExpansion } from "@/components/catalog/template/rows";
+import { KeyField, notWired, RowCard, RowSummary, useRowExpansion } from "@/components/catalog/template/rows";
 import type { SectionProps } from "@/components/catalog/template/section-props";
 import { blankActuator, renamed, type ActuatorDraft } from "@/lib/template-draft";
 
@@ -28,7 +28,7 @@ export function ActuatorsSection(props: SectionProps) {
           if (!rows.isOpen(a, i)) return <RowSummary key={a.uid} kind="actuators" i={i} row={a} desc={desc} onOpen={() => rows.toggle(a.uid)} props={props} />;
           const p = `actuators.${i}.`;
           return (
-            <RowCard key={a.uid} title={a.name || "New actuator"} readOnly={readOnly} onCollapse={() => rows.collapse(a.uid)} onRemove={() => set({ ...d, actuators: d.actuators.filter((x) => x.uid !== a.uid) })}>
+            <RowCard key={a.uid} title={a.name || "New actuator"} readOnly={readOnly} unwired={notWired("actuators", a, props)} onCollapse={() => rows.collapse(a.uid)} onRemove={() => set({ ...d, actuators: d.actuators.filter((x) => x.uid !== a.uid) })}>
               <Field label="Name" {...f(p + "name")} className={span2}>
                 <Input value={a.name} disabled={readOnly} placeholder="e.g. Fan" onChange={(e) => setActuator(i, renamed(a, e.target.value))} onBlur={blur(p + "name")} />
               </Field>

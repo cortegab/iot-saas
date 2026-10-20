@@ -10,6 +10,7 @@ import {
   hardwareToRequest,
   validateHardware,
   type HardwareCatalog,
+  type BindingDraft,
   type HardwareDraft,
   type KeyedRow,
 } from "@/lib/hardware/hardware-draft";
@@ -397,9 +398,20 @@ export function reconcileParts(prev: TemplateDraft, next: HardwareDraft | null, 
       if (row && snapshot(row) === snap) dropping.add(rowUid);
     }
   }
-  const stillLinked = new Set(
-    [...next.inputs, ...next.outputs].flatMap((b) => (before.get(b.uid)?.driver === b.driver ? Object.values(b.channels) : [])),
-  );
+  // Replace part (a part on another driver): it keeps what it fed. Each new
+  // reading takes the old link with its key, else one of the same unit and type.
+  const carried = new Map<string, Record<string, string>>();
+  for (const kind of ["inputs", "outputs"] as const) {
+    for (const b of next[kind]) {
+      const old = before.get(b.uid);
+      const spec = old && old.driver !== b.driver ? findDriver(catalog.drivers, b.driver) : undefined;
+      if (old && spec) carried.set(b.uid, carryLinks(kind, old, spec, prev));
+    }
+  }
+  const stillLinked = new Set([
+    ...[...next.inputs, ...next.outputs].flatMap((b) => (before.get(b.uid)?.driver === b.driver ? Object.values(b.channels) : [])),
+    ...[...carried.values()].flatMap((c) => Object.values(c)),
+  ]);
   for (const u of stillLinked) dropping.delete(u);
   metrics = metrics.filter((r) => !dropping.has(r.uid));
   actuators = actuators.filter((r) => !dropping.has(r.uid));
@@ -413,9 +425,11 @@ export function reconcileParts(prev: TemplateDraft, next: HardwareDraft | null, 
       if (old && old.driver === b.driver) return { ...b, channels: keep(b.channels) };
       const spec = findDriver(catalog.drivers, b.driver);
       if (!spec) return { ...b, proposed: undefined };
-      const channels: Record<string, string> = {};
-      const proposed: Record<string, string> = {};
+      const channels: Record<string, string> = { ...carried.get(b.uid) };
+      // Carried rows keep their proposal record, so they can still go untouched.
+      const proposed: Record<string, string> = Object.fromEntries(Object.entries(old?.proposed ?? {}).filter(([uid]) => Object.values(channels).includes(uid)));
       for (const ch of spec.channels) {
+        if (channels[ch.key]) continue;
         if (ch.common === false) {
           channels[ch.key] = "";
           continue;
@@ -434,6 +448,77 @@ export function reconcileParts(prev: TemplateDraft, next: HardwareDraft | null, 
   const inputs = propose("inputs");
   const outputs = propose("outputs");
   return { ...prev, metrics, actuators, hardware: { ...next, inputs, outputs } };
+}
+
+/** An existing template that a new device's draft is the same as (DESIGN.md
+ * §8: "Matches Greenhouse node. Use it?"): how it runs, its metric and
+ * actuator keys, and its board and parts. Enabled templates only. */
+export function matchingTemplate(d: TemplateDraft, entries: CatalogEntryResponse[], drivers?: DriverSpec[]): CatalogEntryResponse | undefined {
+  const req = draftToRequest(d, drivers);
+  const keys = (rows: { key?: string | null }[]) => rows.map((r) => r.key ?? "").sort().join(",");
+  const parts = (h: HardwareConfig | null | undefined) =>
+    h ? `${h.board}|${[...(h.inputs ?? []), ...(h.outputs ?? [])].map((b) => b.driver).sort().join(",")}` : "";
+  return entries.find(
+    (e) =>
+      e.status === "active" &&
+      e.runs_on === req.runs_on &&
+      keys(e.metrics) === keys(req.metrics) &&
+      keys(e.actuators) === keys(req.actuators) &&
+      parts(e.hardware) === parts(req.hardware),
+  );
+}
+
+/** What a wiring change stops feeding: rows some part fed (or drove) before
+ * and none does after (a part removed or replaced, a reading dropped). The
+ * rows themselves stay, as in `prev`, so the caller can name them. */
+export function unfedRows(prev: TemplateDraft, next: TemplateDraft): { kind: "metrics" | "actuators"; row: MetricDraft | ActuatorDraft }[] {
+  const linked = (h: HardwareDraft | null, kind: "inputs" | "outputs") => new Set((h?.[kind] ?? []).flatMap((b) => Object.values(b.channels)).filter(Boolean));
+  const out: { kind: "metrics" | "actuators"; row: MetricDraft | ActuatorDraft }[] = [];
+  for (const [kind, bindings] of [["metrics", "inputs"], ["actuators", "outputs"]] as const) {
+    const before = linked(prev.hardware, bindings);
+    const after = linked(next.hardware, bindings);
+    for (const row of prev[kind]) if (before.has(row.uid) && !after.has(row.uid)) out.push({ kind, row });
+  }
+  return out;
+}
+
+/** Replace part: which of the old part's links each of the new driver's
+ * readings keeps. First the same reading key (a relay's `value` to a PWM's),
+ * then a row of the same type and unit (a DHT22's °C temperature to a
+ * DS18B20's °C probe). Each link goes to one reading at most. */
+function carryLinks(
+  kind: "inputs" | "outputs",
+  old: BindingDraft,
+  spec: DriverSpec,
+  rows: Pick<TemplateDraft, "metrics" | "actuators">,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const free = new Set(Object.values(old.channels).filter(Boolean));
+  for (const ch of spec.channels) {
+    const ref = old.channels[ch.key];
+    if (ref && free.has(ref)) {
+      out[ch.key] = ref;
+      free.delete(ref);
+    }
+  }
+  const fits = (uid: string, ch: DriverChannelSpec) => {
+    if (kind === "inputs") {
+      const row = rows.metrics.find((r) => r.uid === uid);
+      const unit = proposal(spec, ch).unit;
+      return row != null && unit != null && row.unit === unit && row.data_type === (ch.data_type ?? "float");
+    }
+    const row = rows.actuators.find((r) => r.uid === uid);
+    return row != null && row.value_type === (ch.value_type ?? "bool");
+  };
+  for (const ch of spec.channels) {
+    if (out[ch.key]) continue;
+    const ref = [...free].find((uid) => fits(uid, ch));
+    if (ref) {
+      out[ch.key] = ref;
+      free.delete(ref);
+    }
+  }
+  return out;
 }
 
 /** The row a channel links to: a free one with its key and type, else a new

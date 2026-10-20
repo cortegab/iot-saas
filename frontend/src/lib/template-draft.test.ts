@@ -9,10 +9,12 @@ import {
   brokenUsages,
   draftToRequest,
   keepReading,
+  matchingTemplate,
   reconcileParts,
   renamed,
   templateSectionOrder,
   templateToDraft,
+  unfedRows,
   validateTemplate,
   type TemplateDraft,
 } from "@/lib/template-draft";
@@ -132,6 +134,36 @@ describe("reconcileParts", () => {
     expect(d.hardware!.inputs[0].channels.accel_x).toBe("");
   });
 
+  /** The draft after a part's driver changes (Replace part), as the card's picker does. */
+  const replace = (d: TemplateDraft, kind: "inputs" | "outputs", i: number, driver: string) => {
+    const h = d.hardware!;
+    const old = h[kind][i];
+    const without = { ...h, [kind]: h[kind].filter((x) => x.uid !== old.uid) };
+    const fresh = { ...blankBinding(spec(driver), without, CATALOG), uid: old.uid };
+    return reconcileParts(d, { ...h, [kind]: h[kind].map((x, j) => (j === i ? fresh : x)) }, CATALOG);
+  };
+
+  it("replacing a part keeps the metric a reading of the same unit fed (DHT22 → DS18B20)", () => {
+    const d = add(empty(), "dht22");
+    // A saved template: its metrics are records now, not proposals.
+    const saved = { ...d, metrics: d.metrics.map((m) => ({ ...m, origKey: m.key })), hardware: { ...d.hardware!, inputs: d.hardware!.inputs.map((b) => ({ ...b, proposed: undefined })) } };
+    const temperature = saved.metrics[0];
+    const r = replace(saved, "inputs", 0, "ds18b20");
+    expect(r.hardware!.inputs[0].channels.temp_1).toBe(temperature.uid);
+    // Humidity has no °C/% match on a DS18B20: kept, fed by nothing.
+    expect(r.metrics.map((m) => m.key)).toEqual(expect.arrayContaining(["temperature", "humidity"]));
+    expect(Object.values(r.hardware!.inputs[0].channels)).not.toContain(saved.metrics[1].uid);
+  });
+
+  it("replacing a part drops the untouched proposals nothing carries, and keeps an actuator by its key (relay → PWM)", () => {
+    const d = replace(add(empty(), "dht22"), "inputs", 0, "ds18b20");
+    expect(d.metrics.map((m) => m.key)).not.toContain("humidity");
+    const relay = add(empty(), "relay");
+    const fan = relay.actuators[0];
+    const pwm = replace(relay, "outputs", 0, "pwm");
+    expect(pwm.hardware!.outputs[0].channels.value).toBe(fan.uid);
+  });
+
   it("keeping a reading makes its metric; dropping an untouched one removes it again", () => {
     const d = add(empty(), "mpu6050");
     const part = d.hardware!.inputs[0].uid;
@@ -199,5 +231,34 @@ describe("templateSectionOrder", () => {
     expect(blankTemplate().metrics).toEqual([]);
     expect(own.metrics).toHaveLength(1);
     expect(draftToRequest(own)).toMatchObject({ runs_on: "own_code", hardware: null });
+  });
+});
+
+describe("unfedRows", () => {
+  const read = <T,>(file: string) => JSON.parse(readFileSync(new URL(`../../../firmware/${file}`, import.meta.url), "utf8")) as T;
+  const CATALOG: HardwareCatalog = { drivers: read<{ drivers: DriverSpec[] }>("drivers.json").drivers, models: read<{ models: BoardModel[] }>("boards.json").models };
+  const spec = (id: string) => CATALOG.drivers.find((d) => d.id === id)!;
+
+  it("names what a removed part stopped feeding, and nothing a new part feeds", () => {
+    const base: TemplateDraft = { ...blankTemplate(), name: "Bench", hardware: blankHardware() };
+    const h = base.hardware!;
+    const d = reconcileParts(base, { ...h, inputs: [blankBinding(spec("dht22"), h, CATALOG)] }, CATALOG);
+    // Edited, so removing the part keeps the metrics (only untouched proposals go).
+    const edited = { ...d, metrics: d.metrics.map((m) => ({ ...m, name: `${m.name}!` })) };
+    const removed = reconcileParts(edited, { ...edited.hardware!, inputs: [] }, CATALOG);
+    expect(unfedRows(edited, removed).map((x) => x.row.key)).toEqual(["temperature", "humidity"]);
+    expect(unfedRows(base, d)).toEqual([]);
+  });
+});
+
+describe("matchingTemplate", () => {
+  const saved = (over: object) => ({ ...(entry as object), ...over }) as never;
+
+  it("finds an enabled template with the same keys, how it runs and its parts", () => {
+    const d = templateToDraft(entry);
+    expect(matchingTemplate(d, [saved({ id: "a" })])).toMatchObject({ id: "a" });
+    expect(matchingTemplate(d, [saved({ id: "b", status: "disabled" })])).toBeUndefined();
+    expect(matchingTemplate(d, [saved({ id: "c", runs_on: "generic_firmware" })])).toBeUndefined();
+    expect(matchingTemplate({ ...d, metrics: d.metrics.slice(1) }, [saved({ id: "d" })])).toBeUndefined();
   });
 });

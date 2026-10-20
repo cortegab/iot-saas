@@ -7,7 +7,7 @@ import { Affix, Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { UnitField } from "@/components/catalog/UnitField";
 import { EditorSection } from "@/components/editor/EditorFrame";
-import { KeyField, RowCard, RowSummary, useRowExpansion } from "@/components/catalog/template/rows";
+import { KeyField, notWired, RowCard, RowSummary, useRowExpansion } from "@/components/catalog/template/rows";
 import type { SectionProps } from "@/components/catalog/template/section-props";
 import { blankMetric, renamed, type MetricDraft } from "@/lib/template-draft";
 
@@ -32,7 +32,7 @@ export function MetricsSection(props: SectionProps) {
           if (!rows.isOpen(m, i)) return <RowSummary key={m.uid} kind="metrics" i={i} row={m} desc={desc} onOpen={() => rows.toggle(m.uid)} props={props} />;
           const p = `metrics.${i}.`;
           return (
-            <RowCard key={m.uid} title={m.name || "New metric"} readOnly={readOnly} onCollapse={() => rows.collapse(m.uid)} onRemove={() => set({ ...d, metrics: d.metrics.filter((x) => x.uid !== m.uid) })}>
+            <RowCard key={m.uid} title={m.name || "New metric"} readOnly={readOnly} unwired={notWired("metrics", m, props)} onCollapse={() => rows.collapse(m.uid)} onRemove={() => set({ ...d, metrics: d.metrics.filter((x) => x.uid !== m.uid) })}>
               <Field label="Name" {...f(p + "name")} className={span2}>
                 <Input value={m.name} disabled={readOnly} placeholder="e.g. Temperature" onChange={(e) => setMetric(i, renamed(m, e.target.value))} onBlur={blur(p + "name")} />
               </Field>
