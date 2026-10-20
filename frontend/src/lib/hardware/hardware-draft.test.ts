@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { driversFor, type BoardModel, type DriverSpec } from "./driver-catalog";
+import { driversFor, hasCapability, type BoardModel, type DriverSpec } from "./driver-catalog";
 import type { components } from "@/types/api";
 import {
   blankBinding,
@@ -372,5 +372,14 @@ describe("driversFor", () => {
     const drivers = [{ ...spec("relay"), chips: ["esp32" as const] }, spec("pwm")];
     expect(driversFor(drivers, c3).map((d) => d.id)).toEqual(["pwm"]);
     expect(driversFor(drivers, undefined).map((d) => d.id)).toEqual(["relay", "pwm"]);
+  });
+});
+
+describe("hasCapability", () => {
+  it("reads a model's capabilities, and counts boards from older releases as having BLE", () => {
+    expect(hasCapability({ capabilities: ["ble"] }, "ble")).toBe(true);
+    expect(hasCapability({ capabilities: [] }, "ble")).toBe(false);
+    expect(hasCapability({}, "ble")).toBe(true);
+    expect(MODELS.every((m) => hasCapability(m, "ble"))).toBe(true);
   });
 });

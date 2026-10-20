@@ -148,21 +148,29 @@ function WifiOptions({ flow }: { flow: ConnectFlow }) {
     <>
       <OptionGroup
         label="Wi-Fi"
-        value={flow.wifiMode}
+        value={flow.phone ? "ble" : "sketch"}
         onChange={(v) => flow.setWifiMode(v as "ble" | "sketch")}
-        options={[
-          [
-            "ble",
-            "Set up from a phone",
-            "ESP BLE Provisioning app, Security 1 (PoP): the app proves it holds this device's password, then you pick the network. Nothing about your Wi-Fi in the firmware.",
-          ],
-          flow.install
-            ? ["sketch", "Type it in", "Quick for a bench test. Readable from the board's flash."]
-            : ["sketch", "Type it into the sketch", "Quick for a bench test. Readable from the binary."],
-        ]}
+        options={
+          flow.phoneSetup
+            ? [
+                [
+                  "ble",
+                  "Set up from a phone",
+                  "ESP BLE Provisioning app, Security 1 (PoP): the app proves it holds this device's password, then you pick the network. Nothing about your Wi-Fi in the firmware.",
+                ],
+                flow.install
+                  ? ["sketch", "Type it in", "Quick for a bench test. Readable from the board's flash."]
+                  : ["sketch", "Type it into the sketch", "Quick for a bench test. Readable from the binary."],
+              ]
+            : // No Bluetooth on this board: the only way in (DESIGN.md §8).
+              [["sketch", "Type it in", "This board has no Bluetooth, so its Wi-Fi goes in with the config. To change networks, run Install again."]]
+        }
       />
       {!flow.phone && (
         <div className="grid grid-cols-2 gap-2">
+          {!flow.phoneSetup && (
+            <p className="col-span-2 text-[12.5px] text-ink-muted">Saved on the board with its config. Anyone holding the board can read it.</p>
+          )}
           <Field label="Network (2.4 GHz)">
             <Input value={flow.ssid} autoComplete="off" onChange={(e) => flow.setSsid(e.target.value)} />
           </Field>
