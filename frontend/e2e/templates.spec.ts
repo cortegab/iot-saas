@@ -7,7 +7,7 @@ test("new template: the key follows the name until edited, and bad keys are refu
   const sections = page.locator("[data-editor-section]");
   await expect(sections.nth(1)).toHaveAttribute("data-editor-section", "hardware");
   // Own code: no wiring, and one metric to fill in.
-  await page.getByRole("radio", { name: "My own code or a gateway" }).click();
+  await page.getByRole("radio", { name: "Custom firmware or gateway" }).click();
   await expect(page.locator('[data-editor-section="hardware"]')).toHaveCount(0);
   const metricName = page.getByLabel("Name", { exact: true }).first();
   const key = page.getByLabel(/^Key/).first();

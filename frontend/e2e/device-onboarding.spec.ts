@@ -60,7 +60,7 @@ test("something new on its own code: no wiring, its data listed, it lands on the
 
   try {
     await page.goto("/devices/new?from=new");
-    await page.getByRole("button", { name: /My own code or a gateway/ }).click();
+    await page.getByRole("button", { name: /Custom firmware or gateway/ }).click();
     await expect(page).toHaveURL(/runs=own/);
     await page.getByLabel("Device name").fill(name);
     await expect(page.getByRole("heading", { level: 3, name: "Wiring", exact: true })).toHaveCount(0);

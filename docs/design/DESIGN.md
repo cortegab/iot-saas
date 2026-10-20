@@ -263,12 +263,12 @@ editable side panel and no "Expand" toggle.
 
 - **Defining a device: one model for templates and onboarding**
   - **Runs on** is the first question for anything new, and is stored on the template:
-    **Our firmware** (pick the parts; installs from the browser) or **My own code or a gateway**
+    **Our firmware** (pick the parts; installs from the browser) or **Custom firmware or gateway**
     (list the data it sends). It sets the section order everywhere that template is edited:
     - Our firmware: General → **Wiring** → Metrics → Actuators. Parts bring their metrics and
       actuators; the Metrics and Actuators sections keep the detail settings (publish, deadband,
       min/max, On/Off values).
-    - Own code or a gateway: General → Metrics → Actuators, and no Wiring section. Install offers
+    - Custom firmware or gateway: General → Metrics → Actuators, and no Wiring section. Install offers
       the sketch and the topic contract.
   - **Metrics are the record that lasts.** Rules, dashboards and history point at keys, never at
     parts or pins. A part suggests metrics when added; after that, **Replace part** swaps the driver
@@ -290,7 +290,7 @@ editable side panel and no "Expand" toggle.
     with the same chip look alike. Only the drivers the chosen board's firmware carries are offered;
     changing the board lists, in one summary, the pins that moved and the parts it can't run.
 - **Add device**
-  - Two starts: **Same as a device I have** (name, template, zone; today's form) and **Something
+  - Two starts: **From a template** (name, template, zone) and **Something
     new** (Runs on, then the template editor in onboarding mode: device name and zone on top).
     "Create device" makes the template and the device together.
   - Onboarding names the template itself and keeps the name out of view. Templates surface on
@@ -653,3 +653,4 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-15 | §8 connect flow **Options**: the provisioning security choice is removed; phone setup always uses **Security 1 – PoP**. Security 2 (SRP6a) can't work with the firmware's `network_provisioning` 1.0.2 (the app's Wi-Fi list stays empty), so it isn't offered until that is fixed (docs/ble-provisioning.md). |
 | 2026-10-15 | §5 **ProgressBar** (NEW) for the device **Install**: stage in words, a determinate bar while writing (overall %) and a sliding one otherwise, the elapsed time, and a "Slower link" note when the board dropped to a lower speed. §8 Options: "Set up from a phone" names **Security 1 (PoP)**, as the QR card does. |
 | 2026-10-17 | §8 **Defining a device**: one model for templates and onboarding. **Runs on** (Our firmware / My own code or a gateway) is stored on the template and sets the section order (Wiring second for Our firmware, absent otherwise), replacing "Wiring optional, last in the rail". Metrics are the record that lasts: **Replace part** keeps a reading's metric, removing a part names the rules and dashboards on its keys. Readings are named on the part card with a **What you'll see** line; parts with many readings pick which to keep, and wired parts collapse to one line. Unfed metrics are tagged **Not wired**. Wiring's one home is the template; a device's own wiring uses the same section, tagged **Own wiring**. The board list groups models by chip with capability tags and a **Detect my board** button, and offers only the drivers that board's firmware carries. **Add device** starts as *Same as a device I have* or *Something new*; templates surface on reuse (Add another like this, "Matches *X*. Use it?"). Install on a board without BLE offers only **Type it in**. |
+| 2026-10-19 | §8 wording: Add device's first start is **From a template** (was "Same as a device I have": it picks a template, and a workspace can have templates and no devices yet). The second Runs on choice is **Custom firmware or gateway** (was "My own code or a gateway"), still naming gateways and edge connectors, which aren't firmware. |
