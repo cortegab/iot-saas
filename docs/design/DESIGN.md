@@ -263,13 +263,16 @@ editable side panel and no "Expand" toggle.
 
 - **Defining a device: one model for templates and onboarding**
   - **Runs on** is the first question for anything new, and is stored on the template:
-    **Our firmware** (pick the parts; installs from the browser) or **Custom firmware or gateway**
-    (list the data it sends). It sets the section order everywhere that template is edited:
+    **Our firmware** (pick the parts; installs from the browser) or **Custom firmware** (list the
+    data it sends). It sets the section order everywhere that template is edited:
     - Our firmware: General → **Wiring** → Metrics → Actuators. Parts bring their metrics and
       actuators; the Metrics and Actuators sections keep the detail settings (publish, deadband,
       min/max, On/Off values).
-    - Custom firmware or gateway: General → Metrics → Actuators, and no Wiring section. Install offers
-      the sketch and the topic contract.
+    - Custom firmware: General → Metrics → Actuators, and no Wiring section. Install offers the
+      sketch and the topic contract.
+    - A gateway or edge connector also works as Custom firmware today: anything that speaks the
+      device contract with the device's credential. The label doesn't name gateways until gateway
+      support exists (SCOPE.md §3); then it becomes **Custom firmware or gateway** again.
   - **Metrics are the record that lasts.** Rules, dashboards and history point at keys, never at
     parts or pins. A part suggests metrics when added; after that, **Replace part** swaps the driver
     and keeps each reading's metric. Removing or replacing a part names what depends on its keys
@@ -654,3 +657,4 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-15 | §5 **ProgressBar** (NEW) for the device **Install**: stage in words, a determinate bar while writing (overall %) and a sliding one otherwise, the elapsed time, and a "Slower link" note when the board dropped to a lower speed. §8 Options: "Set up from a phone" names **Security 1 (PoP)**, as the QR card does. |
 | 2026-10-17 | §8 **Defining a device**: one model for templates and onboarding. **Runs on** (Our firmware / My own code or a gateway) is stored on the template and sets the section order (Wiring second for Our firmware, absent otherwise), replacing "Wiring optional, last in the rail". Metrics are the record that lasts: **Replace part** keeps a reading's metric, removing a part names the rules and dashboards on its keys. Readings are named on the part card with a **What you'll see** line; parts with many readings pick which to keep, and wired parts collapse to one line. Unfed metrics are tagged **Not wired**. Wiring's one home is the template; a device's own wiring uses the same section, tagged **Own wiring**. The board list groups models by chip with capability tags and a **Detect my board** button, and offers only the drivers that board's firmware carries. **Add device** starts as *Same as a device I have* or *Something new*; templates surface on reuse (Add another like this, "Matches *X*. Use it?"). Install on a board without BLE offers only **Type it in**. |
 | 2026-10-19 | §8 wording: Add device's first start is **From a template** (was "Same as a device I have": it picks a template, and a workspace can have templates and no devices yet). The second Runs on choice is **Custom firmware or gateway** (was "My own code or a gateway"), still naming gateways and edge connectors, which aren't firmware. |
+| 2026-10-19 | §8 wording: the second Runs on choice is **Custom firmware** (was "Custom firmware or gateway"). Gateways still work through it (any client speaking the device contract), but the label stops promising gateway support that isn't built: no gateway connect path, no child devices under one gateway, no connector of ours. SCOPE.md §3 keeps what gateway support needs; the label names gateways again when it lands. |

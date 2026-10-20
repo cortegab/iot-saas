@@ -25,7 +25,7 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
             ? "Our firmware: pick the board and its parts, and every device installs from the browser with no code."
             : d.hardware
               ? "Saving drops the wiring: these devices run code of their own."
-              : "The device's own code, or a gateway: list the data it sends. Devices get a sketch, or the topics to publish to."
+              : "Your own code on the board: list the data it sends. Devices get a sketch, or the topics to publish to (a gateway that speaks MQTT works too)."
         }
       >
         <SegmentedControl<RunsOn>
@@ -37,7 +37,7 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
           onChange={(runsOn) => set({ ...d, runsOn, metrics: runsOn === "own_code" && d.metrics.length === 0 ? [blankMetric()] : d.metrics })}
           options={[
             { value: "generic_firmware", label: "Our firmware", disabled: readOnly },
-            { value: "own_code", label: "Custom firmware or gateway", disabled: readOnly },
+            { value: "own_code", label: "Custom firmware", disabled: readOnly },
           ]}
         />
       </Field>
