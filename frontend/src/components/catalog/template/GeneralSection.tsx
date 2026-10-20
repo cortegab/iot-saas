@@ -37,7 +37,7 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
           onChange={(runsOn) => set({ ...d, runsOn, metrics: runsOn === "own_code" && d.metrics.length === 0 ? [blankMetric()] : d.metrics })}
           options={[
             { value: "generic_firmware", label: "Our firmware", disabled: readOnly },
-            { value: "own_code", label: "My own code or a gateway", disabled: readOnly },
+            { value: "own_code", label: "Custom firmware or gateway", disabled: readOnly },
           ]}
         />
       </Field>
@@ -76,7 +76,7 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
         {(!device || f("general.name").error) && (
           <Field
             label="Template name"
-            hint={device ? "Saved as a template too, so the next board like this one is Add device → Same as a device I have." : undefined}
+            hint={device ? "Saved as a template too, so the next board like this one is Add device → From a template." : undefined}
             {...f("general.name")}
           >
             <Input

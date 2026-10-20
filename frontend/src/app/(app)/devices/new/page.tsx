@@ -27,7 +27,7 @@ type From = "same" | "new";
 
 const RUNS: Record<"generic" | "own", RunsOn> = { generic: "generic_firmware", own: "own_code" };
 
-/** Add a device (DESIGN.md §8): **Same as a device I have** (name, template,
+/** Add a device (DESIGN.md §8): **From a template** (name, template,
  * zone) or **Something new**: how it runs, then the template editor in
  * onboarding mode, which makes its template too. Either way, creating it goes
  * straight to the connect flow with the one-time credential handed over in
@@ -47,7 +47,7 @@ export default function NewDevicePage() {
       value={from}
       onChange={(v) => router.replace(v === "new" ? "/devices/new?from=new" : "/devices/new")}
       options={[
-        { value: "same", label: "Same as a device I have" },
+        { value: "same", label: "From a template" },
         { value: "new", label: "Something new" },
       ]}
     />
@@ -78,7 +78,7 @@ function RunsOnChoice({ onPick }: { onPick: (runs: "generic" | "own") => void })
     {
       runs: "own" as const,
       icon: <Code2 aria-hidden size={18} />,
-      title: "My own code or a gateway",
+      title: "Custom firmware or gateway",
       body: "Your own firmware, a PLC gateway or another service. List the data it sends; it publishes to the topics itself.",
     },
   ];
