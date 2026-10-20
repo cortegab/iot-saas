@@ -34,7 +34,7 @@ const FW_VERSION = "1.0.0";
  * they're offered. Adding one means a block in firmware/src/board.h and
  * pins.cpp, here in BOARDS, and in CHIP_PINS (lib/hardware/board-pins.ts);
  * release.py checks they agree. */
-export const CHIPS = ["esp32", "esp32c3", "esp32s3", "esp32c6"] as const;
+export const CHIPS = ["esp32", "esp32c3", "esp32s3", "esp32c6", "esp32s2"] as const;
 export type SketchBoard = (typeof CHIPS)[number];
 
 /** What differs per board: the Arduino IDE settings, the provisioning-reset button, the BLE
@@ -126,6 +126,22 @@ export const BOARDS: Record<
     inputs: [2, 3, 6, 7, 10, 11],
     // 23/22 are the default I2C pins (SDA/SCL), so they're handed out last.
     outputs: [18, 19, 20, 21, 14, 0, 1, 23, 22],
+  },
+  esp32s2: {
+    label: "ESP32-S2",
+    blurb: "Lolin S2 Mini and similar. No Bluetooth: Wi-Fi typed in.",
+    ble: false,
+    arduinoBoard: "LOLIN S2 Mini",
+    pioBoard: "lolin_s2_mini",
+    ideSettings: ["USB CDC On Boot: Enabled"],
+    resetPin: 0,
+    resetButton: "the 0 (BOOT) button",
+    // No Bluetooth: the sketch never provisions from a phone on this chip.
+    bleHandler: "",
+    // Left out: strapping 0, 45, 46; USB 19, 20; flash/PSRAM 26-32; 15 (LED).
+    inputs: [3, 4, 5, 6, 7, 8, 9, 10],
+    // 33/35 are the default I2C pins (SDA/SCL), so they're handed out last.
+    outputs: [11, 12, 13, 14, 16, 17, 18, 21, 33, 35],
   },
 };
 

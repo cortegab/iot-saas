@@ -97,12 +97,13 @@ labelled, and that lives in `boards.json`.
 
 ## Size
 
-| Board | App (0.10.0) | Share of a 1.875 MB OTA slot |
+| Board | App (0.11.0) | Share of a 1.875 MB OTA slot |
 |---|---|---|
 | ESP32 | 1.39 MB | 71% |
 | ESP32-C3 | 1.55 MB | 79% |
 | ESP32-S3 | 1.40 MB | 71% |
 | ESP32-C6 | 1.70 MB | 87% |
+| ESP32-S2 | 1.13 MB | 58% (no Bluetooth, so no provisioning code at all) |
 
 The S3's and C6's prebuilt libraries already use NimBLE, so their envs need no `custom_sdkconfig`.
 **The C6 is the tightest**, close to the 90% warning: its prebuilt libraries carry 802.15.4

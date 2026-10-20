@@ -49,6 +49,15 @@
 #define DEFAULT_LED_PIN 8
 #define DEFAULT_LED_ACTIVE_LOW false
 #define BLE_HANDLER NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BLE
+#elif CONFIG_IDF_TARGET_ESP32S2
+#define BOARD_ID "esp32s2"
+// No Bluetooth, so no phone setup and nothing to reset (the Wi-Fi is typed in
+// at Install); GPIO 0 is the BOOT button all the same.
+#define DEFAULT_RESET_PIN 0
+// The Lolin S2 Mini's blue LED.
+#define DEFAULT_LED_TYPE LedType::Gpio
+#define DEFAULT_LED_PIN 15
+#define DEFAULT_LED_ACTIVE_LOW false
 #else
 #error "No block for this chip in src/board.h: add one here, in src/pins.cpp and in release.py's BOARDS."
 #endif
