@@ -17,6 +17,8 @@ export function WiringSection({
   readOnly,
   onChange = () => undefined,
   field = () => ({ onBlur: () => undefined }),
+  onRenameTarget,
+  targetError,
   children,
 }: {
   lead: ReactNode;
@@ -28,13 +30,25 @@ export function WiringSection({
   readOnly: boolean;
   onChange?: (next: HardwareDraft | null) => void;
   field?: (path: string) => { error?: string; warning?: string; onBlur: () => void };
+  /** A template's editor only: name a reading's metric on its part card. */
+  onRenameTarget?: (kind: "inputs" | "outputs", uid: string, name: string) => void;
+  targetError?: (kind: "inputs" | "outputs", uid: string) => string | undefined;
   children?: ReactNode;
 }) {
   const { data, error, isLoading } = useDriverCatalog();
   return (
     <EditorSection id="hardware" title="Wiring" card={card} lead={lead}>
       {hardware !== undefined && (
-        <HardwareSection hardware={hardware} rows={rows} catalog={{ data, loading: isLoading, error: !!error }} readOnly={readOnly} onChange={onChange} field={field} />
+        <HardwareSection
+          hardware={hardware}
+          rows={rows}
+          catalog={{ data, loading: isLoading, error: !!error }}
+          readOnly={readOnly}
+          onChange={onChange}
+          field={field}
+          onRenameTarget={onRenameTarget}
+          targetError={targetError}
+        />
       )}
       {children}
     </EditorSection>

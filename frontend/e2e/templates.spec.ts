@@ -3,6 +3,12 @@ import { test } from "./fixtures";
 
 test("new template: the key follows the name until edited, and bad keys are refused inline", async ({ page }) => {
   await page.goto("/templates/new");
+  // Our firmware by default: the wiring comes right after General (DESIGN.md §8).
+  const sections = page.locator("[data-editor-section]");
+  await expect(sections.nth(1)).toHaveAttribute("data-editor-section", "hardware");
+  // Own code: no wiring, and one metric to fill in.
+  await page.getByRole("radio", { name: "My own code or a gateway" }).click();
+  await expect(page.locator('[data-editor-section="hardware"]')).toHaveCount(0);
   const metricName = page.getByLabel("Name", { exact: true }).first();
   const key = page.getByLabel(/^Key/).first();
 

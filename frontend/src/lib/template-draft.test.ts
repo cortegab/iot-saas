@@ -20,6 +20,7 @@ const entry = {
   id: "t1",
   name: "Climate",
   status: "active",
+  runs_on: "own_code",
   is_legacy: false,
   device_count: 2,
   created_at: "",
@@ -51,7 +52,7 @@ describe("template draft", () => {
   });
 
   it("validates names, keys, ranges and actuator values", () => {
-    const d: TemplateDraft = blankTemplate();
+    const d: TemplateDraft = blankTemplate("own_code");
     d.metrics[0] = { ...d.metrics[0], name: "", key: "a/b", min: "5", max: "5" };
     d.actuators = [{ ...blankActuator(), name: "Fan", key: "fan", on: "1", off: "1" }];
     const { errors } = validateTemplate(d, ctx);
@@ -164,8 +165,15 @@ describe("reconcileParts", () => {
 });
 
 describe("templateSectionOrder", () => {
-  it("puts the wiring after General when onboarding, last when editing", () => {
-    expect(templateSectionOrder({ onboarding: true })).toEqual(["general", "hardware", "metrics", "actuators"]);
-    expect(templateSectionOrder({ onboarding: false })).toEqual(["general", "metrics", "actuators", "hardware"]);
+  it("puts the wiring after General on our firmware, and has none for own code", () => {
+    expect(templateSectionOrder({ runsOn: "generic_firmware" })).toEqual(["general", "hardware", "metrics", "actuators"]);
+    expect(templateSectionOrder({ runsOn: "own_code" })).toEqual(["general", "metrics", "actuators"]);
+  });
+
+  it("never sends wiring for own code, and says how it runs", () => {
+    const own = { ...blankTemplate("own_code"), name: "Gateway" };
+    expect(blankTemplate().metrics).toEqual([]);
+    expect(own.metrics).toHaveLength(1);
+    expect(draftToRequest(own)).toMatchObject({ runs_on: "own_code", hardware: null });
   });
 });

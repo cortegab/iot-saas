@@ -50,6 +50,7 @@ def _to_response(entry: DeviceCatalogEntry, device_count: int = 0) -> CatalogEnt
         metrics=[CatalogMetric.model_validate(m) for m in entry.metrics],
         actuators=[CatalogActuator.model_validate(a) for a in entry.actuators],
         hardware=HardwareConfig.model_validate(entry.hardware) if entry.hardware else None,
+        runs_on=entry.runs_on,  # type: ignore[arg-type]
         status=entry.status,  # type: ignore[arg-type]
         is_legacy=entry.is_legacy,
         device_count=device_count,
@@ -82,6 +83,7 @@ async def create_catalog_entry(
             [m.model_dump(mode="json") for m in body.metrics],
             [a.model_dump(mode="json") for a in body.actuators],
             hardware=body.hardware.model_dump(mode="json") if body.hardware else None,
+            runs_on=body.runs_on,
         )
     except _KEY_ERRORS as exc:
         raise _key_error(exc) from exc
@@ -140,6 +142,7 @@ async def update_catalog_entry(
             body.status,
             hardware=body.hardware.model_dump(mode="json") if body.hardware else None,
             hardware_set="hardware" in body.model_fields_set,
+            runs_on=body.runs_on,
         )
     except _KEY_ERRORS as exc:
         raise _key_error(exc) from exc

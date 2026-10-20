@@ -26,6 +26,9 @@ class DeviceCatalogEntry(Base):
         CheckConstraint(
             "status IN ('active', 'disabled')", name="ck_device_catalog_entries_status"
         ),
+        CheckConstraint(
+            "runs_on IN ('generic_firmware', 'own_code')", name="ck_device_catalog_entries_runs_on"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -46,6 +49,12 @@ class DeviceCatalogEntry(Base):
     # devices are flashed with the generated sketch instead. none_as_null: a
     # Python None is SQL NULL, not the JSON value `null` (JSONB's default).
     hardware: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    # How its devices run (DESIGN.md §8 "Runs on"): "generic_firmware" (our
+    # firmware, wired by `hardware`, installed from the browser) or
+    # "own_code" (the device's own code or a gateway; never any wiring).
+    runs_on: Mapped[str] = mapped_column(
+        nullable=False, default="own_code", server_default="own_code"
+    )
     # "active" | "disabled" — a disabled type stays intact (existing devices
     # keep working) but shouldn't be offered when creating a new device.
     status: Mapped[str] = mapped_column(nullable=False, default="active")

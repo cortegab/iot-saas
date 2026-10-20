@@ -104,6 +104,7 @@ async def create_device(
                 [a.model_dump(mode="json") for a in t.actuators],
                 t.hardware.model_dump(mode="json") if t.hardware else None,
                 zone_id=body.zone_id,
+                runs_on=t.runs_on,
             )
         else:
             assert body.catalog_entry_id is not None  # DeviceCreateRequest checks one is set

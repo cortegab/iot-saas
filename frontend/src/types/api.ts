@@ -1187,6 +1187,8 @@ export interface components {
             /** Actuators */
             actuators?: components["schemas"]["CatalogActuator"][];
             hardware?: components["schemas"]["HardwareConfig"] | null;
+            /** Runs On */
+            runs_on?: ("generic_firmware" | "own_code") | null;
         };
         /** CatalogEntryResponse */
         CatalogEntryResponse: {
@@ -1202,6 +1204,11 @@ export interface components {
             /** Actuators */
             actuators: components["schemas"]["CatalogActuator"][];
             hardware?: components["schemas"]["HardwareConfig"] | null;
+            /**
+             * Runs On
+             * @enum {string}
+             */
+            runs_on: "generic_firmware" | "own_code";
             /**
              * Status
              * @enum {string}
@@ -1233,6 +1240,8 @@ export interface components {
             /** Status */
             status?: ("active" | "disabled") | null;
             hardware?: components["schemas"]["HardwareConfig"] | null;
+            /** Runs On */
+            runs_on?: ("generic_firmware" | "own_code") | null;
         };
         /** CatalogMetric */
         CatalogMetric: {

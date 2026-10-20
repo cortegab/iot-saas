@@ -4,7 +4,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { mutate as revalidate } from "swr";
-import { Plus } from "lucide-react";
+import { Code2, Cpu, Plus } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { Button } from "@/components/ui/Button";
@@ -16,44 +16,95 @@ import { Select } from "@/components/ui/Select";
 import { TemplateEditor } from "@/components/catalog/TemplateEditor";
 import { ApiRequestError } from "@/lib/api-client";
 import { handOffCredential } from "@/lib/credential-handoff";
+import type { RunsOn } from "@/lib/template-draft";
 import type { components } from "@/types/api";
 
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-type From = "template" | "hardware";
+type From = "same" | "new";
 
-/** Add a device, either from a template (name, template, zone) or from the
- * hardware (board and parts, which make its template too: TemplateEditor's
- * `onboard`). Either way, creating it goes straight to the connect flow with
- * the one-time credential handed over in memory. */
+const RUNS: Record<"generic" | "own", RunsOn> = { generic: "generic_firmware", own: "own_code" };
+
+/** Add a device (DESIGN.md §8): **Same as a device I have** (name, template,
+ * zone) or **Something new**: how it runs, then the template editor in
+ * onboarding mode, which makes its template too. Either way, creating it goes
+ * straight to the connect flow with the one-time credential handed over in
+ * memory. `?from=hardware` (older links) is Something new on our firmware. */
 export default function NewDevicePage() {
   const router = useRouter();
-  const from: From = useSearchParams().get("from") === "hardware" ? "hardware" : "template";
+  const params = useSearchParams();
+  const legacy = params.get("from") === "hardware";
+  const from: From = legacy || params.get("from") === "new" ? "new" : "same";
+  const runs = legacy ? "generic" : params.get("runs");
+  const runsOn = runs === "generic" || runs === "own" ? RUNS[runs] : null;
   const modes = (
     <SegmentedControl<From>
       ariaLabel="Start from"
       size="md"
       className="mb-4 w-fit"
       value={from}
-      onChange={(v) => router.replace(v === "hardware" ? "/devices/new?from=hardware" : "/devices/new")}
+      onChange={(v) => router.replace(v === "new" ? "/devices/new?from=new" : "/devices/new")}
       options={[
-        { value: "template", label: "From a template" },
-        { value: "hardware", label: "From the hardware" },
+        { value: "same", label: "Same as a device I have" },
+        { value: "new", label: "Something new" },
       ]}
     />
   );
-  if (from === "hardware") {
-    return (
-      <>
-        <Breadcrumbs crumbs={[{ href: "/devices", label: "Devices" }, { label: "Add device" }]} />
-        {modes}
-        <TemplateEditor entryId={null} onboard mode="page" />
-      </>
-    );
-  }
-  return <FromTemplate modes={modes} />;
+  if (from === "same") return <FromTemplate modes={modes} />;
+  return (
+    <>
+      <Breadcrumbs crumbs={[{ href: "/devices", label: "Devices" }, { label: "Add device" }]} />
+      {modes}
+      {runsOn ? (
+        <TemplateEditor key={runsOn} entryId={null} onboard runsOn={runsOn} mode="page" />
+      ) : (
+        <RunsOnChoice onPick={(r) => router.replace(`/devices/new?from=new&runs=${r}`)} />
+      )}
+    </>
+  );
+}
+
+/** Something new, first question: how will it run? (DESIGN.md §8 "Runs on") */
+function RunsOnChoice({ onPick }: { onPick: (runs: "generic" | "own") => void }) {
+  const choices = [
+    {
+      runs: "generic" as const,
+      icon: <Cpu aria-hidden size={18} />,
+      title: "Our firmware",
+      body: "An ESP32 board you wire yourself. Pick the board and its parts; it installs from the browser, no code.",
+    },
+    {
+      runs: "own" as const,
+      icon: <Code2 aria-hidden size={18} />,
+      title: "My own code or a gateway",
+      body: "Your own firmware, a PLC gateway or another service. List the data it sends; it publishes to the topics itself.",
+    },
+  ];
+  return (
+    <section aria-labelledby="runs-on" className="flex max-w-3xl flex-col gap-3">
+      <h2 id="runs-on" className="text-[15px] font-semibold text-ink">
+        How will this device run?
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {choices.map((c) => (
+          <button
+            key={c.runs}
+            type="button"
+            onClick={() => onPick(c.runs)}
+            className="flex flex-col gap-1.5 rounded-xl border border-border bg-surface p-4 text-left shadow-card hover:border-accent/50"
+          >
+            <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+              <span className="text-accent">{c.icon}</span>
+              {c.title}
+            </span>
+            <span className="text-[13px] text-ink-muted">{c.body}</span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function FromTemplate({ modes }: { modes: ReactNode }) {
