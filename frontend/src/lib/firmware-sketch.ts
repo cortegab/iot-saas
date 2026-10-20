@@ -34,7 +34,7 @@ const FW_VERSION = "1.0.0";
  * they're offered. Adding one means a block in firmware/src/board.h and
  * pins.cpp, here in BOARDS, and in CHIP_PINS (lib/hardware/board-pins.ts);
  * release.py checks they agree. */
-export const CHIPS = ["esp32", "esp32c3", "esp32s3"] as const;
+export const CHIPS = ["esp32", "esp32c3", "esp32s3", "esp32c6"] as const;
 export type SketchBoard = (typeof CHIPS)[number];
 
 /** What differs per board: the Arduino IDE settings, the provisioning-reset button, the BLE
@@ -110,6 +110,22 @@ export const BOARDS: Record<
     inputs: [4, 5, 6, 7, 15, 16, 17, 18],
     // 8/9 are the default I2C pins (SDA/SCL), so they're handed out last.
     outputs: [10, 11, 12, 13, 14, 21, 47, 8, 9],
+  },
+  esp32c6: {
+    label: "ESP32-C6",
+    blurb: "ESP32-C6 DevKitC-1 and similar.",
+    ble: true,
+    arduinoBoard: "ESP32C6 Dev Module",
+    pioBoard: "esp32-c6-devkitc-1",
+    ideSettings: [],
+    resetPin: 9,
+    resetButton: "BOOT",
+    bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BLE",
+    // Left out: strapping 4, 5, 8 (RGB LED), 9 (BOOT), 15; USB 12, 13; UART0
+    // 16, 17; flash 24-30.
+    inputs: [2, 3, 6, 7, 10, 11],
+    // 23/22 are the default I2C pins (SDA/SCL), so they're handed out last.
+    outputs: [18, 19, 20, 21, 14, 0, 1, 23, 22],
   },
 };
 

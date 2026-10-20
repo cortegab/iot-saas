@@ -40,6 +40,15 @@
 #define DEFAULT_LED_ACTIVE_LOW false
 // BLE only, like the C3.
 #define BLE_HANDLER NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BLE
+#elif CONFIG_IDF_TARGET_ESP32C6
+#define BOARD_ID "esp32c6"
+// The BOOT button (GPIO 9): hold it 5 s while running to provision again.
+#define DEFAULT_RESET_PIN 9
+// The DevKitC-1's addressable RGB LED.
+#define DEFAULT_LED_TYPE LedType::Rgb
+#define DEFAULT_LED_PIN 8
+#define DEFAULT_LED_ACTIVE_LOW false
+#define BLE_HANDLER NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BLE
 #else
 #error "No block for this chip in src/board.h: add one here, in src/pins.cpp and in release.py's BOARDS."
 #endif

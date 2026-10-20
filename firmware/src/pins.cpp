@@ -24,6 +24,12 @@ const int8_t INPUT_ONLY[] = {34, 35, 36, 39};
 const int8_t USABLE[] = {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48};
 const int8_t ADC1[] = {1, 2, 4, 5, 6, 7, 8, 9, 10};
 const int8_t INPUT_ONLY[] = {-1};
+#elif CONFIG_IDF_TARGET_ESP32C6
+// Left out: strapping 4, 5, 8 (the RGB LED), 9 (BOOT), 15; USB 12, 13; the
+// USB-UART bridge 16, 17; flash 24-30.
+const int8_t USABLE[] = {0, 1, 2, 3, 6, 7, 10, 11, 14, 18, 19, 20, 21, 22, 23};
+const int8_t ADC1[] = {0, 1, 2, 3, 6};
+const int8_t INPUT_ONLY[] = {-1};
 #else
 #error "No pin rules for this chip in src/pins.cpp"
 #endif
