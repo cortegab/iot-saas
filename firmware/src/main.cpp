@@ -3,11 +3,12 @@
 // flashes (src/config.h). See firmware/README.md.
 #include <Arduino.h>
 
-#include "board.h"
+#include "board.h"  // DEFAULT_LED_* until the config is read
 #include "config.h"
 #include "io.h"
 #include "led.h"
 #include "net.h"
+#include "pins.h"
 #include "version.h"
 
 namespace {
@@ -33,9 +34,19 @@ void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.printf("\n[BOOT] iot-saas firmware %s (%s)\n", FW_VERSION, BOARD_ID);
-  ledBegin();
+  // The chip's LED until the config names the board's own, so a board with no
+  // usable config still blinks its fault.
+  ledBegin(DEFAULT_LED_TYPE, DEFAULT_LED_PIN, DEFAULT_LED_ACTIVE_LOW);
 
-  if (!loadConfig(config, fault) || !ioBegin(config, fault)) {
+  if (!loadConfig(config, fault)) {
+    ledSet(LedState::Fault);
+    return;
+  }
+  ledBegin(config.ledType, config.ledPin, config.ledActiveLow);
+  // Before the bindings claim theirs, so one on these pins fails with a reason.
+  reservePin(config.resetPin, "the reset button");
+  reservePin(config.ledPin, "the status LED");
+  if (!ioBegin(config, fault)) {
     ledSet(LedState::Fault);
     return;
   }

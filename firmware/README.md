@@ -40,7 +40,10 @@ python3 release.py --dev     # build + package to infra/firmware/<version>/ and 
 
 Bump `FW_VERSION` in `src/version.h` for every release. `release.py` fails if:
 - `drivers.json` and `src/drivers/registry.cpp` list different drivers
-- a board model in `boards.json` offers a pin `src/pins.cpp` refuses for its chip
+- `src/board.h` or `src/pins.cpp` lacks a block for a chip it builds, or has one it doesn't
+- `CHIP_PINS` in `frontend/src/lib/hardware/board-pins.ts` disagrees with `src/pins.cpp`
+- a board model in `boards.json` offers a pin `src/pins.cpp` refuses for its chip, offers its own
+  reset or LED pin for wiring, or has an unknown `led.type` or capability
 - an app outgrows its OTA slot
 
 It also warns when an app is above 90% of its slot.
@@ -58,6 +61,10 @@ labelled, and that lives in `boards.json`.
 
 - **The config blob's `board`** is the chip, and the firmware checks it against its own build.
 - **Its `model`** is the board model id, which the firmware only logs.
+- **Its `board_io`** carries the model's reset button and status LED (`reset_pin`, `led: {type,
+  pin, active_low}`), so models of one chip can differ there. It's optional and additive: firmware
+  before 0.6.0 ignores it, and 0.6.0+ falls back to the chip's defaults in `src/board.h` without
+  it. The firmware reserves both pins, so a binding on one fails at boot with the owner named.
 - **Templates store the model id** (`hardware.board`). The backend checks only the id's shape, so a
   new model needs no backend change.
 
@@ -68,19 +75,21 @@ labelled, and that lives in `boards.json`.
    - `id` (kebab-case, never renamed once used), `chip`, `label`, `description`
    - `pins`: the free GPIOs on its header, a subset of the chip's `USABLE` in `src/pins.cpp`
    - `pin_labels`: printed names that differ from the number, such as VP, VN, RX or TX
-   - `reset` and `led`: these must match `src/board.h` for that chip
+   - `reset`: its provisioning-reset button (`pin`, and a `label` people read)
+   - `led`: its status LED, `type` `gpio`, `rgb` (addressable, like the S3/C6 DevKits) or `none`,
+     plus `pin` and `active_low`. Both may differ from the chip's defaults in `src/board.h`.
+   - `capabilities`: `ble` when Wi-Fi can be set up from a phone, `rgb_led` when `led.type` is `rgb`
    - `notes`: anything a person wiring it should know
 2. Bump `FW_VERSION`, then run `release.py`. It refuses pins the firmware wouldn't accept.
 3. Deploy. The dashboard offers the model as soon as the release is live.
 
-**A new model whose reset button or LED differs from its chip's `board.h`:** move those two pins
-into the config blob first (`config.h`, `net.cpp`, `main.cpp`). Today they're per chip.
-
 **A new chip** (for example the ESP32-S3):
-1. Add a PlatformIO env, plus its `#if` branches in `src/board.h` and `src/pins.cpp`.
+1. Add a PlatformIO env, plus its `#elif CONFIG_IDF_TARGET_…` block in `src/board.h` and
+   `src/pins.cpp`. A chip without one doesn't build (`#error`).
 2. Add it to `BOARDS` in `release.py` (env, esptool chip name, bootloader offset).
-3. Mirror its pin rules in `CHIP_PINS` (`frontend/src/lib/hardware/board-pins.ts`), and its pin
-   pools in `BOARDS` (`frontend/src/lib/firmware-sketch.ts`).
+3. Add it to `CHIPS` and `BOARDS` (`frontend/src/lib/firmware-sketch.ts`) and mirror its pin rules
+   in `CHIP_PINS` (`frontend/src/lib/hardware/board-pins.ts`). TypeScript then flags every
+   per-chip table that misses it, and `release.py` checks `CHIP_PINS` against `src/pins.cpp`.
 4. Add a model for it in `boards.json`.
 5. Add an alembic data migration only if stored values need renaming. They don't for a new chip.
 
@@ -108,8 +117,8 @@ Bluedroid-only Arduino BLE libraries out of the build.
 ## Status LED
 
 The board's built-in LED is reserved for the firmware (ESP32 DevKits: GPIO 2; ESP32-C3 Super
-Mini: GPIO 8). It's never offered for wiring. It shows where the board is, so you don't need a
-serial monitor:
+Mini: GPIO 8; each model's `led` in `boards.json`). It's never offered for wiring. An RGB LED
+blinks dim blue. It shows where the board is, so you don't need a serial monitor:
 
 | LED | Meaning | What to do |
 |---|---|---|

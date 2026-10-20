@@ -69,34 +69,78 @@ def check_driver_ids(catalog: dict) -> None:
         )
 
 
-def firmware_pins() -> dict[str, set[int]]:
-    """Each chip's USABLE GPIOs, read from src/pins.cpp (the firmware's own rules)."""
-    source = (HERE / "src/pins.cpp").read_text()
-    c3, esp32 = re.search(r"#if CONFIG_IDF_TARGET_ESP32C3(.*?)#else(.*?)#endif", source, re.S).groups()  # type: ignore[union-attr]
+def chip_blocks(path: str) -> dict[str, str]:
+    """Each chip's block of an `#if CONFIG_IDF_TARGET_X … #elif … #else #error`
+    chain in a firmware source, keyed by board id (ESP32C3 -> esp32c3)."""
+    source = (HERE / path).read_text()
+    parts = re.split(r"#(?:el)?if CONFIG_IDF_TARGET_(\w+)", source)
+    blocks = {chip.lower(): re.split(r"#else|#endif", body)[0] for chip, body in zip(parts[1::2], parts[2::2])}
+    if not blocks:
+        fail(f"no CONFIG_IDF_TARGET_ blocks in {path}")
+    return blocks
 
-    def usable(block: str) -> set[int]:
-        match = re.search(r"USABLE\[\]\s*=\s*\{([^}]*)\}", block)
+
+def pin_list(block: str, name: str, where: str) -> set[int]:
+    match = re.search(rf"{name}\[\]\s*=\s*\{{([^}}]*)\}}", block)
+    if not match:
+        fail(f"{name} not found in {where}")
+    return {int(p) for p in match.group(1).split(",") if int(p) >= 0}  # type: ignore[union-attr]
+
+
+def firmware_pins() -> dict[str, dict[str, set[int]]]:
+    """Each chip's pin rules, read from src/pins.cpp (the firmware's own)."""
+    return {
+        chip: {key: pin_list(block, name, f"src/pins.cpp ({chip})") for key, name in (("usable", "USABLE"), ("adc1", "ADC1"), ("inputOnly", "INPUT_ONLY"))}
+        for chip, block in chip_blocks("src/pins.cpp").items()
+    }
+
+
+def check_chips(pins: dict[str, dict[str, set[int]]]) -> None:
+    """Every build here has a block in board.h and pins.cpp, and the dashboard's
+    CHIP_PINS (frontend/src/lib/hardware/board-pins.ts) says what pins.cpp says."""
+    for path, chips in (("src/board.h", set(chip_blocks("src/board.h"))), ("src/pins.cpp", set(pins))):
+        if chips != set(BOARDS):
+            fail(f"{path} has blocks for {sorted(chips)}, but release.py builds {sorted(BOARDS)}")
+    source = (ROOT / "frontend/src/lib/hardware/board-pins.ts").read_text()
+    for chip, rules in pins.items():
+        match = re.search(rf"\b{chip}:\s*\{{(.*?)\}}", source, re.S)
         if not match:
-            fail("USABLE not found in src/pins.cpp")
-        return {int(p) for p in match.group(1).split(",")}  # type: ignore[union-attr]
+            fail(f"board-pins.ts CHIP_PINS has no {chip}")
+        for key, expected in rules.items():
+            listed = re.search(rf"{key}:\s*\[([^\]]*)\]", match.group(1))  # type: ignore[union-attr]
+            got = {int(p) for p in listed.group(1).split(",") if p.strip()} if listed else None
+            if got != expected:
+                fail(f"board-pins.ts CHIP_PINS.{chip}.{key} is {sorted(got or [])}, src/pins.cpp says {sorted(expected)}")
 
-    return {"esp32c3": usable(c3), "esp32": usable(esp32)}
+
+LED_TYPES = {"gpio", "rgb", "none"}
+CAPABILITIES = {"ble", "rgb_led"}
 
 
-def check_board_models(models: list[dict]) -> None:
+def check_board_models(models: list[dict], pins: dict[str, dict[str, set[int]]]) -> None:
     """Every board model is built for (its chip has an env here), uses only
-    pins the firmware accepts, and keeps its reset button and LED off them."""
-    allowed = firmware_pins()
+    pins the firmware accepts, keeps its reset button and LED off them, and
+    says what it can do (capabilities) consistently with its LED."""
     ids = [m["id"] for m in models]
     if len(ids) != len(set(ids)):
         fail(f"boards.json has a duplicate id: {ids}")
     for m in models:
         if m["chip"] not in BOARDS:
             fail(f"boards.json: {m['id']} is for chip {m['chip']}, which has no build here")
-        extra = set(m["pins"]) - allowed[m["chip"]]
+        extra = set(m["pins"]) - pins[m["chip"]]["usable"]
         if extra:
             fail(f"boards.json: {m['id']} offers {sorted(extra)}, which src/pins.cpp refuses for {m['chip']}")
+        led_type = m["led"].get("type", "gpio")
+        if led_type not in LED_TYPES:
+            fail(f"boards.json: {m['id']}'s led.type {led_type!r} isn't one of {sorted(LED_TYPES)}")
+        caps = set(m.get("capabilities", []))
+        if caps - CAPABILITIES:
+            fail(f"boards.json: {m['id']} has unknown capabilities {sorted(caps - CAPABILITIES)}")
+        if ("rgb_led" in caps) != (led_type == "rgb"):
+            fail(f"boards.json: {m['id']} lists rgb_led only when its led.type is rgb")
         for part in ("reset", "led"):
+            if part == "led" and led_type == "none":
+                continue
             if m[part]["pin"] in m["pins"]:
                 fail(f"boards.json: {m['id']}'s {part} pin {m[part]['pin']} is also offered for wiring")
         i2c = m.get("i2c")
@@ -143,7 +187,9 @@ def main() -> None:
     catalog = json.loads((HERE / "drivers.json").read_text())
     check_driver_ids(catalog)
     models = json.loads((HERE / "boards.json").read_text())["models"]
-    check_board_models(models)
+    pins = firmware_pins()
+    check_chips(pins)
+    check_board_models(models, pins)
     partitions = read_partitions()
     app_offset, app_size = partitions["app0"]
     cfg_offset, cfg_size = partitions["cfg"]

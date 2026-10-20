@@ -10,7 +10,8 @@
       "pin_labels": { "36": "VP", "39": "VN", "16": "RX2", "17": "TX2" },
       "i2c": { "sda": 21, "scl": 22 },
       "reset": { "pin": 19, "label": "a button between GPIO 19 (D19) and GND" },
-      "led": { "pin": 2, "active_low": false },
+      "led": { "type": "gpio", "pin": 2, "active_low": false },
+      "capabilities": ["ble"],
       "notes": ["Header labels like D13 mean GPIO 13."]
     },
     {
@@ -22,7 +23,8 @@
       "pin_labels": { "36": "VP", "39": "VN" },
       "i2c": { "sda": 21, "scl": 22 },
       "reset": { "pin": 19, "label": "a button between GPIO 19 and GND" },
-      "led": { "pin": 2, "active_low": false },
+      "led": { "type": "gpio", "pin": 2, "active_low": false },
+      "capabilities": ["ble"],
       "notes": ["The extra pins on this board (GPIO 0 and 6–11) are BOOT and the flash chip's: never wire them."]
     },
     {
@@ -34,7 +36,8 @@
       "pin_labels": { "20": "RX", "21": "TX" },
       "i2c": { "sda": 5, "scl": 6 },
       "reset": { "pin": 9, "label": "the BOOT button" },
-      "led": { "pin": 8, "active_low": true },
+      "led": { "type": "gpio", "pin": 8, "active_low": true },
+      "capabilities": ["ble"],
       "notes": [
         "Some Super Mini boards need BOOT held while plugging in before they can be flashed.",
         "I2C here is on GPIO 5 (SDA) and 6 (SCL): GPIO 8 and 9, often printed as SDA/SCL, are this board's LED and BOOT button."

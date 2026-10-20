@@ -6,15 +6,19 @@ namespace {
 
 // The GPIOs bindings may use: BOARDS' input and output pools in
 // frontend/src/lib/firmware-sketch.ts, plus ADC1 and the ESP32's input-only
-// pins. Never strapping, flash, USB or the reset button's pin.
+// pins. Never strapping, flash, USB or the reset button's pin. One block per
+// chip; release.py reads them and checks CHIP_PINS in
+// frontend/src/lib/hardware/board-pins.ts against them. -1 = none.
 #if CONFIG_IDF_TARGET_ESP32C3
 const int8_t USABLE[] = {0, 1, 3, 4, 5, 6, 7, 10, 20, 21};
 const int8_t ADC1[] = {0, 1, 3, 4};
 const int8_t INPUT_ONLY[] = {-1};
-#else
+#elif CONFIG_IDF_TARGET_ESP32
 const int8_t USABLE[] = {4, 13, 14, 16, 17, 18, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39};
 const int8_t ADC1[] = {32, 33, 34, 35, 36, 39};
 const int8_t INPUT_ONLY[] = {34, 35, 36, 39};
+#else
+#error "No pin rules for this chip in src/pins.cpp"
 #endif
 
 template <size_t N>
@@ -29,6 +33,10 @@ std::map<int, String> owners;
 }  // namespace
 
 bool hasInternalPull(int pin) { return !contains(INPUT_ONLY, pin); }
+
+void reservePin(int pin, const char* owner) {
+  if (pin >= 0) owners[pin] = owner;
+}
 
 bool claimRawPin(int pin, PinUse use, const char* owner, String& err) {
   String where = String("GPIO ") + pin + " (" + owner + ")";
