@@ -56,7 +56,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 const DIFF: DiffField<TemplateDraft>[] = [
   { label: "Name", get: (d) => d.name.trim() },
   { label: "Status", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
-  { label: "Runs on", get: (d) => d.runsOn, format: (v) => (v === "generic_firmware" ? "Our firmware" : "Custom firmware or gateway") },
+  { label: "Runs on", get: (d) => d.runsOn, format: (v) => (v === "generic_firmware" ? "Our firmware" : "Custom firmware") },
   { label: "Metrics", get: (d) => d.metrics.map((m) => m.key.trim()) },
   { label: "Actuators", get: (d) => d.actuators.map((a) => a.key.trim()) },
   {
@@ -329,7 +329,7 @@ export function TemplateEditor({
     >
       {!catalogLoading && !catalog && (
         <p className="text-sm text-ink-muted">
-          No firmware release is published yet, so there&apos;s nothing to wire. Choose <b className="text-ink">Custom firmware or gateway</b> under
+          No firmware release is published yet, so there&apos;s nothing to wire. Choose <b className="text-ink">Custom firmware</b> under
           Runs on to list the device&apos;s data instead.
         </p>
       )}

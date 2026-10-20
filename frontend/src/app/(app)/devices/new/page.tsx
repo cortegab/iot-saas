@@ -78,8 +78,8 @@ function RunsOnChoice({ onPick }: { onPick: (runs: "generic" | "own") => void })
     {
       runs: "own" as const,
       icon: <Code2 aria-hidden size={18} />,
-      title: "Custom firmware or gateway",
-      body: "Your own firmware, a PLC gateway or another service. List the data it sends; it publishes to the topics itself.",
+      title: "Custom firmware",
+      body: "Your own code on the board. List the data it sends; it publishes to its topics with the device's credential. A gateway that speaks MQTT works the same way.",
     },
   ];
   return (

@@ -128,6 +128,20 @@ iodriven is a multi-tenant IoT platform:
 - **One host, no high availability.** Recovery is a restore from backup, measured in minutes. Multi-node is out until a deliberate infrastructure-split plan exists (validated to about 1,000 devices).
 - **The 2 s guarantee assumes a connected device.** An offline device catches up from its retained desired state when it reconnects, and commands carry a TTL so it never acts on a stale order.
 - **Protocols other than MQTT** never enter the platform core; they use the edge-connector pattern.
+- **Gateways work, but only as a plain device.** A gateway or edge connector can use a *Custom
+  firmware* template today: it connects with the device's MQTT credential and speaks the device
+  contract (CLAUDE.md §4), and rules, dashboards and commands treat it like any board. What's
+  missing for real gateway support, which is when Add device's choice becomes **Custom firmware or
+  gateway** again (DESIGN.md §8):
+  - **A connect path for gateways.** The Connect flow assumes a board (sketch, Arduino upload,
+    phone Wi-Fi setup). A gateway needs only the credential, the broker address and its topics.
+  - **Child devices under one gateway.** One credential is one device: EMQX's ACL limits it to its
+    own topic subtree. A gateway reading ten PLCs is either one device holding every metric (no
+    per-machine health or grouping) or ten MQTT connections with ten credentials. Letting one
+    gateway credential publish for its child devices needs ACL, ingestion and device-model work.
+  - **A connector of our own.** The plan is a small agent (for example on a Raspberry Pi) hosting
+    the Modbus and OPC UA connectors. Until it exists, a gateway is the customer's own software, or
+    a tool such as Node-RED or Telegraf, speaking the contract.
 - **Security 2 provisioning** needs a phone app and an esp32 Arduino core that agree on Espressif's updated message encryption (introduced in ESP-IDF 5.1.7 and the matching 5.x releases; Android app 2.2.3+). Use current versions of both. Security 1 works with every version, and is the safe default.
 - **Not built:** billing, plan tiers and quotas; monitoring and alerting; rate limiting outside the contact form; automated test CI; a public demo workspace; workspace-shared dashboards and CSV export; non-MQTT protocol connectors; ML / anomaly detection.
 - **Contact-form rate-limit counters** live in the real Redis, so repeated test runs within an hour can hit the limit.
