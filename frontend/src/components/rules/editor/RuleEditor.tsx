@@ -33,7 +33,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { EditableSentence } from "./EditableSentence";
-import { LadderCanvas, LadderInspector, liveSelection, type EditorSelection } from "@/components/rules/ladder/LadderMode";
+import { LadderCanvas, LadderSheet, liveSelection, type EditorSelection } from "@/components/rules/ladder/LadderMode";
 import type { components } from "@/types/api";
 import { BehaviourSection, ConditionSection, ThenSection, WhenSection } from "./FormMode";
 import { RulePreview } from "./RulePreview";
@@ -334,10 +334,20 @@ export function RuleEditor({
       />
     </div>
   );
+  // DESIGN.md §9.10: the trigger opens When and a timer Behaviour; the rest open their sheet.
+  function pickOnRung(s: EditorSelection) {
+    if (s?.kind === "when") {
+      setSelection(null);
+      setTab("when");
+    } else if (s?.kind === "timing") {
+      setSelection(null);
+      setTab("behaviour");
+    } else setSelection(s);
+  }
   const ladder = (
     <>
-      <LadderCanvas draft={draft} catalog={catalog} update={setDraft} selection={live} onSelect={setSelection} />
-      <LadderInspector draft={draft} catalog={catalog} update={setDraft} selection={live} onSelect={setSelection} nameFields={nameFields} />
+      <LadderCanvas draft={draft} catalog={catalog} update={setDraft} selection={live} onSelect={pickOnRung} />
+      <LadderSheet draft={draft} catalog={catalog} update={setDraft} selection={live} onSelect={pickOnRung} />
     </>
   );
   // Every tab stays mounted (hidden), so its fields keep their state.
