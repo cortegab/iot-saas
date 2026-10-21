@@ -13,6 +13,8 @@ export interface RecordEditor<D> {
   set: (next: D | ((d: D) => D)) => void;
   /** Mark a field as visited (errors show on blur or submit). */
   touch: (path: string) => void;
+  /** Mark several fields at once (a wizard step's Next reveals its errors). */
+  touchAll: (paths: string[]) => void;
   /** The message to show for a field right now. */
   errorFor: (path: string) => string | undefined;
   warningFor: (path: string) => string | undefined;
@@ -93,6 +95,15 @@ export function useRecordEditor<D>({
     setTouched((t) => (t.has(path) ? t : new Set(t).add(path)));
   }, []);
 
+  const touchAll = useCallback((paths: string[]) => {
+    setTouched((t) => {
+      if (paths.every((p) => t.has(p))) return t;
+      const next = new Set(t);
+      for (const p of paths) next.add(p);
+      return next;
+    });
+  }, []);
+
   const reveal = useCallback(() => {
     setShowAll(true);
     return Object.keys(errors);
@@ -127,6 +138,7 @@ export function useRecordEditor<D>({
     draft,
     set,
     touch,
+    touchAll,
     errorFor: (p) => (isShown(p) ? errors[p] : undefined),
     warningFor: (p) => validation.warnings?.[p],
     errors,

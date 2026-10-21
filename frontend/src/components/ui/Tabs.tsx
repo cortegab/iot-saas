@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 export interface TabItem {
@@ -9,6 +9,10 @@ export interface TabItem {
   /** Small count beside the label; `alert` renders it in the error tint. */
   count?: number;
   alert?: boolean;
+  /** Editor tabs (DESIGN.md §5): problems in this tab that block saving (a
+   * red count) and safety warnings (an amber "!", never blocks). */
+  issues?: number;
+  warn?: boolean;
   disabled?: boolean;
   /** Shown as a native title tooltip on hover when `disabled`. */
   disabledReason?: string;
@@ -16,22 +20,49 @@ export interface TabItem {
 
 /** Controlled underline tab strip (DESIGN.md §5 Tabs). The caller owns the
  * active tab (often mirrored into a query param) and renders the panels. Tabs
- * wrap onto a second line rather than ever showing a horizontal scrollbar. */
+ * wrap onto a second line rather than ever showing a horizontal scrollbar.
+ * Arrow keys, Home and End move between tabs and select them. */
 export function Tabs({
   tabs,
   active,
   onChange,
   ariaLabel = "Sections",
+  className,
 }: {
   tabs: TabItem[];
   active: string;
   onChange: (id: string) => void;
   ariaLabel?: string;
+  className?: string;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const enabled = tabs.filter((t) => !t.disabled);
+  const current = enabled.some((t) => t.id === active) ? active : enabled[0]?.id;
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    const i = enabled.findIndex((t) => t.id === current);
+    let next = -1;
+    if (e.key === "ArrowRight") next = (i + 1) % enabled.length;
+    else if (e.key === "ArrowLeft") next = (i - 1 + enabled.length) % enabled.length;
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = enabled.length - 1;
+    if (next < 0 || !enabled[next]) return;
+    e.preventDefault();
+    const id = enabled[next].id;
+    onChange(id);
+    listRef.current?.querySelector<HTMLElement>(`#tab-${CSS.escape(id)}`)?.focus();
+  }
+
   return (
-    <div role="tablist" aria-label={ariaLabel} className="flex gap-1 overflow-x-auto border-b border-border [scrollbar-width:none]">
+    <div
+      ref={listRef}
+      role="tablist"
+      aria-label={ariaLabel}
+      onKeyDown={onKeyDown}
+      className={cn("flex flex-wrap gap-x-1 border-b border-border", className)}
+    >
       {tabs.map((tab) => {
-        const selected = !tab.disabled && tab.id === active;
+        const selected = !tab.disabled && tab.id === current;
         return (
           <button
             key={tab.id}
@@ -41,6 +72,7 @@ export function Tabs({
             aria-selected={selected}
             aria-disabled={tab.disabled || undefined}
             aria-controls={tab.disabled ? undefined : `tabpanel-${tab.id}`}
+            tabIndex={selected ? 0 : -1}
             title={tab.disabled ? tab.disabledReason : undefined}
             id={`tab-${tab.id}`}
             onClick={() => onChange(tab.id)}
@@ -65,10 +97,31 @@ export function Tabs({
                 {tab.count}
               </span>
             )}
+            <IssueMarks issues={tab.issues} warn={tab.warn} />
           </button>
         );
       })}
     </div>
+  );
+}
+
+/** The red "N to fix" count and the amber "!" used on tabs, steps and rows
+ * (DESIGN.md §9.2: red only for what blocks saving). */
+export function IssueMarks({ issues = 0, warn = false }: { issues?: number; warn?: boolean }) {
+  return (
+    <>
+      {issues > 0 && (
+        <span className="grid h-[17px] min-w-[17px] place-items-center rounded-full bg-status-error px-[5px] text-[10.5px] font-bold text-on-accent">
+          {issues}
+          <span className="sr-only"> to fix</span>
+        </span>
+      )}
+      {issues === 0 && warn && (
+        <span className="grid h-4 w-4 place-items-center rounded-full border-[1.5px] border-status-pending bg-status-pending-surface text-[10px] font-bold text-status-pending">
+          !<span className="sr-only"> warning</span>
+        </span>
+      )}
+    </>
   );
 }
 
