@@ -317,7 +317,7 @@ export function RuleEditor({
         </div>
 
         {/* One sticky save bar for both views (DESIGN.md §7). */}
-        <div className="sticky bottom-0 z-[6] -mx-4 flex flex-wrap items-center gap-2.5 border-t border-border bg-canvas/92 px-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-[10px] md:-mx-10 md:px-10">
+        <div className="sticky bottom-[var(--tabbar-h)] z-[6] -mx-4 flex flex-wrap items-center gap-2.5 border-t border-border bg-canvas/92 px-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))] max-rail:pb-3 pt-3 backdrop-blur-[10px] rail:-mx-10 rail:px-10">
           <div className="flex min-w-[150px] flex-1 flex-wrap items-center gap-2.5 text-[13px] text-ink-muted">
             <span aria-live="polite" className="inline-flex items-center gap-1.5">
               {submitting ? (

@@ -49,14 +49,17 @@ export interface SheetProps {
   onClose: () => void;
   /** Accessible name. */
   label: string;
-  side?: "right" | "left";
-  /** Tailwind width class for the panel. Default `w-[min(640px,100vw)]`. */
+  /** `bottom`: the phone sheet (DESIGN.md §5): full width, rounded top, a
+   * grab handle, up to 85% of the height. */
+  side?: "right" | "left" | "bottom";
+  /** Tailwind width class for a side panel. Default `w-[min(640px,100vw)]`. */
   widthClassName?: string;
   children: ReactNode;
 }
 
-/** DESIGN.md §5 Sheet / Drawer: a side panel over a scrim with a focus trap
- * and Esc to close. Used for editors on narrow screens and the mobile nav. */
+/** DESIGN.md §5 Sheet / Drawer: a panel over a scrim with a focus trap and
+ * Esc to close. Peeks and item sheets from the side; the phone More menu and
+ * short pickers from the bottom. */
 export function Sheet({ open, onClose, label, side = "right", widthClassName, children }: SheetProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(panelRef, open);
@@ -94,11 +97,17 @@ export function Sheet({ open, onClose, label, side = "right", widthClassName, ch
         aria-label={label}
         tabIndex={-1}
         className={cn(
-          "fixed bottom-0 top-0 z-[75] flex flex-col bg-surface pb-[env(safe-area-inset-bottom,0px)] pt-[env(safe-area-inset-top,0px)] shadow-pop outline-none motion-safe:animate-[panein_.2s_ease-out]",
-          side === "right" ? "right-0 border-l border-border" : "left-0 border-r border-border",
-          widthClassName ?? "w-[min(640px,100vw)]",
+          "fixed z-[75] flex flex-col bg-surface pb-[env(safe-area-inset-bottom,0px)] shadow-pop outline-none",
+          side === "bottom"
+            ? "inset-x-0 bottom-0 max-h-[85vh] rounded-t-2xl border-t border-border motion-safe:animate-[sheetup_.2s_ease-out]"
+            : cn(
+                "bottom-0 top-0 pt-[env(safe-area-inset-top,0px)] motion-safe:animate-[panein_.2s_ease-out]",
+                side === "right" ? "right-0 border-l border-border" : "left-0 border-r border-border",
+                widthClassName ?? "w-[min(640px,100vw)]",
+              ),
         )}
       >
+        {side === "bottom" && <span aria-hidden className="mx-auto mt-2 h-1 w-9 shrink-0 rounded-full bg-border" />}
         {children}
       </div>
     </>,

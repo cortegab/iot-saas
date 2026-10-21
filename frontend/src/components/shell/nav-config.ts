@@ -18,6 +18,8 @@ export type NavCountSource = "dashboards" | "devices" | "rules" | "templates" | 
 export interface NavItem {
   href: string;
   label: string;
+  /** The phone tab bar's label, where it differs ("Alerts"). */
+  tabLabel?: string;
   icon: LucideIcon;
   count?: NavCountSource;
   /** Notifications: red unread badge instead of a count. */
@@ -38,7 +40,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { href: "/dashboards", label: "Dashboards", icon: LayoutDashboard, count: "dashboards" },
       { href: "/devices", label: "Devices", icon: Cpu, count: "devices" },
-      { href: "/notifications", label: "Notifications", icon: Bell, alertCount: true },
+      { href: "/notifications", label: "Notifications", tabLabel: "Alerts", icon: Bell, alertCount: true },
     ],
   },
   {
@@ -62,7 +64,13 @@ export const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-const ALL_HREFS = NAV_GROUPS.flatMap((g) => g.items.map((i) => i.href));
+const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);
+const ALL_HREFS = ALL_ITEMS.map((i) => i.href);
+
+/** The phone tab bar's four destinations (DESIGN.md §4); "More" holds the rest. */
+const TAB_HREFS = ["/dashboards", "/devices", "/notifications", "/rules"];
+export const TAB_ITEMS: NavItem[] = TAB_HREFS.map((href) => ALL_ITEMS.find((i) => i.href === href)!);
+export const MORE_ITEMS: NavItem[] = ALL_ITEMS.filter((i) => !TAB_HREFS.includes(i.href));
 
 /** Longest matching prefix wins. */
 export function activeHref(pathname: string | null): string | null {
