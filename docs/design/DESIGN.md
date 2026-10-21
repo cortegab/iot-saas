@@ -463,7 +463,7 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
   - **If:** the conditions (§9.3), **Then:** the actions and the clear actions. Both carry the
     **Form / Ladder** switch (§9.10).
   - **Behaviour:** Re-arm vs Latch, hold time, minimum interval and clear delay (§9.7).
-- **Preview beside the editor** when the content area is at least 1160 px: a sticky 320 px column
+- **Preview beside the editor** when the content column (inside the page padding) is at least 1080 px, which is 1160 px with its padding: a sticky 320 px column
   of the preview cards (§9.4). Narrower, the column goes and a **Preview** button in the header
   opens the same cards in a sheet.
 - One **sticky save bar** (Discard · Save rule, "N to fix", "N safety warnings", Ctrl+S).
@@ -669,7 +669,7 @@ path (CLAUDE.md §9.1).
   |---|---|
   | window ≥ 1440 | Full sidebar (§4). |
   | window ≤ 640 | Top bar + bottom tab bar; sheets open from the bottom where §5 says so. |
-  | content ≥ 1160 | The rule preview sits beside the editor (§9.2). |
+  | content ≥ 1080 | The rule preview sits beside the editor (§9.2). |
   | content ≤ 860 | P3 columns fold; KPI strips wrap. |
   | content ≤ 720 | P2 columns fold; 3–4 column grids become 2. |
   | content ≤ 640 | Wizard steps become "Step n of N"; dashboard edit becomes a list. |
