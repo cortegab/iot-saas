@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Responsive, WidthProvider, type Layout } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
-import { AlertTriangle, GripVertical, X } from "lucide-react";
+import { AlertTriangle, GripVertical } from "lucide-react";
 import { ValueCardWidget } from "@/components/dashboards/ValueCardWidget";
 import { TrendChartWidget } from "@/components/dashboards/TrendChartWidget";
 import { DeviceStatusWidget } from "@/components/dashboards/DeviceStatusWidget";
@@ -25,9 +25,6 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 // phone neither squeezes twelve columns nor rewrites the desktop layout.
 const BREAKPOINTS = { lg: 640, sm: 0 };
 const COLS = { lg: 12, sm: 1 };
-/** Width steps the width button cycles through (demo G). */
-export const WIDTHS = [3, 4, 6, 8, 12] as const;
-
 export const WIDGET_LABEL: Record<Widget["type"], string> = {
   value_card: "Value card",
   trend_chart: "Trend chart",
@@ -62,20 +59,19 @@ export function DashboardGrid({
   devices,
   templates,
   onLayoutChange,
-  onRemoveWidget,
-  onCycleWidth,
+  onOpenWidget,
 }: {
   widgets: Widget[];
-  /** Edit-layout mode: drag, resize, width and remove. Viewing never moves
-   * anything by accident. */
+  /** Edit-layout mode: drag and resize, and a click opens the widget's
+   * sheet (DESIGN.md §8). Viewing never moves anything by accident. */
   editing: boolean;
   devices?: DeviceResponse[];
   templates?: CatalogEntryResponse[];
   onLayoutChange: (updated: Widget[]) => void;
-  onRemoveWidget: (id: string) => void;
-  onCycleWidth: (id: string) => void;
+  onOpenWidget: (id: string) => void;
 }) {
   const [breakpoint, setBreakpoint] = useState("lg");
+  const deviceName = (w: Widget) => devices?.find((d) => d.id === w.device_id)?.name;
   const layout = useMemo<Layout>(() => widgets.map((w) => ({ i: w.id, x: w.x, y: w.y, w: w.w, h: w.h })), [widgets]);
   const stacked = useMemo<Layout>(() => {
     let y = 0;
@@ -117,7 +113,7 @@ export function DashboardGrid({
       {widgets.map((widget) => {
         const broken = brokenReason(widget, devices, templates);
         return (
-          <div key={widget.id} className={cn("group relative", editing && "rounded-xl outline-dashed outline-1 outline-offset-2 outline-accent/50 [&_.widget-title]:pr-28")}>
+          <div key={widget.id} className={cn("group relative", editing && "rounded-xl outline-dashed outline-1 outline-offset-2 outline-accent/50 [&_.widget-title]:pr-12")}>
             {broken ? (
               <WidgetCard title={WIDGET_LABEL[widget.type]}>
                 <p className="flex gap-2.5 rounded-md bg-status-error-surface p-3 text-[13.5px] text-ink">
@@ -137,27 +133,21 @@ export function DashboardGrid({
               <GaugeWidget deviceId={widget.device_id} metric={widget.metric ?? null} min={widget.min ?? null} max={widget.max ?? null} />
             )}
             {editing && (
-              <div className="absolute right-1.5 top-1.5 z-10 flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5 shadow-card">
-                <span className="widget-drag-handle grid h-7 w-7 cursor-move place-items-center text-ink-muted" title="Drag to move">
+              <>
+                {/* The whole widget opens its sheet (DESIGN.md §8); only the handle drags. */}
+                <button
+                  type="button"
+                  onClick={() => onOpenWidget(widget.id)}
+                  aria-label={`Edit ${WIDGET_LABEL[widget.type]}${deviceName(widget) ? `, ${deviceName(widget)}` : ""}`}
+                  className="absolute inset-0 z-[5] cursor-pointer rounded-xl hover:bg-accent/5"
+                />
+                <span
+                  className="widget-drag-handle absolute right-1.5 top-1.5 z-10 grid h-8 w-8 cursor-move place-items-center rounded-md border border-border bg-surface text-ink-muted shadow-card"
+                  title="Drag to move"
+                >
                   <GripVertical aria-hidden size={14} />
                 </span>
-                <button
-                  type="button"
-                  onClick={() => onCycleWidth(widget.id)}
-                  aria-label={`Width ${widget.w} of 12 columns. Change width`}
-                  className="h-7 rounded px-1.5 font-mono text-[11.5px] text-ink-muted hover:bg-surface-raised hover:text-ink"
-                >
-                  {widget.w}/12
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onRemoveWidget(widget.id)}
-                  aria-label={`Remove ${WIDGET_LABEL[widget.type]}`}
-                  className="grid h-7 w-7 place-items-center rounded text-ink-muted hover:bg-status-error-surface hover:text-status-error"
-                >
-                  <X aria-hidden size={13} />
-                </button>
-              </div>
+              </>
             )}
           </div>
         );
