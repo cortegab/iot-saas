@@ -21,7 +21,6 @@ test("notifications: a template change shows up, dismiss with Undo, mark unread"
     const row = page.getByRole("listitem").filter({ hasText: `${name} updated` });
     await expect(row).toBeVisible();
     await expect(row.getByText("Changed 1 metric. Used by 0 devices.")).toBeVisible();
-    await expect(row.getByRole("button", { name: "Open template" })).toBeVisible();
 
     // Read → unread round trip through the row menu.
     await row.getByRole("button", { name: `Actions for ${name} updated` }).click();
@@ -32,6 +31,12 @@ test("notifications: a template change shows up, dismiss with Undo, mark unread"
     await expect(page.getByRole("menuitem", { name: firstLabel === "Mark as read" ? "Mark as unread" : "Mark as read" })).toBeVisible();
     await page.keyboard.press("Escape");
 
+    // The row opens a sheet with the details and the link (DESIGN.md §8).
+    await row.getByRole("button", { name: /^(Info|Warning|Critical)/ }).click();
+    const sheet = page.getByRole("dialog", { name: `${name} updated` });
+    await expect(sheet.getByRole("button", { name: "Open template" })).toBeVisible();
+    await sheet.getByRole("button", { name: "Done" }).click();
+
     // Dismiss, then Undo brings it back.
     await row.getByRole("button", { name: `Actions for ${name} updated` }).click();
     await page.getByRole("menuitem", { name: "Dismiss" }).click();
@@ -41,6 +46,39 @@ test("notifications: a template change shows up, dismiss with Undo, mark unread"
   } finally {
     await request.delete(`${API_URL}/catalog/${entry.id}`, { headers });
     // Keep the shared dev feed clean: dismiss this run's row.
+    const feed = (await (await request.get(`${API_URL}/notifications`, { headers })).json()) as { id: string; message: string }[];
+    for (const n of feed.filter((x) => x.message.startsWith("E2E template "))) {
+      await request.post(`${API_URL}/notifications/${n.id}/dismiss`, { headers });
+    }
+  }
+});
+
+test("notifications: repeats group into one row with ×2, and filters narrow by severity", async ({ page, request }) => {
+  const { accessToken, tenantId } = await login(request);
+  const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
+  const name = `E2E template ${Date.now()}`;
+  const entry = (await (await request.post(`${API_URL}/catalog`, { headers, data: { name, metrics: [], actuators: [] } })).json()) as { id: string };
+  // Two metric changes: the same alert from the same template, twice.
+  await request.patch(`${API_URL}/catalog/${entry.id}`, { headers, data: { metrics: [{ key: "co2", name: "CO2", unit: "ppm" }] } });
+  await request.patch(`${API_URL}/catalog/${entry.id}`, { headers, data: { metrics: [{ key: "co2", name: "CO2", unit: "ppm" }, { key: "rh", name: "Humidity", unit: "%" }] } });
+
+  try {
+    await page.goto("/notifications");
+    const rows = page.getByRole("listitem").filter({ hasText: `${name} updated` });
+    await expect(rows).toHaveCount(1);
+    await expect(rows).toContainText("×2");
+    await rows.getByRole("button", { name: /^(Info|Warning|Critical)/ }).click();
+    const sheet = page.getByRole("dialog", { name: `${name} updated` });
+    await expect(sheet.getByText("Each time")).toBeVisible();
+    await expect(sheet.getByRole("listitem")).toHaveCount(2);
+    await sheet.getByRole("button", { name: "Done" }).click();
+
+    // Template changes are Info: a Critical filter hides them, with a chip.
+    await page.getByRole("combobox", { name: "Filter by severity" }).selectOption("critical");
+    await expect(page.getByText("Severity: Critical")).toBeVisible();
+    await expect(rows).toHaveCount(0);
+  } finally {
+    await request.delete(`${API_URL}/catalog/${entry.id}`, { headers });
     const feed = (await (await request.get(`${API_URL}/notifications`, { headers })).json()) as { id: string; message: string }[];
     for (const n of feed.filter((x) => x.message.startsWith("E2E template "))) {
       await request.post(`${API_URL}/notifications/${n.id}/dismiss`, { headers });
