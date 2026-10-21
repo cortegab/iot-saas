@@ -52,6 +52,9 @@ class DeviceResponse(BaseModel):
     status: str
     last_seen_at: datetime | None
     created_at: datetime
+    # When its credential was last made (create or rotate): the connect flow
+    # reuses a credential kept in the browser only while this matches.
+    credential_rotated_at: datetime | None = None
     # Computed by devices/router.py's _to_response, preferring the push-driven
     # last_status_online (below) when present — an LWT-triggered False is
     # authoritative regardless of elapsed time — and otherwise falling back to

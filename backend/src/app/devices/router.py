@@ -62,6 +62,7 @@ def _to_response(
         status=device.status,
         last_seen_at=device.last_seen_at,
         created_at=device.created_at,
+        credential_rotated_at=device.credential_rotated_at,
         connection_state=_connection_state(device),
         last_status_at=device.last_status_at,
         rssi=device.rssi,

@@ -232,7 +232,7 @@ export function TemplateEditor({
             });
             void revalidate("/devices");
             void revalidate("/catalog");
-            handOffCredential(result.device.id, result.credential);
+            handOffCredential(result.device, result.credential);
             router.push(`/devices/${result.device.id}/connect`);
           } else if (isNew) {
             const created = await api.post<CatalogEntryResponse>("/catalog", { name: body.name, ...parts });

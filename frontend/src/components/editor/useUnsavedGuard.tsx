@@ -9,7 +9,17 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
  * (`beforeunload`), intercepts in-app link clicks, and gives editors a
  * `confirmLeave()` for their own Close/Cancel buttons. Render `dialog` once.
  */
-export function useUnsavedGuard(dirty: boolean, what = "this record") {
+export interface GuardCopy {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  cancelLabel: string;
+  /** Also warn on reload and close. Off when what is guarded survives a
+   * reload (the Connect flow's credential). Default true. */
+  onUnload?: boolean;
+}
+
+export function useUnsavedGuard(dirty: boolean, what = "this record", copy?: GuardCopy) {
   const router = useRouter();
   const { confirm, dialog } = useConfirm();
   const dirtyRef = useRef(dirty);
@@ -17,12 +27,15 @@ export function useUnsavedGuard(dirty: boolean, what = "this record") {
 
   const confirmLeave = useCallback(async () => {
     if (!dirtyRef.current) return true;
-    return confirm(`Your edits to ${what} haven't been saved.`, {
-      title: "Discard unsaved changes?",
-      confirmLabel: "Discard changes",
-      cancelLabel: "Keep editing",
-    });
-  }, [confirm, what]);
+    return copy
+      ? confirm(copy.body, { title: copy.title, confirmLabel: copy.confirmLabel, cancelLabel: copy.cancelLabel })
+      : confirm(`Your edits to ${what} haven't been saved.`, {
+          title: "Discard unsaved changes?",
+          confirmLabel: "Discard changes",
+          cancelLabel: "Keep editing",
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [confirm, what, copy?.title, copy?.body]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -48,13 +61,14 @@ export function useUnsavedGuard(dirty: boolean, what = "this record") {
         }
       });
     }
-    window.addEventListener("beforeunload", onBeforeUnload);
+    const onUnload = copy?.onUnload ?? true;
+    if (onUnload) window.addEventListener("beforeunload", onBeforeUnload);
     document.addEventListener("click", onClick, true);
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("click", onClick, true);
     };
-  }, [dirty, confirmLeave, router]);
+  }, [dirty, confirmLeave, router, copy?.onUnload]);
 
   return { confirmLeave, dialog };
 }

@@ -9,7 +9,7 @@ once at creation/rotation and never retrievable afterward.
 import secrets
 import uuid
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
 from sqlalchemy import func, select, text, update
@@ -101,6 +101,7 @@ async def create_device(
         catalog_entry_id=catalog_entry_id,
         zone_id=zone_id,
         token_hash=auth_service.hash_secret(secret),
+        credential_rotated_at=datetime.now(UTC),
         status=DeviceStatus.ACTIVE.value,
     )
     session.add(device)
@@ -246,6 +247,7 @@ async def rotate_credential(
     device = await get_device(session, tenant_id, device_id)
     secret = _generate_credential_secret()
     device.token_hash = auth_service.hash_secret(secret)
+    device.credential_rotated_at = datetime.now(UTC)
     await session.flush()
     # A rotation usually precedes flashing freshly generated firmware —
     # re-publish the retained config so it's waiting on that first connect.

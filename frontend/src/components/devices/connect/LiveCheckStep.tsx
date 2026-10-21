@@ -21,11 +21,11 @@ export function LiveCheckStep({ flow }: { flow: ConnectFlow }) {
           <p className="mr-auto text-sm text-ink">
             <strong>{device.name} is live.</strong> Readings are flowing{boolActuators.length ? " and every actuator answered" : ""}.
           </p>
-          <Button onClick={() => flow.leave(`/devices/${deviceId}`)}>
+          <Button onClick={() => void flow.leave(`/devices/${deviceId}`)}>
             Open device <ChevronRight aria-hidden size={14} />
           </Button>
           {/* From a template, with this one's template picked (DESIGN.md §8). */}
-          <Button variant="secondary" onClick={() => flow.leave(`/devices/new?catalog_entry_id=${flow.template.id}`)}>
+          <Button variant="secondary" onClick={() => void flow.leave(`/devices/new?catalog_entry_id=${flow.template.id}`)}>
             Add another like this
           </Button>
         </div>

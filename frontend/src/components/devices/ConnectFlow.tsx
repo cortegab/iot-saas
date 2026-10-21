@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
@@ -14,6 +15,7 @@ import { OptionsStep } from "@/components/devices/connect/OptionsStep";
 import { PhoneStep } from "@/components/devices/connect/PhoneStep";
 import { useConnectFlow, type ConnectFlow as Flow } from "@/components/devices/connect/useConnectFlow";
 import { ApiRequestError } from "@/lib/api-client";
+import { forgetCredential } from "@/lib/credential-handoff";
 import { cn } from "@/lib/cn";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
 
@@ -45,14 +47,16 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
         status={<Badge tone={st.tone} shape={st.shape} label={st.label} />}
         description={`${template.name}. About ${install ? "five" : "ten"} minutes from here to live data.`}
         actions={
-          <Button variant="ghost" onClick={() => flow.leave(`/devices/${deviceId}`)}>
+          <Button variant="ghost" onClick={() => void flow.leave(`/devices/${deviceId}`)}>
             I&apos;ll do this later
           </Button>
         }
       />
 
+      <ForgetWhenLive deviceId={deviceId} live={allLive} />
       <div className="grid gap-6 md:grid-cols-[220px_minmax(0,1fr)]">
         <StepList flow={flow} />
+        <CompactSteps flow={flow} />
         <section className="flex min-w-0 flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-card">
           {step === 1 && <CredentialStep flow={flow} />}
           {step === 2 && <OptionsStep flow={flow} />}
@@ -62,6 +66,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
         </section>
       </div>
       {flow.confirmDialog}
+      {flow.guardDialog}
       <p className="sr-only" aria-live="polite">
         {allLive ? `${device.name} is live.` : ""}
       </p>
@@ -74,17 +79,55 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
   );
 }
 
-function StepList({ flow }: { flow: Flow }) {
-  const { install, phone, step, stored, allLive } = flow;
-  const steps: [string, string][] = [
-    ["Credential", "Shown once"],
-    ["Options", install ? "Wiring, Wi-Fi, broker" : "Board, Wi-Fi, pins"],
-    install ? ["Install", "Over USB, from here"] : ["Flash", "Download and upload"],
-    ["Wi-Fi", phone ? "From your phone" : "Skipped: typed in"],
-    ["Live check", "First data"],
-  ];
+/** Once the device is live, its credential has done its job here: forget it
+ * (lib/credential-handoff keeps it for the flow's length only). */
+function ForgetWhenLive({ deviceId, live }: { deviceId: string; live: boolean }) {
+  useEffect(() => {
+    if (live) forgetCredential(deviceId);
+  }, [deviceId, live]);
+  return null;
+}
+
+const stepsFor = ({ install, phone }: Pick<Flow, "install" | "phone">): [string, string][] => [
+  ["Credential", "Shown once"],
+  ["Options", install ? "Wiring, Wi-Fi, broker" : "Board, Wi-Fi, pins"],
+  install ? ["Install", "Over USB, from here"] : ["Flash", "Download and upload"],
+  ["Wi-Fi", phone ? "From your phone" : "Skipped: typed in"],
+  ["Live check", "First data"],
+];
+
+/** Phones (DESIGN.md §8): "Step n of N" over a progress bar, never a list
+ * that scrolls sideways. */
+function CompactSteps({ flow }: { flow: Flow }) {
+  const steps = stepsFor(flow);
   return (
-    <ol aria-label="Steps" className="flex gap-1 overflow-x-auto md:flex-col">
+    <div className="md:hidden">
+      <p className="mb-1.5 text-[13px] text-ink-muted">
+        Step{" "}
+        <b className="text-ink">
+          {flow.step} of {steps.length}
+        </b>{" "}
+        · {steps[flow.step - 1]?.[0]}
+      </p>
+      <div
+        role="progressbar"
+        aria-label="Progress"
+        aria-valuemin={1}
+        aria-valuemax={steps.length}
+        aria-valuenow={flow.step}
+        className="h-1 overflow-hidden rounded-full bg-border"
+      >
+        <div className="h-full rounded-full bg-accent" style={{ width: `${(flow.step / steps.length) * 100}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function StepList({ flow }: { flow: Flow }) {
+  const { phone, step, stored, allLive } = flow;
+  const steps = stepsFor(flow);
+  return (
+    <ol aria-label="Steps" className="flex flex-col gap-1 max-md:hidden">
       {steps.map(([title, sub], i) => {
         const n = i + 1;
         const skipped = n === 4 && !phone;
@@ -111,7 +154,7 @@ function StepList({ flow }: { flow: Flow }) {
               </span>
               <span className="flex flex-col">
                 <strong className="whitespace-nowrap text-sm font-medium text-ink">{title}</strong>
-                <small className="whitespace-nowrap text-xs text-ink-muted max-md:hidden">{sub}</small>
+                <small className="whitespace-nowrap text-xs text-ink-muted">{sub}</small>
               </span>
             </button>
           </li>

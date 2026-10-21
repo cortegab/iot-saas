@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
@@ -8,7 +8,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { ApiRequestError } from "@/lib/api-client";
-import { forgetCredential, peekCredential } from "@/lib/credential-handoff";
+import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
+import { forgetCredential, handOffCredential, peekCredential } from "@/lib/credential-handoff";
 import { BOARDS, buildSketch, defaultPins, pinClashes, provName, type SketchBoard, type SketchCredential } from "@/lib/firmware-sketch";
 import { resolveModel } from "@/lib/hardware/board-pins";
 import type { FirmwareConfig } from "@/lib/hardware/config-blob";
@@ -52,6 +53,14 @@ export interface InstallPath {
 
 export type ConnectFlow = Extract<ReturnType<typeof useConnectFlow>, { kind: "ready" }>["flow"];
 
+const LEAVE_UNSTORED = {
+  title: "Leave before storing the password?",
+  body: "It's shown only once. If you leave now, you'll have to rotate the credential to see a new one.",
+  confirmLabel: "Leave",
+  cancelLabel: "Stay",
+  onUnload: false,
+};
+
 /** All of the Connect flow's state and what follows from it (DESIGN.md §8). */
 export function useConnectFlow(deviceId: string) {
   const api = useApi();
@@ -78,6 +87,18 @@ export function useConnectFlow(deviceId: string) {
   // The broker the board connects to. Defaults to this page's host, which is
   // right in production; on a dev machine it's localhost, which a board can't reach.
   const [host, setHost] = useState(() => (typeof window !== "undefined" ? window.location.hostname : ""));
+
+  // DESIGN.md §8: leaving before the one-time password is stored asks first.
+  // A reload doesn't: the credential survives it (lib/credential-handoff).
+  const guard = useUnsavedGuard(!!credential && !stored, "this device", LEAVE_UNSTORED);
+  // A kept credential is shown only while the device's credential is still the
+  // one it was kept with; one rotated elsewhere since is dropped (lib/credential-handoff).
+  const rotatedAt = device?.credential_rotated_at;
+  useEffect(() => {
+    if (!device) return;
+    if (!peekCredential(deviceId, rotatedAt ?? null)) setCredential(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviceId, rotatedAt, device == null]);
 
   const metrics = useMemo<CatalogMetric[]>(() => template?.metrics ?? [], [template]);
   const actuators = useMemo<CatalogActuator[]>(() => template?.actuators ?? [], [template]);
@@ -204,6 +225,7 @@ export function useConnectFlow(deviceId: string) {
     try {
       const result = await api.post<DeviceCreateResponse>(`/devices/${deviceId}/rotate-credential`);
       setCredential(result.credential);
+      handOffCredential(result.device, result.credential);
       setStored(false);
       toast({ title: "Credential ready", detail: "Store it, then choose the firmware options." });
     } catch (err) {
@@ -224,7 +246,8 @@ export function useConnectFlow(deviceId: string) {
     }
   }
 
-  function leave(href: string) {
+  async function leave(href: string) {
+    if (!(await guard.confirmLeave())) return;
     forgetCredential(deviceId);
     router.push(href);
   }
@@ -291,6 +314,7 @@ export function useConnectFlow(deviceId: string) {
       leave,
       toast,
       confirmDialog: dialog,
+      guardDialog: guard.dialog,
     },
   };
 }

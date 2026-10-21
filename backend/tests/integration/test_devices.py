@@ -153,6 +153,31 @@ async def test_rotate_credential_invalidates_old_one(
         assert verify_secret(old_password, row.token_hash) is False
 
 
+async def test_credential_rotated_at_moves_with_each_new_credential(
+    client: httpx.AsyncClient,
+) -> None:
+    """The connect flow reuses a credential kept in the browser only while
+    this matches (DESIGN.md §8), so every new credential must move it."""
+    owner = await _register(client, "owner-rot@example.com", "AcmeRot")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    catalog_entry_id = await _catalog_entry_id(client, headers)
+
+    created = await client.post(
+        "/devices", json={"name": "Sensor", "catalog_entry_id": catalog_entry_id}, headers=headers
+    )
+    made = created.json()["device"]["credential_rotated_at"]
+    assert made is not None
+    device_id = created.json()["device"]["id"]
+
+    rotated = await client.post(f"/devices/{device_id}/rotate-credential", headers=headers)
+    again = rotated.json()["device"]["credential_rotated_at"]
+    assert again is not None and again > made
+
+    fetched = await client.get(f"/devices/{device_id}", headers=headers)
+    assert fetched.json()["credential_rotated_at"] == again
+
+
 async def test_rotate_credential_republishes_retained_config(
     client: httpx.AsyncClient, _mock_redis_publish: AsyncMock
 ) -> None:
