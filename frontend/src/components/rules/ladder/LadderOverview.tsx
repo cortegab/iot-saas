@@ -12,13 +12,14 @@ import { LadderRung } from "./LadderRung";
 type RuleResponse = components["schemas"]["RuleResponse"];
 
 /** Every rule as a numbered, read-only rung ("segment") — the whole rule
- * set at a glance, like a PLC program listing. Click a segment to edit it. */
+ * set at a glance, like a PLC program listing. Cards in a grid, as many
+ * across as fit at 460px or more (DESIGN.md §6). Click one to edit it. */
 export function LadderOverview({ rules }: { rules: RuleResponse[] }) {
   const catalog = useRuleCatalog();
   const drafts = useMemo(() => rules.map((r) => ({ rule: r, draft: draftFromRule(r) })), [rules]);
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,460px),1fr))] gap-3.5">
       {drafts.map(({ rule, draft }, i) => (
         <Card key={rule.id} padding="md" className={rule.enabled ? undefined : "opacity-60"}>
           <div className="flex flex-col gap-2">

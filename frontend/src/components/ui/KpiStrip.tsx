@@ -36,14 +36,19 @@ export function KpiStrip({
   onSelect?: (id: string) => void;
   ariaLabel?: string;
 }) {
+  // DESIGN.md §6: rows of two, then three, then all, by the strip's own width;
+  // never sideways. Each cell draws its top and left hairline and the grid is
+  // pulled up and left by 1px, so any wrap shows clean lines.
+  const n = items.length;
   return (
+    <div className="@container overflow-hidden rounded-xl border border-border bg-surface shadow-card">
     <div
       role={onSelect ? "group" : undefined}
       aria-label={ariaLabel}
-      className="grid grid-cols-2 overflow-hidden rounded-xl border border-border bg-surface shadow-card md:grid-cols-[repeat(var(--n),minmax(0,1fr))]"
-      style={{ ["--n" as string]: items.length }}
+      className="-ml-px -mt-px grid grid-cols-[repeat(var(--c2),minmax(0,1fr))] @min-[600px]:grid-cols-[repeat(var(--c3),minmax(0,1fr))] @min-[861px]:grid-cols-[repeat(var(--n),minmax(0,1fr))]"
+      style={{ ["--n" as string]: n, ["--c2" as string]: Math.min(n, 2), ["--c3" as string]: Math.min(n, 3) }}
     >
-      {items.map((item, i) => {
+      {items.map((item) => {
         const isActive = active === item.id;
         const body = (
           <>
@@ -58,12 +63,7 @@ export function KpiStrip({
           </>
         );
         const cls = cn(
-          "flex min-w-0 flex-col gap-0.5 border-border px-[18px] py-4 text-left",
-          // Hairlines between cells: left border except the first in each row,
-          // top border for the second row on the 2-column phone layout.
-          i % 2 === 1 && "border-l",
-          i >= 2 && "border-t md:border-t-0",
-          "md:border-l md:first:border-l-0",
+          "flex min-w-0 flex-col gap-0.5 border-l border-t border-border-soft px-[18px] py-4 text-left",
           isActive && item.tone && TONE_BORDER[item.tone],
         );
         return onSelect ? (
@@ -82,6 +82,7 @@ export function KpiStrip({
           </div>
         );
       })}
+    </div>
     </div>
   );
 }

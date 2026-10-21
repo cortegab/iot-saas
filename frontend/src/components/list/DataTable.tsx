@@ -15,8 +15,17 @@ export interface DataColumn<T> {
   numeric?: boolean;
   /** Hidden on phones (the stacked card shows the essentials only). */
   hideOnPhone?: boolean;
+  /** DESIGN.md §6 folding, by the table's own width: P3 columns go below
+   * 860px and P2 below 720px. Their `fold` text then joins the first
+   * column's second line, so nothing is lost. */
+  priority?: 2 | 3;
+  /** Short text for the folded value ("Taller", "4 d ago"). */
+  fold?: (row: T) => ReactNode;
   className?: string;
 }
+
+const FOLD_HIDE: Record<2 | 3, string> = { 2: "@max-[720px]:hidden", 3: "@max-[860px]:hidden" };
+const FOLD_SHOW: Record<2 | 3, string> = { 2: "@max-[720px]:inline", 3: "@max-[860px]:inline" };
 
 export interface DataTableProps<T> {
   columns: DataColumn<T>[];
@@ -45,8 +54,9 @@ const INTERACTIVE = "a, button, input, select, textarea, label, [role='menuitem'
 
 /** DESIGN.md §6 table: sortable columns, name cell with a secondary line,
  * status pill, right-aligned numbers, row ⋯ menu, bulk-select column, hover
- * highlight, row click opens the record. Below 640px rows become stacked
- * two-line cards with the same fields. */
+ * highlight, row click opens the record. Laid out by the table's own width:
+ * P3 / P2 columns fold below 860 / 720px into the name's second line, and
+ * from 600px down rows become stacked cards with the same fields. */
 export function DataTable<T>({
   columns,
   rows,
@@ -94,10 +104,14 @@ export function DataTable<T>({
     if (e.key === "Enter") (onRowEnter ?? onRowClick)(row);
   }
 
+  // P3 folds first (at the wider width), so it leads the line.
+  const folding = columns.filter((c) => c.priority && c.fold).sort((a, b) => b.priority! - a.priority!);
+
   return (
-    <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-card max-sm:overflow-visible">
-      <table aria-label={label} className="w-full border-collapse text-sm tabular-nums max-sm:block">
-        <thead className="max-sm:hidden">
+    <div className="@container">
+    <div className="overflow-x-auto rounded-xl border border-border bg-surface shadow-card @max-[600px]:overflow-visible">
+      <table aria-label={label} className="w-full border-collapse text-sm tabular-nums @max-[600px]:block">
+        <thead className="@max-[600px]:hidden">
           <tr>
             {selection && (
               <th scope="col" className="h-10 w-9 border-b border-border bg-surface pl-3">
@@ -125,6 +139,7 @@ export function DataTable<T>({
                     "h-10 whitespace-nowrap border-b border-border bg-surface px-3 text-left text-xs font-medium text-ink-muted",
                     col.numeric && "text-right",
                     col.className,
+                    col.priority && FOLD_HIDE[col.priority],
                   )}
                 >
                   {col.sortable && onSort ? (
@@ -157,7 +172,7 @@ export function DataTable<T>({
             )}
           </tr>
         </thead>
-        <tbody className="max-sm:block">
+        <tbody className="@max-[600px]:block">
           {rows.map((row) => {
             const key = rowKey(row);
             const selected = selection?.selected.has(key) ?? false;
@@ -176,19 +191,19 @@ export function DataTable<T>({
                   selected && "bg-accent-muted hover:bg-accent-muted",
                   currentKey === key && "bg-row-hover shadow-[inset_3px_0_0_var(--color-accent)]",
                   // Phone: a two-line card.
-                  "max-sm:relative max-sm:flex max-sm:flex-wrap max-sm:items-center max-sm:gap-x-3 max-sm:gap-y-1.5 max-sm:py-3 max-sm:pl-3.5 max-sm:pr-14",
-                  selection && "max-sm:pl-[50px]",
+                  "@max-[600px]:relative @max-[600px]:flex @max-[600px]:flex-wrap @max-[600px]:items-center @max-[600px]:gap-x-3 @max-[600px]:gap-y-1.5 @max-[600px]:py-3 @max-[600px]:pl-3.5 @max-[600px]:pr-14",
+                  selection && "@max-[600px]:pl-[50px]",
                   rowClassName?.(row),
                 )}
               >
                 {selection && (
-                  <td className="w-9 pl-3 align-middle max-sm:absolute max-sm:left-3.5 max-sm:top-[13px] max-sm:w-auto max-sm:p-0">
+                  <td className="w-9 pl-3 align-middle @max-[600px]:absolute @max-[600px]:left-3.5 @max-[600px]:top-[13px] @max-[600px]:w-auto @max-[600px]:p-0">
                     <input
                       type="checkbox"
                       aria-label={`Select ${selection.rowLabel(row)}`}
                       checked={selected}
                       onChange={() => toggleOne(key)}
-                      className="h-[15px] w-[15px] accent-[var(--color-accent)] max-sm:h-5 max-sm:w-5"
+                      className="h-[15px] w-[15px] accent-[var(--color-accent)] @max-[600px]:h-5 @max-[600px]:w-5"
                     />
                   </td>
                 )}
@@ -199,16 +214,26 @@ export function DataTable<T>({
                       "px-3 py-cell align-middle text-ink",
                       col.numeric && "text-right",
                       col.className,
-                      "max-sm:block max-sm:p-0 max-sm:text-left",
-                      i === 0 && "max-sm:min-w-0 max-sm:basis-full",
-                      col.hideOnPhone && "max-sm:hidden",
+                      "@max-[600px]:block @max-[600px]:p-0 @max-[600px]:text-left",
+                      i === 0 && "@max-[600px]:min-w-0 @max-[600px]:basis-full",
+                      col.hideOnPhone && "@max-[600px]:hidden",
+                      col.priority && FOLD_HIDE[col.priority],
                     )}
                   >
                     {col.cell(row)}
+                    {i === 0 && folding.length > 0 && (
+                      <span className="block text-xs text-ink-muted">
+                        {folding.map((c) => (
+                          <span key={c.id} className={cn("hidden before:content-['·_'] first:before:content-none", FOLD_SHOW[c.priority!])}>
+                            {c.fold!(row)}{" "}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </td>
                 ))}
                 {rowMenu && (
-                  <td className="w-11 pr-1.5 text-right align-middle max-sm:absolute max-sm:right-1 max-sm:top-1 max-sm:w-auto max-sm:p-0">
+                  <td className="w-11 pr-1.5 text-right align-middle @max-[600px]:absolute @max-[600px]:right-1 @max-[600px]:top-1 @max-[600px]:w-auto @max-[600px]:p-0">
                     {(() => {
                       // A row with nothing to offer shows no ⋯ at all, not an empty menu.
                       const groups = rowMenu(row).filter((g) => g.length > 0);
@@ -216,7 +241,7 @@ export function DataTable<T>({
                         <DropdownMenu
                           groups={groups}
                           label={rowMenuLabel?.(row) ?? "Actions"}
-                          triggerClassName="inline-grid h-[30px] w-[30px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink max-sm:h-[42px] max-sm:w-[42px]"
+                          triggerClassName="inline-grid h-[30px] w-[30px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink @max-[600px]:h-[42px] @max-[600px]:w-[42px]"
                         />
                       ) : null;
                     })()}
@@ -227,6 +252,7 @@ export function DataTable<T>({
           })}
         </tbody>
       </table>
+    </div>
     </div>
   );
 }
