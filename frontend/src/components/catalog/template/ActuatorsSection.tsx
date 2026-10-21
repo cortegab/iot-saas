@@ -6,7 +6,8 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { EditorSection } from "@/components/editor/EditorFrame";
-import { KeyField, notWired, RowCard, RowSummary, useRowExpansion } from "@/components/catalog/template/rows";
+import { Lines } from "@/components/ui/LineRow";
+import { KeyField, notWired, RowLine, RowSheet, useRowSheet } from "@/components/catalog/template/rows";
 import type { SectionProps } from "@/components/catalog/template/section-props";
 import { blankActuator, renamed, type ActuatorDraft } from "@/lib/template-draft";
 
@@ -16,19 +17,34 @@ const span2 = "col-span-2";
 /** What the platform can switch. */
 export function ActuatorsSection(props: SectionProps) {
   const { d, set, f, blur, readOnly } = props;
-  const rows = useRowExpansion("actuators", props);
+  const rows = useRowSheet();
   const setActuator = (i: number, a: ActuatorDraft) => set({ ...d, actuators: d.actuators.map((x, j) => (j === i ? a : x)) });
 
   return (
-    <EditorSection id="actuators" title="Actuators" lead="What the platform can switch. Commands go out on QoS 1 with a 30 s TTL." actions={rows.toggleAll}>
+    <EditorSection id="actuators" title="Actuators" lead="What the platform can switch. Commands go out on QoS 1 with a 30 s TTL.">
       <div className="flex flex-col gap-2">
         {d.actuators.length === 0 && <p className="text-sm text-ink-muted">No actuators. Sensors-only devices don&apos;t need any.</p>}
+        {d.actuators.length > 0 && (
+          <Lines label="Actuators">
+            {d.actuators.map((a, i) => (
+              <RowLine
+                key={a.uid}
+                kind="actuators"
+                i={i}
+                row={a}
+                desc={a.value_type === "bool" ? `On/off · sends ${a.on || "…"} / ${a.off || "…"}` : CONTROL_LABEL[a.value_type]}
+                selected={rows.openUid === a.uid}
+                onOpen={() => rows.open(a.uid)}
+                props={props}
+              />
+            ))}
+          </Lines>
+        )}
         {d.actuators.map((a, i) => {
-          const desc = a.value_type === "bool" ? `On/off · sends ${a.on || "…"} / ${a.off || "…"}` : CONTROL_LABEL[a.value_type];
-          if (!rows.isOpen(a, i)) return <RowSummary key={a.uid} kind="actuators" i={i} row={a} desc={desc} onOpen={() => rows.toggle(a.uid)} props={props} />;
+          if (a.uid !== rows.openUid) return null;
           const p = `actuators.${i}.`;
           return (
-            <RowCard key={a.uid} title={a.name || "New actuator"} readOnly={readOnly} unwired={notWired("actuators", a, props)} onCollapse={() => rows.collapse(a.uid)} onRemove={() => set({ ...d, actuators: d.actuators.filter((x) => x.uid !== a.uid) })}>
+            <RowSheet key={a.uid} open onClose={rows.close} title={a.name || "New actuator"} sub="Actuator" readOnly={readOnly} unwired={notWired("actuators", a, props)} onRemove={() => set({ ...d, actuators: d.actuators.filter((x) => x.uid !== a.uid) })}>
               <Field label="Name" {...f(p + "name")} className={span2}>
                 <Input value={a.name} disabled={readOnly} placeholder="e.g. Fan" onChange={(e) => setActuator(i, renamed(a, e.target.value))} onBlur={blur(p + "name")} />
               </Field>
@@ -60,12 +76,12 @@ export function ActuatorsSection(props: SectionProps) {
                 </Field>
               )}
               {a.value_type === "float" && <p className="col-span-2 self-end pb-2 text-xs text-ink-muted">Sends the number you choose.</p>}
-            </RowCard>
+            </RowSheet>
           );
         })}
         {!readOnly && (
           <Button
-            variant="link"
+            variant="secondary"
             className="self-start"
             onClick={() => {
               const a = blankActuator();

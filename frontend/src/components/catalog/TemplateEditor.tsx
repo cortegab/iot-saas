@@ -18,13 +18,21 @@ import { ActuatorsSection } from "@/components/catalog/template/ActuatorsSection
 import { GeneralSection } from "@/components/catalog/template/GeneralSection";
 import { MetricsSection } from "@/components/catalog/template/MetricsSection";
 import type { Draft, SectionProps } from "@/components/catalog/template/section-props";
-import { EditorFrame, type EditorMode, type EditorSectionDef } from "@/components/editor/EditorFrame";
+import {
+  EditorFrame,
+  EditorSection,
+  type EditorGroupDef,
+  type EditorMode,
+  type EditorSectionDef,
+} from "@/components/editor/EditorFrame";
+import { ReviewList } from "@/components/editor/ReviewList";
 import { useRecordEditor } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
 import { handOffCredential } from "@/lib/credential-handoff";
-import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
+import { findDriver, useDriverCatalog } from "@/lib/hardware/driver-catalog";
+import { resolveModel } from "@/lib/hardware/board-pins";
 import { blankHardware } from "@/lib/hardware/hardware-draft";
 import {
   blankTemplate,
@@ -342,6 +350,96 @@ export function TemplateEditor({
     actuators: <ActuatorsSection {...props} />,
   };
   const order = templateSectionOrder({ runsOn: d.runsOn });
+  const parts = d.runsOn === "generic_firmware";
+
+  // DESIGN.md §7/§8: creating is a wizard (Basics → Hardware → Data →
+  // Review); editing is tabs (General · Wiring · Data).
+  const groups: EditorGroupDef[] = isNew
+    ? [
+        {
+          id: "basics",
+          label: "Basics",
+          sections: ["general"],
+          question: d.device ? "What is it?" : "Name the template",
+          lead: d.device ? "Name the device and say what it runs on." : "Then say what devices of this kind run on.",
+        },
+        ...(parts
+          ? [
+              {
+                id: "hardware",
+                label: "Hardware",
+                sections: ["hardware"],
+                question: "Which board and parts?",
+                lead: "Pick the board, then add each part wired to it. Every part brings its metrics or actuators.",
+              },
+            ]
+          : []),
+        {
+          id: "data",
+          label: "Data",
+          sections: ["metrics", "actuators"],
+          question: "What does it publish and switch?",
+          lead: parts ? "Your parts brought these. Rename them, or fine-tune how often they publish." : "List the data your firmware sends, and anything it can switch.",
+        },
+        { id: "review", label: "Review", sections: ["review"], question: d.device ? "Check and create" : "Check and create the template", lead: consequence },
+      ]
+    : [
+        { id: "general", label: "General", sections: ["general"] },
+        ...(parts ? [{ id: "wiring", label: "Wiring", sections: ["hardware"] }] : []),
+        { id: "data", label: "Data", sections: ["metrics", "actuators"] },
+      ];
+
+  const none = (n: number, s: string) => (n ? undefined : <span className="text-ink-muted">{s}</span>);
+  const review = isNew && (
+    <EditorSection id="review" title="Summary">
+      <ReviewList
+        rows={[
+          d.device
+            ? { label: "Device", value: d.device.name.trim() || <span className="text-ink-muted">Unnamed</span>, step: "basics" }
+            : { label: "Template", value: d.name.trim() || <span className="text-ink-muted">Unnamed</span>, step: "basics" },
+          { label: "Runs on", value: parts ? "Our firmware" : "Custom firmware", step: "basics" },
+          ...(parts
+            ? [
+                {
+                  label: "Board and parts",
+                  value: d.hardware ? (
+                    <>
+                      {resolveModel(catalog?.models, d.hardware.board)?.label ?? d.hardware.board}
+                      <span className="block text-[13px] text-ink-muted">
+                        {[...d.hardware.inputs, ...d.hardware.outputs].map((b) => findDriver(drivers ?? [], b.driver)?.label ?? b.driver).join("; ") || "No parts"}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-ink-muted">No wiring</span>
+                  ),
+                  step: "hardware",
+                },
+              ]
+            : []),
+          {
+            label: "Metrics",
+            value: none(d.metrics.length, "None") ?? (
+              <>
+                {d.metrics.map((m, i) => (
+                  <Fragment key={m.uid}>
+                    {i > 0 && ", "}
+                    {m.name || "Unnamed"} <span className="font-mono text-xs text-ink-muted">{m.key}</span>
+                  </Fragment>
+                ))}
+              </>
+            ),
+            step: "data",
+          },
+          { label: "Actuators", value: none(d.actuators.length, "None") ?? d.actuators.map((a) => a.name || "Unnamed").join(", "), step: "data" },
+        ]}
+      />
+      {editor.visibleErrors.length > 0 && (
+        <p role="alert" className="text-sm text-status-error">
+          {plural(editor.visibleErrors.length, "problem")} to fix. The marked steps above show where.
+        </p>
+      )}
+    </EditorSection>
+  );
 
   return (
     <>
@@ -356,8 +454,11 @@ export function TemplateEditor({
             {!isNew && <span>· {plural(devices, "device")}</span>}
           </>
         }
-        consequence={consequence}
+        consequence={isNew ? undefined : consequence}
         sections={order.map((id) => railEntry(id, d))}
+        nav={isNew ? "steps" : "tabs"}
+        groups={groups}
+        onTouch={editor.touchAll}
         status={editor}
         readOnly={readOnly}
         saveLabel={d.device ? "Create device" : isNew ? "Create template" : "Save"}
@@ -376,6 +477,7 @@ export function TemplateEditor({
         {order.map((id) => (
           <Fragment key={id}>{body[id]}</Fragment>
         ))}
+        {review}
       </EditorFrame>
       {confirmDialog}
       {guardDialog}

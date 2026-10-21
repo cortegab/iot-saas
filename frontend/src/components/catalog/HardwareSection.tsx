@@ -1,18 +1,19 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { AlertCircle, ChevronDown, ChevronRight, Cpu, Plus, Usb } from "lucide-react";
+import { Cpu, Plug, Plus, ToggleRight, Usb } from "lucide-react";
 import { Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { ItemSheet } from "@/components/ui/ItemSheet";
+import { LineRow, Lines } from "@/components/ui/LineRow";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { Select } from "@/components/ui/Select";
 import { SwitchField } from "@/components/ui/Switch";
 import { Table } from "@/components/ui/Table";
 import { SECTION_LABEL } from "@/components/rules/editor/fields";
-import { cn } from "@/lib/cn";
 import { pinName, pinsFor, resolveModel } from "@/lib/hardware/board-pins";
 import { CHIPS, type SketchBoard } from "@/lib/firmware-sketch";
 import { driversFor, findDriver, hasCapability, runsOn, type DriverCatalog, type DriverParamSpec } from "@/lib/hardware/driver-catalog";
@@ -69,6 +70,8 @@ export function HardwareSection({
 }) {
   // What the last board change moved, for the author to rewire.
   const [moved, setMoved] = useState<{ board: string; pins: MovedPin[]; unsupported: string[] } | null>(null);
+  // The part whose item sheet is open (DESIGN.md §7: one at a time).
+  const [openPart, setOpenPart] = useState<string | null>(null);
   // "Detect my board": the chip the plugged-in board reported, and the attempt.
   const [detected, setDetected] = useState<{ name: string; chip: SketchBoard | null } | null>(null);
   const [detectState, setDetect] = useState<{ busy: boolean; error: string | null }>({ busy: false, error: null });
@@ -113,7 +116,11 @@ export function HardwareSection({
   const firstOf = (kind: Kind) => driversFor(fw.drivers, model).find((d) => d.kind === (kind === "inputs" ? "input" : "output"));
   const add = (kind: Kind) => {
     const spec = firstOf(kind);
-    if (spec) commit({ ...h, [kind]: [...h[kind], blankBinding(spec, h, fw)] });
+    if (!spec) return;
+    // A new part opens its sheet straight away.
+    const b = blankBinding(spec, h, fw);
+    commit({ ...h, [kind]: [...h[kind], b] });
+    setOpenPart(b.uid);
   };
   const busPins = model ? pinsFor(model, "bus") : [];
   const i2cOthers = new Map(usedPins(h).filter((u) => !u.path.startsWith("hardware.i2c")).map((u) => [u.pin, u.owner]));
@@ -267,27 +274,34 @@ export function HardwareSection({
               {kind === "inputs" ? "Nothing reads a metric yet." : "Nothing drives an actuator yet."}
             </p>
           )}
-          {h[kind].map((b, i) => (
-            <BindingCard
-              key={b.uid}
-              kind={kind}
-              index={i}
-              binding={b}
-              hardware={h}
-              catalog={fw}
-              targets={kind === "inputs" ? rows.metrics : rows.actuators}
-              taken={taken[kind]}
-              readOnly={readOnly}
-              field={field}
-              onChange={(next) => setBinding(kind, i, next)}
-              onRemove={() => commit({ ...h, [kind]: h[kind].filter((x) => x.uid !== b.uid) })}
-              onRenameTarget={onRenameTarget}
-              targetError={targetError}
-              onKeepReading={onKeepReading}
-            />
-          ))}
+          {h[kind].length > 0 && (
+            <Lines label={kind === "inputs" ? "Inputs" : "Outputs"}>
+              {h[kind].map((b, i) => (
+                <BindingCard
+                  key={b.uid}
+                  kind={kind}
+                  index={i}
+                  binding={b}
+                  hardware={h}
+                  catalog={fw}
+                  targets={kind === "inputs" ? rows.metrics : rows.actuators}
+                  taken={taken[kind]}
+                  readOnly={readOnly}
+                  field={field}
+                  open={openPart === b.uid}
+                  onOpen={() => setOpenPart(b.uid)}
+                  onClose={() => setOpenPart(null)}
+                  onChange={(next) => setBinding(kind, i, next)}
+                  onRemove={() => commit({ ...h, [kind]: h[kind].filter((x) => x.uid !== b.uid) })}
+                  onRenameTarget={onRenameTarget}
+                  targetError={targetError}
+                  onKeepReading={onKeepReading}
+                />
+              ))}
+            </Lines>
+          )}
           {!readOnly && (
-            <Button variant="link" className="self-start" onClick={() => add(kind)}>
+            <Button variant="secondary" className="self-start" onClick={() => add(kind)}>
               <Plus aria-hidden size={14} />
               {kind === "inputs" ? "Add input" : "Add output"}
             </Button>
@@ -357,6 +371,9 @@ function BindingCard({
   taken,
   readOnly,
   field,
+  open,
+  onOpen,
+  onClose,
   onChange,
   onRemove,
   onRenameTarget,
@@ -365,6 +382,10 @@ function BindingCard({
 }: {
   kind: Kind;
   index: number;
+  /** Its item sheet is open. */
+  open: boolean;
+  onOpen: () => void;
+  onClose: () => void;
   binding: BindingDraft;
   hardware: HardwareDraft;
   catalog: DriverCatalog;
@@ -379,8 +400,6 @@ function BindingCard({
   targetError?: (kind: Kind, uid: string) => string | undefined;
   onKeepReading?: (bindingUid: string, channel: string, keep: boolean) => void;
 }) {
-  // Wired parts collapse to one line (DESIGN.md §8); a card with errors stays open.
-  const [collapsed, setCollapsed] = useState(false);
   const drivers = catalog.drivers;
   const model = resolveModel(catalog.models, hardware.board);
   const spec = findDriver(drivers, binding.driver);
@@ -443,14 +462,12 @@ function BindingCard({
     );
   };
 
-  // Any problem on this card keeps it open.
+  // Its problems, counted on its line (DESIGN.md §5 Line row).
   const paths = [p + "driver", ...pins.map((r) => `${p}pins.${r.role}`), ...params.map((x) => `${p}params.${x.key}`), ...channels.map((c) => `${p}channels.${c.key}`)];
-  const hasError = paths.some((path) => field(path).error);
-  const open = !collapsed || hasError;
-  // The one-line summary: driver · pins · what its readings feed.
+  const issues = paths.filter((path) => field(path).error).length;
+  // The one line: pins · what its readings feed.
   const fed = channels.map((c) => targets.find((t) => t.uid === binding.channels[c.key])).filter((t): t is KeyedRow => !!t);
   const summary = [
-    spec?.label ?? binding.driver,
     i2c ? "I2C" : Object.values(binding.pins).filter((n): n is number => n != null).map((n) => pinName(model, n)).join(", ") || "no pin",
     fed.length ? fed.map((t) => t.name || t.key).join(", ") : kind === "inputs" ? "feeds nothing" : "drives nothing",
   ].join(" · ");
@@ -458,34 +475,40 @@ function BindingCard({
   const choosing = !!onKeepReading && kind === "inputs" && channels.length > 2 && !readOnly;
 
   return (
-    <fieldset className="min-w-0 rounded-xl border border-border bg-surface px-3.5 pb-3.5 pt-3">
-      <legend className="sr-only">
-        {noun} {index + 1}
-      </legend>
-      <div className={cn("flex items-center gap-2", open && "mb-3")}>
-        <button
-          type="button"
-          onClick={() => setCollapsed(open)}
-          disabled={hasError}
-          aria-expanded={open}
-          aria-label={open ? `Collapse ${noun.toLowerCase()} ${index + 1}` : `Expand ${noun.toLowerCase()} ${index + 1}`}
-          className="-ml-1.5 grid h-7 w-7 place-items-center rounded-md text-ink-muted hover:bg-surface-raised disabled:opacity-50"
-        >
-          {open ? <ChevronDown aria-hidden size={15} /> : <ChevronRight aria-hidden size={15} />}
-        </button>
-        <span className="flex-1 truncate text-sm font-medium text-ink">
-          {noun} {index + 1}
-          <span className="font-normal text-ink-muted"> · {open ? spec?.description : summary}</span>
-        </span>
-        {hasError && <AlertCircle aria-label="Has errors" size={15} className="text-status-error" />}
-        {!readOnly && (
-          <Button variant="link-danger" className="text-[12.5px]" onClick={onRemove}>
-            Remove
-          </Button>
-        )}
-      </div>
-      {open && (
+    <>
+      <LineRow
+        icon={kind === "inputs" ? <Plug size={16} /> : <ToggleRight size={16} />}
+        title={spec?.label ?? binding.driver}
+        sub={`${noun} ${index + 1} · ${summary}`}
+        issues={issues}
+        selected={open}
+        onOpen={onOpen}
+      />
+      <ItemSheet
+        open={open}
+        onClose={onClose}
+        title={spec?.label ?? binding.driver}
+        sub={`${noun} ${index + 1} · ${kind === "inputs" ? "its readings feed the metrics named here" : "it drives the actuator named here"}`}
+        footer={
+          <>
+            {!readOnly && (
+              <Button
+                variant="link-danger"
+                className="mr-auto text-[13px]"
+                onClick={() => {
+                  onRemove();
+                  onClose();
+                }}
+              >
+                Remove part
+              </Button>
+            )}
+            <Button onClick={onClose}>Done</Button>
+          </>
+        }
+      >
       <div className="flex flex-col gap-4">
+        {spec?.description && <p className="text-[13px] text-ink-muted">{spec.description}</p>}
         <div className="grid gap-3.5 @[640px]:grid-cols-2">
           <Field label="Driver" error={field(p + "driver").error}>
             <Select value={binding.driver} disabled={readOnly} onChange={(e) => pickDriver(e.target.value)}>
@@ -615,8 +638,8 @@ function BindingCard({
           </Block>
         )}
       </div>
-      )}
-    </fieldset>
+      </ItemSheet>
+    </>
   );
 }
 
