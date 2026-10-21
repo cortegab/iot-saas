@@ -409,9 +409,9 @@ export function EditorFrame({
         "flex shrink-0 flex-wrap items-center gap-2.5 border-t border-border",
         // Inside a host page (a Settings tab): a floating bar within the column.
         headless
-          ? "sticky bottom-3 z-[6] max-w-[760px] rounded-xl border bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-[10px] motion-safe:animate-[toastin_.15s_ease-out]"
+          ? "sticky bottom-[calc(12px+var(--tabbar-h))] z-[6] max-w-[760px] rounded-xl border bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-[10px] motion-safe:animate-[toastin_.15s_ease-out]"
           : mode === "page"
-          ? "sticky bottom-0 z-[6] -mx-4 bg-surface/92 px-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-[10px] [grid-area:foot] md:-mx-10 md:px-10"
+          ? "sticky bottom-[var(--tabbar-h)] z-[6] -mx-4 bg-surface/92 px-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))] max-rail:pb-3 pt-3 backdrop-blur-[10px] [grid-area:foot] rail:-mx-10 rail:px-10"
           : "bg-surface px-5 py-3",
       )}
     >

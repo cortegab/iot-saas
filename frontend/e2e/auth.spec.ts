@@ -38,7 +38,9 @@ test("sign in: generic error, show/hide password, then a workspace choice", asyn
   await expect(page.getByRole("heading", { name: "Choose a workspace" })).toBeVisible();
   await choices.getByRole("button", { name: /E2E Second/ }).click();
   await expect(page).toHaveURL("/devices");
-  await expect(page.getByRole("complementary", { name: "Primary" }).getByText("E2E Second")).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Primary" }).getByRole("button", { name: /Workspace: E2E Second/ }),
+  ).toBeVisible();
 });
 
 test("sign in without 'Keep me signed in' keeps the session out of localStorage", async ({ page, request }) => {

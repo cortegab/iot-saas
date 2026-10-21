@@ -150,8 +150,12 @@
   --radius-xl: 0.75rem; /* 12px — cards, tables, panels */
   --radius-2xl: 1rem; /* 16px — large surfaces, dialogs */
 
-  /* DESIGN.md §4/§9.2: sidebar becomes a drawer below 1100px; the rule
-     workbench preview stacks below 1200px. */
+  /* DESIGN.md §4/§12 shell, by window width: the icon rail from 641px
+     (`rail:`), the full sidebar from 1440px (`full:`); below 641px the phone
+     top bar and tab bar. `shell:` / `wb:` are the rule editor's and editor
+     frame's older breakpoints, until those move to container queries. */
+  --breakpoint-rail: 641px;
+  --breakpoint-full: 1440px;
   --breakpoint-shell: 1100px;
   --breakpoint-wb: 1200px;
 
@@ -279,6 +283,12 @@ body {
     transform: translateX(14px);
   }
 }
+@keyframes sheetup {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+}
 @keyframes toastin {
   from {
     opacity: 0;
@@ -293,6 +303,18 @@ body {
     var(--color-border) 0 2px,
     transparent 2px 4px
   );
+}
+
+/* Height of the phone tab bar (DESIGN.md §4), 0 where there is none. Sticky
+   save bars and toasts sit this far up so the tab bar never covers them. On
+   :root because toasts and sheets portal to <body>, outside the shell. */
+:root {
+  --tabbar-h: 0px;
+}
+@media (max-width: 640px) {
+  :root:has(.app-shell) {
+    --tabbar-h: calc(58px + env(safe-area-inset-bottom, 0px));
+  }
 }
 
 /* Tabular figures wherever digits stack in a column. */
