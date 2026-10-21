@@ -24,14 +24,21 @@ test("something new on our firmware: parts make the template, readings are named
     // The template is named after the device, out of view.
     await expect(page.getByLabel("Template name")).toHaveCount(0);
 
+    await page.getByRole("button", { name: "Next: Hardware" }).click();
+
     // A DHT22 brings temperature and humidity; a relay an on/off actuator.
+    // Each new part opens its sheet; its readings are named right there.
     await page.getByRole("button", { name: "Add input" }).click();
-    await page.getByLabel("Driver").first().selectOption({ label: "DHT22 / AM2302" });
+    const sheet = page.getByRole("dialog");
+    await sheet.getByLabel("Driver").selectOption({ label: "DHT22 / AM2302" });
+    await sheet.getByLabel(/^Name of what Temperature .*feeds$/).fill("Air temperature");
+    await sheet.getByRole("button", { name: "Done" }).click();
     await page.getByRole("button", { name: "Add output" }).click();
-    // Named right on the part card.
-    await page.getByLabel(/^Name of what Temperature .*feeds$/).fill("Air temperature");
+    await sheet.getByRole("button", { name: "Done" }).click();
     await expect(page.locator("p", { hasText: /What you.ll see:/ })).toContainText("Air temperature");
 
+    await page.getByRole("button", { name: "Next: Data" }).click();
+    await page.getByRole("button", { name: "Next: Review" }).click();
     await page.getByRole("button", { name: "Create device" }).click();
     await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\/connect$/);
     // Wired, so the Connect flow installs from the browser, no sketch.
@@ -63,8 +70,12 @@ test("something new on its own code: no wiring, its data listed, it lands on the
     await page.getByRole("button", { name: /Custom firmware/ }).click();
     await expect(page).toHaveURL(/runs=own/);
     await page.getByLabel("Device name").fill(name);
-    await expect(page.getByRole("heading", { level: 3, name: "Wiring", exact: true })).toHaveCount(0);
-    await page.getByLabel("Name", { exact: true }).fill("Flow rate");
+    await expect(page.getByRole("list", { name: "Steps" })).not.toContainText("Hardware");
+    await page.getByRole("button", { name: "Next: Data" }).click();
+    await page.getByRole("button", { name: /Unnamed/ }).click();
+    await page.getByRole("dialog").getByLabel("Name", { exact: true }).fill("Flow rate");
+    await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
+    await page.getByRole("button", { name: "Next: Review" }).click();
 
     await page.getByRole("button", { name: "Create device" }).click();
     await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\/connect$/);
@@ -84,7 +95,7 @@ test("something new on its own code: no wiring, its data listed, it lands on the
 test("older links to Add device from the hardware still start on our firmware", async ({ page }) => {
   await page.goto("/devices/new?from=hardware");
   await expect(page.getByRole("radio", { name: "Something new" })).toBeChecked();
-  await expect(page.getByRole("heading", { level: 3, name: "Wiring", exact: true })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Steps" })).toContainText("Hardware");
 });
 
 test("a new device just like an existing template offers that template, and uses it", async ({ page, request }) => {
@@ -100,8 +111,12 @@ test("a new device just like an existing template offers that template, and uses
   try {
     await page.goto("/devices/new?from=new&runs=own");
     await page.getByLabel("Device name").fill(`E2E twin dev ${stamp}`);
-    await page.getByLabel("Name", { exact: true }).fill("Flow");
-    await page.getByLabel(/^Key/).fill(key);
+    await page.getByRole("button", { name: "Next: Data" }).click();
+    await page.getByRole("button", { name: /Unnamed/ }).click();
+    await page.getByRole("dialog").getByLabel("Name", { exact: true }).fill("Flow");
+    await page.getByRole("dialog").getByLabel(/^Key/).fill(key);
+    await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
+    await page.getByRole("button", { name: "Next: Review" }).click();
     await page.getByRole("button", { name: "Create device" }).click();
 
     await expect(page.getByRole("alertdialog")).toContainText(`Matches ${template.name}`);

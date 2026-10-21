@@ -1,66 +1,29 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { ItemSheet } from "@/components/ui/ItemSheet";
+import { LineRow } from "@/components/ui/LineRow";
 import type { SectionProps } from "@/components/catalog/template/section-props";
-import { cn } from "@/lib/cn";
 import { usageText, type ActuatorDraft, type MetricDraft } from "@/lib/template-draft";
 
 export type RowKind = "metrics" | "actuators";
 type Row = MetricDraft | ActuatorDraft;
 
-/** Which of a section's rows are open. A row with an error, a new row and a
- * row the author opened always are; otherwise "Expand/Collapse all" decides,
- * and short lists on a full page start open. */
-export function useRowExpansion(kind: RowKind, { d, editor, mode }: Pick<SectionProps, "d" | "editor" | "mode">) {
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [allOpen, setAllOpen] = useState<boolean | null>(null);
-  // Keys the author unlocked; kept while a row is collapsed.
+/** Which row's item sheet is open (DESIGN.md §7: one item at a time), and
+ * the keys the author unlocked. */
+export function useRowSheet() {
+  const [openUid, setOpenUid] = useState<string | null>(null);
+  // Keys the author unlocked; kept while the sheet is closed.
   const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
-  const rows: Row[] = d[kind];
-
-  const isOpen = (row: Row, i: number) => {
-    const hasError = editor.visibleErrors.some((p) => p.startsWith(`${kind}.${i}.`));
-    if (hasError || expanded.has(row.uid) || row.origKey == null) return true;
-    if (allOpen != null) return allOpen;
-    return mode === "page" && rows.length <= 3;
-  };
-  const edit = (uid: string, open: boolean) =>
-    setExpanded((s) => {
-      const n = new Set(s);
-      if (open) n.add(uid);
-      else n.delete(uid);
-      return n;
-    });
-  const openNow = rows.every((r, i) => isOpen(r, i));
-  const toggleAll =
-    rows.length < 2 ? undefined : (
-      <Button
-        variant="link"
-        className="inline-flex items-center gap-1 text-[12.5px] font-medium"
-        onClick={() => {
-          setExpanded(new Set());
-          setAllOpen(!openNow);
-        }}
-      >
-        {openNow ? <ChevronDown aria-hidden size={13} /> : <ChevronRight aria-hidden size={13} />}
-        {openNow ? "Collapse all" : "Expand all"}
-      </Button>
-    );
-
   return {
-    isOpen,
-    toggle: (uid: string) => edit(uid, !expanded.has(uid)),
-    open: (uid: string) => edit(uid, true),
-    collapse: (uid: string) => {
-      edit(uid, false);
-      setAllOpen(false);
-    },
-    toggleAll,
+    openUid,
+    open: (uid: string) => setOpenUid(uid),
+    close: () => setOpenUid(null),
     isUnlocked: (uid: string) => unlocked.has(uid),
     unlock: (uid: string) => setUnlocked((s) => new Set(s).add(uid)),
   };
@@ -119,39 +82,45 @@ export function KeyField({
   );
 }
 
-/** A collapsed row: name, one-line description, key, usage and problems. */
-export function RowSummary({ kind, i, row, desc, onOpen, props }: { kind: RowKind; i: number; row: Row; desc: string; onOpen: () => void; props: SectionProps }) {
+/** A row as one line (DESIGN.md §5 Line row): name, then key · what it is ·
+ * who uses it, its Not wired tag and its problems. Opens its sheet. */
+export function RowLine({
+  kind,
+  i,
+  row,
+  desc,
+  onOpen,
+  selected,
+  props,
+}: {
+  kind: RowKind;
+  i: number;
+  row: Row;
+  desc: string;
+  onOpen: () => void;
+  selected: boolean;
+  props: SectionProps;
+}) {
   const { editor, usage } = props;
   const used = row.origKey ? usageText(usage?.[kind][row.origKey]) : "";
-  const hasErr = Object.keys(editor.errors).some((p) => p.startsWith(`${kind}.${i}.`));
-  const hasWarn = !!editor.warningFor(`${kind}.${i}.key`);
+  const issues = editor.visibleErrors.filter((p) => p.startsWith(`${kind}.${i}.`)).length;
+  const warn = !!editor.warningFor(`${kind}.${i}.key`);
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cn(
-        "group flex w-full min-w-0 items-center gap-2.5 rounded-xl border bg-surface py-2.5 pl-3 pr-2.5 text-left hover:border-accent/40",
-        hasErr ? "border-status-error" : "border-border",
-      )}
-    >
-      <span className="flex min-w-0 flex-1 flex-col leading-tight">
-        <span className="truncate text-sm font-medium text-ink">{row.name || <span className="text-ink-muted">Unnamed</span>}</span>
-        <span className="truncate text-[12.5px] text-ink-muted">{desc}</span>
-      </span>
-      {row.key && (
-        <Tag mono className="max-w-[40%] truncate max-sm:hidden">
-          {row.key}
-        </Tag>
-      )}
-      {notWired(kind, row, props) && <NotWiredTag />}
-      {used && <span className="whitespace-nowrap text-[11.5px] text-ink-muted max-sm:hidden">used by {used}</span>}
-      {hasErr && <AlertCircle aria-label="Has errors" size={15} className="text-status-error" />}
-      {!hasErr && hasWarn && <AlertTriangle aria-label="Has warnings" size={15} className="text-status-pending" />}
-      <span className="inline-flex items-center gap-1 text-ink-muted group-hover:text-accent-strong">
-        <span className="hidden text-xs font-semibold group-hover:inline">Edit</span>
-        <ChevronRight aria-hidden size={15} />
-      </span>
-    </button>
+    <LineRow
+      title={row.name || <span className="text-ink-muted">Unnamed</span>}
+      sub={
+        <>
+          <span className="font-mono">{row.key || "no key"}</span>
+          {desc && ` · ${desc}`}
+          {used && ` · used by ${used}`}
+        </>
+      }
+      end={notWired(kind, row, props) ? <NotWiredTag /> : undefined}
+      issues={issues}
+      warn={warn}
+      selected={selected}
+      onOpen={onOpen}
+    />
   );
 }
 
@@ -171,17 +140,22 @@ function NotWiredTag() {
   );
 }
 
-/** An open row: its fields in a card with Collapse and Remove. */
-export function RowCard({
+/** A row's item sheet: its fields, edited live in the draft, with Remove and
+ * Done (DESIGN.md §7: no save of its own). */
+export function RowSheet({
   title,
-  onCollapse,
+  sub,
+  open,
+  onClose,
   onRemove,
   readOnly,
   unwired = false,
   children,
 }: {
   title: string;
-  onCollapse: () => void;
+  sub: string;
+  open: boolean;
+  onClose: () => void;
   onRemove: () => void;
   readOnly: boolean;
   /** Tag it "Not wired" (see notWired). */
@@ -189,21 +163,35 @@ export function RowCard({
   children: ReactNode;
 }) {
   return (
-    <fieldset className="min-w-0 rounded-xl border border-border bg-surface px-3.5 pb-3.5 pt-3">
-      <legend className="sr-only">{title}</legend>
-      <div className="mb-3 flex items-center gap-2">
-        <button type="button" onClick={onCollapse} aria-label="Collapse" className="-ml-1.5 grid h-7 w-7 place-items-center rounded-md text-ink-muted hover:bg-surface-raised">
-          <ChevronDown aria-hidden size={15} />
-        </button>
-        <span className="flex-1 truncate text-sm font-medium text-ink">{title}</span>
-        {unwired && <NotWiredTag />}
-        {!readOnly && (
-          <Button variant="link-danger" className="text-[12.5px]" onClick={onRemove}>
-            Remove
-          </Button>
-        )}
-      </div>
+    <ItemSheet
+      open={open}
+      onClose={onClose}
+      title={title}
+      sub={sub}
+      footer={
+        <>
+          {!readOnly && (
+            <Button
+              variant="link-danger"
+              className="mr-auto text-[13px]"
+              onClick={() => {
+                onRemove();
+                onClose();
+              }}
+            >
+              Remove
+            </Button>
+          )}
+          <Button onClick={onClose}>Done</Button>
+        </>
+      }
+    >
+      {unwired && (
+        <p className="mb-4 flex items-center gap-2 text-[13px] text-ink-muted">
+          <NotWiredTag /> No part feeds this. Your firmware must publish it.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">{children}</div>
-    </fieldset>
+    </ItemSheet>
   );
 }
