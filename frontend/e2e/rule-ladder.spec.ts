@@ -28,10 +28,10 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
 
   await page.goto("/rules/new");
   await page.getByRole("button", { name: /Start blank/ }).click();
-  await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
-  // In Ladder the rule's name is edited in the inspector, picked from the rail.
-  await page.getByRole("navigation", { name: "Rule sections" }).getByRole("button", { name: /^Name/ }).click();
+  // The name sits at the top of the editor (DESIGN.md §9.2); Form / Ladder is in If and Then.
   await page.getByLabel("Rule name").fill(name);
+  await page.getByRole("tablist", { name: "Rule sections" }).getByRole("tab", { name: /^If/ }).click();
+  await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
 
   // A — the starting contact.
   await page.getByRole("button", { name: /^Condition / }).first().click();

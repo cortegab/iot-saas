@@ -6,6 +6,8 @@ test("a clear notification is configured in the form, summarised, and persisted"
 }) => {
   await page.goto(`/rules/${ruleUnderTest.id}`);
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Form" }).click();
+  // What happens on clear is part of Behaviour (DESIGN.md §9.2 tabs).
+  await page.getByRole("tablist", { name: "Rule sections" }).getByRole("tab", { name: /^Behaviour/ }).click();
 
   await expect(page.getByText("When the condition clears")).toBeVisible();
   // The fixture's only action is a notification — there's no actuator to turn back.
@@ -25,7 +27,7 @@ test("a clear notification is configured in the form, summarised, and persisted"
   await page.getByRole("alertdialog").getByRole("button", { name: "Save changes" }).click();
   // The editor stays on the rule after saving (DESIGN.md §7).
   await expect(page.getByText("All changes saved")).toBeVisible();
-  await expect(page).toHaveURL(`/rules/${ruleUnderTest.id}`);
+  expect(new URL(page.url()).pathname).toBe(`/rules/${ruleUnderTest.id}`);
 
   await page.reload();
   await expect(page.getByRole("switch", { name: "Send a notification when it clears" })).toBeChecked();

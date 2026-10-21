@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useState } from "react";
 import { mutate as revalidate } from "swr";
 import { Copy, Play, Trash2, X } from "lucide-react";
@@ -17,7 +17,6 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Callout } from "@/components/ui/Callout";
-import { Tabs, TabPanel } from "@/components/ui/Tabs";
 import { RuleExecutionHistory } from "@/components/rules/RuleExecutionHistory";
 import { RuleEditor } from "@/components/rules/editor/RuleEditor";
 import { ResetLatchButton } from "@/components/rules/ResetLatchButton";
@@ -57,14 +56,6 @@ function consequence(rule: RuleResponse): string {
 
 type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
 
-// DESIGN.md §9.2: Logic · Activity. Simulating lives in the editor's
-// preview; versions sit under Activity.
-const TABS = [
-  { id: "edit", label: "Logic" },
-  { id: "activity", label: "Activity" },
-];
-const OLD_TABS: Record<string, string> = { simulate: "edit", versions: "activity" };
-
 function unhealthySummary(rule: RuleResponse): string | null {
   if (rule.health.evaluatable) return null;
   const bad = rule.health.signals.filter((s) => s.state !== "fresh");
@@ -81,13 +72,8 @@ function primaryInputDevice(rule: RuleResponse): string | undefined {
 export default function EditRulePage() {
   const params = useParams<{ ruleId: string }>();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const isAdmin = useIsAdmin();
   useWideContent();
-  const [tab, setTab] = useState(() => {
-    const t = searchParams.get("tab") ?? "edit";
-    return OLD_TABS[t] ?? t;
-  });
   const {
     data: rule,
     error,
@@ -226,9 +212,6 @@ export default function EditRulePage() {
         </Callout>
       )}
 
-      <Tabs tabs={TABS} active={tab} onChange={setTab} />
-
-      <TabPanel id="edit" active={tab}>
         {restored && (
           <Callout tone="info" className="mb-3">
             <span className="flex flex-wrap items-center justify-between gap-3">
@@ -247,10 +230,7 @@ export default function EditRulePage() {
           existing={rule}
           initialDraft={restoredDraft}
           onSaved={onSaved}
-        />
-      </TabPanel>
-
-      <TabPanel id="activity" active={tab}>
+          activity={
         <div className="flex flex-col gap-6">
           <section className="flex flex-col gap-3">
             <h2 className="text-base font-semibold text-ink">Recent firings</h2>
@@ -262,13 +242,17 @@ export default function EditRulePage() {
               ruleId={params.ruleId}
               canRestore={isAdmin}
               onRestore={(v) => {
+                // The restored editor opens on its logic, not on Activity.
+                const url = new URL(window.location.href);
+                url.searchParams.delete("tab");
+                window.history.replaceState(window.history.state, "", url);
                 setRestored(v);
-                setTab("edit");
               }}
             />
           </section>
         </div>
-      </TabPanel>
+          }
+        />
     </div>
   );
 }
