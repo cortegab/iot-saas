@@ -16,26 +16,19 @@ export function LiveCheckStep({ flow }: { flow: ConnectFlow }) {
         This page listens for {device.name}. Each line turns green on its own as the board connects, reports and answers.
       </p>
       {allLive && (
-        <div className="flex flex-wrap items-center gap-3 rounded-lg border border-status-online/40 bg-status-online/10 p-4">
-          <Check aria-hidden size={20} className="text-status-online" />
-          <p className="mr-auto text-sm text-ink">
+        <p className="flex items-center gap-2.5 rounded-lg bg-status-online/10 px-4 py-3 text-sm text-ink">
+          <Check aria-hidden size={18} className="text-status-online" />
+          <span>
             <strong>{device.name} is live.</strong> Readings are flowing{boolActuators.length ? " and every actuator answered" : ""}.
-          </p>
-          <Button onClick={() => void flow.leave(`/devices/${deviceId}`)}>
-            Open device <ChevronRight aria-hidden size={14} />
-          </Button>
-          {/* From a template, with this one's template picked (DESIGN.md §8). */}
-          <Button variant="secondary" onClick={() => void flow.leave(`/devices/new?catalog_entry_id=${flow.template.id}`)}>
-            Add another like this
-          </Button>
-        </div>
+          </span>
+        </p>
       )}
-      <ul className="flex flex-col divide-y divide-border rounded-lg border border-border">
+      <ul className="flex flex-col divide-y divide-border-soft">
         {items.map((it) => {
           const s = live[it.k] ?? {};
           const state = s.ok ? "ok" : s.busy ? "busy" : "wait";
           return (
-            <li key={it.k} className="flex items-start gap-3 px-4 py-3">
+            <li key={it.k} className="flex items-start gap-3 py-3">
               <span
                 aria-hidden
                 className={cn(
@@ -59,6 +52,11 @@ export function LiveCheckStep({ flow }: { flow: ConnectFlow }) {
                   </details>
                 )}
               </div>
+              {!it.actuator && (
+                <span aria-hidden className={cn("pt-0.5 text-[12.5px]", state === "ok" ? "text-status-online" : "text-ink-muted")}>
+                  {state === "ok" ? "OK" : "Waiting"}
+                </span>
+              )}
               {it.actuator && (
                 <Button
                   size="sm"
@@ -75,7 +73,15 @@ export function LiveCheckStep({ flow }: { flow: ConnectFlow }) {
           );
         })}
       </ul>
-      <StepNav onBack={() => flow.setStep(phone ? 4 : 3)} />
+      <StepNav state={allLive ? `${device.name} is live` : "Waiting for the device"} onBack={() => flow.setStep(phone ? 4 : 3)}>
+        {/* From a template, with this one's template picked (DESIGN.md §8). */}
+        <Button variant="secondary" onClick={() => void flow.leave(`/devices/new?catalog_entry_id=${flow.template.id}`)}>
+          Add another like this
+        </Button>
+        <Button onClick={() => void flow.leave(`/devices/${deviceId}`)}>
+          Open device <ChevronRight aria-hidden size={14} />
+        </Button>
+      </StepNav>
     </>
   );
 }

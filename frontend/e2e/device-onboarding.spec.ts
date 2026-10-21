@@ -43,7 +43,7 @@ test("something new on our firmware: parts make the template, readings are named
     await page.getByRole("button", { name: "Create device" }).click();
     await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\/connect$/);
     // Wired, so the Connect flow installs from the browser, no sketch.
-    await expect(page.getByText("Over USB, from here")).toBeVisible();
+    await expect(page.getByRole("list", { name: "Steps" })).toContainText("Install");
     deviceId = page.url().match(/devices\/([0-9a-f-]{36})/)![1];
 
     const device = await (await request.get(`${API_URL}/devices/${deviceId}`, { headers })).json();
@@ -79,7 +79,7 @@ test("something new on its own code: no wiring, its data listed, it lands on the
 
     await page.getByRole("button", { name: "Create device" }).click();
     await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\/connect$/);
-    await expect(page.getByText("Download and upload")).toBeVisible();
+    await expect(page.getByRole("list", { name: "Steps" })).toContainText("Flash");
     deviceId = page.url().match(/devices\/([0-9a-f-]{36})/)![1];
 
     const device = await (await request.get(`${API_URL}/devices/${deviceId}`, { headers })).json();

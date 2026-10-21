@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Check } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -13,8 +14,32 @@ export interface StepItem {
 /** DESIGN.md §5 Wizard steps: numbered (done ✓ / current / red when a step
  * has problems); "Step n of N" over a progress bar when its container is
  * 640px or narrower. Put it inside an `@container`. */
-export function Stepper({ steps, current }: { steps: StepItem[]; current: number }) {
+export function Stepper({
+  steps,
+  current,
+  onPick,
+  canPick = () => true,
+}: {
+  steps: StepItem[];
+  current: number;
+  /** Makes each step a button that goes to it (Connect: skip to Live check). */
+  onPick?: (index: number) => void;
+  canPick?: (index: number) => boolean;
+}) {
   const now = steps[current];
+  const wrap = (i: number, body: ReactNode) =>
+    onPick ? (
+      <button
+        type="button"
+        disabled={!canPick(i)}
+        onClick={() => onPick(i)}
+        className="flex items-center gap-2 rounded-md hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {body}
+      </button>
+    ) : (
+      body
+    );
   return (
     <>
       <ol aria-label="Steps" className="mb-2 flex flex-wrap items-center gap-x-1.5 gap-y-2 @max-[640px]:hidden">
@@ -32,6 +57,9 @@ export function Stepper({ steps, current }: { steps: StepItem[]; current: number
                 i < steps.length - 1 && "after:ml-1.5 after:mr-1 after:h-px after:w-8 after:bg-border",
               )}
             >
+              {wrap(
+                i,
+                <>
               <span
                 aria-hidden
                 className={cn(
@@ -50,6 +78,8 @@ export function Stepper({ steps, current }: { steps: StepItem[]; current: number
               {s.label}
               {done && !bad && <span className="sr-only">, done</span>}
               {bad && <span className="sr-only">, has problems</span>}
+                </>,
+              )}
             </li>
           );
         })}

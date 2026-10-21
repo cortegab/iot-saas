@@ -46,7 +46,7 @@ export function PhoneStep({ flow, credential }: { flow: ConnectFlow; credential:
         </p>
       </div>
       <SerialMonitor flow={flow} />
-      <StepNav onBack={() => flow.setStep(3)} onNext={() => flow.setStep(5)} />
+      <StepNav state="Give the board its Wi-Fi from your phone" onBack={() => flow.setStep(3)} onNext={() => flow.setStep(5)} />
     </>
   );
 }

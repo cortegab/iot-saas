@@ -15,7 +15,11 @@ export function FirmwareStep({ flow }: { flow: ConnectFlow }) {
       <h2 className="text-lg font-semibold text-ink">{install ? "Install" : "Flash"}</h2>
       {install ? <InstallBlock flow={flow} install={install} /> : <SketchBlock flow={flow} />}
       {!phone && <SerialMonitor flow={flow} />}
-      <StepNav onBack={() => flow.setStep(2)} onNext={() => flow.setStep(phone ? 4 : 5)} />
+      <StepNav
+        state={install ? "Install, or skip if it's already installed" : "Flash the sketch, then continue"}
+        onBack={() => flow.setStep(2)}
+        onNext={() => flow.setStep(phone ? 4 : 5)}
+      />
     </>
   );
 }
