@@ -206,6 +206,8 @@ export default function DevicesPage() {
       header: "Template",
       sortable: true,
       hideOnPhone: true,
+      priority: 3,
+      fold: (d) => templateName.get(d.catalog_entry_id),
       cell: (d) => (
         <>
           {templateName.get(d.catalog_entry_id) ?? <span className="text-ink-muted">—</span>}
@@ -222,6 +224,8 @@ export default function DevicesPage() {
       header: "Zone",
       sortable: true,
       hideOnPhone: true,
+      priority: 2,
+      fold: (d) => (d.zone_id ? zoneName.get(d.zone_id) : null),
       cell: (d) => (d.zone_id ? zoneName.get(d.zone_id) : null) ?? <span className="text-ink-muted">—</span>,
     },
     { id: "status", header: "Status", sortable: true, cell: (d) => <DeviceStatusPill device={d} /> },

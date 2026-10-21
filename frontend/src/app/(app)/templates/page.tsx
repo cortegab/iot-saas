@@ -142,8 +142,8 @@ export default function DeviceTemplatesPage() {
         />
       ),
     },
-    { id: "metrics", header: "Metrics", hideOnPhone: true, cell: (e) => <KeyChips keys={e.metrics.map((m) => m.key)} /> },
-    { id: "actuators", header: "Actuators", hideOnPhone: true, cell: (e) => <KeyChips keys={e.actuators.map((a) => a.key)} /> },
+    { id: "metrics", header: "Metrics", hideOnPhone: true, priority: 3, cell: (e) => <KeyChips keys={e.metrics.map((m) => m.key)} /> },
+    { id: "actuators", header: "Actuators", hideOnPhone: true, priority: 3, cell: (e) => <KeyChips keys={e.actuators.map((a) => a.key)} /> },
     { id: "devices", header: "Devices", sortable: true, numeric: true, cell: (e) => e.device_count },
     {
       id: "status",
@@ -160,6 +160,8 @@ export default function DeviceTemplatesPage() {
       header: "Updated",
       sortable: true,
       hideOnPhone: true,
+      priority: 2,
+      fold: (e) => `updated ${timeAgo(e.updated_at)}`,
       cell: (e) => <span className="text-ink-muted">{timeAgo(e.updated_at)}</span>,
     },
   ];

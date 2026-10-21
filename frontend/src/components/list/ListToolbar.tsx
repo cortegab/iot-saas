@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Search, X } from "lucide-react";
+import { ListFilter, Search, X } from "lucide-react";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/lib/cn";
 
 export interface QuickFilterOption {
@@ -12,14 +15,21 @@ export interface QuickFilterOption {
 }
 
 /** DESIGN.md §6 toolbar: search, filter controls, then (below) the active
- * filter chips. The search input debounces into the URL. */
+ * filter chips. The search input debounces into the URL. On phones the
+ * filter controls move into a **Filters** bottom sheet. */
 export function ListToolbar({
   query,
   onQuery,
   placeholder,
   quick,
+  activeFilters = 0,
+  view,
   children,
 }: {
+  /** A view switch (List / Ladder); stays in the toolbar on phones. */
+  view?: ReactNode;
+  /** How many filters are on, for the phone's Filters button. */
+  activeFilters?: number;
   query: string;
   onQuery: (q: string) => void;
   placeholder: string;
@@ -30,6 +40,8 @@ export function ListToolbar({
 }) {
   const [text, setText] = useState(query);
   const sent = useRef(query);
+  const phone = useMediaQuery("(max-width: 640px)");
+  const [sheetOpen, setSheetOpen] = useState(false);
   // Follow external changes only (chip removed, "Clear filters") — not the
   // echo of our own debounced write, which would clobber newer keystrokes.
   useEffect(() => {
@@ -85,7 +97,26 @@ export function ListToolbar({
           })}
         </div>
       )}
-      {children && <div className="flex flex-wrap items-center gap-2 sm:ml-auto">{children}</div>}
+      {children &&
+        (phone ? (
+          <>
+            <Button variant="secondary" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
+              <ListFilter aria-hidden size={14} />
+              Filters
+              {activeFilters > 0 && <span className="text-xs tabular-nums text-accent-strong">{activeFilters}</span>}
+            </Button>
+            <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} label="Filters" side="bottom">
+              <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-3">
+                <h2 className="text-base font-semibold text-ink">Filters</h2>
+                <div className="flex flex-col gap-3 [&>*]:w-full">{children}</div>
+                <Button onClick={() => setSheetOpen(false)}>Done</Button>
+              </div>
+            </Sheet>
+          </>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">{children}</div>
+        ))}
+      {view}
     </div>
   );
 }
