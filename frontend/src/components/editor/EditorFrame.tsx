@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { AlertCircle, Check, ChevronLeft, ChevronRight, Eye, X } from "lucide-react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
+import { Stepper } from "@/components/ui/Stepper";
 import { Tabs } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
@@ -401,64 +402,7 @@ export function EditorFrame({
   );
 
   const stepper = steps && (
-    <>
-      <ol aria-label="Steps" className="mb-2 flex flex-wrap items-center gap-x-1.5 gap-y-2 @max-[640px]:hidden">
-        {groupList.map((g, i) => {
-          const done = i < stepIndex;
-          const now = i === stepIndex;
-          const bad = groupIssues(g) > 0;
-          return (
-            <li
-              key={g.id}
-              aria-current={now ? "step" : undefined}
-              className={cn(
-                "flex items-center gap-2 text-[13.5px]",
-                now ? "font-medium text-ink" : "text-ink-muted",
-                i < groupList.length - 1 && "after:ml-1.5 after:mr-1 after:h-px after:w-8 after:bg-border",
-              )}
-            >
-              <span
-                aria-hidden
-                className={cn(
-                  "grid h-6 w-6 place-items-center rounded-full border-[1.5px] text-xs font-semibold",
-                  bad
-                    ? "border-status-error text-status-error"
-                    : done
-                      ? "border-status-online bg-status-online text-on-accent"
-                      : now
-                        ? "border-accent bg-accent-muted text-accent-strong"
-                        : "border-border",
-                )}
-              >
-                {done && !bad ? <Check size={12} /> : i + 1}
-              </span>
-              {g.label}
-              {done && !bad && <span className="sr-only">, done</span>}
-              {bad && <span className="sr-only">, has problems</span>}
-            </li>
-          );
-        })}
-      </ol>
-      <div className="mb-2 hidden @max-[640px]:block">
-        <p className="mb-1.5 text-[13px] text-ink-muted">
-          Step{" "}
-          <b className="text-ink">
-            {stepIndex + 1} of {groupList.length}
-          </b>{" "}
-          · {activeGroup?.label}
-        </p>
-        <div
-          role="progressbar"
-          aria-label="Progress"
-          aria-valuemin={1}
-          aria-valuemax={groupList.length}
-          aria-valuenow={stepIndex + 1}
-          className="h-1 overflow-hidden rounded-full bg-border"
-        >
-          <div className="h-full rounded-full bg-accent" style={{ width: `${((stepIndex + 1) / groupList.length) * 100}%` }} />
-        </div>
-      </div>
-    </>
+    <Stepper steps={groupList.map((g) => ({ id: g.id, label: g.label, issues: groupIssues(g) }))} current={stepIndex} />
   );
 
   const question = steps && activeGroup?.question && (

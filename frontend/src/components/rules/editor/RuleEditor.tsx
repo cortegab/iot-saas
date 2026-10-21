@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Activity, AlertCircle, AlertTriangle, Check } from "lucide-react";
+import { Activity, AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { Button } from "@/components/ui/Button";
@@ -24,6 +24,7 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { ItemSheet } from "@/components/ui/ItemSheet";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Stepper } from "@/components/ui/Stepper";
 import { Tabs } from "@/components/ui/Tabs";
 import { ApiRequestError } from "@/lib/api-client";
 import { contacts, draftFromRule, draftToRequest, emptyDraft, validateDraft, type RuleDraft } from "@/lib/rule-draft";
@@ -35,17 +36,32 @@ import { EditableSentence } from "./EditableSentence";
 import { LadderCanvas, LadderInspector, liveSelection, type EditorSelection } from "@/components/rules/ladder/LadderMode";
 import type { components } from "@/types/api";
 import { BehaviourSection, ConditionSection, ThenSection, WhenSection } from "./FormMode";
-import { StepsContext } from "./fields";
 import { RulePreview } from "./RulePreview";
 import { useRuleCatalog } from "./useRuleCatalog";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
 type EditorMode = "form" | "ladder";
-type RuleTab = "when" | "if" | "then" | "behaviour" | "activity";
+type RuleTab = "when" | "if" | "then" | "behaviour" | "activity" | "review";
 
 const MODE_KEY = "rule-editor-mode";
-const TAB_LABEL: Record<RuleTab, string> = { when: "When", if: "If", then: "Then", behaviour: "Behaviour", activity: "Activity" };
+const TAB_LABEL: Record<RuleTab, string> = {
+  when: "When",
+  if: "If",
+  then: "Then",
+  behaviour: "Behaviour",
+  activity: "Activity",
+  review: "Review",
+};
+// A new rule is a wizard (DESIGN.md §9.1): one question per step.
+const WIZARD: RuleTab[] = ["when", "if", "then", "behaviour", "review"];
+const QUESTION: Partial<Record<RuleTab, [string, string]>> = {
+  when: ["What starts it?", "A reading, a schedule, a person, or a device going online or offline."],
+  if: ["What has to be true?", "Add conditions. Combine them with All (and) or Any (or)."],
+  then: ["What should happen?", "Switch something, send an email, call a webhook or post a notification."],
+  behaviour: ["How should it behave?", "Re-arm or latch, and the safety timers that stop hardware flapping."],
+  review: ["Check and create", "Name it, see what it would have done, and create it."],
+};
 // The rule page's older tab names (Logic / Activity, before them Simulate / Versions).
 const OLD_TABS: Record<string, RuleTab> = { edit: "if", simulate: "if", versions: "activity" };
 
@@ -101,23 +117,34 @@ export function RuleEditor({
   const isNew = !existing;
   const nameRef = useRef<HTMLInputElement>(null);
 
-  const tabs: RuleTab[] = activity ? ["when", "if", "then", "behaviour", "activity"] : ["when", "if", "then", "behaviour"];
+  const wizard = isNew;
+  const tabs: RuleTab[] = wizard ? WIZARD : activity ? ["when", "if", "then", "behaviour", "activity"] : ["when", "if", "then", "behaviour"];
   const defaultTab: RuleTab = isNew ? "when" : "if";
   const [tab, setTabState] = useState<RuleTab>(() => {
-    if (typeof window === "undefined") return defaultTab;
+    if (typeof window === "undefined" || wizard) return defaultTab;
     const raw = new URLSearchParams(window.location.search).get("tab") ?? "";
     const t = (OLD_TABS[raw] ?? raw) as RuleTab;
     return tabs.includes(t) ? t : defaultTab;
   });
+  const questionRef = useRef<HTMLHeadingElement>(null);
+  const stepIndex = Math.max(0, tabs.indexOf(tab));
   const setTab = useCallback(
     (next: RuleTab) => {
       setTabState(next);
+      // A wizard's step isn't in the URL; it moves focus to its question.
+      if (wizard) {
+        window.requestAnimationFrame(() => {
+          window.scrollTo({ top: 0 });
+          questionRef.current?.focus();
+        });
+        return;
+      }
       const url = new URL(window.location.href);
       if (next === defaultTab) url.searchParams.delete("tab");
       else url.searchParams.set("tab", next);
       window.history.replaceState(window.history.state, "", url);
     },
-    [defaultTab],
+    [defaultTab, wizard],
   );
 
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(baseline), [draft, baseline]);
@@ -152,7 +179,8 @@ export function RuleEditor({
   const goTo = useCallback(
     (section: RuleSection) => {
       if (section === "name") {
-        nameRef.current?.focus();
+        if (wizard) setTab("review");
+        window.requestAnimationFrame(() => nameRef.current?.focus());
         return;
       }
       setTab(section);
@@ -173,8 +201,18 @@ export function RuleEditor({
         );
       }
     },
-    [mode, draft, setTab],
+    [mode, draft, setTab, wizard],
   );
+
+  /** Wizard Next: refused while this step has problems that block saving. */
+  function next() {
+    const stopping = blocking.filter((i) => i.section === tab);
+    if (stopping.length > 0) {
+      toast({ tone: "error", title: "Fix the marked items first", detail: stopping[0].message });
+      return;
+    }
+    setTab(tabs[stepIndex + 1]);
+  }
 
   async function save() {
     setError(null);
@@ -225,7 +263,9 @@ export function RuleEditor({
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    void save();
+    // Enter in a wizard step moves on; only Review creates.
+    if (wizard && tab !== "review") next();
+    else void save();
   }
 
   // Ctrl/⌘+S saves.
@@ -270,7 +310,7 @@ export function RuleEditor({
   );
 
   const preview = <RulePreview draft={draft} catalog={catalog} ruleId={existing?.id} />;
-  const tabIssues = (t: RuleTab) => issues.filter((i) => i.section === t);
+  const tabIssues = (t: RuleTab | RuleSection) => issues.filter((i) => i.section === t);
   const modeSwitch = (
     <div className="flex justify-end">
       <SegmentedControl
@@ -308,9 +348,15 @@ export function RuleEditor({
   );
 
   return (
-    <StepsContext.Provider value={isNew}>
+    <>
       <form onSubmit={handleSubmit} className="@container flex flex-col gap-4">
-        <div className="grid items-start gap-x-4 gap-y-3 @min-[640px]:grid-cols-2">{nameFields}</div>
+        {wizard && (
+          <Stepper
+            current={stepIndex}
+            steps={tabs.map((t) => ({ id: t, label: TAB_LABEL[t], issues: tabIssues(t === "review" ? "name" : t).filter((i) => i.blocking).length }))}
+          />
+        )}
+        {!wizard && <div className="grid items-start gap-x-4 gap-y-3 @min-[640px]:grid-cols-2">{nameFields}</div>}
 
         {/* The rule as a sentence in a highlighted box (DESIGN.md §9.3). */}
         <div className="rounded-xl border border-accent/30 bg-accent-muted/60 px-4 py-3">
@@ -318,21 +364,32 @@ export function RuleEditor({
         </div>
 
         <div className="flex items-end gap-2">
-          <Tabs
-            ariaLabel="Rule sections"
-            className="min-w-0 flex-1"
-            tabs={tabs.map((t) => {
-              const its = tabIssues(t);
-              const bad = its.filter((i) => i.blocking).length;
-              return { id: t, label: TAB_LABEL[t], issues: bad, warn: its.length > bad };
-            })}
-            active={tab}
-            onChange={(id) => setTab(id as RuleTab)}
-          />
-          <Button type="button" variant="secondary" size="sm" className="mb-1.5 @min-[1080px]:hidden" onClick={() => setPreviewOpen(true)}>
-            <Activity aria-hidden size={14} />
-            Preview
-          </Button>
+          {wizard ? (
+            <div className="flex min-w-0 flex-1 flex-col gap-1 pt-2">
+              <h2 ref={questionRef} tabIndex={-1} className="text-xl font-semibold tracking-[-0.01em] text-ink outline-none">
+                {QUESTION[tab]?.[0]}
+              </h2>
+              <p className="text-ink-muted">{QUESTION[tab]?.[1]}</p>
+            </div>
+          ) : (
+            <Tabs
+              ariaLabel="Rule sections"
+              className="min-w-0 flex-1"
+              tabs={tabs.map((t) => {
+                const its = tabIssues(t);
+                const bad = its.filter((i) => i.blocking).length;
+                return { id: t, label: TAB_LABEL[t], issues: bad, warn: its.length > bad };
+              })}
+              active={tab}
+              onChange={(id) => setTab(id as RuleTab)}
+            />
+          )}
+          {tab !== "review" && (
+            <Button type="button" variant="secondary" size="sm" className="mb-1.5 @min-[1080px]:hidden" onClick={() => setPreviewOpen(true)}>
+              <Activity aria-hidden size={14} />
+              Preview
+            </Button>
+          )}
         </div>
 
         <div className="grid items-start gap-6 @min-[1080px]:grid-cols-[minmax(0,1fr)_320px]">
@@ -354,6 +411,17 @@ export function RuleEditor({
             )}
             {panel("behaviour", <BehaviourSection draft={draft} update={setDraft} />)}
             {activity && panel("activity", activity)}
+            {wizard &&
+              panel(
+                "review",
+                <>
+                  <div className="grid items-start gap-x-4 gap-y-3 rounded-xl border border-border bg-surface p-5 shadow-card @min-[640px]:grid-cols-2">
+                    {nameFields}
+                  </div>
+                  {/* "See what it would have done": the preview, full width when there's no column for it. */}
+                  <div className="flex flex-col gap-3 @min-[1080px]:hidden">{preview}</div>
+                </>,
+              )}
           </div>
 
           <aside aria-label="Preview" className="hidden min-w-0 flex-col gap-3 @min-[1080px]:sticky @min-[1080px]:top-4 @min-[1080px]:flex @min-[1080px]:max-h-[calc(100vh-112px)] @min-[1080px]:overflow-y-auto">
@@ -410,20 +478,45 @@ export function RuleEditor({
               </p>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            {isNew && onCancel ? (
-              <Button type="button" variant="ghost" onClick={() => void cancel()}>
-                Cancel
-              </Button>
-            ) : (
+          {wizard ? (
+            // The wizard (DESIGN.md §5): Back (the recipes, on the first step), then Next: {step}.
+            <div className="flex items-center gap-2">
+              {stepIndex > 0 ? (
+                <Button type="button" variant="ghost" onClick={() => setTab(tabs[stepIndex - 1])}>
+                  <ChevronLeft aria-hidden size={15} />
+                  Back
+                </Button>
+              ) : (
+                onCancel && (
+                  <Button type="button" variant="ghost" onClick={() => void cancel()}>
+                    <ChevronLeft aria-hidden size={15} />
+                    Recipes
+                  </Button>
+                )
+              )}
+              {stepIndex < tabs.length - 1 ? (
+                // Keyed apart: React would otherwise reuse this element as the submit
+                // button mid-click, and the click would create the rule.
+                <Button key="next" type="button" onClick={next}>
+                  Next: {TAB_LABEL[tabs[stepIndex + 1]]}
+                  <ChevronRight aria-hidden size={15} />
+                </Button>
+              ) : (
+                <Button key="create" type="submit" disabled={submitting}>
+                  {submitting ? "Saving…" : "Create rule"}
+                </Button>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
               <Button type="button" variant="ghost" disabled={!dirty || submitting} onClick={() => setDraft(baseline)}>
                 Discard
               </Button>
-            )}
-            <Button type="submit" disabled={submitting || (!dirty && !isNew)}>
-              {submitting ? "Saving…" : existing ? "Save changes" : "Create rule"}
-            </Button>
-          </div>
+              <Button type="submit" disabled={submitting || !dirty}>
+                {submitting ? "Saving…" : "Save changes"}
+              </Button>
+            </div>
+          )}
         </div>
       </form>
       <ItemSheet open={previewOpen} onClose={() => setPreviewOpen(false)} title="Preview" sub="What this draft would do. Nothing is sent.">
@@ -431,6 +524,6 @@ export function RuleEditor({
       </ItemSheet>
       {dialog}
       {guardDialog}
-    </StepsContext.Provider>
+    </>
   );
 }

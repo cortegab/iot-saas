@@ -28,9 +28,8 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
 
   await page.goto("/rules/new");
   await page.getByRole("button", { name: /Start blank/ }).click();
-  // The name sits at the top of the editor (DESIGN.md §9.2); Form / Ladder is in If and Then.
-  await page.getByLabel("Rule name").fill(name);
-  await page.getByRole("tablist", { name: "Rule sections" }).getByRole("tab", { name: /^If/ }).click();
+  // A new rule is a wizard (DESIGN.md §9.1); Form / Ladder is in its If and Then steps.
+  await page.getByRole("button", { name: "Next: If" }).click();
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
 
   // A — the starting contact.
@@ -62,6 +61,11 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   await expect(page.getByRole("radiogroup", { name: "Combine with" })).toHaveCount(2);
   await expect(page.getByText(/ and \(.+ or .+\) and /)).toBeVisible();
 
+  // Through the steps to Review, where it's named and created.
+  await page.getByRole("button", { name: "Next: Then" }).click();
+  await page.getByRole("button", { name: "Next: Behaviour" }).click();
+  await page.getByRole("button", { name: "Next: Review" }).click();
+  await page.getByLabel("Rule name").fill(name);
   await page.getByRole("button", { name: "Create rule" }).click();
   // A new rule opens on its own page.
   await expect(page).toHaveURL(/\/rules\/[0-9a-f-]{36}$/);
