@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { draftFromRule } from "@/lib/rule-draft";
 import { useRuleCatalog } from "@/components/rules/editor/useRuleCatalog";
 import type { components } from "@/types/api";
-import { LadderRung } from "./LadderRung";
+import { ResponsiveRung } from "./LadderRung";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 
@@ -37,9 +37,9 @@ export function LadderOverview({ rules }: { rules: RuleResponse[] }) {
             <Link
               href={`/rules/${rule.id}`}
               aria-label={`Edit ${rule.name}`}
-              className="-mx-1 block overflow-x-auto rounded-lg px-1 pb-1 hover:bg-surface-raised"
+              className="-mx-1 block rounded-lg px-1 pb-1 hover:bg-surface-raised"
             >
-              <LadderRung draft={draft} catalog={catalog} ariaLabel={`Ladder for ${rule.name}`} />
+              <ResponsiveRung fit draft={draft} catalog={catalog} ariaLabel={`Ladder for ${rule.name}`} />
             </Link>
           </div>
         </Card>

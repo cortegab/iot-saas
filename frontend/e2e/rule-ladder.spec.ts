@@ -46,12 +46,15 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   await page.getByRole("button", { name: "Add in series" }).click();
   await fillContact(page, deviceId, "40");
   await expect(page.getByRole("button", { name: /^Condition / })).toHaveCount(4);
+  // Each element opens in a sheet (DESIGN.md §9.10); close it to pick the next.
+  await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
 
   // THEN: replace the default (empty) actuator coil with a notification.
   await page.getByRole("button", { name: "Add an action" }).click();
   await page.getByRole("button", { name: "+ In-app notification" }).click();
   // Field puts its hint inside the <label>, so the accessible name continues past "Message".
   await page.getByLabel(/^Message/).fill("E2E ladder fired");
+  await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
   await page.getByRole("button", { name: /^Action actuator/ }).click();
   await page.getByRole("button", { name: "Remove coil" }).click();
   await expect(page.getByRole("button", { name: /^Action / })).toHaveCount(1);
