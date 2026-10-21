@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { expect } from "@playwright/test";
 import { API_URL, login, test } from "./fixtures";
 
-// DESIGN.md §8 controls: what was requested, then Waiting… (counting down
+// DESIGN.md §8 controls (demo H rows): what was requested, then Waiting… (counting down
 // the TTL), Acknowledged, or No response with Retry; offline sends warn
 // first; the command timeline filters by result.
 
@@ -27,7 +27,11 @@ test("controls: warn when offline, count down, acknowledged by the device, then 
   try {
     await page.goto(`/devices/${device.id}?tab=controls`);
     // Never connected, so offline: the send says so first.
-    await page.getByRole("button", { name: "Turn On" }).click();
+    // One offline callout above the rows; each actuator an On | Off control.
+    await expect(page.getByText(/The device is never connected. Commands wait in its desired state/)).toBeVisible();
+    const fan = page.getByRole("radiogroup", { name: "Set Fan" });
+    await expect(page.getByText("Nothing sent yet")).toBeVisible();
+    await fan.getByRole("radio", { name: "On" }).click();
     const ask = page.getByRole("alertdialog");
     await expect(ask).toContainText("Send to an offline device?");
     await ask.getByRole("button", { name: "Turn On" }).click();
@@ -40,7 +44,9 @@ test("controls: warn when offline, count down, acknowledged by the device, then 
     await expect(page.getByText("Acknowledged").first()).toBeVisible({ timeout: 15_000 });
 
     // Turned off, unanswered: No response once the 30 s TTL passes, then Retry.
-    await page.getByRole("button", { name: "Turn Off" }).click();
+    await expect(fan.getByRole("radio", { name: "On" })).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByText(/sent manually, /)).toBeVisible();
+    await fan.getByRole("radio", { name: "Off" }).click();
     await page.getByRole("alertdialog").getByRole("button", { name: "Turn Off" }).click();
     await expect(page.getByText(/No response within 30 s\./)).toBeVisible({ timeout: 45_000 });
     await page.getByRole("button", { name: "Retry" }).click();
@@ -53,7 +59,7 @@ test("controls: warn when offline, count down, acknowledged by the device, then 
     await expect(timeline.getByRole("listitem")).toHaveCount(3);
     await page.getByRole("radiogroup", { name: "Result" }).getByRole("radio", { name: "Acknowledged" }).click();
     await expect(timeline.getByRole("listitem")).toHaveCount(1);
-    await expect(timeline.getByRole("listitem")).toContainText("fan1 → On");
+    await expect(timeline.getByRole("listitem")).toContainText("Fan → On");
   } finally {
     await request.delete(`${API_URL}/devices/${device.id}`, { headers });
     await request.delete(`${API_URL}/catalog/${tpl.id}`, { headers });

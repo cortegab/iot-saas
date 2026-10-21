@@ -7,11 +7,22 @@ test("a device peeks from the list and is edited in its Settings tab", async ({ 
   await row.locator("td").nth(-2).click();
   await expect(page).toHaveURL(/peek=/);
   const peek = page.getByRole("region", { name: / details$/ });
-  await expect(peek.getByRole("link", { name: "Open device" })).toBeVisible();
   await expect(peek.getByRole("textbox")).toHaveCount(0);
+  // Read-only: Open device is the one button; the rest is in ⋯ (demo H).
+  await expect(peek.getByRole("link", { name: "Edit settings" })).toHaveCount(0);
+  await peek.getByRole("button", { name: "More actions" }).click();
+  await expect(page.getByRole("menuitem", { name: "Rotate credential…" })).toBeVisible();
+  await page.keyboard.press("Escape");
 
-  await peek.getByRole("link", { name: "Edit settings" }).click();
-  await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\?tab=settings$/);
+  await peek.getByRole("link", { name: "Open device" }).click();
+  await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}$/);
+  // The header: template · zone overline, status and last message, Connect or Install, ⋯.
+  await expect(page.getByText(/· last message /)).toBeVisible();
+  await expect(page.getByRole("link", { name: /^(Connect|Install)$/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Health" })).toBeVisible();
+
+  await page.getByRole("tab", { name: "Settings" }).click();
+  await expect(page).toHaveURL(/\?tab=settings$/);
   const name = page.getByLabel("Name", { exact: true });
   const original = await name.inputValue();
   await name.fill(`${original} draft`);
@@ -21,12 +32,15 @@ test("a device peeks from the list and is edited in its Settings tab", async ({ 
   // The save bar only shows while there is something to save.
   await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
-  // One settings page: stacked sections, one connect action, the danger zone last.
-  for (const heading of ["General", "Rule evaluation", "Template", "Wiring", "Connection", "Danger zone"]) {
+  // One settings page: plain stacked sections, Delete last.
+  await expect(page.getByText("Saving applies right away.", { exact: false })).toBeVisible();
+  for (const heading of ["General", "Rule evaluation", "Template", "Wiring", "Connection", "Delete"]) {
     await expect(page.getByRole("heading", { level: 3, name: heading, exact: true })).toBeVisible();
   }
-  await expect(page.getByRole("heading", { name: "MQTT topics", exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Connect and get firmware" })).toHaveCount(1);
+  await expect(page.getByText("Gives it")).toBeVisible();
+  await page.getByText("Show its MQTT topics").click();
+  await expect(page.getByText("Health (retained, last will)")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Rotate credential…" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Delete device…" })).toBeVisible();
 });
 
