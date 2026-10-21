@@ -26,7 +26,7 @@ type CommandResponse = components["schemas"]["CommandResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
 function formatValue(value: unknown): string {
-  if (typeof value === "boolean") return value ? "ON" : "OFF";
+  if (typeof value === "boolean") return value ? "On" : "Off";
   return String(value);
 }
 
@@ -47,44 +47,61 @@ function ActuatorRow({
   deviceOnline: boolean;
   isAdmin: boolean;
   latest: CommandResponse | undefined;
-  onSent: () => void;
+  /** Re-fetches the device's commands; resolves with the fresh list. */
+  onSent: () => Promise<CommandResponse[] | undefined>;
 }) {
   const api = useApi();
   const { confirm, dialog } = useConfirm();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Accepted (202), not yet a command row: the worker writes it a moment later.
+  const [sending, setSending] = useState<boolean | null>(null);
 
   const currentValue = latest?.value ?? false;
 
-  // Re-render once when the pending command crosses its TTL deadline, so the
-  // badge flips "Pending" → "No response" on time instead of waiting for the
-  // next SWR poll. A late ack landing after this still revalidates the list
+  // While a command waits, tick every second: the countdown (DESIGN.md §8)
+  // runs live, and "Waiting" flips to "No response" at the TTL deadline
+  // instead of at the next SWR poll. A late ack still revalidates the list
   // (useRealtime) and wins, since acked_at takes precedence.
   const [, forceTick] = useState(0);
+  const waitingMs = latest ? msUntilCommandDeadline(latest) : null;
   useEffect(() => {
-    if (!latest) return;
-    const ms = msUntilCommandDeadline(latest);
-    if (ms == null) return;
-    const id = setTimeout(() => forceTick((n) => n + 1), ms + 250);
-    return () => clearTimeout(id);
-  }, [latest]);
+    if (waitingMs == null) return;
+    const id = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [waitingMs == null, latest?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const status = latest ? commandStatus(latest) : null;
 
-  async function send(nextValue: boolean) {
-    const ok = await confirm(`Turn ${actuatorLabel} ${nextValue ? "ON" : "OFF"}?`, {
+  async function send(nextValue: boolean, retry = false) {
+    const words = nextValue ? "On" : "Off";
+    // DESIGN.md §8: a command to an offline device says so before it's sent.
+    const body = deviceOnline
+      ? `${retry ? "Send it again: turn" : "Turn"} ${actuatorLabel} ${words}?`
+      : `The device is offline. The command waits as its desired state and applies when it reconnects, if that's within the command's time limit. Turn ${actuatorLabel} ${words}?`;
+    const ok = await confirm(body, {
+      title: deviceOnline ? undefined : "Send to an offline device?",
       danger: false,
-      confirmLabel: nextValue ? "Turn ON" : "Turn OFF",
+      confirmLabel: retry ? "Retry" : `Turn ${words}`,
     });
     if (!ok) return;
     setBusy(true);
     setError(null);
     try {
+      const sentAt = Date.now();
       await api.post(`/devices/${deviceId}/commands`, { actuator: actuatorId, value: nextValue });
-      onSent();
+      // The API accepts it (202) and the worker writes the command row a
+      // moment later: say "Sending…" until it shows up, polling briefly.
+      setSending(nextValue);
+      for (let i = 0; i < 15; i++) {
+        const list = await onSent();
+        if (list?.some((c) => c.actuator === actuatorId && new Date(c.issued_at).getTime() >= sentAt - 2000)) break;
+        await new Promise((r) => setTimeout(r, 800));
+      }
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Couldn't send this command.");
     } finally {
+      setSending(null);
       setBusy(false);
     }
   }
@@ -95,23 +112,44 @@ function ActuatorRow({
         <span className="font-medium text-ink">{actuatorLabel}</span>
         {isAdmin && (
           <Button disabled={busy} onClick={() => void send(!(currentValue === true))}>
-            Turn {currentValue === true ? "OFF" : "ON"}
+            Turn {currentValue === true ? "Off" : "On"}
           </Button>
         )}
       </div>
 
-      <div className="flex items-center gap-2 text-sm text-ink-muted">
-        {latest && status ? (
+      {/* Requested, then what happened (DESIGN.md §8). "Device reports"
+          waits for reported state (§13, deferred). */}
+      <div aria-live="polite" className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
+        {sending != null ? (
+          <>
+            <span>
+              Requested <span className="text-ink">{formatValue(sending)}</span>
+            </span>
+            <span aria-hidden>·</span>
+            <span className="text-status-pending">Sending…</span>
+          </>
+        ) : latest && status ? (
           <>
             <span>
               Requested <span className="text-ink">{formatValue(latest.value)}</span>
             </span>
             <span aria-hidden>·</span>
-            <Badge
-              tone={commandStatusTone(status)}
-              variant="text"
-              label={commandStatusLabel(status)}
-            />
+            {status === "pending" ? (
+              <span className="text-status-pending">
+                Waiting for the device… <span className="tabular-nums">{Math.ceil((waitingMs ?? 0) / 1000)}</span> s
+              </span>
+            ) : status === "no-response" ? (
+              <>
+                <span className="text-status-offline">No response within {latest.ttl_seconds} s.</span>
+                {isAdmin && typeof latest.value === "boolean" && (
+                  <Button variant="link" className="text-sm" disabled={busy} onClick={() => void send(latest.value as boolean, true)}>
+                    Retry
+                  </Button>
+                )}
+              </>
+            ) : (
+              <Badge tone={commandStatusTone(status)} variant="text" label={commandStatusLabel(status)} />
+            )}
           </>
         ) : (
           <span>No commands sent yet.</span>
@@ -183,7 +221,7 @@ export function ActuatorControl({
           deviceOnline={deviceOnline}
           isAdmin={isAdmin}
           latest={commands?.find((c) => c.actuator === id)}
-          onSent={() => void mutateCommands()}
+          onSent={() => mutateCommands()}
         />
       ))}
     </div>
