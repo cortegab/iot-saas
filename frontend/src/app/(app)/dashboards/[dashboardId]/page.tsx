@@ -17,8 +17,10 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { NameDialog } from "@/components/ui/NameDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
-import { AddWidgetDialog } from "@/components/dashboards/AddWidgetDialog";
-import { DashboardGrid, WIDGET_LABEL, WIDTHS } from "@/components/dashboards/DashboardGrid";
+import { DashboardGrid, WIDGET_LABEL } from "@/components/dashboards/DashboardGrid";
+import { WidgetList, moveWidget } from "@/components/dashboards/WidgetList";
+import { AddWidgetSheet, WidgetSheet } from "@/components/dashboards/WidgetSheet";
+import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
 
@@ -29,9 +31,10 @@ type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-/** A dashboard (DESIGN.md §8, demo G): personal, viewed by default, laid out
- * in edit mode (`?edit=1`) where widgets move, resize, change width and
- * leave with an Undo. Changes save as you go. */
+/** A dashboard (DESIGN.md §8, demo H): personal, viewed by default, laid out
+ * in edit mode (`?edit=1`): drag by the handle, resize from the corner, click a
+ * widget to change it in its sheet, add one in three steps; on a phone, a list
+ * to open and reorder. Removing has an Undo. Changes save as you go. */
 export default function DashboardDetailPage() {
   const { dashboardId } = useParams<{ dashboardId: string }>();
   const router = useRouter();
@@ -51,6 +54,9 @@ export default function DashboardDetailPage() {
 
   const [widgets, setWidgets] = useState<Widget[] | null>(null);
   const [adding, setAdding] = useState(false);
+  // The widget whose sheet is open (DESIGN.md §8).
+  const [openId, setOpenId] = useState<string | null>(null);
+  const phone = useMediaQuery("(max-width: 640px)");
   const [renaming, setRenaming] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
 
@@ -98,16 +104,10 @@ export default function DashboardDetailPage() {
     if (gone) toast({ title: `${WIDGET_LABEL[gone.type]} removed`, action: { label: "Undo", onClick: () => void saveLayout(before) } });
   }
 
-  function cycleWidth(id: string) {
+  /** A widget changed in its sheet: applied as you go. */
+  function changeWidget(next: Widget) {
     if (!widgets) return;
-    void saveLayout(
-      widgets.map((w) => {
-        if (w.id !== id) return w;
-        const i = WIDTHS.indexOf(w.w as (typeof WIDTHS)[number]);
-        const next = WIDTHS[(i + 1) % WIDTHS.length];
-        return { ...w, w: next, x: Math.min(w.x, 12 - next) };
-      }),
-    );
+    void saveLayout(widgets.map((w) => (w.id === next.id ? { ...next, x: Math.min(next.x, 12 - next.w) } : w)));
   }
 
   async function rename(name: string) {
@@ -250,8 +250,10 @@ export default function DashboardDetailPage() {
         <p role="status" className="flex items-center gap-2 rounded-md border border-accent/40 bg-accent-muted px-3.5 py-2.5 text-[13.5px] text-ink">
           <LayoutGrid aria-hidden size={15} className="shrink-0 text-accent" />
           <span>
-            <strong>Editing layout.</strong> Drag widgets by their handle, resize from the corner, change their width, or remove them with ×. Changes save as
-            you go.
+            <strong>Editing layout.</strong>{" "}
+            {phone
+              ? "Open a widget to change it, or move it up and down. Changes save as you go."
+              : "Click a widget to change it. Drag it by its handle, or resize it from the corner. Changes save as you go."}
           </span>
         </p>
       )}
@@ -270,6 +272,14 @@ export default function DashboardDetailPage() {
             ) : undefined
           }
         />
+      ) : editing && phone ? (
+        <WidgetList
+          widgets={widgets}
+          devices={devices ?? []}
+          templates={templates ?? []}
+          onOpen={setOpenId}
+          onMove={(id, dir) => void saveLayout(moveWidget(widgets, id, dir))}
+        />
       ) : (
         <DashboardGrid
           widgets={widgets}
@@ -277,19 +287,18 @@ export default function DashboardDetailPage() {
           devices={devices}
           templates={templates}
           onLayoutChange={(updated) => void saveLayout(updated)}
-          onRemoveWidget={removeWidget}
-          onCycleWidth={cycleWidth}
+          onOpenWidget={setOpenId}
         />
       )}
 
-      <AddWidgetDialog
-        open={adding}
-        onClose={() => setAdding(false)}
-        dashboardName={data.name}
-        devices={devices ?? []}
-        templates={templates ?? []}
-        onAdd={addWidget}
+      <WidgetSheet
+        widget={widgets.find((w) => w.id === openId) ?? null}
+        src={{ devices: devices ?? [], templates: templates ?? [] }}
+        onChange={changeWidget}
+        onRemove={removeWidget}
+        onClose={() => setOpenId(null)}
       />
+      <AddWidgetSheet open={adding} src={{ devices: devices ?? [], templates: templates ?? [] }} onAdd={addWidget} onClose={() => setAdding(false)} />
       <NameDialog open={renaming} onClose={() => setRenaming(false)} title="Rename dashboard" initial={data.name} confirmLabel="Rename" onSubmit={rename} />
       <NameDialog
         open={duplicating}
