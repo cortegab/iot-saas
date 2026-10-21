@@ -5,16 +5,26 @@ import { test } from "./fixtures";
 // When · If · Then · Behaviour · Activity; conditions and actions are rows
 // that open a sheet; the preview is beside the editor when there's room.
 
-test("tabs carry what blocks a save, and a blank rule isn't created", async ({ page }) => {
+test("a new rule is a wizard: Next waits for each step, Back to the recipes, Review creates", async ({ page }) => {
   await page.goto("/rules/new");
   await page.getByRole("button", { name: /Start blank/ }).click();
-  const tabs = page.getByRole("tablist", { name: "Rule sections" });
-  await expect(tabs.getByRole("tab", { name: "If 1 to fix" })).toBeVisible();
-  await expect(tabs.getByRole("tab", { name: "Then 1 to fix" })).toBeVisible();
-  await page.getByRole("button", { name: "Create rule" }).click();
-  await expect(page.getByText("2 to fix").first()).toBeVisible();
-  // Save went to the first problem's tab.
-  await expect(tabs.getByRole("tab", { name: /^If/ })).toHaveAttribute("aria-selected", "true");
+  const steps = page.getByRole("list", { name: "Steps" });
+  await expect(steps).toContainText("When");
+  await expect(steps).toContainText("Review");
+  await expect(page.getByRole("heading", { name: "What starts it?" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Next: If" }).click();
+  await expect(page.getByRole("heading", { name: "What has to be true?" })).toBeFocused();
+  // A blank condition stops the step.
+  await page.getByRole("button", { name: "Next: Then" }).click();
+  await expect(page.getByText("Fix the marked items first")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What has to be true?" })).toBeVisible();
+
+  // Back, and on the first step back to the recipes.
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page.getByRole("heading", { name: "What starts it?" })).toBeVisible();
+  await page.getByRole("button", { name: "Recipes" }).click();
+  await expect(page.getByRole("list", { name: "Recipes" })).toBeVisible();
   await expect(page).toHaveURL(/\/rules\/new/);
 });
 
@@ -60,4 +70,18 @@ test("the preview sits beside the editor when there's room, and behind a button 
   await expect(page.getByRole("complementary", { name: "Preview" })).toBeHidden();
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.getByRole("dialog", { name: "Preview" })).toBeVisible();
+});
+
+test("walking a recipe to Review creates nothing until Create rule", async ({ page }) => {
+  await page.goto("/rules/new");
+  await page.getByRole("button", { name: /Tell me when this device goes offline/ }).click();
+  for (const next of ["Next: If", "Next: Then", "Next: Behaviour", "Next: Review"]) {
+    await page.getByRole("button", { name: next }).click();
+  }
+  await expect(page.getByRole("heading", { name: "Check and create" })).toBeVisible();
+  // Regression: the last Next must not turn into the submit button mid-click.
+  await expect(page).toHaveURL(/\/rules\/new/);
+  await expect(page.getByText(/ created$/)).toHaveCount(0);
+  await expect(page.getByLabel("Rule name")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create rule" })).toBeEnabled();
 });
