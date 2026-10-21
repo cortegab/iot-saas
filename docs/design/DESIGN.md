@@ -1,8 +1,9 @@
 # DESIGN.md — frontend design directives
 
 The single source of truth for how the iot-saas frontend looks, is laid out, behaves and is worded.
-It turns the approved **demo G** (`docs/design/redesign/demo-g-full-site.html`) into rules for the
-real Next.js app. Read it before building or changing any page or component.
+It turns the approved **demo G** (`docs/design/redesign/demo-g-full-site.html`) and the responsive,
+guided **demo H** (`docs/design/redesign/demo-h-guided.html`) into rules for the real Next.js app.
+Read it before building or changing any page or component.
 
 ---
 
@@ -14,8 +15,10 @@ real Next.js app. Read it before building or changing any page or component.
    types, RLS and hashed credentials. Nothing here overrides them. For example, flapping controls
    can never be hidden.
 2. **This file** is authoritative for frontend look, layout, components, interaction and wording.
-3. **Demo G** is the visual reference where this file is silent. When you settle a gap by looking at
-   the demo, write the answer back into this file.
+3. **Demo H**, then **demo G**, is the visual reference where this file is silent: H for the shell,
+   responsive layout and every flow it shows; G for everything H doesn't show (public pages,
+   members, keys, zones, settings). When you settle a gap by looking at a demo, write the answer
+   back into this file.
 4. **Everything else is subordinate**, and gets updated to match this file, never the reverse:
    - code comments (for example the "Control Room" comments in `globals.css`)
    - UI bullets in `docs/history/PLAN.md`
@@ -23,8 +26,13 @@ real Next.js app. Read it before building or changing any page or component.
    - older notes
 
 **Status:**
-- Demo G is a prototype. Its **behaviour, layout and wording are binding**. Its vanilla-JS code is
-  not: build it with the app's React primitives.
+- Demos G and H are prototypes. Their **behaviour, layout and wording are binding**. Their
+  vanilla-JS code is not: build it with the app's React primitives.
+- Demo H also shows features that need backend work (§13: the alarm lifecycle, stored "No
+  response", widget titles, reported actuator state). Those parts are built only when their backend
+  exists; until then the UI shows what the API really has and never fakes the rest.
+- Demo H is generated from `docs/design/redesign/src/` (`bash docs/design/redesign/src/build.sh`);
+  edit the sources, not the HTML. `docs/design/redesign/index.html` is its overview.
 - Demos A–F, the rule-editor demos and the redesign audit were removed on 2026-10-07; they are in git history.
 - **Rule semantics are defined elsewhere.** `docs/rule-engine-multi-device.md` and CLAUDE.md §5 own
   the condition tree, latch, `clear_actions` and "stale = unknown". This file owns only how the
@@ -127,7 +135,15 @@ font in a component.** If you need a value that has no token, add the token here
 
 ## 4. App shell
 
-- **Sidebar** is 256 px wide and sticky. From top to bottom:
+The shell has three forms, chosen by the width of the app (breakpoints in §12):
+
+| Width | Navigation |
+|---|---|
+| **≥ 1440 px** | The full **sidebar**, 256 px, always open. |
+| **641–1439 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. |
+| **≤ 640 px** | A **top bar** (logo, app name, the live indicator only while reconnecting, search) and a **bottom tab bar**: Dashboards · Devices · **Alerts** (with the active-alert count) · Rules · **More**. More opens a bottom sheet with the user, the theme toggle, the live indicator and the rest of the nav. |
+
+- **Sidebar** (full form) is 256 px wide and sticky. From top to bottom:
   - The workspace switcher (logo tile, name, "role · N devices").
   - The **⌘K search / command palette** trigger. The palette is both navigation and actions:
     "New rule", "Go to device…".
@@ -147,10 +163,15 @@ font in a component.** If you need a value that has no token, add the token here
 - The logo links to Dashboards, which is the first nav item.
 - **Page header**: breadcrumbs, an overline and status pill where relevant, an H1, a one-line
   description, a meta row, and actions on the right. The primary action is rightmost.
-- **Content column**: max 1120 px, and 1520 px for wide views (dashboards, the rule workbench). A
-  list never changes width: its peek opens as a drawer over it.
+- **Content column**: max 1120 px, and 1520 px for wide views (dashboards, the rule page). Editor
+  sections, wizard steps and settings hold to a 760 px reading column inside it. A list never
+  changes width: its peek opens as a drawer over it.
   Padding is 36 px top, 40 px sides and 110 px bottom so the save bar never covers content.
-- **Below 1100 px** the sidebar becomes a drawer behind a menu button.
+  Below 641 px the padding is 16 px at the sides, and the bottom padding clears the tab bar.
+- **Reconnecting banner:** while the live connection is down, a banner at the top of the content says
+  "**Reconnecting…** Live updates are paused, so values on this page may be stale." The live
+  indicator turns pending. Both go when it reconnects.
+- **Skip link:** "Skip to content" is the first focusable element and moves focus to the content.
 
 ---
 
@@ -167,12 +188,14 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | Combobox | existing | For long lists with search (units, devices). |
 | SegmentedControl | existing | Mutually exclusive modes (Form / Ladder, schedule repeat mode). `role="radiogroup"` or pressed buttons. |
 | **Switch** | NEW | Every on/off **setting that is saved with a record** (`SwitchField`): a label naming the setting above, the switch beside a **state word**, and a hint below that changes with it. State words: **Enabled / Disabled** for a record's own status (label "Status": rule, device, template), **On / Off** for an option inside a record (e.g. "Turn it back when the condition clears", "Send a notification when it clears"). A **checkbox** is only for picking items in a list (bulk select) or for a one-time choice that belongs to a single submit and isn't stored as a setting ("I've stored it", "Keep me signed in on this device"). List row menus use the verbs **Enable / Disable**. |
-| Tabs | existing | Underline style. **Never show a horizontal scrollbar**: overflowing tabs wrap or collapse into a menu. |
+| Tabs | existing | Underline style. **Never show a horizontal scrollbar**: overflowing tabs wrap or collapse into a menu. Editor tabs carry the section's red problem count or amber "!", live in the URL (`?tab=`), and move with the arrow keys. |
 | Badge / Tag | existing | Pills with a status dot. `tag--warn` (pending surface) for conflicts ("shares fan1"). `tag--sm` for qualifiers ("expert"). |
 | Callout | existing | `info` (accent-muted), `warning` (pending surface), `error` (error surface). Dismissible for tips only. |
 | **Toast** | NEW | Bottom-right, stacked. Title plus a detail line; save toasts carry the **change summary** ("2 changes: Schedule: … → …"). |
 | ConfirmDialog | existing | For destructive actions and guards. Title states the action; the body states the consequence with real numbers; the danger button repeats the verb. |
-| **Sheet / Drawer** | NEW | The record peek at every width (560 px, full height); mobile nav. Scrim + focus trap + Esc. |
+| **Sheet / Drawer** | existing | The record peek and the item sheet (§7), 560 px, full height, from the right. **Bottom** placement on phones (≤ 640 px) for the More menu, sentence editors and short pickers: rounded top, a grab handle, up to 85% of the height. Scrim + focus trap + Esc; focus returns to the trigger. |
+| **Wizard** | NEW | Creating a record (§7). Numbered steps (done ✓ / current / red when a step has a problem); on phones "Step n of N · Name" over a thin progress bar instead. Each step opens with a question as its heading ("What starts it?"), which takes focus, and a one-line lead. The save bar holds **Back** and **Next: {step}**; the last step is **Review**, a definition list with a **Change** link per row, and the primary button names the result ("Create rule"). Next is refused while the step has blocking problems: they are marked and the first takes focus. |
+| **Line row** | NEW | One child item as one line (a part, metric, actuator, condition, action, alarm): icon, a bold name with a muted second line, tags, and a chevron. A red count or amber "!" marks its problems. Clicking or Enter opens its item sheet. Rows stack in a bordered **Lines** group. |
 | **CopyField / SecretReveal** | NEW | One component for every one-time secret (device token, API key). It replaces the four copies in the devices and tokens pages. Shown once, with a copy button and a "won't be shown again" warning. |
 | **ProgressBar** | NEW | Only for a running job with real steps (the device Install). 6 px `--color-border` track, `--color-accent` fill, fully rounded. Determinate when the share done is known (with the % in words beside it); otherwise a sliding segment, static under reduced motion. Stage text sits above it, in words, never just a bar. `role="progressbar"`. |
 | EmptyState / ErrorState / LoadingSkeleton | existing | Every list and panel has all three. Empty explains why and offers the primary action. Error and empty never render together. |
@@ -215,27 +238,42 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | Dashboards | Dashboard · Widgets · Updated |
 | Members / API keys | Name · Role/Scope · Last active · actions |
 
-Below 640 px, tables collapse to stacked cards with the same fields.
+**As the content narrows** (widths of the content column, not the window):
+- Columns fold by priority. Each table marks its columns P2 and P3. Below 860 px the P3 columns go,
+  and below 720 px the P2 columns go. A folded value moves into the name cell's secondary line, so
+  nothing is lost. Name, status and the row menu never fold.
+- At 600 px and below, rows become **stacked cards** with the same fields.
+- On phones the filter menus move into a **Filters** button that opens a bottom sheet. Search, the
+  active-filter chips and the result count stay in the toolbar.
+- KPI strips wrap to rows of three, then two; they never scroll sideways.
+
+**Rules list:** the KPI strip is Armed · Fired (24 h) · Latched · Can't evaluate · Disabled, and
+each figure is a **filter** (pressed when on; it shows as a chip like any filter). The toolbar adds
+Device and Trigger filters and a **List / Ladder** view switch. Ladder shows each rule as a card with
+its read-only rung; a card opens the rule.
 
 ---
 
 ## 7. Editors: one editing model
 
-Every create/edit flow, whether catalog record, rule or settings, uses **the same editor chrome** in
-three presentations.
+Every create/edit flow, whether catalog record, rule or settings, uses **the same editor chrome**.
+**To create, you go step by step; to edit, you use short tabs; one item at a time opens in a side
+sheet.**
 
 | Presentation | When |
 |---|---|
 | **Peek**: a drawer over the list, at every width | **Looking only.** Key facts, status, the next step (Edit / Open) and a ⋯ menu. No fields, no save bar. `?peek=<id>`. The drawer blocks the list, so browsing happens inside it: ‹ › with "n of N", and ↑/↓ while focus is in the drawer. Closing returns focus to the row last shown. |
-| **Full page** | **Every create and edit**, for every record: `/x/new`, `/x/{id}` (a device: its page's Settings tab). Deep-linkable. |
+| **Full page, creating** | A **Wizard** (§5) at `/x/new`: a few steps, each asking one question, ending in Review. Records with one short section (a zone, a key, a dashboard name) skip the steps and use one form. |
+| **Full page, editing** | `/x/{id}` (a device: its page's Settings tab). Short **tabs** of sections (`?tab=`), with the title, consequence line and save bar shared across them. Deep-linkable. |
+| **Item sheet** | One **child item** of the record being edited (a part, a metric, an actuator, a condition, an action, a widget): its Line row opens it in a side sheet (a bottom sheet on phones). The sheet edits the page's draft live. It has **Done**, never a save of its own; the page's save bar saves, and the unsaved-changes guard covers it. A newly added item opens its sheet straight away. |
 
-One place to look and one place to change each record; "New" goes where "Edit" goes. There is no
-editable side panel and no "Expand" toggle.
+One place to look and one place to change each record; "New" goes where "Edit" goes. A sheet never
+edits a whole record, and there is no "Expand" toggle.
 
-**Shared chrome (all three presentations):**
+**Shared chrome:**
 - A title ("Edit rule", "New device template") and a record menu (⋯: Duplicate, Delete).
-- A **section rail** in page mode. It lists the sections and shows a per-section error badge. Clicking
-  a section scrolls to it. "Expand all" is available.
+- **Tabs** when editing, **steps** when creating. Both carry each section's red problem count or
+  amber "!". Saving with a problem switches to the first tab (or step) that has one.
 - A **consequence line** under the title that says what saving does ("Saving applies within a
   second. It watches 1 device and can switch 1 actuator").
 - A **sticky save bar** that shows "Unsaved changes" or "All changes saved", with **Discard** and
@@ -264,12 +302,13 @@ editable side panel and no "Expand" toggle.
 - **Defining a device: one model for templates and onboarding**
   - **Runs on** is the first question for anything new, and is stored on the template:
     **Our firmware** (pick the parts; installs from the browser) or **Custom firmware** (list the
-    data it sends). It sets the section order everywhere that template is edited:
-    - Our firmware: General → **Wiring** → Metrics → Actuators. Parts bring their metrics and
-      actuators; the Metrics and Actuators sections keep the detail settings (publish, deadband,
-      min/max, On/Off values).
-    - Custom firmware: General → Metrics → Actuators, and no Wiring section. Install offers the
-      sketch and the topic contract.
+    data it sends). It sets the steps and tabs everywhere that template is made or edited:
+    - Our firmware: creating is **Basics → Hardware → Data → Review**; editing is tabs **General ·
+      Wiring · Data**. Parts bring their metrics and actuators; Data (metrics, then actuators) keeps
+      the detail settings (publish, deadband, min/max, On/Off values).
+    - Custom firmware: **Basics → Data → Review**, and tabs **General · Data**, with no Wiring.
+      Install offers the sketch and the topic contract.
+    - Parts, metrics and actuators are Line rows; each opens in its item sheet (§7).
     - A gateway or edge connector also works as Custom firmware today: anything that speaks the
       device contract with the device's credential. The label doesn't name gateways until gateway
       support exists (SCOPE.md §3); then it becomes **Custom firmware or gateway** again.
@@ -293,9 +332,10 @@ editable side panel and no "Expand" toggle.
     with the same chip look alike. Only the drivers the chosen board's firmware carries are offered;
     changing the board lists, in one summary, the pins that moved and the parts it can't run.
 - **Add device**
-  - Two starts: **From a template** (name, template, zone) and **Something
-    new** (Runs on, then the template editor in onboarding mode: device name and zone on top).
-    "Create device" makes the template and the device together.
+  - Two starts: **From a template** (name, template, zone; one form) and **Something new**, the
+    template wizard in onboarding mode: Basics asks "What is it?" (device name, zone, Runs on), then
+    Hardware → Data → Review. "Create device" makes the template and the device together, then
+    opens Connect.
   - Onboarding names the template itself and keeps the name out of view. Templates surface on
     reuse: after creating, **Add another like this**; and when a new device's parts and keys match
     an existing template, "Matches *Greenhouse node*. Use it?"
@@ -304,7 +344,7 @@ editable side panel and no "Expand" toggle.
   - Reserved keys (`status`, `config`) and duplicates are rejected inline (CLAUDE.md §4).
   - Min ≤ max; units come from the unit Combobox. The data type `bool` gives flag metrics.
   - Disabled templates can't be picked for new devices.
-  - A **Wiring** section (Our firmware templates only; second in the rail, see above) says how the
+  - A **Wiring** section (Our firmware templates only; the Hardware step and the Wiring tab, see above) says how the
     board is wired for the generic firmware: board, then input and output cards, then a generated **wiring guide** (pin table +
     per-driver notes). Each card reads top to bottom in labelled blocks: **Driver**, **Connection**
     (pins, or the I2C bus line plus the part's address), **Settings** (params), then **Readings**
@@ -322,7 +362,20 @@ editable side panel and no "Expand" toggle.
 - **Devices**
   - Zone is set and changed **only in the device's own settings**.
   - The one-time credential uses SecretReveal.
-  - The connect / firmware-sketch flow is part of the device page.
+  - The connect / firmware-sketch flow is part of the device page, and is a step-by-step wizard
+    (Credential · Options · Install · Wi-Fi from your phone · Live check), with a side list of the
+    steps on wide screens and "Step n of N" on phones.
+  - The one-time credential **survives a reload**: it is kept in `sessionStorage` (this tab only,
+    never `localStorage`, never sent anywhere) until **I've stored it** is ticked, then removed.
+    Leaving the page before that asks first ("You haven't stored the password. It won't be shown
+    again.").
+  - **Controls** (device Controls tab and the actuator widget) show what was **requested** and what
+    happened: *Waiting for the device… {n} s* (counting down the command's TTL), then
+    **Acknowledged**, or **No response within {ttl} s** with **Retry**. A command sent to an offline
+    device says so before it is sent. Below the controls, the **command timeline**: time, actuator,
+    value, who or which rule, and the result (Acknowledged / Pending / No response), filterable by
+    result and actuator. "Device reports {value}" appears only once devices report their state
+    (§13).
   - **Install** (a device whose wiring is set, its own or its template's):
     - **Options** shows a **Wiring** card instead of Board and pins: the board model, the pin table,
       and "Change the wiring".
@@ -343,8 +396,21 @@ editable side panel and no "Expand" toggle.
   - The list shows Zone / Devices / Status.
   - Delete is blocked while devices are assigned.
   - The Devices list can filter by zone.
-- **Dashboards** are per user. They are edited **in place on the grid**: add, remove and resize
-  widgets. No side panel.
+- **Dashboards** are per user. They are edited **in place on the grid** (Edit layout): drag and
+  resize as before, and **click a widget** to open its item sheet: Type, Device, Reading (or
+  Actuator), Title (optional, once §13 lands) and Size (S · M · L · Full = 3 · 4 · 8 · 12 columns),
+  applied as you change them, with **Remove widget** in the sheet. **Add a widget** is a sheet with
+  three steps: Type → Source → Size. On phones, Edit layout shows a **reorderable list** of the
+  widgets (open, remove, move up / down) instead of the grid. Moving a widget swaps its grid place
+  with its neighbour's in reading order, so the desktop layout stays intact apart from that swap.
+- **Notifications** (the tab bar calls it **Alerts**): one Line row per alert, with severity icon,
+  title, detail, device and rule links and the time. Repeats of the same alert from the same source
+  group into one row (**×4**, "since 09:12, last 2 min ago"). Filters: severity, device, rule.
+  A row opens a sheet with the details. With the alarm lifecycle (§13) it becomes an alarm inbox:
+  tabs **Active · Acknowledged · Cleared · All** with counts, KPIs for active critical and warning
+  alarms, **Acknowledge…** with an optional note (one or many, with Undo), "Acknowledged by *name*
+  2 min ago: *note*" for everyone, a timeline per alarm, and the bell and the Alerts tab counting
+  active alarms only. Until then they count unread.
 - **Members:** role changes happen inline, with a confirmation that states the new permissions.
   Nobody can grant a role above their own.
 - **Workspace settings** are saved like a record, with the save bar and change toast. The time zone
@@ -368,47 +434,65 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
   - Tell me when this device goes offline
   - Switch something on a schedule
 - **Start blank** is always offered.
+- A recipe a device can't do (no actuator, no on/off metric) is shown disabled with the reason.
+- Picking a recipe or Start blank opens the **new-rule wizard**: **When → If → Then → Behaviour →
+  Review**. Each step asks its question ("What starts it?", "What has to be true?", "What should
+  happen?", "How should it behave?") and uses the same section body as the matching edit tab. The
+  sentence stays on top and fills in as you go; the preview sits beside the steps when there's room.
+  Review holds the name (with the generated name as placeholder) and Status, then **Create rule**.
+  Back on the first step returns to the recipes.
 - Each card shows an icon, a title, one line on what it does, and tags: *switches hardware* ·
   *latches* · *email*.
 - Starting from a device page preselects that device.
 - Recipes are built in the frontend as an ordinary draft. There is no recipe entity in the backend.
 
-### 9.2 Layout: workbench
+### 9.2 Layout: tabs and preview
 
-- **One frame for both views**, as on the template page: a **section rail** (When · If · Then ·
-  Behaviour · Name) on the left, the **canvas** in the middle, a sticky **340 px right column**, and
-  one **sticky save bar** (Discard · Save, "N to fix", "N safety warnings", Ctrl+S). Switching Form ⇄
-  Ladder changes only the canvas and what the right column shows; the header, sentence, rail, column
-  and save bar stay put.
-  - **Form:** the canvas is the section cards; the right column is the preview.
-  - **Ladder:** the canvas is the rung; the right column is the **inspector** for the selected element
-    (the rule's name and status when *Name* is picked), over the preview folded into one line.
-  - **Rail:** each section shows a red count of issues that **block saving**, an amber "!" for
-    **safety warnings**, or a ✓ when a new rule's section is complete. In Form it scrolls to the
-    section; in Ladder it selects it on the rung. Below 1200 px it becomes a row of chips; below
-    1100 px the right column stacks under the canvas.
-  - **Validation:** blocking = incomplete trigger, conditions or actions, a clear notification with no
-    message, a name over 200 characters; Save goes to the first one. Safety warnings (hold < 5 s,
-    interval < 30 s, no hysteresis on a hardware rule) show while typing and in the checks, and never
-    block a save. In the Checks card a blocking problem is a red ✕ and a safety warning the amber
-    circled "!" the rail uses; never a red ✕ for something that only warns.
-  - Saving keeps you on the rule; a new rule opens on its own page.
-- **Tabs:** **Logic · Activity**. There is no Simulate tab; simulating is part of the preview.
-- **Form / Ladder** is a segmented control; Ladder is tagged "expert". The choice is remembered per
-  user.
-- **New rules show numbered steps:** **1 When · 2 If · 3 Then · 4 Behaviour · 5 Name**, matching the
-  rail.
+- **Top of the page:** the header (breadcrumbs, state and last firing, the consequence line,
+  Preview, Run now…, ⋯), then **Name** and **Status** side by side, then the **editable sentence**.
+  Latched, can't-evaluate and restored-version callouts sit above them.
+- **Tabs:** **When · If · Then · Behaviour · Activity** (`?tab=`, opening on If). The first four
+  carry their section's red problem count or amber "!"; Activity holds recent firings, then
+  Versions (§9.8), and has no save bar. Nothing else is a tab: there is no Logic tab, no section
+  rail and no inspector column.
+  - **When:** the trigger as radio cards (each reading · a schedule · manually · device online /
+    offline), then the reading or the schedule picker (§9.5).
+  - **If:** the conditions (§9.3), **Then:** the actions and the clear actions. Both carry the
+    **Form / Ladder** switch (§9.10).
+  - **Behaviour:** Re-arm vs Latch, hold time, minimum interval and clear delay (§9.7).
+- **Preview beside the editor** when the content area is at least 1160 px: a sticky 320 px column
+  of the preview cards (§9.4). Narrower, the column goes and a **Preview** button in the header
+  opens the same cards in a sheet.
+- One **sticky save bar** (Discard · Save rule, "N to fix", "N safety warnings", Ctrl+S).
+- **Validation:**
+  - Blocking: incomplete trigger, conditions or actions; a clear notification with no message; a
+    name over 200 characters. Save goes to the first one's tab and focuses it.
+  - Safety warnings (hold < 5 s, interval < 30 s, no hysteresis on a hardware rule) show while
+    typing and in the checks, and never block a save.
+  - In tabs, steps, rows and the Checks card, a blocking problem is red (a count or ✕) and a safety
+    warning is the amber circled "!"; never red for something that only warns.
+- Saving keeps you on the rule; a new rule opens on its own page.
+- **Form / Ladder** is remembered per user; Ladder is tagged "expert".
 - A dismissible "Three steps to a rule" tip appears on first use.
 
-### 9.3 Editable sentence
+### 9.3 Editable sentence, conditions and actions
 
 - The rule is summarised as one sentence at the top, e.g. "When **temperature on bay1-climate is
   above 27 °C** for **10 s**, **turn fan1 on**…".
-- **Every phrase is a chip.** Clicking one opens an in-place popover with Apply / Cancel:
+- **Every phrase is a chip.** Clicking one opens a small editor with Apply / Cancel: a popover beside
+  the chip, or a **bottom sheet on phones**.
   - Readings: operator and value.
   - Actuators: On / Off.
-  - Everything else: "Open full condition".
-- Chips are keyboard-focusable. Esc closes the popover and returns focus to the chip.
+  - Everything else: "Open full condition", which opens that condition's item sheet.
+- Chips are keyboard-focusable. Esc closes the editor and returns focus to the chip.
+- **Conditions** are Line rows inside **All of** (and) / **Any of** (or) groups, which nest. A row
+  reads as a phrase ("temperature on bay1-climate > 27 °C, hysteresis 1 °C") and opens its item
+  sheet: device, reading, operator, value(s), hysteresis. A group's header switches All / Any and
+  has its own sheet (wrap in a group, ungroup, delete). **Add condition** and **Add an Any-of
+  group** sit under each group.
+- **Actions** and **clear actions** are Line rows too ("Turn fan1 on · bay1-climate"), each opening
+  its sheet (type, target, value, message). Clear actions sit under their Switch ("Turn it back when
+  the condition clears", "Send a notification when it clears").
 
 ### 9.4 Preview cards (live as you edit)
 
@@ -471,9 +555,9 @@ path (CLAUDE.md §9.1).
 - **Behaviour:** Re-arm vs Latch until reset, as two illustrated radio cards.
 - **Hold time, minimum interval and clear delay** are always visible. They are never collapsed
   behind "advanced" (CLAUDE.md §9.7).
-- **General:**
+- **Name and Status** (top of the rule page, the Review step of the wizard):
   - Rule name, with an auto-generated placeholder ("Left blank, a name is generated").
-  - **Status** on **its own full-width row** below the name: a Switch with **Enabled / Disabled**
+  - **Status** beside the name (below it on narrow screens): a Switch with **Enabled / Disabled**
     (the same words as the header badge) and a hint that changes with it ("Fires when its trigger
     and conditions are met." / "Keeps its settings and history, but won't fire.").
 
@@ -493,6 +577,21 @@ path (CLAUDE.md §9.1).
 - Each row shows a 24 h mini strip and "fired N× in 24 h" (or "quiet in 24 h"; schedule rules show
   their schedule).
 - A **"shares fan1"** warning tag appears when another enabled rule drives the same actuator.
+- KPI filters and the List / Ladder view: §6.
+
+### 9.10 Ladder (expert)
+
+- The **same rule and the same item sheets** as the Form: clicking a contact opens its condition's
+  sheet, a coil its action's sheet, a timer the Behaviour tab. There is no separate inspector.
+- **Horizontal** rung when it fits the content width; a **vertical** rung on narrow screens (contacts
+  top to bottom, groups indented with a dashed rail), so it never scrolls sideways.
+- It draws what the Form says in words: the **clear rung** (clear actions, under its own caption),
+  the **hold** and **clear-delay** timers (TON), the **minimum interval**, and **latch** with its
+  reset. Add points (+) add a contact in series or an OR branch, under one contact or around the
+  whole block.
+- Every element is focusable; the **arrow keys** move between them along the rung and **Enter**
+  opens one. Errors colour the element red, as in the Form.
+- A legend under the rung names the symbols.
 
 ---
 
@@ -557,20 +656,34 @@ path (CLAUDE.md §9.1).
   - `aria-pressed`: day toggles
   - `aria-describedby` from every control to its message line
   - `aria-invalid` on errors
-- **Hit targets:** at least 36 px, and 36 px minimum on touch for segmented and toggle buttons.
+- **Hit targets:** at least 36 px; on touch (`pointer: coarse`) buttons and inputs are 44 px and
+  segmented buttons 40 px.
+- **Widths.** Designed and tested at **1440 · 1366 · 1280 · 1150 · 820 · 390** px. The shell follows
+  the window; everything inside follows the **content column's** width (container queries), so a
+  pinned-open sidebar or a sheet never breaks the layout under it.
+
+  | Breakpoint | What changes |
+  |---|---|
+  | window ≥ 1440 | Full sidebar (§4). |
+  | window ≤ 640 | Top bar + bottom tab bar; sheets open from the bottom where §5 says so. |
+  | content ≥ 1160 | The rule preview sits beside the editor (§9.2). |
+  | content ≤ 860 | P3 columns fold; KPI strips wrap. |
+  | content ≤ 720 | P2 columns fold; 3–4 column grids become 2. |
+  | content ≤ 640 | Wizard steps become "Step n of N"; dashboard edit becomes a list. |
+  | content ≤ 600 | Tables become cards; the sentence tightens; the ladder goes vertical if it doesn't fit. |
+  | content ≤ 480 | Form grids become one column; save-bar buttons fill the width. |
 - **Phone:**
-  - At 390 px nothing scrolls horizontally.
-  - Tables become cards, the workbench preview stacks, and editors open full-screen.
-  - Demo controls or floating buttons never cover content.
+  - At 390 px nothing scrolls horizontally, the ladder included.
+  - Demo controls or floating buttons never cover content, and the tab bar respects the safe area.
 - **Motion:** honour `prefers-reduced-motion`. Keep transitions under 200 ms and only on
   colour/opacity/transform.
 - **Contrast:** meet WCAG AA in both themes.
 
 ---
 
-## 13. Functionality G proposes that needs backend work
+## 13. Functionality that needs backend work
 
-G is not frontend-only. These need API, schema or migration work, each respecting CLAUDE.md §9:
+G and H are not frontend-only. These need API, schema or migration work, each respecting CLAUDE.md §9:
 
 | Feature | Backend need |
 |---|---|
@@ -582,6 +695,16 @@ G is not frontend-only. These need API, schema or migration work, each respectin
 | Blocked delete / rename warnings | Usage counts: templates→devices, keys→rules/widgets, zones→devices. |
 | Recipes, schedule picker, time zone labels, status switch | **No backend change.** Cron + IANA tz and `enabled` are already stored. |
 | CRUD fixes | The P0/P1 items from the redesign audit (now in git history): key freeze, owner-role escalation, disabled templates usable, key format validation, orphaning renames, dropped 422 details. |
+
+**Demo H additions, not built yet.** The UI for each waits for its backend (§1); the frontend
+interim is in the last column.
+
+| Feature | Backend need | Until then |
+|---|---|---|
+| Alarm lifecycle | Stored state on each notification (active / acknowledged / cleared), acknowledge with who, when and a note (one or many), grouping of repeats by source, and a timeline per alarm (an events table with `tenant_id` + RLS in the same migration). A rule's clear marks its alarm cleared. | Notifications grouped on the client, filters, a detail sheet; counts are unread. |
+| Stored "No response" | A sweep off the hot path that marks each command whose TTL ran out with no ack, so the result is stored and the same for everyone. | The browser works it out from `issued_at`, `ttl` and `acked_at`. |
+| Widget titles | An optional `title` on each dashboard widget. | The generated title (reading · device). |
+| Reported actuator state | Devices report their real state and whether a command was applied: an additive change to the device contract (CLAUDE.md §4), made in both deployment variants, plus firmware. **Deferred by decision (2026-10-20).** | Requested state and Acknowledged / No response only. |
 
 Regenerate `frontend/src/types/api.ts` after every schema change (CLAUDE.md §9.8).
 
@@ -605,12 +728,34 @@ Each step is a separate PR and leaves the app fully working.
 7. **Rule editor** (§9): recipes → workbench → sentence chips → schedule + time zone → versions.
 8. **Public pages** (§10).
 
+Steps 1–8 are built. **Demo H** follows, frontend first, one PR each:
+
+1. **Shell** (§4): icon rail, full sidebar from 1440 px, phone top bar + tab bar + More sheet,
+   reconnecting banner, skip link; bottom Sheet placement.
+2. **Building blocks** (§5): Wizard, Line row, item sheet, Tabs with problem badges.
+3. **Lists** (§6): column folding, cards, the filter sheet; the Rules list KPI filters and Ladder view.
+4. **Templates and Add device** (§8): wizard to create, tabs to edit, item sheets.
+5. **Connect** (§8): the connect wizard and the credential that survives a reload.
+6. **Rule editing** (§9.2–9.3): tabs, condition and action rows, preview beside or in a sheet.
+7. **New rule wizard** (§9.1).
+8. **Ladder** (§9.10).
+9. **Dashboard editing** (§8).
+10. **Controls** (§8).
+11. **Notifications** (§8), the frontend part.
+
+The §13 "Demo H additions" follow as their own backend work.
+
 ---
 
 ## 15. Reference and changelog
 
 **Reference demos** (open locally in a browser; no build needed):
-- `docs/design/redesign/demo-g-full-site.html`: **the reference**.
+- `docs/design/redesign/demo-h-guided.html`: **the reference** for the shell, responsive layout and
+  every flow it shows. Overview and things to try: `docs/design/redesign/index.html`.
+  - The bar at the top sets the frame width (1440 · 1366 · 1280 · 1150 · 820 · 390), switches light
+    and dark, and simulates a lost live connection.
+  - Generated from `docs/design/redesign/src/` by `build.sh`; edit the sources.
+- `docs/design/redesign/demo-g-full-site.html`: the reference for what H doesn't show.
   - Use the **Demo controls** button (top right) to switch role and theme and to open any route.
   - Hash routes deep-link to pages and editors.
 
@@ -658,3 +803,4 @@ Each step is a separate PR and leaves the app fully working.
 | 2026-10-17 | §8 **Defining a device**: one model for templates and onboarding. **Runs on** (Our firmware / My own code or a gateway) is stored on the template and sets the section order (Wiring second for Our firmware, absent otherwise), replacing "Wiring optional, last in the rail". Metrics are the record that lasts: **Replace part** keeps a reading's metric, removing a part names the rules and dashboards on its keys. Readings are named on the part card with a **What you'll see** line; parts with many readings pick which to keep, and wired parts collapse to one line. Unfed metrics are tagged **Not wired**. Wiring's one home is the template; a device's own wiring uses the same section, tagged **Own wiring**. The board list groups models by chip with capability tags and a **Detect my board** button, and offers only the drivers that board's firmware carries. **Add device** starts as *Same as a device I have* or *Something new*; templates surface on reuse (Add another like this, "Matches *X*. Use it?"). Install on a board without BLE offers only **Type it in**. |
 | 2026-10-19 | §8 wording: Add device's first start is **From a template** (was "Same as a device I have": it picks a template, and a workspace can have templates and no devices yet). The second Runs on choice is **Custom firmware or gateway** (was "My own code or a gateway"), still naming gateways and edge connectors, which aren't firmware. |
 | 2026-10-19 | §8 wording: the second Runs on choice is **Custom firmware** (was "Custom firmware or gateway"). Gateways still work through it (any client speaking the device contract), but the label stops promising gateway support that isn't built: no gateway connect path, no child devices under one gateway, no connector of ours. SCOPE.md §3 keeps what gateway support needs; the label names gateways again when it lands. |
+| 2026-10-20 | **Demo H (Guided)** adopted, frontend first (user decision); G stays the reference where H is silent. §4 shell: icon rail with tooltips and a pin from 641 px, the full sidebar from 1440 px, and on phones a top bar plus a bottom tab bar (Dashboards · Devices · Alerts · Rules · More) replacing the drawer; reconnecting banner and skip link. §5: bottom Sheet placement, **Wizard**, **Line row**, tabs with problem badges. §6: columns fold by priority, cards at 600 px, a Filters sheet on phones; the Rules list KPIs become filters, plus a Ladder view. §7: **create = wizard, edit = tabs, one child item at a time in a sheet**. This replaces the section rail and partly reverses "no editable side panel" (2026-10-02): a sheet still never edits a whole record, it edits one item of the page's draft with Done and no save of its own, and peeks stay read-only. §8: template steps Basics → Hardware → Data → Review and tabs General · Wiring · Data; Add device's Something new is that wizard; the Connect wizard, whose one-time credential now survives a reload in `sessionStorage` until "I've stored it" (replacing "carried over in memory, nothing stored"); controls with a TTL countdown and No response / Retry, plus a command timeline; a dashboard widget sheet, Add a widget in three steps and a phone list (sizes S · M · L · Full replace the width cycle); notifications grouped and filtered. §9.2–9.3: tabs When · If · Then · Behaviour · Activity, with Name, Status and the sentence on top, replace demo A's rail, canvas and inspector (2026-10-03); the preview sits beside the editor from 1160 px, otherwise behind a Preview button; conditions and actions are rows in nested All / Any groups; sentence editors are bottom sheets on phones. §9.1: the new-rule wizard. §9.10 Ladder: the same sheets, a vertical rung when narrow, clear rung, timers, interval and latch drawn, arrow-key focus. §12: tested widths and the breakpoint table. §13: H's backend needs (alarm lifecycle, stored No response, widget titles; reported actuator state deferred) with what the UI shows until then. |
