@@ -18,8 +18,9 @@ test("something new on our firmware: parts make the template, readings are named
   try {
     await page.goto("/devices/new");
     await page.getByRole("radio", { name: "Something new" }).click();
-    await page.getByRole("button", { name: /Our firmware/ }).click();
-    await expect(page).toHaveURL(/from=new&runs=generic/);
+    // Straight into the wizard, on our firmware (DESIGN.md §8, demo H).
+    await expect(page).toHaveURL(/from=new/);
+    await expect(page.getByRole("radio", { name: /^Our firmware/ })).toBeChecked();
     await page.getByLabel("Device name").fill(name);
     // The template is named after the device, out of view.
     await expect(page.getByLabel("Template name")).toHaveCount(0);
@@ -67,8 +68,7 @@ test("something new on its own code: no wiring, its data listed, it lands on the
 
   try {
     await page.goto("/devices/new?from=new");
-    await page.getByRole("button", { name: /Custom firmware/ }).click();
-    await expect(page).toHaveURL(/runs=own/);
+    await page.getByRole("radio", { name: /^Custom firmware/ }).click();
     await page.getByLabel("Device name").fill(name);
     await expect(page.getByRole("list", { name: "Steps" })).not.toContainText("Hardware");
     await page.getByRole("button", { name: "Next: Data" }).click();
@@ -129,4 +129,22 @@ test("a new device just like an existing template offers that template, and uses
     if (deviceId) await request.delete(`${API_URL}/devices/${deviceId}`, { headers });
     await request.delete(`${API_URL}/catalog/${template.id}`, { headers });
   }
+});
+
+test("add device starts as two cards; From a template says what the template gives you", async ({ page }) => {
+  await page.goto("/devices/new");
+  const start = page.getByRole("radiogroup", { name: "How to start" });
+  await expect(start.getByRole("radio", { name: /^From a template/ })).toBeChecked();
+  await expect(page.getByLabel("Device name")).toBeVisible();
+  await expect(page.getByText("It gives you")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create device" })).toBeDisabled();
+
+  // Something new: the wizard, with the same cards above its first question.
+  await start.getByRole("radio", { name: /^Something new/ }).click();
+  await expect(page).toHaveURL(/from=new/);
+  await expect(page.getByRole("heading", { name: "What is it?" })).toBeVisible();
+  await expect(page.getByRole("radiogroup", { name: "Runs on" })).toBeVisible();
+  // Regression: nothing typed yet, so no error yet (StrictMode once stole the name field's focus).
+  await expect(page.getByText("Give the device a name.")).toHaveCount(0);
+  await expect(page.getByLabel("Device name")).toBeFocused();
 });

@@ -142,8 +142,8 @@ test("rotating the credential makes a new QR", async ({ page, context, throwaway
 test("adding a device hands its credential straight to the connect flow", async ({ page, request }) => {
   const name = `E2E add ${Date.now()}`;
   await page.goto("/devices/new");
-  await page.getByLabel("Name").fill(name);
-  await page.getByRole("button", { name: "Create and connect" }).click();
+  await page.getByLabel("Device name").fill(name);
+  await page.getByRole("button", { name: "Create device" }).click();
   await expect(page).toHaveURL(/\/devices\/[0-9a-f-]+\/connect$/);
   const deviceId = page.url().split("/devices/")[1].split("/")[0];
   try {

@@ -104,6 +104,9 @@ export interface EditorFrameProps {
   /** Steps: reveals these fields' errors (the record editor's `touchAll`),
    * so Next can mark what stops the step. */
   onTouch?: (paths: string[]) => void;
+  /** Steps: shown on the first step, above its question (Add device's
+   * "how to start" cards). */
+  intro?: ReactNode;
   children: ReactNode;
 }
 
@@ -183,6 +186,7 @@ export function EditorFrame({
   groups,
   tabParam = "tab",
   onTouch,
+  intro,
   children,
 }: EditorFrameProps) {
   const rootRef = useRef<HTMLDivElement>(null);
@@ -227,14 +231,14 @@ export function EditorFrame({
     [grouped, activeGroup, goTo],
   );
 
-  // A new step moves focus to its question (skipping the first render).
-  const firstStep = useRef(true);
+  // A new step moves focus to its question. Only on a real change of step:
+  // a flag for "first render" is spent by StrictMode's double effect run, and
+  // the second run would steal focus from an autofocused field (blurring it
+  // shows its error before anything was typed).
+  const shownStep = useRef(group);
   useEffect(() => {
-    if (!steps) return;
-    if (firstStep.current) {
-      firstStep.current = false;
-      return;
-    }
+    if (!steps || shownStep.current === group) return;
+    shownStep.current = group;
     window.scrollTo({ top: 0 });
     questionRef.current?.focus();
   }, [steps, group]);
@@ -557,6 +561,7 @@ export function EditorFrame({
               : "min-h-0 flex-1 gap-7 overflow-auto px-5 pb-8 pt-5",
       )}
     >
+      {steps && stepIndex === 0 && intro}
       {question}
       {readOnly && readOnlyNote !== false && (
         <p className="flex items-center gap-2 rounded-md bg-accent-muted px-3.5 py-2.5 text-[13.5px] text-accent-strong">
