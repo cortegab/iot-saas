@@ -138,7 +138,7 @@ function FromTemplate({ modes }: { modes: ReactNode }) {
         ...(zoneId ? { zone_id: zoneId } : {}),
       });
       void revalidate("/devices");
-      handOffCredential(result.device.id, result.credential);
+      handOffCredential(result.device, result.credential);
       router.push(`/devices/${result.device.id}/connect`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");

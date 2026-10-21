@@ -1500,6 +1500,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Credential Rotated At */
+            credential_rotated_at?: string | null;
             /**
              * Connection State
              * @enum {string}

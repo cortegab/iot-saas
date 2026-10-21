@@ -151,6 +151,29 @@ test("adding a device hands its credential straight to the connect flow", async 
     const reveal = page.getByRole("region", { name: "One-time secret" });
     await expect(reveal.getByText(deviceId, { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Create credential" })).toHaveCount(0);
+
+    // DESIGN.md §8: it survives a reload (this tab's sessionStorage only)…
+    await page.reload();
+    await expect(reveal.getByText(deviceId, { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.includes("credential")))).toEqual([]);
+
+    // On a phone: "Step n of N", and nothing scrolls sideways.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByText(/Step\s*1 of 5/)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    // …and leaving before storing it asks first.
+    await page.getByRole("button", { name: "I'll do this later" }).click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toContainText("Leave before storing the password?");
+    await ask.getByRole("button", { name: "Stay" }).click();
+    await expect(page).toHaveURL(/\/connect$/);
+    await page.getByRole("button", { name: "I'll do this later" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Leave" }).click();
+    await expect(page).toHaveURL(new RegExp(`/devices/${deviceId}$`));
+    // Left: it's forgotten.
+    expect(await page.evaluate((id) => sessionStorage.getItem(`iot:credential:${id}`), deviceId)).toBeNull();
   } finally {
     await request.delete(`${API_URL}/devices/${deviceId}`, { headers: await apiHeaders(request) });
   }
