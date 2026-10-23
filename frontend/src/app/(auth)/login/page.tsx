@@ -34,7 +34,7 @@ export default function LoginPage() {
   const [failures, setFailures] = useState(0);
   const [capsOn, setCapsOn] = useState(false);
   const [choosing, setChoosing] = useState<TokenPairResponse | null>(null);
-  const [keep, setKeep] = useState(true);
+  const [keep, setKeep] = useState(false);
 
   function enter(data: TokenPairResponse, tenantId?: string) {
     adoptSession(data, tenantId, { keep });

@@ -53,6 +53,8 @@ test("sign in without 'Keep me signed in' keeps the session out of localStorage"
   await page.waitForLoadState("networkidle");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
+  // DESIGN.md §10: it starts unticked, so the session ends with the browser.
+  await expect(page.getByLabel("Keep me signed in on this device")).not.toBeChecked();
   await page.getByLabel("Keep me signed in on this device").uncheck();
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL("/devices");

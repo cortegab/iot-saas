@@ -415,7 +415,7 @@ edits a whole record, and there is no "Expand" toggle.
   alarms, **Acknowledge…** with an optional note (one or many, with Undo), "Acknowledged by *name*
   2 min ago: *note*" for everyone, a timeline per alarm, and the bell and the Alerts tab counting
   active alarms only. Until then they count unread.
-- **Members:** role changes happen inline, with a confirmation that states the new permissions.
+- **Members:** a role is changed on the member's own page (`/members/{id}`), with a confirmation that states the new permissions; invites are their own rows (changelog 2026-09-30, 2026-10-02).
   Nobody can grant a role above their own.
 - **Workspace settings** are saved like a record, with the save bar and change toast. The time zone
   uses the shared time zone select (§9).
