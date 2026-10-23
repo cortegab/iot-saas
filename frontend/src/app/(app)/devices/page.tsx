@@ -108,13 +108,13 @@ export default function DevicesPage() {
       sortable: true,
       cell: (d) => (
         <NameCell
-          mono
           name={
             <Link href={`/devices/${d.id}`} className="hover:underline hover:underline-offset-[3px]">
               {d.name}
             </Link>
           }
-          sub={[d.fw_version && `fw ${d.fw_version}`, d.rssi != null && `${d.rssi} dBm`].filter(Boolean).join(" · ") || d.slug}
+          // demo H: the name in the UI face, its MQTT id under it in mono.
+          sub={<span className="font-mono text-[11.5px]">{d.slug}</span>}
         />
       ),
     },

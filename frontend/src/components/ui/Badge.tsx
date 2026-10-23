@@ -77,12 +77,12 @@ export function Badge({ tone, label, variant = "pill", shape = "solid", classNam
   }
 
   if (variant === "text") {
-    return <span className={cn("text-sm", cfg.text, className)}>{label}</span>;
+    return <span className={cn("text-[12.5px] font-medium", cfg.text, className)}>{label}</span>;
   }
 
   if (variant === "dot") {
     return (
-      <span className={cn("inline-flex items-center gap-1.5 text-sm", className)}>
+      <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-medium", className)}>
         <Dot tone={tone} shape={shape} />
         <span className={cfg.text}>{label}</span>
       </span>
