@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateDraft } from "./rule-draft";
-import { recipesFor, type RecipeDevice } from "./rule-recipes";
+import { recipesFor, unavailableRecipes, type RecipeDevice } from "./rule-recipes";
 
 const climate: RecipeDevice = {
   id: "dev-1",
@@ -54,5 +54,14 @@ describe("recipesFor", () => {
   it("schedules start in the given time zone", () => {
     const s = recipesFor(climate, "Europe/Madrid").find((r) => r.id === "schedule")!;
     expect(s.draft.when).toMatchObject({ type: "schedule", cron: "0 22 * * *", timezone: "Europe/Madrid" });
+  });
+});
+
+describe("unavailableRecipes", () => {
+  it("lists what a device can't run, with what it needs", () => {
+    const bare = recipesFor({ id: "x", name: "bare", metrics: [], actuators: [] });
+    expect(unavailableRecipes(bare).map((r) => r.id)).toEqual(["too-hot", "door-open", "humidity-low", "tank-low", "schedule"]);
+    expect(unavailableRecipes(recipesFor(climate)).map((r) => r.id)).toEqual(["tank-low"]);
+    expect(unavailableRecipes(recipesFor(climate))[0].why).toMatch(/^Needs /);
   });
 });

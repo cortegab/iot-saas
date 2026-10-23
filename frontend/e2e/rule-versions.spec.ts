@@ -14,11 +14,11 @@ test("rule versions: a rename shows up, and restoring v1 saves as v3", async ({ 
   await expect(versions.getByText("Created")).toBeVisible();
 
   await versions.getByRole("button", { name: "Restore" }).click();
-  await expect(page.getByText("Version 1 is loaded into the editor.")).toBeVisible();
+  await expect(page.getByText("Version 1 is loaded. Save to make it current, or discard it.")).toBeVisible();
   await expect(page.getByRole("textbox", { name: /name/i }).first()).toHaveValue(ruleUnderTest.name);
   await page.getByRole("button", { name: /^Save/ }).first().click();
   // The rule is live: confirm.
-  await page.getByRole("alertdialog").getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Save rule" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
 
   const list = await (await request.get(`${API_URL}/rules/${ruleUnderTest.id}/versions`, { headers })).json();

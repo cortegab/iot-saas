@@ -48,7 +48,7 @@ test("rules: KPIs filter, the Trigger filter makes a chip, and Ladder shows card
   await expect(page.getByText("State: Fired in 24 h")).toBeVisible();
   await kpis.getByRole("button", { name: /^Fired/ }).click();
 
-  await page.getByRole("searchbox", { name: "Search rules, devices or actions" }).fill(ruleUnderTest.name);
+  await page.getByRole("searchbox", { name: "Search rules" }).fill(ruleUnderTest.name);
   // The search is debounced into the URL; let it land before the next filter.
   await expect(page).toHaveURL(/[?&]q=/);
   await page.getByRole("combobox", { name: "Filter by trigger" }).selectOption("metric");

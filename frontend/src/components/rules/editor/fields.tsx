@@ -7,22 +7,22 @@
  */
 
 import { createContext, useContext, type ReactNode } from "react";
-import { Card } from "@/components/ui/Card";
+import { ChoiceCards } from "@/components/ui/ChoiceCards";
+import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { SchedulePicker } from "@/components/ui/SchedulePicker";
 import { Field } from "@/components/ui/Field";
-import { Input } from "@/components/ui/Input";
+import { Affix, Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClassName } from "@/components/ui/Button";
+import { Bell, Globe, Mail, Plus, Power } from "lucide-react";
 import { SwitchField } from "@/components/ui/Switch";
 import { cn } from "@/lib/cn";
 import {
-  ACTION_LABELS,
   HYSTERESIS_OPERATORS,
   OPERATORS,
   OPERATOR_ARITY,
-  TRIGGER_LABELS,
   type ActionDraft,
   type ActuatorActionDraft,
   type ContactDraft,
@@ -45,9 +45,6 @@ const VALUE_TYPE_WORD: Record<CatalogActuator["value_type"], string> = {
   string: "text",
 };
 
-/** True while creating a rule: sections show their step numbers
- * (DESIGN.md §9.2: 1 When · 2 Then · 3 Safety · 4 Name). */
-export const StepsContext = createContext(false);
 
 /** True inside a narrow panel (the ladder inspector): field rows stack one
  * per line instead of going wide on viewport breakpoints. */
@@ -59,57 +56,22 @@ export function FieldRow({ wide, children }: { wide: string; children: ReactNode
   return <div className={cn("grid grid-cols-1 gap-4", !compact && wide)}>{children}</div>;
 }
 
-export function SectionCard({
-  id,
-  title,
-  aside,
-  step,
-  children,
-}: {
-  /** The rail section it belongs to: the anchor the rail scrolls to. */
-  id?: string;
-  title: string;
-  aside?: ReactNode;
-  /** Shown only while creating (StepsContext). */
-  step?: number;
-  children: ReactNode;
-}) {
-  const numbered = useContext(StepsContext) && step != null;
-  return (
-    <div id={id ? `rule-sec-${id}` : undefined} data-rule-section={id} className="scroll-mt-4">
-    <Card padding="md">
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className={cn(SECTION_LABEL, "flex items-center gap-2")}>
-            {numbered && (
-              <span aria-hidden className="grid h-5 w-5 place-items-center rounded-full bg-accent text-[11px] font-semibold normal-case tracking-normal text-on-accent">
-                {step}
-              </span>
-            )}
-            {numbered ? <span className="sr-only">Step {step}: </span> : null}
-            {title}
-          </h2>
-          {aside}
-        </div>
-        {children}
-      </div>
-    </Card>
-    </div>
-  );
-}
-
+/** A safety timer in seconds (demo H Behaviour): a number with an "s" affix,
+ * warning when it's low enough to let a relay cycle. */
 export function NumberSafetyField({
   label,
   hint,
   value,
   onChange,
   min = 0,
+  disabled = false,
 }: {
   label: string;
   hint: string;
   value: number;
   onChange: (v: number) => void;
   min?: number;
+  disabled?: boolean;
 }) {
   return (
     <Field
@@ -117,7 +79,7 @@ export function NumberSafetyField({
       hint={
         <>
           {hint}
-          {value < min && (
+          {!disabled && value < min && (
             <span className="block text-status-pending">
               Low values make relays cycle rapidly on noisy readings — consider {min} or higher.
             </span>
@@ -125,14 +87,9 @@ export function NumberSafetyField({
         </>
       }
     >
-      <Input
-        compact
-        type="number"
-        min={0}
-        step="any"
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
+      <Affix suffix="s">
+        <Input compact type="number" min={0} step="any" disabled={disabled} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+      </Affix>
     </Field>
   );
 }
@@ -202,13 +159,13 @@ function WireControl({
 
 // ---- WHEN -------------------------------------------------------------------
 
-const TRIGGER_HELP: Record<TriggerType, string> = {
-  metric: "Checked every time one of the condition's metrics reports a new value.",
-  schedule: "Runs at the scheduled times. With a condition, only if it's true at that moment.",
-  manual: "Only runs when someone presses “Run now” on the rule — never automatically.",
-  device_status:
-    "Runs every time the device connects or disconnects. With a condition, only if it's also true.",
-};
+/** The four starts as radio cards (demo H When). */
+const TRIGGER_CARDS: { value: TriggerType; title: string; description: string }[] = [
+  { value: "metric", title: "On each reading", description: "Checks every new reading." },
+  { value: "schedule", title: "On a schedule", description: "Every day, certain days, or repeatedly." },
+  { value: "manual", title: "Manually", description: "Only when someone runs it." },
+  { value: "device_status", title: "Device connects or disconnects", description: "Online and offline events." },
+];
 
 export function WhenFields({
   when,
@@ -221,17 +178,13 @@ export function WhenFields({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <SegmentedControl
-        ariaLabel="Trigger"
-        className="flex-wrap"
-        value={when.type}
-        onChange={(type) => onChange({ ...when, type })}
-        options={(Object.keys(TRIGGER_LABELS) as TriggerType[]).map((t) => ({
-          value: t,
-          label: TRIGGER_LABELS[t],
-        }))}
-      />
-      <p className="text-sm text-ink-muted">{TRIGGER_HELP[when.type]}</p>
+      <ChoiceCards ariaLabel="Trigger" value={when.type} onChange={(type) => onChange({ ...when, type })} options={TRIGGER_CARDS} />
+      {when.type === "metric" && <p className="text-sm text-ink-muted">It checks every reading from the devices in its conditions, the moment it arrives.</p>}
+      {when.type === "manual" && (
+        <p className="text-sm text-ink-muted">
+          It fires only when someone presses <b className="font-medium text-ink">Run now</b>. Any conditions are checked at that moment.
+        </p>
+      )}
       {when.type === "device_status" && (
         <FieldRow wide="sm:grid-cols-2">
           <Field label="Device">
@@ -242,14 +195,14 @@ export function WhenFields({
               onChange={(statusDeviceId) => onChange({ ...when, statusDeviceId })}
             />
           </Field>
-          <Field label="When it">
+          <Field label="When it" hint="Disconnects comes from its Last-Will, so it's immediate.">
             <SegmentedControl
               ariaLabel="Transition"
               value={when.transition}
               onChange={(transition) => onChange({ ...when, transition })}
               options={[
-                { value: "connected", label: "Connects" },
                 { value: "disconnected", label: "Disconnects" },
+                { value: "connected", label: "Connects" },
               ]}
             />
           </Field>
@@ -706,52 +659,43 @@ export function actionLabel(action: ActionDraft, catalog: RuleCatalog): { title:
       const device = catalog.deviceNameById[action.deviceId] ?? "device";
       const actuator = catalog.actuatorFor(action.deviceId, action.actuator);
       const name = actuator?.name ?? (action.actuator || "actuator");
-      const value =
-        action.valueKind === "boolean"
-          ? String((action.bool ? actuator?.on_value : actuator?.off_value) ?? (action.bool ? "ON" : "OFF"))
-          : action.valueKind === "number"
-            ? String(action.num)
-            : action.text || "…";
-      return { title: `${name} = ${value}`, detail: device };
+      // demo H: actions read as sentences — "Turn Fan on", "Set Mode to eco".
+      if (action.valueKind === "boolean") return { title: `Turn ${name} ${action.bool ? "on" : "off"}`, detail: device };
+      const value = action.valueKind === "number" ? String(action.num) : action.text || "…";
+      return { title: `Set ${name} to ${value}`, detail: device };
     }
     case "email": {
       const to = action.to.trim();
-      return { title: "Email", detail: to ? to : "alert recipients" };
+      return { title: "Send an email", detail: to ? to : "alert recipients" };
     }
     case "webhook":
-      return { title: "Webhook", detail: action.url.replace(/^https?:\/\//, "") || "…" };
+      return { title: "Call a webhook", detail: action.url.replace(/^https?:\/\//, "") || "no address" };
     case "notification":
-      return { title: "Notification", detail: action.message || "…" };
+      return { title: "Post a notification", detail: action.message || "no message" };
   }
 }
 
-/** The kinds a new action can be, plus the ones planned but not built yet. */
-export const ACTION_MENU: { kind: ActionDraft["kind"] | "whatsapp" | "push"; label: string; soon?: boolean }[] = [
-  { kind: "actuator", label: ACTION_LABELS.actuator },
-  { kind: "email", label: ACTION_LABELS.email },
-  { kind: "webhook", label: ACTION_LABELS.webhook },
-  { kind: "notification", label: ACTION_LABELS.notification },
-  { kind: "whatsapp", label: "WhatsApp", soon: true },
-  { kind: "push", label: "Push notification", soon: true },
+/** Add action (demo H): one button opening a menu of the four kinds. */
+const ADD_ACTIONS: { kind: ActionDraft["kind"]; label: string; Icon: typeof Power }[] = [
+  { kind: "actuator", label: "Switch an actuator", Icon: Power },
+  { kind: "email", label: "Send an email", Icon: Mail },
+  { kind: "webhook", label: "Call a webhook", Icon: Globe },
+  { kind: "notification", label: "Post a notification", Icon: Bell },
 ];
 
 export function AddActionMenu({ onAdd }: { onAdd: (kind: ActionDraft["kind"]) => void }) {
   return (
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Add an action">
-      {ACTION_MENU.map((item) => (
-        <Button
-          key={item.kind}
-          type="button"
-          variant="secondary"
-          disabled={item.soon}
-          title={item.soon ? "Coming soon" : undefined}
-          className={cn(item.soon && "opacity-60")}
-          onClick={() => !item.soon && onAdd(item.kind as ActionDraft["kind"])}
-        >
-          + {item.label}
-          {item.soon && <span className="ml-1 text-[10px] uppercase tracking-wide">soon</span>}
-        </Button>
-      ))}
-    </div>
+    <DropdownMenu
+      label="Add action"
+      align="start"
+      triggerClassName={buttonClassName({ variant: "secondary" })}
+      trigger={
+        <>
+          <Plus aria-hidden size={15} />
+          Add action
+        </>
+      }
+      groups={[ADD_ACTIONS.map(({ kind, label, Icon }) => ({ label, icon: <Icon size={15} />, onClick: () => onAdd(kind) }))]}
+    />
   );
 }

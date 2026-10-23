@@ -22,7 +22,7 @@ test("sentence chips edit the threshold and hold in place, and the save toast li
   await pop.getByRole("button", { name: "Apply" }).click();
   await expect(sentence.getByRole("button", { name: "15 s" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Save changes" }).click();
-  await page.getByRole("alertdialog").getByRole("button", { name: "Save changes" }).click();
+  await page.getByRole("button", { name: "Save rule" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "Save rule" }).click();
   await expect(page.getByText(/2 changes: Condition changed; Hold for: .* → 15 s/)).toBeVisible();
 });

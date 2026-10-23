@@ -34,7 +34,7 @@ test("a saved rule: tabs in the URL, a condition edited in its sheet, Activity h
   await expect(tabs.getByRole("tab")).toHaveText([/^When/, /^If/, /^Then/, /^Behaviour/, /^Activity/]);
   // A saved rule opens on If, with the name and status on top.
   await expect(tabs.getByRole("tab", { name: /^If/ })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByLabel("Rule name")).toHaveValue(ruleUnderTest.name);
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue(ruleUnderTest.name);
   await expect(page.getByRole("switch", { name: "Status" })).toBeVisible();
 
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Form" }).click();
@@ -52,7 +52,7 @@ test("a saved rule: tabs in the URL, a condition edited in its sheet, Activity h
 
   await tabs.getByRole("tab", { name: /^Activity/ }).click();
   await expect(page.getByRole("heading", { name: "Recent firings" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Save changes" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Save rule" })).toBeHidden();
 
   // Older links: ?tab=edit lands on If.
   await page.goto(`/rules/${ruleUnderTest.id}?tab=edit`);
@@ -82,6 +82,6 @@ test("walking a recipe to Review creates nothing until Create rule", async ({ pa
   // Regression: the last Next must not turn into the submit button mid-click.
   await expect(page).toHaveURL(/\/rules\/new/);
   await expect(page.getByText(/ created$/)).toHaveCount(0);
-  await expect(page.getByLabel("Rule name")).toBeVisible();
+  await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create rule" })).toBeEnabled();
 });

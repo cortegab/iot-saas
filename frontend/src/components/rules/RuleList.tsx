@@ -10,16 +10,12 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
-import { actionsText, ruleStateKey, triggerText, type RuleStateKey } from "@/lib/rule-text";
+import { RULE_STATE, actionsText, ruleStateKey, triggerText } from "@/lib/rule-text";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 
-const STATE: Record<RuleStateKey, { label: string; tone: "online" | "pending" | "unknown"; shape: "solid" | "square" }> = {
-  armed: { label: "Armed", tone: "online", shape: "solid" },
-  latched: { label: "Latched", tone: "pending", shape: "square" },
-  disabled: { label: "Disabled", tone: "unknown", shape: "square" },
-};
+const STATE = RULE_STATE;
 
 /** This device's rules as Line rows (demo H): name, the rule as a sentence,
  * its state and a chevron to the rule. Managed from /rules — no inline

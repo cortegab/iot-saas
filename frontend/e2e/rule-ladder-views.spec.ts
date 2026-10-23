@@ -45,7 +45,7 @@ test("ladder: a clear notification draws the CLEAR rung", async ({ page, ruleUnd
   await page.goto(`/rules/${ruleUnderTest.id}`);
   const tabs = page.getByRole("tablist", { name: "Rule sections" });
   await tabs.getByRole("tab", { name: /^Behaviour/ }).click();
-  await page.getByRole("switch", { name: "Send a notification when it clears" }).click();
+  await page.getByRole("switch", { name: "Notify when it clears" }).click();
   await tabs.getByRole("tab", { name: /^If/ }).click();
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
   await expect(page.getByRole("group", { name: "Rule rung editor" }).getByRole("button", { name: /^On clear Notify/ })).toBeVisible();

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type KeyboardEvent } from "react";
+import { useRef, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 export interface ChoiceOption<T extends string> {
@@ -9,6 +9,8 @@ export interface ChoiceOption<T extends string> {
   /** One line on what picking it means. */
   description: string;
   disabled?: boolean;
+  /** A small drawing at the card's end (Re-arm / Latch in a rule's Behaviour). */
+  illustration?: ReactNode;
 }
 
 /** DESIGN.md §5 radio cards: a choice between a few options that each need a
@@ -66,10 +68,11 @@ export function ChoiceCards<T extends string>({
                 aria-hidden
                 className={cn("mt-0.5 h-4 w-4 shrink-0 rounded-full border-[1.5px]", on ? "border-[5px] border-accent" : "border-ink-muted")}
               />
-              <span className="flex flex-col gap-0.5">
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <b className="text-sm font-semibold text-ink">{o.title}</b>
                 <span className="text-[12.5px] text-ink-muted">{o.description}</span>
               </span>
+              {o.illustration}
             </button>
           );
         })}
