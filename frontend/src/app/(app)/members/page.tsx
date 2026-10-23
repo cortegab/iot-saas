@@ -153,7 +153,7 @@ export default function MembersPage() {
   const inviteButton = canManage ? (
     <Link href="/members/invite" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
-      Invite member
+      Invite
     </Link>
   ) : null;
   const peeked = peek.peekId ? rows.find((x) => x.id === peek.peekId) : undefined;
@@ -162,7 +162,7 @@ export default function MembersPage() {
     <>
       <PageHeader
         title="Members"
-        description="People with access to this workspace. Only an owner can grant or remove the Owner role."
+        description="People in this workspace and what they can do."
         actions={inviteButton}
       />
       {error ? (

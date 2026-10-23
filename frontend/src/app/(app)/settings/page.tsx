@@ -154,17 +154,20 @@ export default function WorkspaceSettingsPage() {
         consequence={`Applies to everyone in ${ws.name}.`}
         sections={[
           { id: "workspace", label: "Workspace" },
-          { id: "alerts", label: "Alert recipients", count: d.recipients.length },
-          { id: "time", label: "Time" },
-          { id: "account", label: "Your account" },
-          { id: "leave", label: "Leave" },
+          { id: "alerts", label: "Alerts", count: d.recipients.length },
+          { id: "time", label: "Time and region" },
+          { id: "account", label: "You" },
+          { id: "leave", label: "Leave workspace" },
         ]}
         sectionOf={(p) => (p.startsWith("me.") ? "account" : "workspace")}
         status={editor}
-        saveLabel="Save settings"
+        saveLabel="Save"
+        nav="plain"
         onSave={onSave}
         onDiscard={editor.discard}
       >
+        {/* Plain stacked sections divided by hairlines (demo H). */}
+        <div className="flex max-w-[760px] flex-col gap-7 [&>section+section]:border-t [&>section+section]:border-border-soft [&>section+section]:pt-7">
         <EditorSection id="workspace" title="Workspace" lead="Only an owner can rename the workspace.">
           <div className="grid gap-3.5 @xl:grid-cols-2">
             <Field
@@ -187,8 +190,8 @@ export default function WorkspaceSettingsPage() {
 
         <EditorSection
           id="alerts"
-          title="Alert recipients"
-          lead="Rules with an email action send here unless they list their own recipients. With nobody listed, alerts go to every owner and admin."
+          title="Alerts"
+          lead="Who rule emails and critical notifications go to, unless a rule lists its own. With nobody listed, owners and admins get them."
         >
           <ul className="flex flex-wrap gap-1.5" aria-label="Alert recipients">
             {d.recipients.length === 0 && <li className="text-sm text-ink-muted">Nobody listed: owners and admins get the alerts.</li>}
@@ -241,13 +244,13 @@ export default function WorkspaceSettingsPage() {
           )}
         </EditorSection>
 
-        <EditorSection id="time" title="Time" lead="New schedules start in this time zone. Each schedule keeps its own zone once saved.">
+        <EditorSection id="time" title="Time and region" lead="New schedules start in this time zone. Each schedule keeps its own zone once saved.">
           <Field label="Time zone" hint={canEdit ? undefined : "Ask an admin to change it."}>
             <TimezoneSelect value={d.timezone} disabled={!canEdit} onChange={(tz) => editor.set({ ...d, timezone: tz })} className="max-w-sm" />
           </Field>
         </EditorSection>
 
-        <EditorSection id="account" title="Your account" lead={`Signed in as ${me?.email ?? ""}. Your name shows to the people you work with.`}>
+        <EditorSection id="account" title="You" lead={`Signed in as ${me?.email ?? ""}. Your name shows to the people you work with.`}>
           <Field label="Your name" optional error={editor.errorFor("me.name")}>
             <Input
               value={d.myName}
@@ -259,22 +262,20 @@ export default function WorkspaceSettingsPage() {
           </Field>
         </EditorSection>
 
-        <EditorSection id="leave" title="Leave workspace">
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3.5">
-            <div>
-              <p className="text-sm font-medium text-ink">Leave {ws.name}</p>
-              <p className="text-[13px] text-ink-muted">
-                {role === "owner"
-                  ? "An owner can leave once another owner exists. Your personal dashboards here are deleted."
-                  : "You lose access. Your personal dashboards here are deleted."}
-              </p>
-            </div>
-            <Button variant="secondary" onClick={() => void leave()}>
+        <EditorSection id="leave" title="Leave workspace" tone="danger">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="min-w-0 flex-1 text-[13px] text-ink-muted">
+              {role === "owner"
+                ? "An owner can leave once another owner exists. Your personal dashboards here are deleted."
+                : "You lose access. Your personal dashboards here are deleted."}
+            </p>
+            <Button variant="secondary" className="text-status-error" onClick={() => void leave()}>
               <LogOut aria-hidden size={14} />
-              Leave…
+              Leave workspace…
             </Button>
           </div>
         </EditorSection>
+        </div>
       </EditorFrame>
       {dialog}
       {guardDialog}

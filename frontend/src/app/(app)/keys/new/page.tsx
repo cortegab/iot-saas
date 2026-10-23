@@ -17,15 +17,15 @@ export default function NewKeyPage() {
   const [secret, setSecret] = useState<ApiKeyCreateResponse | null>(null);
   return (
     <>
-      <Breadcrumbs crumbs={[{ label: "API keys", href: "/keys" }, { label: "New" }]} />
+      <Breadcrumbs crumbs={[{ label: "API keys", href: "/keys" }]} />
       <KeyEditor keyId={null} onCreated={setSecret} />
-      <Dialog open={secret != null} onClose={() => undefined} title="Your new API key">
+      <Dialog open={secret != null} onClose={() => undefined} title="Copy your key">
         {secret && (
           <SecretReveal
             fields={[{ label: "API key", value: secret.key, secret: true }]}
             title={
               <>
-                Copy it now. We store only a hash, so <strong>{secret.api_key.name}</strong> can&apos;t be shown again.
+                It won&apos;t be shown again. Only a hash of <strong>{secret.api_key.name}</strong> is stored.
               </>
             }
             requireAcknowledge

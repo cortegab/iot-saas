@@ -6,7 +6,7 @@ import { test } from "./fixtures";
 
 test("from 1440px the full sidebar shows the grouped nav, and ⌘K navigates", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  const nav = page.getByRole("navigation", { name: "Sections" });
+  const nav = page.getByRole("navigation", { name: "Main" });
   for (const group of ["Monitor", "Automate", "Configure", "Admin"]) {
     await expect(nav.getByText(group, { exact: true })).toBeVisible();
   }
@@ -25,7 +25,7 @@ test("from 1440px the full sidebar shows the grouped nav, and ⌘K navigates", a
 test("at laptop widths the icon rail labels its icons and pins open over the content", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   const sidebar = page.getByRole("complementary", { name: "Primary" });
-  const nav = sidebar.getByRole("navigation", { name: "Sections" });
+  const nav = sidebar.getByRole("navigation", { name: "Main" });
   await expect(nav.getByText("Monitor", { exact: true })).toHaveCount(0);
   expect((await sidebar.boundingBox())?.width).toBe(64);
 

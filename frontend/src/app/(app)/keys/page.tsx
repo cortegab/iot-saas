@@ -72,13 +72,17 @@ export default function KeysPage() {
               {k.name}
             </Link>
           }
-          sub={<span className="font-mono">{k.key_prefix}…</span>}
+          sub={
+            <>
+              Created {formatDate(k.created_at)} · <span className="font-mono">{k.key_prefix}…</span>
+            </>
+          }
         />
       ),
     },
     {
       id: "role",
-      header: "Role",
+      header: "Scope",
       cell: (k) => {
         const r = toRole(k.role);
         return <Tag tone="neutral">{r ? ROLE_LABEL[r] : k.role}</Tag>;
@@ -126,13 +130,13 @@ export default function KeysPage() {
   const newButton = (
     <Link href="/keys/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
-      New API key
+      New key
     </Link>
   );
 
   return (
     <>
-      <PageHeader title="API keys" description="For scripts and integrations. Each key has a role and is shown once when created." actions={newButton} />
+      <PageHeader title="API keys" description="For scripts and other systems: Authorization: Bearer." actions={newButton} />
       {error ? (
         <ErrorState title="Couldn't load API keys" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
       ) : isLoading || !keys ? (
