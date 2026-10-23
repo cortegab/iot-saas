@@ -34,7 +34,8 @@ test("notifications: a template change shows up, dismiss with Undo, mark unread"
     // The row opens a sheet with the details and the link (DESIGN.md §8).
     await row.getByRole("button", { name: /^(Info|Warning|Critical)/ }).click();
     const sheet = page.getByRole("dialog", { name: `${name} updated` });
-    await expect(sheet.getByRole("button", { name: "Open template" })).toBeVisible();
+    // Its sources are links (demo H).
+    await expect(sheet.getByRole("link", { name })).toHaveAttribute("href", /templates/);
     await sheet.getByRole("button", { name: "Done" }).click();
 
     // Dismiss, then Undo brings it back.
@@ -77,6 +78,14 @@ test("notifications: repeats group into one row with ×2, and filters narrow by 
     await page.getByRole("combobox", { name: "Filter by severity" }).selectOption("critical");
     await expect(page.getByText("Severity: Critical")).toBeVisible();
     await expect(rows).toHaveCount(0);
+
+    // The severity row (demo H): Unread shows only what's unread.
+    await page.getByRole("button", { name: "Clear all" }).click();
+    const kpis = page.getByRole("group", { name: "Unread alerts" });
+    await kpis.getByRole("button", { name: /^Unread/ }).click();
+    await expect(page).toHaveURL(/show=unread/);
+    await kpis.getByRole("button", { name: /^Unread/ }).click();
+    await expect(page).not.toHaveURL(/show=unread/);
   } finally {
     await request.delete(`${API_URL}/catalog/${entry.id}`, { headers });
     const feed = (await (await request.get(`${API_URL}/notifications`, { headers })).json()) as { id: string; message: string }[];

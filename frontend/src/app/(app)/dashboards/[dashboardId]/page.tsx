@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { mutate as revalidate } from "swr";
@@ -18,6 +18,9 @@ import { NameDialog } from "@/components/ui/NameDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { useToast } from "@/components/ui/Toast";
 import { DashboardGrid, WIDGET_LABEL } from "@/components/dashboards/DashboardGrid";
+import { DashboardRange } from "@/components/dashboards/widget-common";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { DEFAULT_RANGE_MS, RANGE_OPTIONS } from "@/lib/chart-range";
 import { WidgetList, moveWidget } from "@/components/dashboards/WidgetList";
 import { AddWidgetSheet, WidgetSheet } from "@/components/dashboards/WidgetSheet";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
@@ -58,6 +61,8 @@ export default function DashboardDetailPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const phone = useMediaQuery("(max-width: 640px)");
   const [renaming, setRenaming] = useState(false);
+  // The one range every trend widget follows (demo H header).
+  const [range, setRange] = useState(DEFAULT_RANGE_MS);
   const [duplicating, setDuplicating] = useState(false);
 
   // Seed local state once per dashboard — not on every background SWR
@@ -67,7 +72,6 @@ export default function DashboardDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.id]);
 
-  const deviceCount = useMemo(() => new Set((widgets ?? []).map((w) => w.device_id)).size, [widgets]);
 
   function setEditing(on: boolean) {
     const q = new URLSearchParams(params.toString());
@@ -213,8 +217,19 @@ export default function DashboardDetailPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={switcher}
-        description={`${plural(widgets.length, "widget")} from ${plural(deviceCount, "device")} · only you see this dashboard`}
+        breadcrumbs={[{ label: "Dashboards", href: "/dashboards" }]}
+        description={`${plural(widgets.length, "widget")} · live`}
         actions={
+          <>
+            {widgets.some((w) => w.type === "trend_chart") && (
+              <SegmentedControl
+                ariaLabel="Range"
+                value={String(range)}
+                onChange={(v) => setRange(Number(v))}
+                options={RANGE_OPTIONS.map((o) => ({ value: String(o.ms), label: o.label }))}
+              />
+            )}
+            {
           canEdit &&
           (editing ? (
             <>
@@ -249,7 +264,8 @@ export default function DashboardDetailPage() {
                 ]}
               />
             </>
-          ))
+          ))}
+          </>
         }
       />
 
@@ -260,7 +276,7 @@ export default function DashboardDetailPage() {
             <strong>Editing layout.</strong>{" "}
             {phone
               ? "Open a widget to change it, or move it up and down. Changes save as you go."
-              : "Click a widget to change it. Drag it by its handle, or resize it from the corner. Changes save as you go."}
+              : "Click a widget to change what it shows and its size, or drag it by its handle and resize it from the corner. Changes save as you go."}
           </span>
         </p>
       )}
@@ -288,6 +304,7 @@ export default function DashboardDetailPage() {
           onMove={(id, dir) => void saveLayout(moveWidget(widgets, id, dir))}
         />
       ) : (
+        <DashboardRange.Provider value={range}>
         <DashboardGrid
           widgets={widgets}
           editing={editing}
@@ -296,6 +313,7 @@ export default function DashboardDetailPage() {
           onLayoutChange={(updated) => void saveLayout(updated)}
           onOpenWidget={setOpenId}
         />
+        </DashboardRange.Provider>
       )}
 
       <WidgetSheet

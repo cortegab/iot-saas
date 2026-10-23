@@ -3,13 +3,13 @@
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ActuatorControl } from "@/components/actuators/ActuatorControl";
 import { WidgetCard } from "@/components/dashboards/WidgetCard";
-import { DeviceLink, useWidgetDevice } from "@/components/dashboards/widget-common";
+import { useWidgetDevice } from "@/components/dashboards/widget-common";
 
 export function ActuatorControlWidget({ deviceId }: { deviceId: string }) {
   const { device, isLoading } = useWidgetDevice(deviceId);
   const online = device?.connection_state === "online";
   return (
-    <WidgetCard title="Controls" subtitle={<DeviceLink device={device} />}>
+    <WidgetCard device={device}>
       {isLoading || !device ? (
         <LoadingSkeleton rows={1} rowClassName="h-16" />
       ) : (

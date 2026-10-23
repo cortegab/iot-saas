@@ -74,6 +74,14 @@ export function useListState<F extends string>(
     [write],
   );
 
+  /** Several filters in one URL write (two setFilter calls in a row would clash). */
+  const setFilters = useCallback(
+    (patch: Partial<Record<F, string>>) =>
+      write(Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, v === defaults[k as F] ? null : (v as string)]))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [write],
+  );
+
   const toggleSort = useCallback(
     (key: string) => {
       const cur = state.sort;
@@ -101,7 +109,7 @@ export function useListState<F extends string>(
   const isFiltered =
     state.q.trim() !== "" || (Object.keys(defaults) as F[]).some((k) => state.filters[k] !== defaults[k]);
 
-  return { ...state, isFiltered, setQuery, setFilter, toggleSort, clearAll, setPage, setPageSize };
+  return { ...state, isFiltered, setQuery, setFilter, setFilters, toggleSort, clearAll, setPage, setPageSize };
 }
 
 /** Case-insensitive "every word appears somewhere in the haystack". */
