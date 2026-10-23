@@ -55,14 +55,15 @@ test("a part with many readings asks which to keep in its sheet, and closes to o
   await page.getByLabel("Template name").fill(`E2E motion ${Date.now()}`);
   await page.getByRole("button", { name: "Next: Hardware" }).click();
   await page.getByRole("button", { name: "Set up wiring" }).click();
-  await page.getByRole("button", { name: "Add input" }).click();
+  // Add part opens one picker: Sensors and inputs, then Outputs (demo H).
+  await page.getByRole("button", { name: "Add part" }).click();
 
   // A new part opens its sheet straight away.
   const sheet = page.getByRole("dialog");
-  await sheet.getByLabel("Driver").selectOption({ label: "MPU6050 / GY-521 motion" });
+  await page.getByRole("dialog", { name: "Add a part" }).getByRole("button", { name: "MPU6050 / GY-521 motion" }).click();
 
   // Only the common readings make metrics; the raw axes start not kept.
-  const seen = page.locator("p", { hasText: /What you.ll see:/ });
+  const seen = page.getByRole("region", { name: "What you'll see" });
   await expect(sheet.getByLabel("Keep Accel X (g)")).not.toBeChecked();
   await expect(seen).not.toContainText("Accel X");
 
@@ -75,7 +76,7 @@ test("a part with many readings asks which to keep in its sheet, and closes to o
   // Closed: driver, then bus · what it feeds, on one line.
   await sheet.getByRole("button", { name: "Done" }).click();
   const row = page.getByRole("button", { name: /MPU6050 \/ GY-521 motion/ });
-  await expect(row).toContainText(/Input 1 · I2C · Tilt X/);
+  await expect(row).toContainText(/I2C · Tilt X/);
   await expect(page.getByLabel("Keep Accel X (g)")).toHaveCount(0);
 });
 
@@ -84,9 +85,10 @@ test("replacing a part keeps the metric it fed, and a metric no part feeds is ta
   await page.getByLabel("Template name").fill(`E2E replace ${Date.now()}`);
   await page.getByRole("button", { name: "Next: Hardware" }).click();
   await page.getByRole("button", { name: "Set up wiring" }).click();
-  await page.getByRole("button", { name: "Add input" }).click();
+  // Add part opens one picker: Sensors and inputs, then Outputs (demo H).
+  await page.getByRole("button", { name: "Add part" }).click();
   const sheet = page.getByRole("dialog");
-  await sheet.getByLabel("Driver").selectOption({ label: "DHT22 / AM2302" });
+  await page.getByRole("dialog", { name: "Add a part" }).getByRole("button", { name: "DHT22 / AM2302" }).click();
   await sheet.getByLabel(/^Name of what Temperature .*feeds$/).fill("Air");
 
   // Replace part: a DS18B20's °C probe takes over the °C metric, name and all.

@@ -1,10 +1,12 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Affix, Input } from "@/components/ui/Input";
-import { Select } from "@/components/ui/Select";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { cn } from "@/lib/cn";
 import { UnitField } from "@/components/catalog/UnitField";
 import { EditorSection } from "@/components/editor/EditorFrame";
 import { Lines } from "@/components/ui/LineRow";
@@ -12,14 +14,32 @@ import { KeyField, notWired, RowLine, RowSheet, useRowSheet } from "@/components
 import type { SectionProps } from "@/components/catalog/template/section-props";
 import { blankMetric, renamed, type MetricDraft } from "@/lib/template-draft";
 
-const PUBLISH_LABEL = { periodic: "Every N seconds", on_change: "When it changes", streaming: "As fast as it samples" } as const;
+const PUBLISH_WORD = { periodic: "", on_change: "on change", streaming: "streaming" } as const;
 const span2 = "col-span-2";
 
-// A metric on its line: unit, range and how it publishes.
+/** "Every 30 s · 1 decimal · 0 to 50" (demo H). */
+function publishSummary(m: MetricDraft): string {
+  const how = m.publish === "periodic" ? `every ${m.interval || "?"} s` : PUBLISH_WORD[m.publish];
+  if (m.data_type === "bool") return how;
+  const range = m.min !== "" || m.max !== "" ? `${m.min || "…"} to ${m.max || "…"}` : null;
+  return [how, `${m.decimals || 0} decimal${m.decimals === "1" ? "" : "s"}`, range].filter(Boolean).join(" · ");
+}
+
+// A metric on its line: unit and how it publishes (demo H).
 const describe = (m: MetricDraft) =>
-  m.data_type === "bool"
-    ? "On/off flag"
-    : [m.unit, m.min !== "" || m.max !== "" ? `${m.min || "…"} to ${m.max || "…"}` : null, PUBLISH_LABEL[m.publish].toLowerCase()].filter(Boolean).join(" · ");
+  [m.data_type === "bool" ? "On/Off" : m.unit || "no unit", m.publish === "periodic" ? `every ${m.interval || "?"} s` : PUBLISH_WORD[m.publish]].join(" · ");
+
+/** A labelled segmented control in the sheet's grid: a plain caption, not a
+ * <label> (a label around the buttons would name them all after it). */
+export function SegField({ label, hint, className, children }: { label: string; hint?: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={cn("flex flex-col gap-[5px]", className)}>
+      <span className="text-[13px] font-medium text-ink">{label}</span>
+      {children}
+      {hint && <span className="text-[12px] text-ink-muted">{hint}</span>}
+    </div>
+  );
+}
 
 /** What the device publishes; each key is the last segment of an MQTT topic. */
 export function MetricsSection(props: SectionProps) {
@@ -28,9 +48,9 @@ export function MetricsSection(props: SectionProps) {
   const setMetric = (i: number, m: MetricDraft) => set({ ...d, metrics: d.metrics.map((x, j) => (j === i ? m : x)) });
 
   return (
-    <EditorSection id="metrics" title="Metrics" lead="What the device publishes. Each key is the last segment of an MQTT topic.">
+    <EditorSection id="metrics" title="Metrics" lead="What the device publishes. Rules, dashboards and history point at these keys.">
       <div className="flex flex-col gap-2">
-        {d.metrics.length === 0 && <p className="text-sm text-ink-muted">No metrics. Add one for each reading the device sends.</p>}
+        {d.metrics.length === 0 && <p className="text-sm text-ink-muted">None yet.</p>}
         {d.metrics.length > 0 && (
           <Lines label="Metrics">
             {d.metrics.map((m, i) => (
@@ -49,52 +69,74 @@ export function MetricsSection(props: SectionProps) {
               <div className={span2}>
                 <KeyField kind="metrics" i={i} row={m} topic={`…/{device}/${m.key.trim() || "key"}`} onChange={(key) => setMetric(i, { ...m, key, keyAuto: false })} unlocked={rows.isUnlocked(m.uid)} onUnlock={() => rows.unlock(m.uid)} props={props} />
               </div>
-              <Field label="Type">
-                <Select value={m.data_type} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, data_type: e.target.value as MetricDraft["data_type"] })}>
-                  <option value="float">Number</option>
-                  <option value="bool">On/off</option>
-                </Select>
-              </Field>
-              {m.data_type === "float" ? (
-                <>
-                  <Field label="Unit" optional>
-                    <UnitField value={m.unit} onChange={(unit) => setMetric(i, { ...m, unit })} />
-                  </Field>
-                  <Field label="Decimals" {...f(p + "decimals")}>
-                    <Input inputMode="numeric" value={m.decimals} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, decimals: e.target.value })} onBlur={blur(p + "decimals")} />
-                  </Field>
-                  <Field label="Min" optional {...f(p + "min")}>
-                    <Input inputMode="decimal" value={m.min} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, min: e.target.value })} onBlur={blur(p + "min")} />
-                  </Field>
-                  <Field label="Max" optional {...f(p + "max")}>
-                    <Input inputMode="decimal" value={m.max} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, max: e.target.value })} onBlur={blur(p + "max")} />
-                  </Field>
-                </>
-              ) : (
-                <p className="col-span-3 self-end pb-2 text-xs text-ink-muted">Sends 0 or 1. No unit or range.</p>
-              )}
-              <Field label="Publish" className={span2}>
-                <Select value={m.publish} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, publish: e.target.value as MetricDraft["publish"] })}>
-                  {(Object.keys(PUBLISH_LABEL) as MetricDraft["publish"][]).map((k) => (
-                    <option key={k} value={k}>
-                      {PUBLISH_LABEL[k]}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-              {m.publish === "on_change" ? (
-                <Field label="Change of at least" optional {...f(p + "deadband")} className={span2}>
-                  <Affix suffix={m.unit || "units"}>
-                    <Input inputMode="decimal" value={m.deadband} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, deadband: e.target.value })} onBlur={blur(p + "deadband")} />
-                  </Affix>
-                </Field>
-              ) : (
-                <Field label="Every" optional {...f(p + "interval")} className={span2}>
-                  <Affix suffix="s">
-                    <Input inputMode="numeric" value={m.interval} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, interval: e.target.value })} onBlur={blur(p + "interval")} />
-                  </Affix>
+              <SegField label="Type" className={m.data_type === "float" ? span2 : "col-span-full"} hint={m.data_type === "bool" ? "Reads On or Off; no unit." : undefined}>
+                <SegmentedControl
+                  ariaLabel="Type"
+                  size="md"
+                  value={m.data_type}
+                  onChange={(data_type) => !readOnly && setMetric(i, { ...m, data_type })}
+                  options={[
+                    { value: "float", label: "Number", disabled: readOnly },
+                    { value: "bool", label: "On / Off", disabled: readOnly },
+                  ]}
+                />
+              </SegField>
+              {m.data_type === "float" && (
+                <Field label="Unit" optional className={span2}>
+                  <UnitField value={m.unit} onChange={(unit) => setMetric(i, { ...m, unit })} />
                 </Field>
               )}
+              {/* How often and how precisely, folded (demo H). */}
+              <details
+                className="col-span-full rounded-lg border border-border px-3.5 py-2.5"
+                open={["interval", "deadband", "decimals", "min", "max"].some((k) => !!f(p + k).error) || undefined}
+              >
+                <summary className="cursor-pointer text-sm font-medium text-ink">
+                  Publishing and range <span className="font-normal text-ink-muted">· {publishSummary(m)}</span>
+                </summary>
+                <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">
+                  <SegField label="Publish" className="col-span-full">
+                    <SegmentedControl
+                      ariaLabel="Publish"
+                      size="md"
+                      value={m.publish}
+                      onChange={(publish) => !readOnly && setMetric(i, { ...m, publish })}
+                      options={[
+                        { value: "periodic", label: "Every…", disabled: readOnly },
+                        { value: "on_change", label: "On change", disabled: readOnly },
+                        { value: "streaming", label: "Streaming", disabled: readOnly },
+                      ]}
+                    />
+                  </SegField>
+                  {m.publish === "periodic" && (
+                    <Field label="Every" {...f(p + "interval")}>
+                      <Affix suffix="s">
+                        <Input inputMode="numeric" value={m.interval} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, interval: e.target.value })} onBlur={blur(p + "interval")} />
+                      </Affix>
+                    </Field>
+                  )}
+                  {m.publish === "on_change" && m.data_type === "float" && (
+                    <Field label="Change of at least" optional {...f(p + "deadband")}>
+                      <Affix suffix={m.unit || "units"}>
+                        <Input inputMode="decimal" value={m.deadband} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, deadband: e.target.value })} onBlur={blur(p + "deadband")} />
+                      </Affix>
+                    </Field>
+                  )}
+                  {m.data_type === "float" && (
+                    <>
+                      <Field label="Decimals" {...f(p + "decimals")}>
+                        <Input inputMode="numeric" value={m.decimals} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, decimals: e.target.value })} onBlur={blur(p + "decimals")} />
+                      </Field>
+                      <Field label="Min" optional {...f(p + "min")}>
+                        <Input inputMode="decimal" value={m.min} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, min: e.target.value })} onBlur={blur(p + "min")} />
+                      </Field>
+                      <Field label="Max" optional {...f(p + "max")}>
+                        <Input inputMode="decimal" value={m.max} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, max: e.target.value })} onBlur={blur(p + "max")} />
+                      </Field>
+                    </>
+                  )}
+                </div>
+              </details>
             </RowSheet>
           );
         })}

@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Boxes, Copy, Cpu, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { BookOpen, Boxes, Copy, Cpu, Pencil, Plus, Power, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -24,27 +24,13 @@ import { TemplatePeek } from "@/components/catalog/TemplatePeek";
 import { usePeek } from "@/components/list/usePeek";
 import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { ApiRequestError } from "@/lib/api-client";
+import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-function KeyChips({ keys: raw }: { keys: (string | null | undefined)[] }) {
-  const keys = raw.filter((k): k is string => !!k);
-  if (keys.length === 0) return <span className="text-ink-muted">—</span>;
-  return (
-    <span className="flex flex-wrap gap-1">
-      {keys.slice(0, 3).map((k) => (
-        <Tag key={k} mono>
-          {k}
-        </Tag>
-      ))}
-      {keys.length > 3 && <span className="text-xs text-ink-muted">+{keys.length - 3}</span>}
-    </span>
-  );
-}
 
 /** DESIGN.md §6 catalog standard for device templates. */
 export default function DeviceTemplatesPage() {
@@ -56,6 +42,8 @@ export default function DeviceTemplatesPage() {
   const { confirm, dialog } = useConfirm();
   const { data: entries, error, isLoading, mutate } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const list = useListState({ status: "all" }, { key: "name", dir: "asc" });
+  const { data: driverCatalog } = useDriverCatalog();
+  const boardLabel = useMemo(() => new Map((driverCatalog?.models ?? []).map((m) => [m.id, m.label])), [driverCatalog]);
 
 
   const counts = useMemo(() => {
@@ -72,6 +60,8 @@ export default function DeviceTemplatesPage() {
     );
     return sortRows(rows, list.sort, (e, key) => {
       if (key === "devices") return e.device_count;
+      if (key === "metrics") return e.metrics.length;
+      if (key === "actuators") return e.actuators.length;
       if (key === "updated") return -new Date(e.updated_at).getTime();
       return e.name;
     });
@@ -125,6 +115,10 @@ export default function DeviceTemplatesPage() {
     }
   }
 
+  /** demo H: what it runs on, under the name. */
+  const runsOnLine = (e: CatalogEntryResponse) =>
+    e.runs_on === "generic_firmware" ? `Our firmware${e.hardware ? ` · ${boardLabel.get(e.hardware.board) ?? e.hardware.board}` : ""}` : "Custom firmware";
+
   const columns: DataColumn<CatalogEntryResponse>[] = [
     {
       id: "name",
@@ -138,29 +132,25 @@ export default function DeviceTemplatesPage() {
             </Link>
           }
           trailing={e.is_legacy ? <Tag size="sm">Legacy</Tag> : undefined}
-          sub={`${plural(e.metrics.length, "metric")} · ${plural(e.actuators.length, "actuator")}`}
+          sub={runsOnLine(e)}
         />
       ),
     },
-    { id: "metrics", header: "Metrics", hideOnPhone: true, priority: 3, cell: (e) => <KeyChips keys={e.metrics.map((m) => m.key)} /> },
-    { id: "actuators", header: "Actuators", hideOnPhone: true, priority: 3, cell: (e) => <KeyChips keys={e.actuators.map((a) => a.key)} /> },
-    { id: "devices", header: "Devices", sortable: true, numeric: true, cell: (e) => e.device_count },
+    { id: "metrics", header: "Metrics", sortable: true, numeric: true, hideOnPhone: true, priority: 2, fold: (e) => plural(e.metrics.length, "metric"), cell: (e) => e.metrics.length },
+    { id: "actuators", header: "Actuators", sortable: true, numeric: true, hideOnPhone: true, priority: 3, fold: (e) => plural(e.actuators.length, "actuator"), cell: (e) => e.actuators.length },
+    { id: "devices", header: "Devices", sortable: true, numeric: true, cell: (e) => plural(e.device_count, "device") },
     {
       id: "status",
       header: "Status",
       cell: (e) =>
-        e.status === "active" ? (
-          <Badge tone="online" label="Enabled" />
-        ) : (
-          <Badge tone="unknown" shape="square" label="Disabled" />
-        ),
+        e.status === "active" ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />,
     },
     {
       id: "updated",
       header: "Updated",
       sortable: true,
       hideOnPhone: true,
-      priority: 2,
+      priority: 3,
       fold: (e) => `updated ${timeAgo(e.updated_at)}`,
       cell: (e) => <span className="text-ink-muted">{timeAgo(e.updated_at)}</span>,
     },
@@ -171,6 +161,7 @@ export default function DeviceTemplatesPage() {
       [
         { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => router.push(`/templates/${e.id}`) },
         { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${e.id}`) },
+        ...(e.runs_on === "generic_firmware" && e.hardware ? [{ label: "Wiring guide", icon: <BookOpen size={15} />, onClick: () => router.push(`/templates/${e.id}/wiring`) }] : []),
       ],
     ];
     if (canWrite) {
@@ -206,7 +197,7 @@ export default function DeviceTemplatesPage() {
     <>
       <PageHeader
         title="Device templates"
-        description="A template describes a kind of device: the metrics it publishes and the actuators it can switch. Every device is created from one."
+        description="What a kind of device publishes and what it can switch. Devices are added from these."
         actions={newAction}
       />
 
@@ -247,7 +238,7 @@ export default function DeviceTemplatesPage() {
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
-            placeholder="Search templates or keys"
+            placeholder="Search templates"
             quick={{
               label: "Status",
               value: list.filters.status,

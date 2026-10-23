@@ -20,6 +20,7 @@ export function WiringSection({
   onRenameTarget,
   targetError,
   onKeepReading,
+  guideHref,
   children,
 }: {
   lead: ReactNode;
@@ -35,6 +36,8 @@ export function WiringSection({
   onRenameTarget?: (kind: "inputs" | "outputs", uid: string, name: string) => void;
   targetError?: (kind: "inputs" | "outputs", uid: string) => string | undefined;
   onKeepReading?: (bindingUid: string, channel: string, keep: boolean) => void;
+  /** A saved template's wiring guide page. */
+  guideHref?: string;
   children?: ReactNode;
 }) {
   const { data, error, isLoading } = useDriverCatalog();
@@ -51,6 +54,7 @@ export function WiringSection({
           onRenameTarget={onRenameTarget}
           targetError={targetError}
           onKeepReading={onKeepReading}
+          guideHref={guideHref}
         />
       )}
       {children}

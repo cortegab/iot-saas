@@ -3,12 +3,13 @@
 import { Fragment, useCallback, useMemo, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
-import { Copy, Trash2 } from "lucide-react";
+import { BookOpen, Copy, Cpu, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -337,6 +338,7 @@ export function TemplateEditor({
       onRenameTarget={renameTarget}
       targetError={targetError}
       onKeepReading={(bindingUid, channel, keep) => guardUnfed({ ...keepReading(d, bindingUid, channel, keep, catalog), device: d.device })}
+      guideHref={entryId ? `/templates/${entryId}/wiring` : undefined}
     >
       {!catalogLoading && !catalog && (
         <p className="text-sm text-ink-muted">
@@ -437,9 +439,11 @@ export function TemplateEditor({
         ]}
       />
       {editor.visibleErrors.length > 0 && (
-        <p role="alert" className="text-sm text-status-error">
-          {plural(editor.visibleErrors.length, "problem")} to fix. The marked steps above show where.
-        </p>
+        <div role="alert">
+          <Callout tone="error">
+            <b className="font-medium">{plural(editor.visibleErrors.length, "problem")} to fix.</b> The marked steps above show where.
+          </Callout>
+        </div>
       )}
     </EditorSection>
   );
@@ -453,7 +457,7 @@ export function TemplateEditor({
         eyebrow={
           d.device ? undefined : <>
             {"Device template"}
-            {!isNew && (d.enabled ? <Badge tone="online" label="Enabled" /> : <Badge tone="unknown" shape="square" label="Disabled" />)}
+            {!isNew && (d.enabled ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />)}
             {!isNew && <span>· {plural(devices, "device")}</span>}
           </>
         }
@@ -478,7 +482,17 @@ export function TemplateEditor({
             </Button>
           ) : undefined
         }
-        menu={!isNew && !readOnly ? [[{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]] : undefined}
+        menu={
+          !isNew
+            ? [
+                [
+                  { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${entryId}`) },
+                  ...(entry?.hardware && entry.runs_on === "generic_firmware" ? [{ label: "Wiring guide", icon: <BookOpen size={15} />, onClick: () => router.push(`/templates/${entryId}/wiring`) }] : []),
+                ],
+                ...(readOnly ? [] : [[{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]]),
+              ]
+            : undefined
+        }
       >
         {order.map((id) => (
           <Fragment key={id}>{body[id]}</Fragment>
