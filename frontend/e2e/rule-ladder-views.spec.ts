@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { test } from "./fixtures";
+import { API_URL, login, test } from "./fixtures";
 
 // DESIGN.md §9.10: the ladder is horizontal when it fits and vertical when it
 // doesn't (never sideways), opens the same sheets as the Form, sends the
@@ -19,6 +19,41 @@ test("ladder: horizontal when it fits, vertical on a phone, and nothing scrolls 
   expect(await rung.evaluate((el) => el.tagName.toLowerCase())).toBe("div");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("ladder: in the editor a wide rung scales down to fit before it goes vertical", async ({ page, request }) => {
+  const { accessToken, tenantId } = await login(request);
+  const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
+  const devices = (await (await request.get(`${API_URL}/devices`, { headers })).json()) as { id: string }[];
+  const leaf = (metric: string) => ({ kind: "leaf", device_id: devices[0].id, metric, operator: ">", rhs: { source: "static", value: 0 } });
+  // a OR b OR (c AND d AND (e OR f)): three contacts in series, wider than the editor at 940 px.
+  const rule = (await (
+    await request.post(`${API_URL}/rules`, {
+      headers,
+      data: {
+        name: `E2E wide rung ${Date.now()}`,
+        enabled: false,
+        condition: {
+          kind: "group",
+          op: "OR",
+          predicates: [leaf("a"), leaf("b"), { kind: "group", op: "AND", predicates: [leaf("c"), leaf("d"), { kind: "group", op: "OR", predicates: [leaf("e"), leaf("f")] }] }],
+        },
+        actions: [{ type: "notification", message: "E2E wide rung", channels: ["platform"] }],
+      },
+    })
+  ).json()) as { id: string };
+  try {
+    await page.setViewportSize({ width: 940, height: 900 });
+    await page.goto(`/rules/${rule.id}?tab=if`);
+    await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
+    const rung = page.getByRole("group", { name: "Rule rung editor" });
+    await expect(rung).toBeVisible();
+    expect(await rung.evaluate((el) => el.tagName.toLowerCase())).toBe("svg");
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  } finally {
+    await request.delete(`${API_URL}/rules/${rule.id}`, { headers });
+  }
 });
 
 test("ladder: arrow keys move along the rung, Enter opens a sheet, the trigger opens When", async ({ page, ruleUnderTest }) => {

@@ -589,9 +589,11 @@ export function ResponsiveRung({ fit = false, ...props }: Parameters<typeof Ladd
     return () => ro.disconnect();
   }, []);
   const need = rungGeometry(props.draft, props.onSelect !== undefined, props.catalog).width;
-  // A read-only rung (`fit`) scales down first; below 55% it's unreadable, so vertical.
+  // It scales down to fit first, and goes vertical only when that would make it
+  // unreadable: below 55% for a read-only rung (`fit`), below 80% in the editor,
+  // where its text must stay legible to edit (its smallest is 10.5 px).
   const tooNarrow = room != null && room < need;
-  const scaled = fit && tooNarrow && (room ?? 0) / need >= 0.55;
+  const scaled = tooNarrow && (room ?? 0) / need >= (fit ? 0.55 : 0.8);
   const vertical = tooNarrow && !scaled;
   return (
     <div ref={ref} onKeyDown={rovingKeys} className="min-w-0">
