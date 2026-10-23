@@ -32,7 +32,7 @@ export function ZonePeek({ zone, offline, onClose }: { zone: ZoneResponse | unde
     ) : offline ? (
       <Badge tone="offline" label={`${offline} offline`} />
     ) : (
-      <Badge tone="online" label="All online" />
+      <Badge tone="online" label="All reporting" />
     );
 
   const menu: DropdownMenuItem[][] = [

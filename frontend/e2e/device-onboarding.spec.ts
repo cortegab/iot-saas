@@ -29,14 +29,16 @@ test("something new on our firmware: parts make the template, readings are named
 
     // A DHT22 brings temperature and humidity; a relay an on/off actuator.
     // Each new part opens its sheet; its readings are named right there.
-    await page.getByRole("button", { name: "Add input" }).click();
+    // Add part opens one picker: Sensors and inputs, then Outputs (demo H).
+    await page.getByRole("button", { name: "Add part" }).click();
     const sheet = page.getByRole("dialog");
-    await sheet.getByLabel("Driver").selectOption({ label: "DHT22 / AM2302" });
+    await page.getByRole("dialog", { name: "Add a part" }).getByRole("button", { name: "DHT22 / AM2302" }).click();
     await sheet.getByLabel(/^Name of what Temperature .*feeds$/).fill("Air temperature");
     await sheet.getByRole("button", { name: "Done" }).click();
-    await page.getByRole("button", { name: "Add output" }).click();
+    await page.getByRole("button", { name: "Add part" }).click();
+    await page.getByRole("dialog", { name: "Add a part" }).getByRole("group", { name: "Outputs" }).getByRole("button").first().click();
     await sheet.getByRole("button", { name: "Done" }).click();
-    await expect(page.locator("p", { hasText: /What you.ll see:/ })).toContainText("Air temperature");
+    await expect(page.getByRole("region", { name: "What you'll see" })).toContainText("Air temperature");
 
     await page.getByRole("button", { name: "Next: Data" }).click();
     await page.getByRole("button", { name: "Next: Review" }).click();
@@ -55,6 +57,15 @@ test("something new on our firmware: parts make the template, readings are named
     expect(template.actuators).toHaveLength(1);
     // JSONB doesn't keep key order.
     expect(Object.keys(template.hardware.inputs[0].channels).sort()).toEqual(["humidity", "temperature"]);
+
+    // Its wiring guide is a page of its own (demo H): part, connection, board pin, then notes.
+    await page.goto(`/templates/${template.id}?tab=wiring`);
+    await page.getByRole("link", { name: "Wiring guide" }).click();
+    await expect(page).toHaveURL(new RegExp(`/templates/${template.id}/wiring$`));
+    await expect(page.getByRole("heading", { level: 1, name: "Wiring guide" })).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Board pin" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: /DHT22/ }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Print" })).toBeVisible();
   } finally {
     await cleanUp(request, headers, deviceId);
   }

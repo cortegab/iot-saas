@@ -64,7 +64,7 @@ export default function ZonesPage() {
   const status = (z: ZoneResponse) => {
     if (z.device_count === 0) return <Badge tone="unknown" shape="square" label="No devices" />;
     const off = offline.get(z.id) ?? 0;
-    return off ? <Badge tone="offline" label={`${off} offline`} /> : <Badge tone="online" label="All online" />;
+    return off ? <Badge tone="offline" variant="dot" label={`${off} offline`} /> : <Badge tone="online" variant="dot" label="All reporting" />;
   };
 
   const columns: DataColumn<ZoneResponse>[] = [
@@ -79,11 +79,11 @@ export default function ZonesPage() {
               {z.name}
             </Link>
           }
-          sub={z.notes ?? undefined}
+          sub={z.notes || "No notes"}
         />
       ),
     },
-    { id: "devices", header: "Devices", sortable: true, numeric: true, cell: (z) => z.device_count },
+    { id: "devices", header: "Devices", sortable: true, numeric: true, cell: (z) => `${z.device_count} device${z.device_count === 1 ? "" : "s"}` },
     { id: "status", header: "Status", cell: status },
   ];
 
@@ -106,7 +106,7 @@ export default function ZonesPage() {
 
   return (
     <>
-      <PageHeader title="Zones" description="Places devices are installed in. Filter devices by zone and see each place's status at a glance." actions={newButton} />
+      <PageHeader title="Zones" description="Places your devices live in." actions={newButton} />
       {error ? (
         <ErrorState title="Couldn't load zones" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
       ) : isLoading || !zones ? (
