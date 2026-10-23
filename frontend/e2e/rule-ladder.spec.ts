@@ -51,11 +51,12 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
 
   // THEN: replace the default (empty) actuator coil with a notification.
   await page.getByRole("button", { name: "Add an action" }).click();
-  await page.getByRole("button", { name: "+ In-app notification" }).click();
+  await page.getByRole("button", { name: "Add action", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Post a notification" }).click();
   // Field puts its hint inside the <label>, so the accessible name continues past "Message".
   await page.getByLabel(/^Message/).fill("E2E ladder fired");
   await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
-  await page.getByRole("button", { name: /^Action actuator/ }).click();
+  await page.getByRole("button", { name: /^Action Turn actuator/ }).click();
   await page.getByRole("button", { name: "Remove coil" }).click();
   await expect(page.getByRole("button", { name: /^Action / })).toHaveCount(1);
 
@@ -68,7 +69,7 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   await page.getByRole("button", { name: "Next: Then" }).click();
   await page.getByRole("button", { name: "Next: Behaviour" }).click();
   await page.getByRole("button", { name: "Next: Review" }).click();
-  await page.getByLabel("Rule name").fill(name);
+  await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByRole("button", { name: "Create rule" }).click();
   // A new rule opens on its own page.
   await expect(page).toHaveURL(/\/rules\/[0-9a-f-]{36}$/);

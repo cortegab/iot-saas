@@ -74,12 +74,12 @@ export function actionsText(actions: Record<string, unknown>[]): string {
       }
       case "email": {
         const to = Array.isArray(a.to) ? a.to : [];
-        return to.length === 1 ? `Email ${String(to[0])}` : to.length > 1 ? `Email ${to.length} people` : "Email alert recipients";
+        return to.length === 1 ? `Email ${String(to[0])}` : to.length > 1 ? `Email ${to.length} people` : "Email the alert recipients";
       }
       case "webhook":
-        return "Call webhook";
+        return "Call a webhook";
       case "notification":
-        return "Notify in app";
+        return "Post a notification";
       default:
         return "Unknown action";
     }
@@ -129,4 +129,16 @@ export function ruleStateKey(r: Pick<RuleResponse, "enabled" | "latched">): Rule
   if (!r.enabled) return "disabled";
   if (r.latched) return "latched";
   return "armed";
+}
+
+/** How each state reads as a badge (rules list, rule page, peek, device Rules tab). */
+export const RULE_STATE: Record<RuleStateKey, { label: string; tone: "online" | "pending" | "unknown"; shape: "solid" | "square" }> = {
+  armed: { label: "Armed", tone: "online", shape: "solid" },
+  latched: { label: "Latched", tone: "pending", shape: "square" },
+  disabled: { label: "Disabled", tone: "unknown", shape: "square" },
+};
+
+/** The rules list's Trigger column (demo H): what starts it, in words. */
+export function triggerKindText(rule: Pick<RuleResponse, "trigger" | "condition" | "devices">): string {
+  return (rule.trigger as Record<string, unknown>).type === "metric" || !(rule.trigger as Record<string, unknown>).type ? "On each reading" : triggerText(rule);
 }

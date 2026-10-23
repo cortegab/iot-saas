@@ -229,9 +229,9 @@ export function RuleEditor({
     }
     // A live rule acts on the next reading: say so before saving (§9.8).
     if (existing?.enabled) {
-      const ok = await confirm("Changes apply from the next reading. The rule's history and versions are kept.", {
-        title: `Save changes to ${existing.name}?`,
-        confirmLabel: "Save changes",
+      const ok = await confirm(`${existing.name} is enabled, so the change applies within a second. Its history and versions are kept.`, {
+        title: "Save and apply now?",
+        confirmLabel: "Save rule",
         danger: false,
       });
       if (!ok) return;
@@ -294,8 +294,8 @@ export function RuleEditor({
 
   const nameFields = (
     <>
-      <Field label="Rule name" hint="Left blank, a name is generated." error={draft.name.trim().length > MAX_NAME ? `Keep the name to ${MAX_NAME} characters.` : undefined}>
-        <Input ref={nameRef} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="e.g. Boiler overheat interlock" />
+      <Field label="Name" error={draft.name.trim().length > MAX_NAME ? `Keep the name to ${MAX_NAME} characters.` : undefined}>
+        <Input ref={nameRef} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Left blank, a name is generated" />
       </Field>
       <SwitchField
         label="Status"
@@ -312,7 +312,7 @@ export function RuleEditor({
   const preview = <RulePreview draft={draft} catalog={catalog} ruleId={existing?.id} />;
   const tabIssues = (t: RuleTab | RuleSection) => issues.filter((i) => i.section === t);
   const modeSwitch = (
-    <div className="flex justify-end">
+    <div className="flex flex-wrap items-center gap-2.5">
       <SegmentedControl
         ariaLabel="Editor view"
         value={mode}
@@ -332,6 +332,7 @@ export function RuleEditor({
           },
         ]}
       />
+      {mode === "ladder" && <span className="text-[13px] text-ink-muted">Click any element to change it.</span>}
     </div>
   );
   // DESIGN.md §9.10: the trigger opens When and a timer Behaviour; the rest open their sheet.
@@ -416,7 +417,7 @@ export function RuleEditor({
               "then",
               <>
                 {modeSwitch}
-                {mode === "form" ? <ThenSection draft={draft} catalog={catalog} update={setDraft} /> : tab === "then" && ladder}
+                {mode === "form" ? <ThenSection draft={draft} catalog={catalog} update={setDraft} onGoBehaviour={() => setTab("behaviour")} /> : tab === "then" && ladder}
               </>,
             )}
             {panel("behaviour", <BehaviourSection draft={draft} update={setDraft} />)}
@@ -454,7 +455,7 @@ export function RuleEditor({
                   Unsaved changes
                 </>
               ) : isNew ? (
-                "New rule, not created yet"
+                "Not created yet"
               ) : (
                 <>
                   <Check aria-hidden size={14} className="text-status-online" />
@@ -523,7 +524,7 @@ export function RuleEditor({
                 Discard
               </Button>
               <Button type="submit" disabled={submitting || !dirty}>
-                {submitting ? "Saving…" : "Save changes"}
+                {submitting ? "Saving…" : "Save rule"}
               </Button>
             </div>
           )}
