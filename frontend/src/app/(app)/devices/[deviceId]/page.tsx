@@ -183,8 +183,10 @@ export default function DeviceDetailPage() {
     { id: "settings", label: "Settings" },
   ];
 
+  // Fills the window (main's bottom padding traded for its own) so the Settings
+  // tab's floating save bar lands at the bottom, as every save bar does.
   return (
-    <div className="flex flex-col gap-4">
+    <div className="-mb-[110px] flex flex-1 flex-col gap-4 pb-6">
       <PageHeader
         breadcrumbs={[{ href: "/devices", label: "Devices" }]}
         eyebrow={
@@ -312,7 +314,7 @@ export default function DeviceDetailPage() {
         </div>
       </TabPanel>
 
-      <TabPanel id="settings" active={tab}>
+      <TabPanel id="settings" active={tab} className="flex-1">
         {/* The one place a device is edited (DESIGN.md §7): plain stacked
             sections, the Delete section last. */}
         <DeviceEditor

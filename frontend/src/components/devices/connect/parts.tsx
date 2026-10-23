@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { SAVE_BAR } from "@/components/editor/save-bar";
 import type { ConnectFlow } from "@/components/devices/connect/useConnectFlow";
 
 export const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
@@ -59,7 +60,7 @@ export function StepNav({
   children?: ReactNode;
 }) {
   return (
-    <div className="sticky bottom-[var(--tabbar-h)] z-[6] -mx-4 mt-2 flex flex-wrap items-center gap-2 border-t border-border bg-canvas/92 px-4 py-3 backdrop-blur-[10px] rail:-mx-10 rail:px-10">
+    <div data-savebar className={SAVE_BAR}>
       <span className="mr-auto min-w-[150px] text-[13px] text-ink-muted">{state}</span>
       {onBack && (
         <Button variant="ghost" onClick={onBack}>

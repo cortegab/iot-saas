@@ -132,11 +132,13 @@ export function TabPanel({
   id,
   active,
   keepMounted = false,
+  className,
   children,
 }: {
   id: string;
   active: string;
   keepMounted?: boolean;
+  className?: string;
   children: ReactNode;
 }) {
   const isActive = id === active;
@@ -147,7 +149,7 @@ export function TabPanel({
       id={`tabpanel-${id}`}
       aria-labelledby={`tab-${id}`}
       hidden={!isActive}
-      className="flex flex-col gap-4 pt-4"
+      className={cn("flex flex-col gap-4 pt-4", className)}
     >
       {children}
     </div>

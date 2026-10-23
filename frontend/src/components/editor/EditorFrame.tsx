@@ -8,6 +8,7 @@ import { Stepper } from "@/components/ui/Stepper";
 import { Tabs } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
+import { PAGE_WITH_BAR, SAVE_BAR } from "@/components/editor/save-bar";
 
 export type EditorMode = "dock" | "drawer" | "page";
 
@@ -580,13 +581,14 @@ export function EditorFrame({
   const showFoot = !readOnly && (!headless || status.dirty || status.saving || issues > 0);
   const foot = showFoot && (
     <div
+      data-savebar={mode === "page" || undefined}
       className={cn(
         "flex shrink-0 flex-wrap items-center gap-2.5 border-t border-border",
         // Inside a host page (a Settings tab): a floating bar within the column.
         headless
-          ? "sticky bottom-[calc(12px+var(--tabbar-h))] z-[6] max-w-[760px] rounded-xl border bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-[10px] motion-safe:animate-[toastin_.15s_ease-out]"
+          ? "sticky bottom-[calc(12px+var(--tabbar-h))] z-[6] mt-auto max-w-[760px] rounded-xl border bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-[10px] motion-safe:animate-[toastin_.15s_ease-out]"
           : mode === "page"
-          ? "sticky bottom-[var(--tabbar-h)] z-[6] -mx-4 bg-surface/92 px-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))] max-rail:pb-3 pt-3 backdrop-blur-[10px] [grid-area:foot] rail:-mx-10 rail:px-10"
+          ? `${SAVE_BAR} [grid-area:foot]`
           : "bg-surface px-5 py-3",
       )}
     >
@@ -647,8 +649,8 @@ export function EditorFrame({
           className={cn(
             "flex flex-col",
             grouped && "@container",
-            !headless && "-mb-[110px]",
-            showRail && "wb:grid wb:grid-cols-[230px_minmax(0,1fr)] wb:items-start wb:gap-x-9 wb:[grid-template-areas:'head_head''rail_body''foot_foot']",
+            headless ? "flex-1" : PAGE_WITH_BAR,
+            showRail && "wb:grid wb:grid-cols-[230px_minmax(0,1fr)] wb:grid-rows-[auto_1fr_auto] wb:items-start wb:gap-x-9 wb:[grid-template-areas:'head_head''rail_body''foot_foot']",
           )}
         >
           {head}
