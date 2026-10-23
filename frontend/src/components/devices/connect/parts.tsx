@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
@@ -40,17 +41,33 @@ export function OptionGroup({
   );
 }
 
-export function StepNav({ onBack, onNext, nextDisabled }: { onBack?: () => void; onNext?: () => void; nextDisabled?: boolean }) {
+/** The wizard's bottom bar (DESIGN.md §5, demo H): what this step waits for,
+ * then Back and Continue (or the step's own buttons in `children`). Sticky,
+ * above the phone tab bar. */
+export function StepNav({
+  onBack,
+  onNext,
+  nextDisabled,
+  state,
+  children,
+}: {
+  onBack?: () => void;
+  onNext?: () => void;
+  nextDisabled?: boolean;
+  /** One line on what this step needs ("Store the password, then continue"). */
+  state?: string;
+  children?: ReactNode;
+}) {
   return (
-    <div className="flex justify-between border-t border-border pt-4">
-      {onBack ? (
+    <div className="sticky bottom-[var(--tabbar-h)] z-[6] -mx-4 mt-2 flex flex-wrap items-center gap-2 border-t border-border bg-canvas/92 px-4 py-3 backdrop-blur-[10px] rail:-mx-10 rail:px-10">
+      <span className="mr-auto min-w-[150px] text-[13px] text-ink-muted">{state}</span>
+      {onBack && (
         <Button variant="ghost" onClick={onBack}>
           <ChevronLeft aria-hidden size={14} />
           Back
         </Button>
-      ) : (
-        <span />
       )}
+      {children}
       {onNext && (
         <Button onClick={onNext} disabled={nextDisabled}>
           Continue <ChevronRight aria-hidden size={14} />

@@ -39,7 +39,7 @@ export function OptionsStep({ flow }: { flow: ConnectFlow }) {
           {install ? <InstallSummary flow={flow} install={install} /> : <SketchPinsAndSummary flow={flow} />}
         </div>
       </div>
-      <StepNav onBack={() => flow.setStep(1)} onNext={() => flow.setStep(3)} nextDisabled={blocked || (!phone && !ssid) || hostProblem != null} />
+      <StepNav state="Choose the board, Wi-Fi and broker, then continue" onBack={() => flow.setStep(1)} onNext={() => flow.setStep(3)} nextDisabled={blocked || (!phone && !ssid) || hostProblem != null} />
     </>
   );
 }
