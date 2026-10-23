@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { mutate as revalidate } from "swr";
 import { AlertTriangle, Bell, Check, CheckCheck, ChevronRight, Info, Mail, X, Zap } from "lucide-react";
 import { NOTIFICATIONS_KEY, useNotifications } from "@/hooks/useNotifications";
@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ItemSheet } from "@/components/ui/ItemSheet";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
+import { KpiStrip } from "@/components/ui/KpiStrip";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
@@ -72,7 +73,6 @@ const clock = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday
  * Acknowledge and the Active / Acknowledged / Cleared lifecycle wait for
  * their backend (§13). */
 export default function NotificationsPage() {
-  const router = useRouter();
   const toast = useToast();
   const { notifications, unreadCount, isLoading, error, markAllRead, markRead, markUnread, dismiss, restore } = useNotifications();
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
@@ -114,6 +114,12 @@ export default function NotificationsPage() {
     return groupRepeats(shown).filter((g) => f.show === "all" || g.unread);
   }, [notifications, list.filters, list.q, deviceName, ruleName, templateName]);
 
+  // Alerts waiting to be read, counted once per group of repeats.
+  const kpis = useMemo(() => {
+    const unread = groupRepeats(notifications).filter((g) => g.unread);
+    return { critical: unread.filter((g) => g.latest.severity === "critical").length, warning: unread.filter((g) => g.latest.severity === "warning").length, unread: unread.length };
+  }, [notifications]);
+
   const { pageRows, pageCount, page } = paginate(groups, list.page, list.pageSize);
   const open = groups.find((g) => g.key === openKey) ?? null;
 
@@ -147,16 +153,12 @@ export default function NotificationsPage() {
   if (list.filters.rule !== "all")
     chips.push({ id: "rule", label: `Rule: ${ruleName.get(list.filters.rule) ?? "unknown"}`, onRemove: () => list.setFilter("rule", "all") });
 
-  const sourceLine = (n: NotificationResponse) =>
-    [n.device_id && (deviceName.get(n.device_id) ?? "deleted device"), n.rule_id && `rule ${ruleName.get(n.rule_id) ?? "deleted"}`, n.catalog_entry_id && templateName.get(n.catalog_entry_id)]
-      .filter(Boolean)
-      .join(" · ");
 
   return (
     <>
       <PageHeader
         title="Notifications"
-        description="What rules, devices and templates reported. Open one for its details and links."
+        description="Alarms that need someone, and what happened. Open one for its details and links."
         actions={
           <Button variant="secondary" disabled={unreadCount === 0} onClick={() => void markAllRead().then(() => toast({ title: "All notifications marked as read" }))}>
             <CheckCheck aria-hidden size={15} />
@@ -174,9 +176,24 @@ export default function NotificationsPage() {
       ) : isLoading ? (
         <LoadingSkeleton rows={4} rowClassName="h-16" />
       ) : notifications.length === 0 ? (
-        <EmptyState icon={<Bell aria-hidden size={26} />} title="You're all caught up" description="New alerts from rules and devices appear here, with a count in the sidebar." />
+        <EmptyState icon={<Bell aria-hidden size={26} />} title="Nothing needs attention" description="No alerts. New ones appear here, with a count in the sidebar." />
       ) : (
         <>
+          {/* demo H: what's waiting, by severity. Unread stands in for "not
+              acknowledged" until alarms have a lifecycle (DESIGN.md §13). */}
+          <KpiStrip
+            ariaLabel="Unread alerts"
+            active={list.filters.show !== "unread" ? null : list.filters.severity !== "all" ? list.filters.severity : "unread"}
+            onSelect={(id) => {
+              const on = list.filters.show === "unread" && (id === "unread" ? list.filters.severity === "all" : list.filters.severity === id);
+              list.setFilters({ show: on ? "all" : "unread", severity: on || id === "unread" ? "all" : id });
+            }}
+            items={[
+              { id: "critical", label: "Critical, unread", value: kpis.critical, tone: "offline" },
+              { id: "warning", label: "Warnings, unread", value: kpis.warning, tone: "pending" },
+              { id: "unread", label: "Unread", value: kpis.unread, tone: "accent" },
+            ]}
+          />
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
@@ -236,38 +253,42 @@ export default function NotificationsPage() {
                   const sev = SEVERITY[n.severity];
                   const SevIcon = n.kind === "delivery_failed" ? Mail : sev.icon;
                   const repeats = g.items.length;
-                  const source = sourceLine(n);
                   return (
-                    <li key={g.key} className={cn("flex items-start gap-1 border-b border-border-soft pr-2 last:border-b-0", g.unread && "bg-accent/[0.04]")}>
-                      <button
-                        type="button"
-                        onClick={() => openSheet(g)}
-                        aria-haspopup="dialog"
-                        className="flex min-w-0 flex-1 items-start gap-3 py-3.5 pl-4 text-left hover:bg-row-hover"
+                    <li key={g.key} className={cn("flex items-start gap-1 border-b border-border-soft pr-2 last:border-b-0 hover:bg-row-hover", g.unread && "bg-accent/[0.04]")}>
+                      {/* The whole row opens the sheet; the device and rule in its
+                          last line are links of their own (demo H). */}
+                      <div
+                        className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 py-3.5 pl-4"
+                        onClick={(e) => {
+                          if (!(e.target as HTMLElement).closest("a, button")) openSheet(g);
+                        }}
                       >
-                        <span title={sev.label} className={cn("grid h-[30px] w-[30px] shrink-0 place-items-center rounded-md", sev.className)}>
-                          <SevIcon aria-hidden size={16} />
-                          <span className="sr-only">{sev.label}</span>
-                        </span>
-                        <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
-                          <span className="text-ink">
-                            {g.unread && <span aria-label="Unread" className="mr-2 inline-block h-[7px] w-[7px] rounded-full bg-accent align-middle" />}
-                            <strong className="font-medium">{n.message}</strong>
-                            {repeats > 1 && (
-                              <Tag size="sm" className="ml-2">
-                                ×{repeats}
-                              </Tag>
-                            )}
+                        <button type="button" onClick={() => openSheet(g)} aria-haspopup="dialog" className="flex min-w-0 items-start gap-3 text-left">
+                          <span title={sev.label} className={cn("grid h-[30px] w-[30px] shrink-0 place-items-center rounded-md", sev.className)}>
+                            <SevIcon aria-hidden size={16} />
+                            <span className="sr-only">{sev.label}</span>
                           </span>
-                          {n.detail && <span className="text-[13.5px] text-ink">{n.detail}</span>}
-                          <span className="text-[13px] text-ink-muted">
-                            {[sev.label, source, repeats > 1 ? `since ${clock(g.first.created_at)}, last ${timeAgo(n.created_at)}` : timeAgo(n.created_at)]
-                              .filter(Boolean)
-                              .join(" · ")}
+                          <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
+                            <span className="text-ink">
+                              {g.unread && <span aria-label="Unread" className="mr-2 inline-block h-[7px] w-[7px] rounded-full bg-accent align-middle" />}
+                              <strong className="font-medium">{n.message}</strong>
+                              {repeats > 1 && (
+                                <Tag size="sm" className="ml-2">
+                                  ×{repeats}
+                                </Tag>
+                              )}
+                            </span>
+                            {n.detail && <span className="text-[13.5px] text-ink">{n.detail}</span>}
                           </span>
+                          <ChevronRight aria-hidden size={15} className="mt-2 shrink-0 text-ink-muted" />
+                        </button>
+                        <span className="pl-[42px] text-[13px] text-ink-muted">
+                          {sev.label}
+                          <SourceLinks n={n} deviceName={deviceName} ruleName={ruleName} templateName={templateName} />
+                          {" · "}
+                          {repeats > 1 ? `since ${clock(g.first.created_at)}, last ${timeAgo(n.created_at)}` : timeAgo(n.created_at)}
                         </span>
-                        <ChevronRight aria-hidden size={15} className="mt-2 shrink-0 text-ink-muted" />
-                      </button>
+                      </div>
                       <span className="pt-3">
                         <DropdownMenu
                           label={`Actions for ${n.message}`}
@@ -326,19 +347,19 @@ export default function NotificationsPage() {
               {open.latest.device_id && (
                 <>
                   <dt className="text-ink-muted">Device</dt>
-                  <dd>{deviceName.get(open.latest.device_id) ?? "Deleted device"}</dd>
+                  <dd>{deviceName.has(open.latest.device_id) ? <Link href={`/devices/${open.latest.device_id}`} className="text-accent hover:underline">{deviceName.get(open.latest.device_id)}</Link> : "Deleted device"}</dd>
                 </>
               )}
               {open.latest.rule_id && (
                 <>
                   <dt className="text-ink-muted">Rule</dt>
-                  <dd>{ruleName.get(open.latest.rule_id) ?? "Deleted rule"}</dd>
+                  <dd>{ruleName.has(open.latest.rule_id) ? <Link href={`/rules/${open.latest.rule_id}`} className="text-accent hover:underline">{ruleName.get(open.latest.rule_id)}</Link> : "Deleted rule"}</dd>
                 </>
               )}
               {open.latest.catalog_entry_id && (
                 <>
                   <dt className="text-ink-muted">Template</dt>
-                  <dd>{templateName.get(open.latest.catalog_entry_id) ?? "Deleted template"}</dd>
+                  <dd>{templateName.has(open.latest.catalog_entry_id) ? <Link href={`/templates/${open.latest.catalog_entry_id}`} className="text-accent hover:underline">{templateName.get(open.latest.catalog_entry_id)}</Link> : "Deleted template"}</dd>
                 </>
               )}
               <dt className="text-ink-muted">{open.items.length > 1 ? "First" : "When"}</dt>
@@ -352,23 +373,6 @@ export default function NotificationsPage() {
                 </>
               )}
             </dl>
-            <div className="flex flex-wrap gap-2">
-              {open.latest.device_id && deviceName.has(open.latest.device_id) && (
-                <Button variant="secondary" size="sm" onClick={() => router.push(`/devices/${open.latest.device_id}`)}>
-                  Open device
-                </Button>
-              )}
-              {open.latest.rule_id && ruleName.has(open.latest.rule_id) && (
-                <Button variant="secondary" size="sm" onClick={() => router.push(`/rules/${open.latest.rule_id}`)}>
-                  Open rule
-                </Button>
-              )}
-              {open.latest.catalog_entry_id && templateName.has(open.latest.catalog_entry_id) && (
-                <Button variant="secondary" size="sm" onClick={() => router.push(`/templates/${open.latest.catalog_entry_id}`)}>
-                  Open template
-                </Button>
-              )}
-            </div>
             {open.items.length > 1 && (
               <div className="flex flex-col gap-2">
                 <h3 className="text-[13px] font-medium text-ink-muted">Each time</h3>
@@ -384,6 +388,32 @@ export default function NotificationsPage() {
           </div>
         )}
       </ItemSheet>
+    </>
+  );
+}
+
+/** " · {device} · rule {rule} · {template}" as links to each (demo H). */
+function SourceLinks({
+  n,
+  deviceName,
+  ruleName,
+  templateName,
+}: {
+  n: NotificationResponse;
+  deviceName: Map<string, string>;
+  ruleName: Map<string, string>;
+  templateName: Map<string, string>;
+}) {
+  const link = (href: string, text: string) => (
+    <Link href={href} className="text-ink-muted underline-offset-[3px] hover:text-accent hover:underline">
+      {text}
+    </Link>
+  );
+  return (
+    <>
+      {n.device_id && <> · {deviceName.has(n.device_id) ? link(`/devices/${n.device_id}`, deviceName.get(n.device_id)!) : "deleted device"}</>}
+      {n.rule_id && <> · rule {ruleName.has(n.rule_id) ? link(`/rules/${n.rule_id}`, ruleName.get(n.rule_id)!) : "deleted"}</>}
+      {n.catalog_entry_id && templateName.has(n.catalog_entry_id) && <> · {link(`/templates/${n.catalog_entry_id}`, templateName.get(n.catalog_entry_id)!)}</>}
     </>
   );
 }
