@@ -37,6 +37,7 @@ import { LadderCanvas, LadderSheet, liveSelection, type EditorSelection } from "
 import type { components } from "@/types/api";
 import { BehaviourSection, ConditionSection, ThenSection, WhenSection } from "./FormMode";
 import { RulePreview } from "./RulePreview";
+import { SAVE_BAR } from "@/components/editor/save-bar";
 import { useRuleCatalog } from "./useRuleCatalog";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -360,7 +361,7 @@ export function RuleEditor({
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="@container flex flex-col gap-4">
+      <form onSubmit={handleSubmit} className="@container flex flex-1 flex-col gap-4">
         {wizard && (
           <Stepper
             current={stepIndex}
@@ -443,7 +444,8 @@ export function RuleEditor({
         {/* One sticky save bar (DESIGN.md §7); Activity has nothing to save. */}
         <div
           hidden={tab === "activity"}
-          className="sticky bottom-[var(--tabbar-h)] z-[6] -mx-4 flex flex-wrap items-center gap-2.5 border-t border-border bg-canvas/92 px-4 pb-[calc(12px+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur-[10px] max-rail:pb-3 rail:-mx-10 rail:px-10"
+          data-savebar
+          className={SAVE_BAR}
         >
           <div className="flex min-w-[150px] flex-1 flex-wrap items-center gap-2.5 text-[13px] text-ink-muted">
             <span aria-live="polite" className="inline-flex items-center gap-1.5">
