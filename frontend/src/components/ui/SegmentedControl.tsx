@@ -58,7 +58,7 @@ export function SegmentedControl<T extends string>({
         className,
       )}
     >
-      {options.map((opt) => {
+      {options.map((opt, i) => {
         const checked = value === opt.value;
         return (
           <button
@@ -67,7 +67,8 @@ export function SegmentedControl<T extends string>({
             role="radio"
             aria-checked={checked}
             data-value={opt.value}
-            tabIndex={checked ? 0 : -1}
+            // Nothing selected yet (an actuator never commanded): the first segment takes Tab.
+            tabIndex={checked || (i === 0 && !options.some((o) => o.value === value)) ? 0 : -1}
             disabled={opt.disabled}
             onClick={() => onChange(opt.value)}
             className={cn(

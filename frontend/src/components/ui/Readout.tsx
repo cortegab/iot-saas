@@ -1,5 +1,14 @@
 import { AlertTriangle } from "lucide-react";
+import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
+
+export type Freshness = "live" | "stale" | "none";
+
+const FRESHNESS: Record<Freshness, { label: string; tone: "online" | "unknown"; shape: "solid" | "square" }> = {
+  live: { label: "Live", tone: "online", shape: "solid" },
+  stale: { label: "Stale", tone: "unknown", shape: "square" },
+  none: { label: "No data", tone: "unknown", shape: "square" },
+};
 
 export interface ReadoutProps {
   /** Omitted when the surrounding card already names the metric. */
@@ -16,6 +25,9 @@ export interface ReadoutProps {
   /** The value is the last one heard, not a live one: dimmed, with the stamp
    * in the warning tone (stale data is never shown as current). */
   stale?: boolean;
+  /** A Live / Stale / No data badge beside the label (DESIGN.md §8 device
+   * Overview, demo H `freshness()`). */
+  freshness?: Freshness;
   size?: "md" | "lg";
   /** Card chrome (border, surface, padding). Off inside a widget that
    * already draws its own card. */
@@ -43,6 +55,7 @@ export function Readout({
   threshold,
   stamp,
   stale = false,
+  freshness,
   size = "md",
   framed = true,
   className,
@@ -58,7 +71,20 @@ export function Readout({
         className,
       )}
     >
-      {label && <span className="text-xs text-ink-muted">{label}</span>}
+      {(label || freshness) && (
+        <span className="flex items-center gap-2 text-xs text-ink-muted">
+          {label}
+          {freshness && (
+            <Badge
+              variant="dot"
+              tone={FRESHNESS[freshness].tone}
+              shape={FRESHNESS[freshness].shape}
+              label={FRESHNESS[freshness].label}
+              className="ml-auto"
+            />
+          )}
+        </span>
+      )}
       <span
         className={cn(
           "flex items-baseline gap-[5px] font-semibold leading-[1.1] tracking-[-0.02em] text-ink tabular-nums",

@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { Badge } from "@/components/ui/Badge";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -28,7 +27,7 @@ const time = (iso: string) =>
  * or which rule sent it, and what happened — filterable by result and
  * actuator. useRealtime's command_ack messages revalidate this key the moment
  * an ack lands; the interval is a fallback. */
-export function CommandHistory({ deviceId }: { deviceId: string }) {
+export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Actuator wire id → its name. */ labels?: Map<string, string> }) {
   const { data, error, isLoading, mutate } = useApiSWR<CommandResponse[]>(`/devices/${deviceId}/commands`, { refreshInterval: 20_000 });
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
   const [result, setResult] = useState<"" | CommandStatus>("");
@@ -46,6 +45,9 @@ export function CommandHistory({ deviceId }: { deviceId: string }) {
   const ruleName = useMemo(() => new Map((rules ?? []).map((r) => [r.id, r.name])), [rules]);
   const actuators = useMemo(() => [...new Set((data ?? []).map((c) => c.actuator))].sort(), [data]);
 
+  const name = (a: string) => labels?.get(a) ?? a;
+  const heading = <h2 className="text-[15px] font-semibold text-ink">Command timeline</h2>;
+
   if (isLoading) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
   if (error) {
     return (
@@ -53,38 +55,47 @@ export function CommandHistory({ deviceId }: { deviceId: string }) {
     );
   }
   if (!data || data.length === 0) {
-    return <EmptyState title="No commands yet" description="Actuator commands, manual or rule-fired, appear here." />;
+    return (
+      <section className="flex flex-col gap-2">
+        {heading}
+        <p className="text-sm text-ink-muted">No commands yet. Commands sent by you or by rules appear here.</p>
+      </section>
+    );
   }
 
   const rows = data.filter((c) => (!result || commandStatus(c) === result) && (!actuator || c.actuator === actuator));
 
   return (
-    <div className="@container flex flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <SegmentedControl
-          ariaLabel="Result"
-          value={result}
-          onChange={(v) => setResult(v as "" | CommandStatus)}
-          options={[
-            { value: "", label: "All" },
-            { value: "pending", label: "Pending" },
-            { value: "confirmed", label: "Acknowledged" },
-            { value: "no-response", label: "No response" },
-          ]}
-        />
-        {actuators.length > 1 && (
-          <Select aria-label="Actuator" value={actuator} onChange={(e) => setActuator(e.target.value)} className="w-auto">
-            <option value="">All actuators</option>
-            {actuators.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </Select>
-        )}
-        <span className="ml-auto text-[12.5px] text-ink-muted">
+    <section className="@container flex flex-col gap-3">
+      {/* The heading with its filters on one row (demo H). */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        {heading}
+        <span className="text-[12.5px] text-ink-muted">
           {rows.length} of {data.length}
         </span>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <SegmentedControl
+            ariaLabel="Result"
+            value={result}
+            onChange={(v) => setResult(v as "" | CommandStatus)}
+            options={[
+              { value: "", label: "All" },
+              { value: "pending", label: "Pending" },
+              { value: "confirmed", label: "Acknowledged" },
+              { value: "no-response", label: "No response" },
+            ]}
+          />
+          {actuators.length > 1 && (
+            <Select aria-label="Actuator" value={actuator} onChange={(e) => setActuator(e.target.value)} className="w-auto">
+              <option value="">All actuators</option>
+              {actuators.map((a) => (
+                <option key={a} value={a}>
+                  {name(a)}
+                </option>
+              ))}
+            </Select>
+          )}
+        </div>
       </div>
       {rows.length === 0 ? (
         <p className="text-sm text-ink-muted">No commands match.</p>
@@ -100,7 +111,7 @@ export function CommandHistory({ deviceId }: { deviceId: string }) {
               >
                 <span className="text-[12.5px] tabular-nums text-ink-muted">{time(c.published_at)}</span>
                 <span className="col-span-full min-w-0 @min-[600px]:col-span-1 @min-[600px]:order-none">
-                  <span className="font-mono text-ink">{c.actuator}</span> → <b className="font-medium text-ink">{formatValue(c.value)}</b>
+                  <span className="text-ink">{name(c.actuator)}</span> → <b className="font-medium text-ink">{formatValue(c.value)}</b>
                   <span className="text-ink-muted">
                     {" · "}
                     {c.rule_id ? (
@@ -120,6 +131,6 @@ export function CommandHistory({ deviceId }: { deviceId: string }) {
           })}
         </ol>
       )}
-    </div>
+    </section>
   );
 }
