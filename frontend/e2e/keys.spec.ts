@@ -4,13 +4,14 @@ import { API_URL, test } from "./fixtures";
 test("api keys: create, authenticate with it, then revoke", async ({ page, request }) => {
   const name = `E2E key ${Date.now()}`;
   await page.goto("/keys");
-  await page.locator("header").getByRole("link", { name: "New API key" }).click();
+  await page.locator("header").getByRole("link", { name: "New key", exact: true }).click();
   await expect(page).toHaveURL("/keys/new");
   await page.waitForLoadState("networkidle");
 
   await page.getByLabel("Name").fill(name);
   await page.getByLabel("Expires").selectOption("30");
   await page.getByRole("button", { name: "Create key" }).click();
+  await expect(page.getByRole("dialog", { name: "Copy your key" })).toBeVisible();
 
   const secret = page.getByRole("region", { name: "One-time secret" });
   await secret.getByRole("button", { name: "Show" }).click();

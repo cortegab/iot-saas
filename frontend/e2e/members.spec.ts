@@ -12,7 +12,7 @@ test("members: invite someone, resend the invite, then cancel it", async ({ page
 
   const email = `e2e-invite-${Date.now()}@example.com`;
   await page.goto("/members");
-  await page.locator("header").getByRole("link", { name: "Invite member" }).click();
+  await page.locator("header").getByRole("link", { name: "Invite", exact: true }).click();
   await expect(page).toHaveURL("/members/invite");
   await page.waitForLoadState("networkidle");
 
@@ -20,6 +20,7 @@ test("members: invite someone, resend the invite, then cancel it", async ({ page
   await page.getByRole("radio", { name: /Admin/ }).check();
   await page.getByRole("button", { name: "Send invite" }).click();
   await expect(page.getByText("Invite sent", { exact: true })).toBeVisible();
+  await expect(page.getByText(`${email} has 7 days to accept.`)).toBeVisible();
 
   // Back on the list, peeking the new invite.
   await expect(page).toHaveURL(/\/members\?peek=invite\./);

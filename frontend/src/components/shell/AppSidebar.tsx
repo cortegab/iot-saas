@@ -208,7 +208,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
       </button>
 
       <nav
-        aria-label="Sections"
+        aria-label="Main"
         className={cn(
           "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-width:thin]",
           compact ? "w-full items-center" : "-mx-1 gap-3.5 px-1",

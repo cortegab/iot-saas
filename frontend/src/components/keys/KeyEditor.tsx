@@ -13,6 +13,7 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { CopyField } from "@/components/ui/SecretReveal";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
 import { EditorFrame, EditorSection, type EditorMode } from "@/components/editor/EditorFrame";
@@ -187,9 +188,8 @@ export function KeyEditor({
       <EditorFrame
         mode={mode}
         noun="key"
-        title={d.name.trim() || "New API key"}
-        eyebrow="New API key"
-        consequence="The key is shown once when created. Only a hash is stored."
+        title="New API key"
+        consequence="The key is shown once, then stored hashed."
         sections={[{ id: "key", label: "Key" }]}
         status={editor}
         saveLabel="Create key"
@@ -197,33 +197,35 @@ export function KeyEditor({
         onDiscard={editor.discard}
       >
         <EditorSection id="key" title="Key">
-          <Field label="Name" error={editor.errorFor("key.name")}>
-            <Input
-              autoFocus
-              value={d.name}
-              placeholder="Grafana read-only"
-              onChange={(e) => editor.set({ ...d, name: e.target.value })}
-              onBlur={() => editor.touch("key.name")}
-            />
-          </Field>
-          <div className="grid gap-3.5 @md:grid-cols-2">
-            <Field label="Role" hint="Keys can never be Owner.">
-              <Select value={d.role} onChange={(e) => editor.set({ ...d, role: e.target.value as KeyDraft["role"] })}>
-                <option value="viewer">Viewer: read only</option>
-                <option value="admin">Admin: read and write</option>
-                <option value="owner" disabled>
-                  Owner: not available for keys
-                </option>
-              </Select>
+          <div className="grid items-start gap-3.5 @md:grid-cols-2">
+            <Field label="Name" error={editor.errorFor("key.name")} hint="What uses it, e.g. Grafana.">
+              <Input autoFocus value={d.name} onChange={(e) => editor.set({ ...d, name: e.target.value })} onBlur={() => editor.touch("key.name")} />
             </Field>
             <Field label="Expires" warning={editor.warningFor("key.expiry")}>
               <Select value={d.expiry} onChange={(e) => editor.set({ ...d, expiry: e.target.value as KeyDraft["expiry"] })}>
                 <option value="30">In 30 days</option>
                 <option value="90">In 90 days</option>
-                <option value="365">In 1 year</option>
+                <option value="365">In a year</option>
                 <option value="never">Never</option>
               </Select>
             </Field>
+          </div>
+          {/* demo H: Viewer | Admin; keys can never be Owner. */}
+          <div className="flex flex-col gap-[5px]">
+            <span className="text-[13px] font-medium text-ink">Scope</span>
+            <SegmentedControl
+              ariaLabel="Scope"
+              size="md"
+              value={d.role}
+              onChange={(role) => editor.set({ ...d, role })}
+              options={[
+                { value: "viewer", label: "Viewer" },
+                { value: "admin", label: "Admin" },
+              ]}
+            />
+            <span className={d.role === "admin" ? "text-[12.5px] text-status-pending" : "text-[12.5px] text-ink-muted"}>
+              {d.role === "admin" ? "Can change devices and rules. Give it only to systems you trust." : "Read-only."}
+            </span>
           </div>
         </EditorSection>
       </EditorFrame>

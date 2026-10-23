@@ -97,12 +97,12 @@ export default function LoginPage() {
   return (
     <AuthCard
       title="Sign in"
-      description="Welcome back. Sign in to your iodriven workspace."
+      description="to your workspace"
       footer={
         <>
-          New to iodriven?{" "}
+          No account?{" "}
           <Link href="/register" className="font-medium text-accent hover:underline">
-            Create an account
+            Create a workspace
           </Link>
         </>
       }

@@ -14,7 +14,8 @@ export type EditorMode = "dock" | "drawer" | "page";
 /** How a page-mode editor moves between its sections (DESIGN.md §7):
  * `rail` scrolls one long page; `tabs` shows one group at a time (editing);
  * `steps` is the creating wizard. */
-export type EditorNavKind = "rail" | "tabs" | "steps";
+/** `plain`: one stacked page with no rail and no jump bar (demo H workspace settings). */
+export type EditorNavKind = "rail" | "tabs" | "steps" | "plain";
 
 /** A tab or a wizard step: a group of sections shown together. */
 export interface EditorGroupDef {
@@ -391,8 +392,8 @@ export function EditorFrame({
     </>
   );
 
-  const showRail = mode === "page" && !headless && !grouped && sections.length > 1;
-  const showJump = !headless && !grouped && sections.length > 1;
+  const showRail = mode === "page" && !headless && !grouped && navKind !== "plain" && sections.length > 1;
+  const showJump = !headless && !grouped && navKind !== "plain" && sections.length > 1;
   const groupIssues = (g: EditorGroupDef) => status.visibleErrors.filter((p) => g.sections.includes(sectionOf(p))).length;
 
   const tabStrip = tabs && (
@@ -418,6 +419,7 @@ export function EditorFrame({
     </div>
   );
 
+  const TitleTag = mode === "page" ? "h1" : "h2";
   const head = headless ? null : (
     <div
       className={cn(
@@ -427,7 +429,8 @@ export function EditorFrame({
     >
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
         {eyebrow && <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">{eyebrow}</div>}
-        <h2
+        {/* A full page's title is its H1 (demo H); a drawer's is a section heading. */}
+        <TitleTag
           tabIndex={-1}
           className={cn(
             "break-words font-semibold text-ink outline-none",
@@ -435,7 +438,7 @@ export function EditorFrame({
           )}
         >
           {title}
-        </h2>
+        </TitleTag>
         {consequence && (
           <p className={cn("mt-1 max-w-[70ch] text-ink-muted", mode === "page" ? "text-[14.5px]" : "text-[12.5px]")}>
             {consequence}

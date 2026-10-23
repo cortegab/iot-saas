@@ -7,7 +7,7 @@ import { MemberEditor } from "@/components/members/MemberEditor";
 export default function InviteMemberPage() {
   return (
     <>
-      <Breadcrumbs crumbs={[{ label: "Members", href: "/members" }, { label: "Invite" }]} />
+      <Breadcrumbs crumbs={[{ label: "Members", href: "/members" }]} />
       <MemberEditor memberId={null} />
     </>
   );
