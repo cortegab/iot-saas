@@ -1,46 +1,38 @@
 "use client";
 
+import { ChoiceCards } from "@/components/ui/ChoiceCards";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { SwitchField } from "@/components/ui/Switch";
 import { EditorSection } from "@/components/editor/EditorFrame";
 import type { SectionProps } from "@/components/catalog/template/section-props";
+import { blankHardware } from "@/lib/hardware/hardware-draft";
 import { blankMetric, type RunsOn } from "@/lib/template-draft";
 import type { components } from "@/types/api";
 
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-/** Names and availability; when onboarding, the device's name and zone too. */
+/** Names and availability, then how the devices run (DESIGN.md §8, demo H:
+ * the names first, Runs on as two cards); when onboarding, the device's name
+ * and zone instead of the template's. */
 export function GeneralSection({ zones, ...props }: SectionProps & { zones?: ZoneResponse[] }) {
   const { d, set, f, blur, readOnly } = props;
   const device = d.device;
+
+  function setRunsOn(runsOn: RunsOn) {
+    set({
+      ...d,
+      runsOn,
+      // Custom firmware lists its data by hand: start it with a metric to fill in.
+      metrics: runsOn === "own_code" && d.metrics.length === 0 ? [blankMetric()] : d.metrics,
+      // A new device on our firmware starts at the board, ready for its first part.
+      hardware: device && runsOn === "generic_firmware" && !d.hardware ? blankHardware() : d.hardware,
+    });
+  }
+
   return (
     <EditorSection id="general" title="General">
-      <Field
-        label="Runs on"
-        hint={
-          d.runsOn === "generic_firmware"
-            ? "Our firmware: pick the board and its parts, and every device installs from the browser with no code."
-            : d.hardware
-              ? "Saving drops the wiring: these devices run code of their own."
-              : "Your own code on the board: list the data it sends. Devices get a sketch, or the topics to publish to (a gateway that speaks MQTT works too)."
-        }
-      >
-        <SegmentedControl<RunsOn>
-          ariaLabel="Runs on"
-          size="md"
-          className="w-fit"
-          value={d.runsOn}
-          // Own code lists its data by hand: start it with a metric to fill in.
-          onChange={(runsOn) => set({ ...d, runsOn, metrics: runsOn === "own_code" && d.metrics.length === 0 ? [blankMetric()] : d.metrics })}
-          options={[
-            { value: "generic_firmware", label: "Our firmware", disabled: readOnly },
-            { value: "own_code", label: "Custom firmware", disabled: readOnly },
-          ]}
-        />
-      </Field>
       <div className="grid gap-3.5 @[640px]:grid-cols-2">
         {device && (
           <>
@@ -99,6 +91,22 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
             onHint="Offered in Add device."
             offHint="Hidden from Add device. Devices that already use it keep working."
           />
+        )}
+      </div>
+      {/* Not a Field: its <label> would name the first card "Runs on". */}
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-ink-muted">Runs on</span>
+        <ChoiceCards<RunsOn>
+          ariaLabel="Runs on"
+          value={d.runsOn}
+          onChange={setRunsOn}
+          options={[
+            { value: "generic_firmware", title: "Our firmware", description: "Pick the board and parts; installs from the browser.", disabled: readOnly },
+            { value: "own_code", title: "Custom firmware", description: "List the data it sends; you write the firmware.", disabled: readOnly },
+          ]}
+        />
+        {d.runsOn === "own_code" && d.hardware && (
+          <p className="text-[12.5px] text-status-pending">Saving drops the wiring: these devices run code of their own.</p>
         )}
       </div>
     </EditorSection>

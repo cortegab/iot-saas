@@ -4,110 +4,64 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { mutate as revalidate } from "swr";
-import { Code2, Cpu, Plus } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClassName } from "@/components/ui/Button";
+import { ChoiceCards } from "@/components/ui/ChoiceCards";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Breadcrumbs, PageHeader } from "@/components/ui/PageHeader";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { TemplateEditor } from "@/components/catalog/TemplateEditor";
 import { ApiRequestError } from "@/lib/api-client";
 import { handOffCredential } from "@/lib/credential-handoff";
 import type { RunsOn } from "@/lib/template-draft";
+import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-type From = "same" | "new";
+type Start = "same" | "new";
 
 const RUNS: Record<"generic" | "own", RunsOn> = { generic: "generic_firmware", own: "own_code" };
 
-/** Add a device (DESIGN.md §8): **From a template** (name, template,
- * zone) or **Something new**: how it runs, then the template editor in
- * onboarding mode, which makes its template too. Either way, creating it goes
- * straight to the connect flow with the one-time credential handed over in
- * memory. `?from=hardware` (older links) is Something new on our firmware. */
+/** Add a device (DESIGN.md §8, demo H): two starts as cards. **From a
+ * template** is one form (name, zone, template, what it gives you).
+ * **Something new** is the template wizard in onboarding mode — Basics
+ * (device name, zone, Runs on) → Hardware → Data → Review — which makes its
+ * template too. Either way, creating it goes straight to Connect with the
+ * credential handed over. `?from=new` starts on Something new; `&runs=own`
+ * (and the older `?from=hardware`) still preset how it runs. */
 export default function NewDevicePage() {
   const router = useRouter();
   const params = useSearchParams();
   const legacy = params.get("from") === "hardware";
-  const from: From = legacy || params.get("from") === "new" ? "new" : "same";
+  const start: Start = legacy || params.get("from") === "new" ? "new" : "same";
   const runs = legacy ? "generic" : params.get("runs");
-  const runsOn = runs === "generic" || runs === "own" ? RUNS[runs] : null;
-  const modes = (
-    <SegmentedControl<From>
-      ariaLabel="Start from"
-      size="md"
-      className="mb-4 w-fit"
-      value={from}
+  const runsOn = runs === "generic" || runs === "own" ? RUNS[runs] : "generic_firmware";
+  const cards = (
+    <ChoiceCards<Start>
+      ariaLabel="How to start"
+      value={start}
       onChange={(v) => router.replace(v === "new" ? "/devices/new?from=new" : "/devices/new")}
       options={[
-        { value: "same", label: "From a template" },
-        { value: "new", label: "Something new" },
+        { value: "same", title: "From a template", description: "Another device like one you already have." },
+        { value: "new", title: "Something new", description: "Say what it runs on and what it has; we make its template." },
       ]}
     />
   );
-  if (from === "same") return <FromTemplate modes={modes} />;
+  if (start === "same") return <FromTemplate cards={cards} />;
   return (
     <>
       <Breadcrumbs crumbs={[{ href: "/devices", label: "Devices" }, { label: "Add device" }]} />
-      {modes}
-      {runsOn ? (
-        <TemplateEditor key={runsOn} entryId={null} onboard runsOn={runsOn} mode="page" />
-      ) : (
-        <RunsOnChoice onPick={(r) => router.replace(`/devices/new?from=new&runs=${r}`)} />
-      )}
+      <TemplateEditor key={runsOn} entryId={null} onboard runsOn={runsOn} mode="page" intro={cards} />
     </>
   );
 }
 
-/** Something new, first question: how will it run? (DESIGN.md §8 "Runs on") */
-function RunsOnChoice({ onPick }: { onPick: (runs: "generic" | "own") => void }) {
-  const choices = [
-    {
-      runs: "generic" as const,
-      icon: <Cpu aria-hidden size={18} />,
-      title: "Our firmware",
-      body: "An ESP32 board you wire yourself. Pick the board and its parts; it installs from the browser, no code.",
-    },
-    {
-      runs: "own" as const,
-      icon: <Code2 aria-hidden size={18} />,
-      title: "Custom firmware",
-      body: "Your own code on the board. List the data it sends; it publishes to its topics with the device's credential. A gateway that speaks MQTT works the same way.",
-    },
-  ];
-  return (
-    <section aria-labelledby="runs-on" className="flex max-w-3xl flex-col gap-3">
-      <h2 id="runs-on" className="text-[15px] font-semibold text-ink">
-        How will this device run?
-      </h2>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {choices.map((c) => (
-          <button
-            key={c.runs}
-            type="button"
-            onClick={() => onPick(c.runs)}
-            className="flex flex-col gap-1.5 rounded-xl border border-border bg-surface p-4 text-left shadow-card hover:border-accent/50"
-          >
-            <span className="flex items-center gap-2 text-sm font-semibold text-ink">
-              <span className="text-accent">{c.icon}</span>
-              {c.title}
-            </span>
-            <span className="text-[13px] text-ink-muted">{c.body}</span>
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function FromTemplate({ modes }: { modes: ReactNode }) {
+function FromTemplate({ cards }: { cards: ReactNode }) {
   const api = useApi();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -120,6 +74,7 @@ function FromTemplate({ modes }: { modes: ReactNode }) {
   const [zoneId, setZoneId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const template = templates?.find((t) => t.id === templateId);
 
   // Default to the first template (a fresh tenant always has its "Legacy /
   // Uncategorized" one — devices/service.py), unless one was handed in.
@@ -146,53 +101,74 @@ function FromTemplate({ modes }: { modes: ReactNode }) {
     }
   }
 
+  const byRuns = (r: RunsOn) => (templates ?? []).filter((t) => (t.runs_on ?? "own_code") === r);
+
   return (
     <>
       <PageHeader
         breadcrumbs={[{ href: "/devices", label: "Devices" }, { label: "Add device" }]}
         title="Add device"
-        description="Name it and pick its template. Next comes the credential and the firmware to flash."
+        description="Name it and pick its template. Next come its credential and Install."
       />
-      {modes}
-      <form onSubmit={(e) => void handleSubmit(e)} className="flex max-w-lg flex-col gap-4 rounded-xl border border-border bg-surface p-5 shadow-card">
-        <Field label="Name" hint="Shown in lists and alerts. Its MQTT id is made from it and never changes.">
-          <Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. bay1-climate" />
-        </Field>
-        <Field label="Template" hint={<Link href="/templates" className="text-accent hover:underline">Manage templates</Link>}>
-          <Select required value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-            {!templates && <option value="">Loading…</option>}
-            {templates?.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name}
-              </option>
-            ))}
-          </Select>
-        </Field>
-        {zones && zones.length > 0 && (
+      <form onSubmit={(e) => void handleSubmit(e)} className="@container flex max-w-[760px] flex-col gap-6">
+        {cards}
+        <div className="grid gap-3.5 @min-[560px]:grid-cols-2">
+          <Field label="Device name" hint="Shown in lists and alerts. Its MQTT id is made from it and never changes.">
+            <Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. bay1-climate" />
+          </Field>
           <Field label="Zone" optional>
             <Select value={zoneId} onChange={(e) => setZoneId(e.target.value)}>
               <option value="">No zone</option>
-              {zones.map((z) => (
+              {(zones ?? []).map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.name}
                 </option>
               ))}
             </Select>
           </Field>
+        </div>
+        <Field label="Template" hint={<Link href="/templates" className="text-accent hover:underline">Manage templates</Link>}>
+          <Select required value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+            {!templates && <option value="">Loading…</option>}
+            {(["generic_firmware", "own_code"] as const).map((r) =>
+              byRuns(r).length ? (
+                <optgroup key={r} label={r === "generic_firmware" ? "Our firmware" : "Custom firmware"}>
+                  {byRuns(r).map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null,
+            )}
+          </Select>
+        </Field>
+        {template && (
+          <div className="flex flex-col gap-2 rounded-xl bg-surface-raised px-4 py-3.5 text-sm">
+            <span className="text-[13px] font-medium text-ink-muted">It gives you</span>
+            <p className="text-ink">
+              <b className="font-medium">Readings: </b>
+              {template.metrics.length ? template.metrics.map((m) => m.name || wireId(m)).join(", ") : "none"}
+            </p>
+            <p className="text-ink">
+              <b className="font-medium">Switches: </b>
+              {template.actuators.length ? template.actuators.map((a) => a.name || wireId(a)).join(", ") : "none"}
+            </p>
+          </div>
         )}
         {error && (
           <p role="alert" className="text-sm text-status-error">
             {error}
           </p>
         )}
-        <div className="flex gap-2">
-          <Button type="submit" disabled={submitting || !templateId || !name.trim()}>
-            <Plus aria-hidden size={15} />
-            {submitting ? "Creating…" : "Create and connect"}
-          </Button>
-          <Link href="/devices" className="inline-flex h-control items-center rounded-md px-3.5 text-sm text-ink-muted hover:text-ink">
+        <div className="sticky bottom-[var(--tabbar-h)] z-[6] -mx-4 flex items-center justify-end gap-2 border-t border-border bg-canvas/92 px-4 py-3 backdrop-blur-[10px] rail:-mx-10 rail:px-10">
+          <span className="mr-auto text-[13px] text-ink-muted">Not created yet</span>
+          <Link href="/devices" className={buttonClassName({ variant: "ghost" })}>
             Cancel
           </Link>
+          <Button type="submit" disabled={submitting || !templateId || !name.trim()}>
+            {submitting ? "Creating…" : "Create device"}
+          </Button>
         </div>
       </form>
     </>

@@ -108,6 +108,7 @@ export function TemplateEditor({
   mode = "page",
   onboard = false,
   runsOn = "generic_firmware",
+  intro,
 }: {
   /** null = new template. */
   entryId: string | null;
@@ -116,6 +117,8 @@ export function TemplateEditor({
   onboard?: boolean;
   /** How a new template's (or onboarded device's) devices run, to start with. */
   runsOn?: RunsOn;
+  /** Above the first step's question (Add device's start cards). */
+  intro?: ReactNode;
 }) {
   const api = useApi();
   const router = useRouter();
@@ -446,19 +449,22 @@ export function TemplateEditor({
       <EditorFrame
         mode={mode}
         noun={d.device ? "device" : "device template"}
-        title={d.device ? d.device.name.trim() || "New device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
+        title={d.device ? "Add device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
         eyebrow={
-          <>
-            {d.device ? "New device" : "Device template"}
+          d.device ? undefined : <>
+            {"Device template"}
             {!isNew && (d.enabled ? <Badge tone="online" label="Enabled" /> : <Badge tone="unknown" shape="square" label="Disabled" />)}
             {!isNew && <span>· {plural(devices, "device")}</span>}
           </>
         }
-        consequence={isNew ? undefined : consequence}
+        // Adding something new says what the wizard does (demo H); a new template
+        // says it on its Review step.
+        consequence={d.device ? "Say what it runs on and what's wired to it. Its template is made for you." : isNew ? undefined : consequence}
         sections={order.map((id) => railEntry(id, d))}
         nav={isNew ? "steps" : "tabs"}
         groups={groups}
         onTouch={editor.touchAll}
+        intro={intro}
         status={editor}
         readOnly={readOnly}
         saveLabel={d.device ? "Create device" : isNew ? "Create template" : "Save"}

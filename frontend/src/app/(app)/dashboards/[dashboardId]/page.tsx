@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { mutate as revalidate } from "swr";
@@ -77,14 +77,21 @@ export default function DashboardDetailPage() {
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   }
 
-  async function saveLayout(next: Widget[]) {
+  // Saves go out one after another: each PATCH carries the whole layout, so
+  // two in flight (Remove, then Undo) could land out of order and leave the
+  // older one saved.
+  const saveChain = useRef<Promise<void>>(Promise.resolve());
+  function saveLayout(next: Widget[]): Promise<void> {
     setWidgets(next);
-    try {
-      await api.patch(`/dashboards/${dashboardId}`, { layout: next });
-      void revalidate("/dashboards");
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't save the layout", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
+    saveChain.current = saveChain.current.then(async () => {
+      try {
+        await api.patch(`/dashboards/${dashboardId}`, { layout: next });
+        void revalidate("/dashboards");
+      } catch (err) {
+        toast({ tone: "error", title: "Couldn't save the layout", detail: err instanceof ApiRequestError ? err.message : undefined });
+      }
+    });
+    return saveChain.current;
   }
 
   function addWidget(w: Omit<Widget, "x" | "y">) {
