@@ -1,22 +1,30 @@
 import type { ReactNode } from "react";
-import { Geist, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/components/ui/Toast";
 
 /* Type system (docs/design/DESIGN.md §3): Geist for display, UI and readouts;
  * Geist Mono for keys, topics, payloads and times in chips. Exposed as CSS vars
- * on <html> and wired into Tailwind's font tokens in globals.css. */
-const sans = Geist({
-  subsets: ["latin"],
+ * on <html> and wired into Tailwind's font tokens in globals.css.
+ *
+ * Self-hosted (app/fonts, SIL OFL 1.1), not next/font/google: a dev server or
+ * build that starts without network would otherwise fall back to system fonts
+ * for its whole life (wider, and the mono names in a generic monospace). */
+const Geist = localFont({
+  src: "./fonts/geist-latin.woff2",
+  weight: "100 900",
   variable: "--ff-sans",
   display: "swap",
+  fallback: ["ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
 });
 
-const mono = Geist_Mono({
-  subsets: ["latin"],
+const GeistMono = localFont({
+  src: "./fonts/geist-mono-latin.woff2",
+  weight: "100 900",
   variable: "--ff-mono",
   display: "swap",
+  fallback: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
 });
 
 /* Runs before first paint: apply the saved theme, or fall back to the OS
@@ -33,7 +41,7 @@ export const metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${Geist.variable} ${GeistMono.variable}`} suppressHydrationWarning>
       <body className="m-0 min-h-screen">
         {/* First child of <body>: runs synchronously during parse, before any
             body content paints, so the theme is right on first frame. React 19

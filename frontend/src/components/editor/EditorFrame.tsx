@@ -434,7 +434,7 @@ export function EditorFrame({
           tabIndex={-1}
           className={cn(
             "break-words font-semibold text-ink outline-none",
-            mode === "page" ? "text-[24px] leading-[1.15] tracking-[-0.025em] md:text-[30px]" : "text-[19px] leading-[1.3] tracking-[-0.015em]",
+            mode === "page" ? "text-[24px] leading-[1.2] tracking-[-0.015em] md:text-[28px]" : "text-[19px] leading-[1.3] tracking-[-0.015em]",
           )}
         >
           {title}
