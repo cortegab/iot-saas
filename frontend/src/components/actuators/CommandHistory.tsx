@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { TableFooter } from "@/components/list/TableFooter";
+import { useServerPager } from "@/components/list/useServerPager";
 import { Badge } from "@/components/ui/Badge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -23,19 +25,28 @@ function formatValue(value: unknown): string {
 const time = (iso: string) =>
   new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false });
 
+/** The API's name for each result filter (backend commands/service.py). */
+const STATUS_PARAM: Record<CommandStatus, string> = { confirmed: "confirmed", pending: "pending", "no-response": "no_response" };
+
 /** The command timeline (DESIGN.md §8): when, which actuator and value, who
- * or which rule sent it, and what happened — filterable by result and
- * actuator. useRealtime's command_ack messages revalidate this key the moment
- * an ack lands; the interval is a fallback. */
+ * or which rule sent it, and what happened — filtered by result and actuator
+ * and paged by the API, so all of it can be browsed. useRealtime's command_ack
+ * messages revalidate every loaded page the moment an ack lands; the interval
+ * is a fallback. */
 export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Actuator wire id → its name. */ labels?: Map<string, string> }) {
-  const { data, error, isLoading, mutate } = useApiSWR<CommandResponse[]>(`/devices/${deviceId}/commands`, { refreshInterval: 20_000 });
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
   const [result, setResult] = useState<"" | CommandStatus>("");
   const [actuator, setActuator] = useState("");
+  const pager = useServerPager<CommandResponse>(`/devices/${deviceId}/commands`, {
+    params: { status: result ? STATUS_PARAM[result] : null, actuator: actuator || null },
+    config: { refreshInterval: 20_000 },
+  });
+  const { rows, total, isLoading, error, mutate } = pager;
+  const filtered = !!(result || actuator);
 
   // "Pending" turns into "No response" at the TTL deadline; re-render while any wait.
   const [, tick] = useState(0);
-  const anyPending = (data ?? []).some((c) => commandStatus(c) === "pending");
+  const anyPending = rows.some((c) => commandStatus(c) === "pending");
   useEffect(() => {
     if (!anyPending) return;
     const id = setInterval(() => tick((n) => n + 1), 1000);
@@ -43,18 +54,19 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
   }, [anyPending]);
 
   const ruleName = useMemo(() => new Map((rules ?? []).map((r) => [r.id, r.name])), [rules]);
-  const actuators = useMemo(() => [...new Set((data ?? []).map((c) => c.actuator))].sort(), [data]);
+  // The device's actuators (from its template and rules), not just the ones on this page.
+  const actuators = useMemo(() => [...(labels?.keys() ?? [])].sort(), [labels]);
 
   const name = (a: string) => labels?.get(a) ?? a;
   const heading = <h2 className="text-[15px] font-semibold text-ink">Command timeline</h2>;
 
-  if (isLoading) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
+  if (isLoading && rows.length === 0) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
   if (error) {
     return (
       <ErrorState message={error instanceof ApiRequestError ? error.message : "Couldn't load command history."} onRetry={() => void mutate()} />
     );
   }
-  if (!data || data.length === 0) {
+  if (total === 0 && !filtered) {
     return (
       <section className="flex flex-col gap-2">
         {heading}
@@ -63,16 +75,11 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
     );
   }
 
-  const rows = data.filter((c) => (!result || commandStatus(c) === result) && (!actuator || c.actuator === actuator));
-
   return (
     <section className="@container flex flex-col gap-3">
       {/* The heading with its filters on one row (demo H). */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {heading}
-        <span className="text-[12.5px] text-ink-muted">
-          {rows.length} of {data.length}
-        </span>
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <SegmentedControl
             ariaLabel="Result"
@@ -130,6 +137,18 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
             );
           })}
         </ol>
+      )}
+      {total > 0 && (
+        <TableFooter
+          shown={total}
+          total={total}
+          noun={["command", "commands"]}
+          page={pager.page}
+          pageCount={pager.pageCount}
+          pageSize={pager.pageSize}
+          onPage={pager.setPage}
+          onPageSize={pager.setPageSize}
+        />
       )}
     </section>
   );

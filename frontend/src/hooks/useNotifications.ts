@@ -1,25 +1,32 @@
 "use client";
 
+import useSWR from "swr";
 import { useApi } from "@/hooks/useApi";
-import { useApiSWR } from "@/hooks/useApiSWR";
+import type { ApiPage } from "@/lib/api-client";
 import type { components } from "@/types/api";
 
 type NotificationResponse = components["schemas"]["NotificationResponse"];
 
 export const NOTIFICATIONS_KEY = "/notifications";
 
-/** A fallback, not the primary freshness mechanism — useRealtime revalidates
- * this same key the moment a `notification` event arrives over the socket.
- * Unread count is derived client-side from `read_at` rather than fetched as
- * a separate endpoint — one less thing to keep in sync. Dismissed rows never
- * come back from the API, so they never count. */
-export function useNotifications() {
+/** The latest `limit` notifications and how many there are in all
+ * (X-Total-Count). The page's "Show older" raises `limit`, so one request
+ * holds everything shown and read / unread / dismiss refresh all of it.
+ *
+ * A fallback, not the primary freshness mechanism — useRealtime revalidates
+ * every /notifications key the moment a `notification` event arrives. Unread
+ * count is derived client-side from `read_at` over what's loaded. Dismissed
+ * rows never come back from the API, so they never count. */
+export function useNotifications(limit = 50) {
   const api = useApi();
-  const { data, isLoading, error, mutate } = useApiSWR<NotificationResponse[]>(NOTIFICATIONS_KEY, {
+  const key = `${NOTIFICATIONS_KEY}?limit=${limit}`;
+  const { data, isLoading, error, mutate } = useSWR<ApiPage<NotificationResponse>>(key, () => api.getPage<NotificationResponse>(key), {
     refreshInterval: 30_000,
+    keepPreviousData: true,
   });
 
-  const unreadCount = data?.filter((n) => n.read_at == null).length ?? 0;
+  const notifications = data?.items ?? [];
+  const unreadCount = notifications.filter((n) => n.read_at == null).length;
 
   async function markAllRead() {
     await api.post<NotificationResponse[]>("/notifications/read");
@@ -38,7 +45,7 @@ export function useNotifications() {
 
   async function dismiss(id: string) {
     // Drop it at once; the server agrees a moment later.
-    await mutate((rows) => rows?.filter((n) => n.id !== id), { revalidate: false });
+    await mutate((page) => page && { items: page.items.filter((n) => n.id !== id), total: page.total - 1 }, { revalidate: false });
     await api.post<NotificationResponse>(`/notifications/${id}/dismiss`);
     await mutate();
   }
@@ -49,7 +56,9 @@ export function useNotifications() {
   }
 
   return {
-    notifications: data ?? [],
+    notifications,
+    /** Every notification, loaded or not. */
+    total: data?.total ?? 0,
     unreadCount,
     isLoading,
     error,

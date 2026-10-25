@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { ChevronRight, Plus } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { TableFooter } from "@/components/list/TableFooter";
+import { usePager } from "@/components/list/usePager";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
@@ -23,6 +25,8 @@ const STATE = RULE_STATE;
 export function RuleList({ deviceId }: { deviceId: string }) {
   const { can } = usePermissions();
   const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
+  // Paged in the browser: a device rarely has more than a page of rules.
+  const pager = usePager(rules ?? []);
 
   if (isLoading) return <LoadingSkeleton rows={2} rowClassName="h-14" />;
   if (error) {
@@ -47,8 +51,9 @@ export function RuleList({ deviceId }: { deviceId: string }) {
   }
 
   return (
+    <div className="flex flex-col gap-2">
     <ul aria-label="Rules" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
-      {rules.map((r) => {
+      {pager.pageRows.map((r) => {
         const s = STATE[ruleStateKey(r)];
         return (
           <li key={r.id} className="border-t border-border-soft first:border-t-0">
@@ -69,5 +74,7 @@ export function RuleList({ deviceId }: { deviceId: string }) {
         );
       })}
     </ul>
+    <TableFooter shown={rules.length} total={rules.length} noun={["rule", "rules"]} page={pager.page} pageCount={pager.pageCount} pageSize={pager.pageSize} onPage={pager.setPage} onPageSize={pager.setPageSize} />
+    </div>
   );
 }

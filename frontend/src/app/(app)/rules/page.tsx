@@ -286,7 +286,19 @@ export default function RulesPage() {
           {filtered.length === 0 ? (
             <NoResults noun="rules" hidden={total} onClear={list.clearAll} />
           ) : list.filters.view === "ladder" ? (
-            <LadderOverview rules={filtered} />
+            <div className="flex flex-col gap-2">
+              <LadderOverview rules={pageRows} />
+              <TableFooter
+                shown={filtered.length}
+                total={total}
+                noun={["rule", "rules"]}
+                page={page}
+                pageCount={pageCount}
+                pageSize={list.pageSize}
+                onPage={list.setPage}
+                onPageSize={list.setPageSize}
+              />
+            </div>
           ) : (
             <ListWithPeek
               label="Rule"

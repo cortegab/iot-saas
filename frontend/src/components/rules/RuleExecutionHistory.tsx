@@ -1,7 +1,8 @@
 "use client";
 
 import { AlertCircle, Check } from "lucide-react";
-import { useApiSWR } from "@/hooks/useApiSWR";
+import { TableFooter } from "@/components/list/TableFooter";
+import { useServerPager } from "@/components/list/useServerPager";
 import { Tag } from "@/components/ui/Badge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -33,15 +34,18 @@ function outcome(a: ActionExecutionResponse): string {
  * (or cleared), and a ✓ or ⚠ per action with what happened. useRealtime's
  * rule_execution messages revalidate this key the moment a firing lands. */
 export function RuleExecutionHistory({ ruleId }: { ruleId: string }) {
-  const { data, error, isLoading, mutate } = useApiSWR<RuleExecutionResponse[]>(`/rules/${ruleId}/executions`);
+  // Paged by the API, so every firing can be browsed, not just the latest 100.
+  const pager = useServerPager<RuleExecutionResponse>(`/rules/${ruleId}/executions`);
+  const { rows: data, total, isLoading, error, mutate } = pager;
 
-  if (isLoading) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
+  if (isLoading && data.length === 0) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
   if (error) {
     return <ErrorState message={error instanceof ApiRequestError ? error.message : "Couldn't load recent firings."} onRetry={() => void mutate()} />;
   }
-  if (!data || data.length === 0) return <p className="text-sm text-ink-muted">It hasn&apos;t fired yet. Every firing shows up here with what each action did.</p>;
+  if (total === 0) return <p className="text-sm text-ink-muted">It hasn&apos;t fired yet. Every firing shows up here with what each action did.</p>;
 
   return (
+    <div className="flex flex-col gap-2">
     <ul aria-label="Recent firings" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
       {data.map((e) => (
         <li key={e.id} className="flex flex-wrap items-start gap-x-4 gap-y-1 border-t border-border-soft px-3.5 py-2.5 text-sm first:border-t-0">
@@ -66,5 +70,7 @@ export function RuleExecutionHistory({ ruleId }: { ruleId: string }) {
         </li>
       ))}
     </ul>
+    <TableFooter shown={total} total={total} noun={["firing", "firings"]} page={pager.page} pageCount={pager.pageCount} pageSize={pager.pageSize} onPage={pager.setPage} onPageSize={pager.setPageSize} />
+    </div>
   );
 }

@@ -14,6 +14,12 @@ type DeviceResponse = components["schemas"]["DeviceResponse"];
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/** A history feed and every page of it the screen has loaded (`${path}?limit=…`,
+ * components/list/useServerPager.ts). */
+function revalidateFeed(path: string): void {
+  void mutate((key) => typeof key === "string" && (key === path || key.startsWith(`${path}?`)));
+}
+
 /** One real revalidation of every device-scoped key — after a WS reconnect
  * (frames were missed) or when the page is visible again (lib/live-buffer
  * drops frames while hidden). */
@@ -121,11 +127,11 @@ export function useRealtime(): RealtimeStatus {
           );
         }
       } else if (message.type === "command_ack" && message.device_id) {
-        void mutate(`/devices/${message.device_id}/commands`);
+        revalidateFeed(`/devices/${message.device_id}/commands`);
       } else if (message.type === "notification") {
-        void mutate("/notifications");
+        revalidateFeed("/notifications");
       } else if (message.type === "rule_execution" && message.rule_id) {
-        void mutate(`/rules/${message.rule_id}/executions`);
+        revalidateFeed(`/rules/${message.rule_id}/executions`);
         void mutate("/rules/activity");
       } else if ((message.type === "rule_health" || message.type === "rule_latched") && message.rule_id) {
         void mutate("/rules");

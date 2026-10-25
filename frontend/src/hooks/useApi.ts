@@ -61,6 +61,8 @@ export function useApi() {
     };
     return {
       get: <T,>(path: string) => withRetry<T>((ctx) => apiClient.get<T>(path, ctx)),
+      /** A page of a history feed with its total (X-Total-Count). */
+      getPage: <T,>(path: string) => withRetry((ctx) => apiClient.getPage<T>(path, ctx)),
       post: <T,>(path: string, body?: Record<string, unknown>) =>
         withRetry<T>((ctx) => apiClient.post<T>(path, ctx, body)).then(afterWrite),
       /** A POST that reads (simulate, dry runs): no write happened, so no
