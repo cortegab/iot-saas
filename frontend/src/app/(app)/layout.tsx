@@ -106,7 +106,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             id="content"
             tabIndex={-1}
             className={cn(
-              "mx-auto flex w-full flex-col gap-[22px] px-4 pb-[calc(110px+var(--tabbar-h))] pt-[22px] outline-none transition-[max-width] duration-200 rail:px-10 rail:pt-9",
+              "mx-auto flex w-full flex-1 flex-col gap-[22px] px-4 pb-[calc(110px+var(--tabbar-h))] pt-[22px] outline-none transition-[max-width] duration-200 rail:px-10 rail:pt-9",
               wide ? "max-w-[1520px]" : "max-w-[1120px]",
             )}
           >

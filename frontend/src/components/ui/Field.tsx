@@ -46,8 +46,10 @@ export function Field({ label, optional, hint, error, warning, action, inline, c
   // The <label> holds only the label text and the control, so the control's
   // accessible name is the label; the message line is its description.
   return (
-    <div className={cn("relative grid min-w-0 gap-[5px]", inline && "grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3", className)}>
-      <label className={cn("grid min-w-0 gap-[5px]", inline && "col-span-2 grid-cols-subgrid items-center")}>
+    // content-start / self-start: a Field never stretches to its row's tallest
+    // neighbour, so a hint under one field can't move or grow the next control.
+    <div className={cn("relative grid min-w-0 content-start gap-[5px] self-start", inline && "grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3", className)}>
+      <label className={cn("grid min-w-0 content-start gap-[5px]", inline && "col-span-2 grid-cols-subgrid items-center")}>
         <span className={cn("text-xs font-medium text-ink-muted", inline && "text-[13px] text-ink")}>
           {label}
           {optional && <span className="font-normal opacity-75"> · optional</span>}

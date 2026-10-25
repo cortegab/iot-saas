@@ -53,7 +53,7 @@ export const CompactFields = createContext(false);
 /** A row of fields: `wide` columns on large viewports, one column when compact. */
 export function FieldRow({ wide, children }: { wide: string; children: ReactNode }) {
   const compact = useContext(CompactFields);
-  return <div className={cn("grid grid-cols-1 gap-4", !compact && wide)}>{children}</div>;
+  return <div className={cn("grid grid-cols-1 items-start gap-4", !compact && wide)}>{children}</div>;
 }
 
 /** A safety timer in seconds (demo H Behaviour): a number with an "s" affix,

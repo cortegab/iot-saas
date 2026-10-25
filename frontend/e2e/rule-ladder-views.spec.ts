@@ -12,11 +12,13 @@ test("ladder: horizontal when it fits, vertical on a phone, and nothing scrolls 
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
   const rung = page.getByRole("group", { name: "Rule rung editor" });
   await expect(rung).toBeVisible();
-  expect(await rung.evaluate((el) => el.tagName.toLowerCase())).toBe("svg");
+  // Polled: the rung swaps on the ResizeObserver's next frame, not at once.
+  await expect.poll(() => rung.evaluate((el) => el.tagName.toLowerCase())).toBe("svg");
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(rung).toBeVisible();
-  expect(await rung.evaluate((el) => el.tagName.toLowerCase())).toBe("div");
+  // Polled: the rung swaps on the ResizeObserver's next frame, not at once.
+  await expect.poll(() => rung.evaluate((el) => el.tagName.toLowerCase())).toBe("div");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
@@ -48,7 +50,8 @@ test("ladder: in the editor a wide rung scales down to fit before it goes vertic
     await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
     const rung = page.getByRole("group", { name: "Rule rung editor" });
     await expect(rung).toBeVisible();
-    expect(await rung.evaluate((el) => el.tagName.toLowerCase())).toBe("svg");
+    // Polled: the rung swaps on the ResizeObserver's next frame, not at once.
+    await expect.poll(() => rung.evaluate((el) => el.tagName.toLowerCase())).toBe("svg");
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
     expect(overflow).toBeLessThanOrEqual(0);
   } finally {

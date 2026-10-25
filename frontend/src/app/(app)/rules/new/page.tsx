@@ -15,6 +15,7 @@ import { upsertRuleInCache } from "@/lib/rule-cache";
 import type { RuleDraft } from "@/lib/rule-draft";
 import { recipesFor, unavailableRecipes, type Recipe } from "@/lib/rule-recipes";
 import { cn } from "@/lib/cn";
+import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -56,7 +57,7 @@ export default function NewRulePage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className={cn("flex flex-col gap-4", start && PAGE_WITH_BAR)}>
       <PageHeader
         title="New rule"
         breadcrumbs={[seededDevice ? { href: back, label: device?.name ?? "Device" } : { href: "/rules", label: "Rules" }]}

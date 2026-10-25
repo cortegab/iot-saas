@@ -12,6 +12,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import { MiniStrip } from "@/components/ui/MiniStrip";
 import { Callout } from "@/components/ui/Callout";
 import { RuleExecutionHistory } from "@/components/rules/RuleExecutionHistory";
@@ -107,7 +108,7 @@ export default function EditRulePage() {
   const unhealthy = unhealthySummary(rule);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className={`${PAGE_WITH_BAR} gap-4`}>
       <PageHeader
         breadcrumbs={[{ label: "Rules", href: "/rules" }]}
         eyebrow={
