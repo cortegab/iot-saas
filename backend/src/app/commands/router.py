@@ -6,7 +6,7 @@ devices.deps.get_device_or_404 (the same dependency devices/telemetry use),
 then the query/request is delegated to commands.service.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.commands import service
@@ -15,6 +15,7 @@ from app.commands.schemas import CommandResponse, ManualCommandRequest
 from app.db import get_session
 from app.devices.deps import get_device_or_404
 from app.devices.models import Device, DeviceStatus
+from app.paging import OFFSET, limit_param, set_total
 from app.tenants.deps import TenantContext, require_role
 from app.tenants.models import TenantRole
 
@@ -38,10 +39,32 @@ def _to_response(command: Command) -> CommandResponse:
 
 @router.get("/commands", response_model=list[CommandResponse])
 async def list_commands(
+    response: Response,
     device: Device = Depends(get_device_or_404),
     session: AsyncSession = Depends(get_session, scope="function"),
+    limit: int = limit_param(100),
+    offset: int = OFFSET,
+    actuator: str | None = Query(None, description="Only this actuator (wire id)."),
+    result: service.CommandStatusFilter | None = Query(
+        None, alias="status", description="confirmed, pending or no_response."
+    ),
 ) -> list[CommandResponse]:
-    commands = await service.list_commands(session, device.tenant_id, device.id)
+    """Newest first, paged; the total is in X-Total-Count (app/paging.py)."""
+    commands = await service.list_commands(
+        session,
+        device.tenant_id,
+        device.id,
+        limit=limit,
+        offset=offset,
+        actuator=actuator,
+        status=result,
+    )
+    set_total(
+        response,
+        await service.count_commands(
+            session, device.tenant_id, device.id, actuator=actuator, status=result
+        ),
+    )
     return [_to_response(c) for c in commands]
 
 
