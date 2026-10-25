@@ -9,13 +9,14 @@ activity feed, not tenant configuration, so membership alone
 import uuid
 from collections.abc import Awaitable, Callable
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.notifications import service
 from app.notifications.models import Notification
 from app.notifications.schemas import NotificationResponse
+from app.paging import OFFSET, limit_param, set_total
 from app.tenants.deps import TenantContext, require_tenant_context
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -27,10 +28,17 @@ def _to_response(notification: Notification) -> NotificationResponse:
 
 @router.get("", response_model=list[NotificationResponse])
 async def list_notifications(
+    response: Response,
     ctx: TenantContext = Depends(require_tenant_context),
     session: AsyncSession = Depends(get_session, scope="function"),
+    limit: int = limit_param(50),
+    offset: int = OFFSET,
 ) -> list[NotificationResponse]:
-    notifications = await service.list_notifications(session, ctx.tenant_id)
+    """Newest first, paged; the total is in X-Total-Count (app/paging.py)."""
+    notifications = await service.list_notifications(
+        session, ctx.tenant_id, limit=limit, offset=offset
+    )
+    set_total(response, await service.count_notifications(session, ctx.tenant_id))
     return [_to_response(n) for n in notifications]
 
 

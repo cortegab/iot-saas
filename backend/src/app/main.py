@@ -19,6 +19,7 @@ from app.devices.router import router as devices_router
 from app.ingestion.router import router as ingestion_router
 from app.logging_config import configure_logging
 from app.notifications.router import router as notifications_router
+from app.paging import TOTAL_HEADER
 from app.realtime.router import router as realtime_router
 from app.rules.router import router as rules_router
 from app.telemetry.router import router as telemetry_router
@@ -37,6 +38,8 @@ app.add_middleware(
     allow_origins=settings.cors_allow_origins_list,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The history feeds' total row count (app/paging.py), readable cross-origin.
+    expose_headers=[TOTAL_HEADER],
 )
 
 app.include_router(auth_router)

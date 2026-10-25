@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 import aiomqtt
 import redis.asyncio as redis
 from croniter import CroniterError, croniter
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth import service as auth_service
@@ -1407,20 +1407,35 @@ class RuleExecutionRow(NamedTuple):
     actions: list[ActionExecutionRow]
 
 
+async def count_rule_executions(
+    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID
+) -> int:
+    result = await session.execute(
+        select(func.count())
+        .select_from(RuleExecution)
+        .where(RuleExecution.tenant_id == tenant_id, RuleExecution.rule_id == rule_id)
+    )
+    return int(result.scalar_one())
+
+
 async def list_rule_executions(
-    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID, limit: int = 100
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    limit: int = 100,
+    offset: int = 0,
 ) -> list[RuleExecutionRow]:
-    """Flat capped list, newest first — matches this codebase's only existing
-    pagination convention (commands/notifications' hardcoded .limit(N), no
-    offset/cursor anywhere). Device display name resolved via a raw text()
-    join, same reason list_rule_device_rows does — rules/ never imports
-    devices/models.py directly (CLAUDE.md §6).
+    """A page of a rule's firings, newest first (limit/offset, app/paging.py;
+    id breaks ties so pages never repeat or skip a row). Device display name
+    resolved via a raw text() join, same reason list_rule_device_rows does —
+    rules/ never imports devices/models.py directly (CLAUDE.md §6).
     """
     result = await session.execute(
         select(RuleExecution)
         .where(RuleExecution.tenant_id == tenant_id, RuleExecution.rule_id == rule_id)
-        .order_by(RuleExecution.fired_at.desc())
+        .order_by(RuleExecution.fired_at.desc(), RuleExecution.id.desc())
         .limit(limit)
+        .offset(offset)
     )
     executions = list(result.scalars().all())
     if not executions:
@@ -1484,8 +1499,20 @@ class FailedActionRow(NamedTuple):
     created_at: datetime
 
 
+_FAILED_WHERE = (
+    "WHERE ae.tenant_id = :tenant_id AND ae.status = 'failed' AND ae.retried_at IS NULL "
+)
+
+
+async def count_failed_actions(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    result = await session.execute(
+        text("SELECT count(*) FROM action_executions ae " + _FAILED_WHERE), {"tenant_id": tenant_id}
+    )
+    return int(result.scalar_one())
+
+
 async def list_failed_actions(
-    session: AsyncSession, tenant_id: uuid.UUID, limit: int = 100
+    session: AsyncSession, tenant_id: uuid.UUID, limit: int = 100, offset: int = 0
 ) -> list[FailedActionRow]:
     """Tenant-wide feed of failed deliveries (webhook/email that exhausted
     retries, unresolvable actuator targets, etc.) — the operational "what is
@@ -1499,10 +1526,10 @@ async def list_failed_actions(
             "FROM action_executions ae "
             "JOIN rule_executions re ON re.id = ae.rule_execution_id "
             "LEFT JOIN rules r ON r.id = re.rule_id "
-            "WHERE ae.tenant_id = :tenant_id AND ae.status = 'failed' AND ae.retried_at IS NULL "
-            "ORDER BY ae.created_at DESC LIMIT :limit"
+            + _FAILED_WHERE
+            + "ORDER BY ae.created_at DESC, ae.id DESC LIMIT :limit OFFSET :offset"
         ),
-        {"tenant_id": tenant_id, "limit": limit},
+        {"tenant_id": tenant_id, "limit": limit, "offset": offset},
     )
     return [FailedActionRow(**row) for row in result.mappings().all()]
 
@@ -2205,11 +2232,24 @@ async def emit_rule_health_transitions(factory: async_sessionmaker[AsyncSession]
 # ---- Versions (API-side, DESIGN.md §9) ---------------------------------------
 
 
-async def list_rule_versions(
+async def count_rule_versions(
     session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID
+) -> int:
+    return await rule_versions.count_versions(session, tenant_id, rule_id)
+
+
+async def list_rule_versions(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[tuple[RuleVersion, str | None]]:
-    """Newest first, each with its author's display name (or email)."""
-    rows = await rule_versions.list_versions(session, tenant_id, rule_id)
+    """A page of saved states, newest first, each with its author's display
+    name (or email)."""
+    rows = await rule_versions.list_versions(
+        session, tenant_id, rule_id, limit=limit, offset=offset
+    )
     people = await auth_service.get_people_by_user_ids(
         session, list({v.author_id for v in rows if v.author_id is not None})
     )

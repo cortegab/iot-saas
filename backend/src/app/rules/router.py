@@ -12,13 +12,14 @@ are still accepted).
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import TypeAdapter
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
 from app.devices.deps import get_device_or_404
 from app.devices.models import Device
+from app.paging import OFFSET, limit_param, set_total
 from app.rules import service
 from app.rules.deps import get_rule_or_404
 from app.rules.models import Rule
@@ -197,13 +198,17 @@ async def create_device_rule(
 
 @router.get("/rules/failed-actions", response_model=list[FailedActionResponse])
 async def list_failed_actions(
+    response: Response,
     ctx: TenantContext = Depends(require_tenant_context),
     session: AsyncSession = Depends(get_session, scope="function"),
+    limit: int = limit_param(100),
+    offset: int = OFFSET,
 ) -> list[FailedActionResponse]:
     # Declared above GET /rules/{rule_id} so "failed-actions" isn't matched as
     # a rule_id. Read-side feed — membership is enough, no admin gate (same
-    # reasoning as notifications/router.py).
-    rows = await service.list_failed_actions(session, ctx.tenant_id)
+    # reasoning as notifications/router.py). Paged; total in X-Total-Count.
+    rows = await service.list_failed_actions(session, ctx.tenant_id, limit=limit, offset=offset)
+    set_total(response, await service.count_failed_actions(session, ctx.tenant_id))
     return [
         FailedActionResponse(
             id=row.id,
@@ -332,12 +337,19 @@ async def simulate_rule(
 
 @router.get("/rules/{rule_id}/versions", response_model=list[RuleVersionResponse])
 async def list_rule_versions(
+    response: Response,
     rule: Rule = Depends(get_rule_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
     session: AsyncSession = Depends(get_session, scope="function"),
+    limit: int = limit_param(50),
+    offset: int = OFFSET,
 ) -> list[RuleVersionResponse]:
-    """Saved states, newest first. Membership is enough (read-side)."""
-    rows = await service.list_rule_versions(session, ctx.tenant_id, rule.id)
+    """Saved states, newest first, paged (total in X-Total-Count). Membership
+    is enough (read-side)."""
+    rows = await service.list_rule_versions(
+        session, ctx.tenant_id, rule.id, limit=limit, offset=offset
+    )
+    set_total(response, await service.count_rule_versions(session, ctx.tenant_id, rule.id))
     return [
         RuleVersionResponse(
             id=v.id,
@@ -354,11 +366,18 @@ async def list_rule_versions(
 
 @router.get("/rules/{rule_id}/executions", response_model=list[RuleExecutionResponse])
 async def list_rule_executions(
+    response: Response,
     rule: Rule = Depends(get_rule_or_404),
     ctx: TenantContext = Depends(require_tenant_context),
     session: AsyncSession = Depends(get_session, scope="function"),
+    limit: int = limit_param(100),
+    offset: int = OFFSET,
 ) -> list[RuleExecutionResponse]:
-    rows = await service.list_rule_executions(session, ctx.tenant_id, rule.id)
+    """Firings, newest first, paged (total in X-Total-Count)."""
+    rows = await service.list_rule_executions(
+        session, ctx.tenant_id, rule.id, limit=limit, offset=offset
+    )
+    set_total(response, await service.count_rule_executions(session, ctx.tenant_id, rule.id))
     return [
         RuleExecutionResponse(
             id=row.id,
