@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, RotateCw } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
-import { useApiSWR } from "@/hooks/useApiSWR";
+import { TableFooter } from "@/components/list/TableFooter";
+import { useServerPager } from "@/components/list/useServerPager";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
@@ -46,7 +47,9 @@ export function FailedActionsList() {
   const { can } = usePermissions();
   const canRetry = can("rules.write");
   const [retrying, setRetrying] = useState<string | null>(null);
-  const { data, error, isLoading, mutate } = useApiSWR<FailedActionResponse[]>("/rules/failed-actions");
+  // Paged by the API, so every failure can be browsed, not just the latest 100.
+  const pager = useServerPager<FailedActionResponse>("/rules/failed-actions");
+  const { rows: data, total, isLoading, error, mutate } = pager;
 
   async function retry(a: FailedActionResponse) {
     setRetrying(a.id);
@@ -72,8 +75,8 @@ export function FailedActionsList() {
       />
     );
   }
-  if (isLoading || !data) return <TableSkeleton rows={4} columns={4} />;
-  if (data.length === 0) {
+  if (isLoading && data.length === 0) return <TableSkeleton rows={4} columns={4} />;
+  if (total === 0) {
     return (
       <EmptyState
         icon={<CheckCircle2 aria-hidden size={26} />}
@@ -148,9 +151,16 @@ export function FailedActionsList() {
   return (
     <div className="flex flex-col gap-2">
       <DataTable label="Failed deliveries" columns={columns} rows={data} rowKey={(a) => a.id} />
-      <p className="px-0.5 text-xs text-ink-muted">
-        {data.length} failed {data.length === 1 ? "delivery" : "deliveries"}
-      </p>
+      <TableFooter
+        shown={total}
+        total={total}
+        noun={["failed delivery", "failed deliveries"]}
+        page={pager.page}
+        pageCount={pager.pageCount}
+        pageSize={pager.pageSize}
+        onPage={pager.setPage}
+        onPageSize={pager.setPageSize}
+      />
     </div>
   );
 }

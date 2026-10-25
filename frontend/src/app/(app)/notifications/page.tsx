@@ -38,6 +38,8 @@ const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; tone: strin
   info: { icon: Info, label: "Info", tone: "text-ink-muted" },
 };
 const SEVERITY_ORDER: Severity[] = ["critical", "warning", "info"];
+/** The API's largest page (backend app/paging.py MAX_LIMIT). */
+const MAX_LOADED = 500;
 
 /** Repeats of the same alert from the same source, as one row (DESIGN.md §8). */
 interface AlertGroup {
@@ -74,7 +76,9 @@ const clock = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday
  * their backend (§13). */
 export default function NotificationsPage() {
   const toast = useToast();
-  const { notifications, unreadCount, isLoading, error, markAllRead, markRead, markUnread, dismiss, restore } = useNotifications();
+  // The latest `limit` notifications; "Show older" loads 100 more (up to the API's 500 a request).
+  const [limit, setLimit] = useState(100);
+  const { notifications, total: totalRows, unreadCount, isLoading, error, markAllRead, markRead, markUnread, dismiss, restore } = useNotifications(limit);
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
   const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
@@ -171,7 +175,7 @@ export default function NotificationsPage() {
         <ErrorState
           title="Couldn't load notifications"
           message={error instanceof ApiRequestError ? error.message : "The API didn't respond."}
-          onRetry={() => void revalidate(NOTIFICATIONS_KEY)}
+          onRetry={() => void revalidate((key) => typeof key === "string" && key.startsWith(NOTIFICATIONS_KEY))}
         />
       ) : isLoading ? (
         <LoadingSkeleton rows={4} rowClassName="h-16" />
@@ -312,6 +316,21 @@ export default function NotificationsPage() {
                 onPage={list.setPage}
                 onPageSize={list.setPageSize}
               />
+              {/* Older than what's loaded: one request grows (useNotifications). */}
+              {totalRows > notifications.length && (
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
+                  <span className="text-[12.5px] text-ink-muted">
+                    The latest {notifications.length} of {totalRows} notifications
+                  </span>
+                  {limit < MAX_LOADED ? (
+                    <Button variant="secondary" size="sm" onClick={() => setLimit((l) => Math.min(l + 100, MAX_LOADED))}>
+                      Show older
+                    </Button>
+                  ) : (
+                    <span className="text-[12.5px] text-ink-muted">Dismiss old ones to see further back.</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </>
