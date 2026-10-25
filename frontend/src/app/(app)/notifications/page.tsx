@@ -3,10 +3,10 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { mutate as revalidate } from "swr";
-import { AlertTriangle, Bell, Check, CheckCheck, ChevronRight, Info, Mail, X, Zap } from "lucide-react";
+import { AlertTriangle, Bell, Check, CheckCheck, Info, Mail, X, Zap } from "lucide-react";
 import { NOTIFICATIONS_KEY, useNotifications } from "@/hooks/useNotifications";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { Tag } from "@/components/ui/Badge";
+import { Badge, Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -32,10 +32,10 @@ type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type NotificationResponse = components["schemas"]["NotificationResponse"];
 type Severity = NotificationResponse["severity"];
 
-const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; className: string }> = {
-  critical: { icon: AlertTriangle, label: "Critical", className: "bg-status-error-surface text-status-error" },
-  warning: { icon: Zap, label: "Warning", className: "bg-status-pending-surface text-status-pending" },
-  info: { icon: Info, label: "Info", className: "bg-surface-raised text-ink-muted" },
+const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; tone: string }> = {
+  critical: { icon: AlertTriangle, label: "Critical", tone: "text-status-error" },
+  warning: { icon: Zap, label: "Warning", tone: "text-status-pending" },
+  info: { icon: Info, label: "Info", tone: "text-ink-muted" },
 };
 const SEVERITY_ORDER: Severity[] = ["critical", "warning", "info"];
 
@@ -117,7 +117,7 @@ export default function NotificationsPage() {
   // Alerts waiting to be read, counted once per group of repeats.
   const kpis = useMemo(() => {
     const unread = groupRepeats(notifications).filter((g) => g.unread);
-    return { critical: unread.filter((g) => g.latest.severity === "critical").length, warning: unread.filter((g) => g.latest.severity === "warning").length, unread: unread.length };
+    return { all: groupRepeats(notifications).length, critical: unread.filter((g) => g.latest.severity === "critical").length, warning: unread.filter((g) => g.latest.severity === "warning").length, unread: unread.length };
   }, [notifications]);
 
   const { pageRows, pageCount, page } = paginate(groups, list.page, list.pageSize);
@@ -247,68 +247,64 @@ export default function NotificationsPage() {
             )
           ) : (
             <div className="flex flex-col gap-2">
-              <ul className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+              {/* demo H rows: a bare severity icon, one column (title, muted
+                  detail, small meta with links), the state and its action on
+                  the right. The whole row opens the sheet. */}
+              <ul aria-label="Alerts" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
                 {pageRows.map((g) => {
                   const n = g.latest;
                   const sev = SEVERITY[n.severity];
                   const SevIcon = n.kind === "delivery_failed" ? Mail : sev.icon;
                   const repeats = g.items.length;
                   return (
-                    <li key={g.key} className={cn("flex items-start gap-1 border-b border-border-soft pr-2 last:border-b-0 hover:bg-row-hover", g.unread && "bg-accent/[0.04]")}>
-                      {/* The whole row opens the sheet; the device and rule in its
-                          last line are links of their own (demo H). */}
-                      <div
-                        className="flex min-w-0 flex-1 cursor-pointer flex-col gap-0.5 py-3.5 pl-4"
-                        onClick={(e) => {
-                          if (!(e.target as HTMLElement).closest("a, button")) openSheet(g);
-                        }}
-                      >
-                        <button type="button" onClick={() => openSheet(g)} aria-haspopup="dialog" className="flex min-w-0 items-start gap-3 text-left">
-                          <span title={sev.label} className={cn("grid h-[30px] w-[30px] shrink-0 place-items-center rounded-md", sev.className)}>
-                            <SevIcon aria-hidden size={16} />
-                            <span className="sr-only">{sev.label}</span>
+                    <li
+                      key={g.key}
+                      onClick={(e) => {
+                        if (!(e.target as HTMLElement).closest("a, button")) openSheet(g);
+                      }}
+                      className={cn(
+                        "flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-2 border-t border-border-soft px-3.5 py-2.5 first:border-t-0 hover:bg-row-hover",
+                        // Unread: the demo's active bar on the left edge.
+                        g.unread && "shadow-[inset_3px_0_0_var(--color-accent)]",
+                      )}
+                    >
+                      <div className="flex min-w-0 flex-1 basis-[260px] items-start gap-3">
+                        <SevIcon aria-hidden size={17} className={cn("mt-0.5 shrink-0", sev.tone)} />
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
+                          <button type="button" onClick={() => openSheet(g)} aria-haspopup="dialog" className="min-w-0 text-left text-ink">
+                            <span className="sr-only">{sev.label}: </span>
+                            <strong className="font-medium">{n.message}</strong>
+                            {repeats > 1 && (
+                              <Tag size="sm" className="ml-2">
+                                ×{repeats}
+                              </Tag>
+                            )}
+                          </button>
+                          {n.detail && <span className="text-[12.5px] text-ink-muted">{n.detail}</span>}
+                          <span className="text-[12.5px] text-ink-muted">
+                            {repeats > 1 ? `since ${clock(g.first.created_at)}, last ${timeAgo(n.created_at)}` : timeAgo(n.created_at)}
+                            <SourceLinks n={n} deviceName={deviceName} ruleName={ruleName} templateName={templateName} />
                           </span>
-                          <span className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
-                            <span className="text-ink">
-                              {g.unread && <span aria-label="Unread" className="mr-2 inline-block h-[7px] w-[7px] rounded-full bg-accent align-middle" />}
-                              <strong className="font-medium">{n.message}</strong>
-                              {repeats > 1 && (
-                                <Tag size="sm" className="ml-2">
-                                  ×{repeats}
-                                </Tag>
-                              )}
-                            </span>
-                            {n.detail && <span className="text-[13.5px] text-ink">{n.detail}</span>}
-                          </span>
-                          <ChevronRight aria-hidden size={15} className="mt-2 shrink-0 text-ink-muted" />
-                        </button>
-                        <span className="pl-[42px] text-[13px] text-ink-muted">
-                          {sev.label}
-                          <SourceLinks n={n} deviceName={deviceName} ruleName={ruleName} templateName={templateName} />
-                          {" · "}
-                          {repeats > 1 ? `since ${clock(g.first.created_at)}, last ${timeAgo(n.created_at)}` : timeAgo(n.created_at)}
-                        </span>
+                        </div>
                       </div>
-                      <span className="pt-3">
+                      <div className="ml-auto flex shrink-0 items-center gap-2.5 max-[600px]:w-full max-[600px]:pl-[29px]">
+                        {g.unread && <Badge tone="accent" label="Unread" />}
+                        <Button size="sm" variant="secondary" onClick={() => void (g.unread ? readAll(g) : unreadAll(g))}>
+                          {g.unread ? <Check aria-hidden size={14} /> : <Bell aria-hidden size={14} />}
+                          {g.unread ? "Mark read" : "Mark unread"}
+                        </Button>
                         <DropdownMenu
                           label={`Actions for ${n.message}`}
-                          groups={[
-                            [
-                              g.unread
-                                ? { label: "Mark as read", icon: <Check size={15} />, onClick: () => void readAll(g) }
-                                : { label: "Mark as unread", icon: <Bell size={15} />, onClick: () => void unreadAll(g) },
-                            ],
-                            [{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }],
-                          ]}
+                          groups={[[{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }]]}
                         />
-                      </span>
+                      </div>
                     </li>
                   );
                 })}
               </ul>
               <TableFooter
                 shown={groups.length}
-                total={groups.length}
+                total={kpis.all}
                 noun={["alert", "alerts"]}
                 page={page}
                 pageCount={pageCount}
