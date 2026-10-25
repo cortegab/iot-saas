@@ -28,10 +28,9 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
 
   await page.goto("/rules/new");
   await page.getByRole("button", { name: /Start blank/ }).click();
+  // A new rule is a wizard (DESIGN.md §9.1); Form / Ladder is in its If and Then steps.
+  await page.getByRole("button", { name: "Next: If" }).click();
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
-  // In Ladder the rule's name is edited in the inspector, picked from the rail.
-  await page.getByRole("navigation", { name: "Rule sections" }).getByRole("button", { name: /^Name/ }).click();
-  await page.getByLabel("Rule name").fill(name);
 
   // A — the starting contact.
   await page.getByRole("button", { name: /^Condition / }).first().click();
@@ -47,13 +46,17 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   await page.getByRole("button", { name: "Add in series" }).click();
   await fillContact(page, deviceId, "40");
   await expect(page.getByRole("button", { name: /^Condition / })).toHaveCount(4);
+  // Each element opens in a sheet (DESIGN.md §9.10); close it to pick the next.
+  await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
 
   // THEN: replace the default (empty) actuator coil with a notification.
   await page.getByRole("button", { name: "Add an action" }).click();
-  await page.getByRole("button", { name: "+ In-app notification" }).click();
+  await page.getByRole("button", { name: "Add action", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Post a notification" }).click();
   // Field puts its hint inside the <label>, so the accessible name continues past "Message".
   await page.getByLabel(/^Message/).fill("E2E ladder fired");
-  await page.getByRole("button", { name: /^Action actuator/ }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: /^Action Turn actuator/ }).click();
   await page.getByRole("button", { name: "Remove coil" }).click();
   await expect(page.getByRole("button", { name: /^Action / })).toHaveCount(1);
 
@@ -62,6 +65,11 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   await expect(page.getByRole("radiogroup", { name: "Combine with" })).toHaveCount(2);
   await expect(page.getByText(/ and \(.+ or .+\) and /)).toBeVisible();
 
+  // Through the steps to Review, where it's named and created.
+  await page.getByRole("button", { name: "Next: Then" }).click();
+  await page.getByRole("button", { name: "Next: Behaviour" }).click();
+  await page.getByRole("button", { name: "Next: Review" }).click();
+  await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByRole("button", { name: "Create rule" }).click();
   // A new rule opens on its own page.
   await expect(page).toHaveURL(/\/rules\/[0-9a-f-]{36}$/);

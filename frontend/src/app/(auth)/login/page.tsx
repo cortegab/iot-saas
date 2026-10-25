@@ -34,7 +34,7 @@ export default function LoginPage() {
   const [failures, setFailures] = useState(0);
   const [capsOn, setCapsOn] = useState(false);
   const [choosing, setChoosing] = useState<TokenPairResponse | null>(null);
-  const [keep, setKeep] = useState(true);
+  const [keep, setKeep] = useState(false);
 
   function enter(data: TokenPairResponse, tenantId?: string) {
     adoptSession(data, tenantId, { keep });
@@ -97,12 +97,12 @@ export default function LoginPage() {
   return (
     <AuthCard
       title="Sign in"
-      description="Welcome back. Sign in to your iodriven workspace."
+      description="to your workspace"
       footer={
         <>
-          New to iodriven?{" "}
+          No account?{" "}
           <Link href="/register" className="font-medium text-accent hover:underline">
-            Create an account
+            Create a workspace
           </Link>
         </>
       }

@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -19,9 +18,10 @@ import {
   type RuleDraft,
 } from "@/lib/rule-draft";
 import { BehaviourFields, lastDevice } from "@/components/rules/editor/FormMode";
-import { ActionFields, AddActionMenu, CompactFields, ContactFields, WhenFields, actionLabel } from "@/components/rules/editor/fields";
+import { ActionFields, AddActionMenu, ContactFields, WhenFields, actionLabel } from "@/components/rules/editor/fields";
 import type { RuleCatalog } from "@/components/rules/editor/useRuleCatalog";
-import { LadderRung, type LadderSelection } from "./LadderRung";
+import { ItemSheet } from "@/components/ui/ItemSheet";
+import { ResponsiveRung, type LadderSelection } from "./LadderRung";
 
 type Update = (next: RuleDraft) => void;
 
@@ -65,8 +65,8 @@ function Crumb({ draft, id, leaf, select }: { draft: RuleDraft; id?: string; lea
   );
 }
 
-function Title({ children }: { children: string }) {
-  return <h3 className="text-[15px] font-semibold text-ink">{children}</h3>;
+function Title({ children, show = true }: { children: string; show?: boolean }) {
+  return show ? <h3 className="text-[15px] font-semibold text-ink">{children}</h3> : null;
 }
 
 function InspectorBody({
@@ -75,19 +75,22 @@ function InspectorBody({
   catalog,
   update,
   select,
+  titled = true,
 }: {
   selection: LadderSelection;
   draft: RuleDraft;
   catalog: RuleCatalog;
   update: Update;
   select: (s: LadderSelection) => void;
+  /** False inside a sheet, whose header already names it. */
+  titled?: boolean;
 }) {
   const setCondition = (condition: DraftNode | null) => update({ ...draft, condition });
 
   if (selection === null) {
     return (
       <>
-        <Title>Rule</Title>
+        <Title show={titled}>Rule</Title>
         <p className="text-[13px] text-ink-muted">
           Select the trigger, a contact, a block, the timer or a coil on the rung to edit it. Use <strong>+</strong> to add a contact at the end or another coil.
         </p>
@@ -98,7 +101,7 @@ function InspectorBody({
     return (
       <>
         <Crumb draft={draft} leaf="Trigger" select={select} />
-        <Title>Trigger</Title>
+        <Title show={titled}>Trigger</Title>
         <WhenFields when={draft.when} catalog={catalog} onChange={(when) => update({ ...draft, when })} />
       </>
     );
@@ -107,7 +110,7 @@ function InspectorBody({
     return (
       <>
         <Crumb draft={draft} leaf="Timer" select={select} />
-        <Title>Behaviour</Title>
+        <Title show={titled}>Behaviour</Title>
         <BehaviourFields draft={draft} update={update} />
       </>
     );
@@ -116,7 +119,7 @@ function InspectorBody({
     return (
       <>
         <Crumb draft={draft} leaf="Coil" select={select} />
-        <Title>New coil</Title>
+        <Title show={titled}>New coil</Title>
         <p className="text-[13px] text-ink-muted">It runs together with the other coils when the rule fires.</p>
         <AddActionMenu
           onAdd={(kind) => {
@@ -155,7 +158,7 @@ function InspectorBody({
       return (
         <>
           <Crumb draft={draft} id={id} leaf="Contact" select={select} />
-          <Title>Contact</Title>
+          <Title show={titled}>Contact</Title>
           <ContactFields contact={node} catalog={catalog} onChange={(patch) => setCondition(updateContact(draft.condition, id, patch))} />
           {addButtons}
           <div>
@@ -169,7 +172,7 @@ function InspectorBody({
     return (
       <>
         <Crumb draft={draft} id={id} select={select} />
-        <Title>{node.op === "AND" ? "Series block" : "Parallel block"}</Title>
+        <Title show={titled}>{node.op === "AND" ? "Series block" : "Parallel block"}</Title>
         <SegmentedControl
           ariaLabel="Block type"
           value={node.op}
@@ -200,7 +203,7 @@ function InspectorBody({
   return (
     <>
       <Crumb draft={draft} leaf="Coil" select={select} />
-      <Title>{actionLabel(action, catalog).title}</Title>
+      <Title show={titled}>{actionLabel(action, catalog).title}</Title>
       <ActionFields
         action={action}
         catalog={catalog}
@@ -245,7 +248,9 @@ export function liveSelection(draft: RuleDraft, selection: EditorSelection): Edi
   return selection;
 }
 
-/** The rung, its hint and legend (DESIGN.md §9.2) — the Ladder canvas. */
+/** The rung, its hint and legend (DESIGN.md §9.10) — the Ladder canvas.
+ * Horizontal when it fits, vertical otherwise; arrow keys move between its
+ * elements and Enter opens one. */
 export function LadderCanvas({
   draft,
   catalog,
@@ -267,8 +272,8 @@ export function LadderCanvas({
   }
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <div className="overflow-x-auto rounded-xl border border-border bg-surface bg-[radial-gradient(var(--color-border)_1px,transparent_1px)] p-4 shadow-card [background-size:14px_14px]">
-        <LadderRung
+      <div className="overflow-hidden rounded-xl border border-border bg-surface bg-[radial-gradient(var(--color-border)_1px,transparent_1px)] p-4 shadow-card [background-size:14px_14px]">
+        <ResponsiveRung
           draft={draft}
           catalog={catalog}
           selection={selection?.kind === "name" ? null : selection}
@@ -278,7 +283,7 @@ export function LadderCanvas({
         />
       </div>
       <p className="text-[13px] text-ink-muted">
-        Series contacts must all be true; parallel branches need any one. Select an element to edit it on the right. The ladder and the form edit the same rule.
+        Series contacts must all be true; parallel branches need any one. Select an element to open it; the arrow keys move between them. The ladder and the form edit the same rule.
       </p>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
         {LEGEND.map((l) => (
@@ -291,39 +296,37 @@ export function LadderCanvas({
   );
 }
 
-/** The selected element's properties (demo G inspector), in the editor's
- * right column. Fields stack one per row in the narrow panel. */
-export function LadderInspector({
+/** The selected contact, block or coil in an item sheet (DESIGN.md §9.10:
+ * the same sheets as the Form; there is no inspector column). The trigger
+ * and the timers open their tabs instead, so this only shows for those. */
+export function LadderSheet({
   draft,
   catalog,
   update,
   selection,
   onSelect,
-  nameFields,
 }: {
   draft: RuleDraft;
   catalog: RuleCatalog;
   update: Update;
   selection: EditorSelection;
   onSelect: (s: EditorSelection) => void;
-  /** Name and status, shown when the rule itself is selected. */
-  nameFields: ReactNode;
 }) {
+  const open = selection?.kind === "node" || selection?.kind === "action" || selection?.kind === "add-action";
+  let title = "Rung";
+  if (selection?.kind === "add-action") title = "New coil";
+  else if (selection?.kind === "action") {
+    const a = draft.actions.find((x) => x.id === selection.id);
+    title = a ? actionLabel(a, catalog).title : "Coil";
+  } else if (selection?.kind === "node") {
+    const n = findNode(draft.condition, selection.id);
+    title = n?.kind === "group" ? (n.op === "AND" ? "Series block" : "Parallel block") : "Condition";
+  }
   return (
-    <section aria-label="Inspector" className="flex min-w-0 flex-col gap-3 rounded-xl border border-border bg-surface p-4 shadow-card">
-      <CompactFields.Provider value={true}>
-        {selection?.kind === "name" ? (
-          <>
-            <nav aria-label="Where this sits" className="font-mono text-[12px] text-ink-muted">
-              Rule
-            </nav>
-            <Title>Name and status</Title>
-            {nameFields}
-          </>
-        ) : (
-          <InspectorBody selection={selection} draft={draft} catalog={catalog} update={update} select={onSelect} />
-        )}
-      </CompactFields.Provider>
-    </section>
+    <ItemSheet open={open} onClose={() => onSelect(null)} title={title} sub="On the rung">
+      <div className="flex flex-col gap-3">
+        {open && <InspectorBody selection={selection} draft={draft} catalog={catalog} update={update} select={onSelect} titled={false} />}
+      </div>
+    </ItemSheet>
   );
 }

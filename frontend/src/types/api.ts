@@ -774,7 +774,8 @@ export interface paths {
         };
         /**
          * List Rule Versions
-         * @description Saved states, newest first. Membership is enough (read-side).
+         * @description Saved states, newest first, paged (total in X-Total-Count). Membership
+         *     is enough (read-side).
          */
         get: operations["list_rule_versions_rules__rule_id__versions_get"];
         put?: never;
@@ -792,7 +793,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Rule Executions */
+        /**
+         * List Rule Executions
+         * @description Firings, newest first, paged (total in X-Total-Count).
+         */
         get: operations["list_rule_executions_rules__rule_id__executions_get"];
         put?: never;
         post?: never;
@@ -809,7 +813,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Commands */
+        /**
+         * List Commands
+         * @description Newest first, paged; the total is in X-Total-Count (app/paging.py).
+         */
         get: operations["list_commands_devices__device_id__commands_get"];
         put?: never;
         /** Request Command */
@@ -864,7 +871,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Notifications */
+        /**
+         * List Notifications
+         * @description Newest first, paged; the total is in X-Total-Count (app/paging.py).
+         */
         get: operations["list_notifications_notifications_get"];
         put?: never;
         post?: never;
@@ -1187,6 +1197,8 @@ export interface components {
             /** Actuators */
             actuators?: components["schemas"]["CatalogActuator"][];
             hardware?: components["schemas"]["HardwareConfig"] | null;
+            /** Runs On */
+            runs_on?: ("generic_firmware" | "own_code") | null;
         };
         /** CatalogEntryResponse */
         CatalogEntryResponse: {
@@ -1202,6 +1214,11 @@ export interface components {
             /** Actuators */
             actuators: components["schemas"]["CatalogActuator"][];
             hardware?: components["schemas"]["HardwareConfig"] | null;
+            /**
+             * Runs On
+             * @enum {string}
+             */
+            runs_on: "generic_firmware" | "own_code";
             /**
              * Status
              * @enum {string}
@@ -1233,6 +1250,8 @@ export interface components {
             /** Status */
             status?: ("active" | "disabled") | null;
             hardware?: components["schemas"]["HardwareConfig"] | null;
+            /** Runs On */
+            runs_on?: ("generic_firmware" | "own_code") | null;
         };
         /** CatalogMetric */
         CatalogMetric: {
@@ -1439,11 +1458,9 @@ export interface components {
         DeviceCreateRequest: {
             /** Name */
             name: string;
-            /**
-             * Catalog Entry Id
-             * Format: uuid
-             */
-            catalog_entry_id: string;
+            /** Catalog Entry Id */
+            catalog_entry_id?: string | null;
+            new_template?: components["schemas"]["CatalogEntryCreateRequest"] | null;
             /** Zone Id */
             zone_id?: string | null;
         };
@@ -1493,6 +1510,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Credential Rotated At */
+            credential_rotated_at?: string | null;
             /**
              * Connection State
              * @enum {string}
@@ -4231,7 +4250,12 @@ export interface operations {
     };
     list_failed_actions_rules_failed_actions_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Rows per page. */
+                limit?: number;
+                /** @description Rows to skip, newest first. */
+                offset?: number;
+            };
             header?: {
                 authorization?: string | null;
                 "X-Tenant-Id"?: string | null;
@@ -4578,7 +4602,12 @@ export interface operations {
     };
     list_rule_versions_rules__rule_id__versions_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Rows per page. */
+                limit?: number;
+                /** @description Rows to skip, newest first. */
+                offset?: number;
+            };
             header?: {
                 authorization?: string | null;
                 "X-Tenant-Id"?: string | null;
@@ -4612,7 +4641,12 @@ export interface operations {
     };
     list_rule_executions_rules__rule_id__executions_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Rows per page. */
+                limit?: number;
+                /** @description Rows to skip, newest first. */
+                offset?: number;
+            };
             header?: {
                 authorization?: string | null;
                 "X-Tenant-Id"?: string | null;
@@ -4646,7 +4680,16 @@ export interface operations {
     };
     list_commands_devices__device_id__commands_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Rows per page. */
+                limit?: number;
+                /** @description Rows to skip, newest first. */
+                offset?: number;
+                /** @description Only this actuator (wire id). */
+                actuator?: string | null;
+                /** @description confirmed, pending or no_response. */
+                status?: ("confirmed" | "pending" | "no_response") | null;
+            };
             header?: {
                 authorization?: string | null;
                 "X-Tenant-Id"?: string | null;
@@ -4890,7 +4933,12 @@ export interface operations {
     };
     list_notifications_notifications_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Rows per page. */
+                limit?: number;
+                /** @description Rows to skip, newest first. */
+                offset?: number;
+            };
             header?: {
                 authorization?: string | null;
                 "X-Tenant-Id"?: string | null;

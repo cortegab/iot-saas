@@ -206,11 +206,13 @@ The platform stamps its own receive time for staleness math and never trusts thi
 MQTT credentials map 1:1 to a device; EMQX ACLs restrict each device to its own topic subtree.
 
 **BLE Wi-Fi provisioning** (device-side, before MQTT): sketches generated with "Set up from a
-phone" use **Espressif's unified provisioning** (Arduino `WiFiProv`), so the ESP BLE Provisioning
+phone" use **Espressif's unified provisioning** (Arduino `WiFiProv`; the generic firmware in
+`firmware/` calls ESP-IDF's `network_provisioning` directly, same protocol), so the ESP BLE Provisioning
 app works today and the future app embeds Espressif's libraries. The service name is the device
 name; the QR carries the device's own MQTT credential (`pop` = password, plus `username` = device
-id for Security 2), so rotating the credential means a new sketch and a new QR. Security 1 (PoP)
-or 2 (SRP6a; salt/verifier computed in the browser) — details in `docs/ble-provisioning.md`. It is
+id for Security 2), so rotating the credential means a new sketch and a new QR. Security 1 (PoP);
+Security 2 (SRP6a) is in the contract but **off** until the firmware's `network_provisioning` is
+≥ 1.0.5 (the Arduino core pins 1.0.2) — details in `docs/ble-provisioning.md`. It is
 part of this shared contract: keep it in sync across variants, with boards already flashed in mind.
 
 Commits touching ingestion, rules, commands, or the telemetry schema are tagged `[core]` so they can
@@ -372,8 +374,9 @@ files on the frontend and for MQTT topic segments.
 this codegen step is what replaces the type safety a single-language stack would have given you.
 
 **Frontend design** — `docs/design/DESIGN.md` is binding for the frontend's look, layout,
-components, interaction and wording; demo G (`docs/design/redesign/demo-g-full-site.html`) is the
-visual reference where it is silent. Precedence: §9 constraints > DESIGN.md > demo G > everything
+components, interaction and wording; demo H (`docs/design/redesign/demo-h-guided.html`), then demo
+G (`docs/design/redesign/demo-g-full-site.html`), is the visual reference where it is silent.
+Precedence: §9 constraints > DESIGN.md > demo H > demo G > everything
 else (code comments such as the old "Control Room" notes, `docs/history/PLAN.md` UI bullets, older
 notes). Design skills/plugins (`frontend-design`, `ui-ux-pro-max`) may help with technique, but
 their palettes, fonts and styles are **not** applied here — DESIGN.md's tokens and patterns win. To

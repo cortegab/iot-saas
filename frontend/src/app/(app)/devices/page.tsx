@@ -2,28 +2,24 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Cpu, KeyRound, Pencil, Plus, Power, SquareArrowOutUpRight, Trash2, Wrench } from "lucide-react";
-import { useApi } from "@/hooks/useApi";
+import { Cpu, Plus, Power, Trash2 } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button, buttonClassName } from "@/components/ui/Button";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { Tag } from "@/components/ui/Badge";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { KpiStrip } from "@/components/ui/KpiStrip";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { SecretReveal } from "@/components/ui/SecretReveal";
 import { Select } from "@/components/ui/Select";
-import { useToast } from "@/components/ui/Toast";
-import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { DataTable, NameCell, type DataColumn } from "@/components/list/DataTable";
 import { BulkBar, FilterChips, ListToolbar, type FilterChip } from "@/components/list/ListToolbar";
 import { FirstUse, NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { DevicePeek } from "@/components/devices/DevicePeek";
+import { useDeviceActions } from "@/components/devices/useDeviceActions";
 import { usePeek } from "@/components/list/usePeek";
 import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { ApiRequestError } from "@/lib/api-client";
@@ -32,7 +28,6 @@ import { ageMinutes, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
-type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
 type ZoneResponse = components["schemas"]["ZoneResponse"];
@@ -42,12 +37,8 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 /** DESIGN.md §6 catalog standard for Devices: KPI strip (status filter),
  * toolbar, chips, bulk actions, sortable table, footer, designed states. */
 export default function DevicesPage() {
-  const router = useRouter();
-  const api = useApi();
-  const toast = useToast();
   const { can } = usePermissions();
   const canWrite = can("devices.write");
-  const { confirm, dialog } = useConfirm();
 
   const { data: devices, error, isLoading, mutate } = useApiSWR<DeviceResponse[]>("/devices");
   const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
@@ -57,8 +48,6 @@ export default function DevicesPage() {
   const list = useListState({ status: "all", template: "all", zone: "all" }, { key: "name", dir: "asc" });
   const zoneName = useMemo(() => new Map((zones ?? []).map((z) => [z.id, z.name])), [zones]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-
-  const [revealed, setRevealed] = useState<{ name: string; credential: DeviceCreateResponse["credential"] } | null>(null);
 
   const templateName = useMemo(() => {
     const m = new Map<string, string>();
@@ -103,83 +92,12 @@ export default function DevicesPage() {
   const peek = usePeek({ rows: pageRows, rowKey: (d) => d.id, pageHref: (id) => `/devices/${id}`, newHref: "/devices/new" });
 
   // ---------------------------------------------------------------- actions
-  async function setEnabled(targets: DeviceResponse[], enabled: boolean, undoable = true) {
-    try {
-      for (const d of targets) await api.patch(`/devices/${d.id}`, { status: enabled ? "active" : "disabled" });
-      await mutate();
-      toast({
-        title:
-          targets.length === 1
-            ? `${targets[0].name} ${enabled ? "enabled" : "disabled"}`
-            : `${plural(targets.length, "device")} ${enabled ? "enabled" : "disabled"}`,
-        detail: enabled
-          ? "Rules evaluate them again from the next reading."
-          : "Rules stop evaluating them and they can't connect. Telemetry history is kept.",
-        action: undoable ? { label: "Undo", onClick: () => void setEnabled(targets, !enabled, false) } : undefined,
-      });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't update the device", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
-  }
-
-  /** Resolves true once the devices are deleted. */
+  const actions = useDeviceActions({ onChanged: () => mutate(), ruleCount: (id) => rulesPerDevice.get(id) ?? 0 });
+  const { setEnabled } = actions;
   async function remove(targets: DeviceResponse[]): Promise<boolean> {
-    const ruleCount = targets.reduce((n, d) => n + (rulesPerDevice.get(d.id) ?? 0), 0);
-    const one = targets.length === 1;
-    const ok = await confirm(
-      <p>
-        {one ? "Its credential stops" : "Their credentials stop"} working immediately
-        {ruleCount > 0 && (
-          <>
-            , <strong>{plural(ruleCount, "rule")}</strong> stop evaluating {one ? "it" : "them"}
-          </>
-        )}
-        , and {one ? "its" : "their"} telemetry history is removed. This can&apos;t be undone. To pause{" "}
-        {one ? "it" : "them"} instead, disable {one ? "it" : "them"}.
-      </p>,
-      {
-        title: one ? `Delete ${targets[0].name}?` : `Delete ${plural(targets.length, "device")}?`,
-        confirmLabel: one ? "Delete device" : `Delete ${plural(targets.length, "device")}`,
-        details: one ? undefined : (
-          <ul>
-            {targets.map((d) => (
-              <li key={d.id} className="font-mono">
-                {d.name}
-              </li>
-            ))}
-          </ul>
-        ),
-      },
-    );
-    if (!ok) return false;
-    try {
-      for (const d of targets) await api.delete(`/devices/${d.id}`);
-      setSelected(new Set());
-      await mutate();
-      toast({ title: one ? `${targets[0].name} deleted` : `${plural(targets.length, "device")} deleted` });
-      return true;
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete", detail: err instanceof ApiRequestError ? err.message : undefined });
-      await mutate();
-      return false;
-    }
-  }
-
-  async function rotate(d: DeviceResponse) {
-    const ok = await confirm(
-      d.connection_state === "never_connected"
-        ? "A new credential is issued and the old one stops working."
-        : "The firmware running now disconnects until you flash it with the new credential.",
-      { title: `Rotate the credential for ${d.name}?`, confirmLabel: "Rotate credential" },
-    );
-    if (!ok) return;
-    try {
-      const result = await api.post<DeviceCreateResponse>(`/devices/${d.id}/rotate-credential`);
-      setRevealed({ name: d.name, credential: result.credential });
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't rotate the credential", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
+    const gone = await actions.remove(targets);
+    if (gone) setSelected(new Set());
+    return gone;
   }
 
   // ---------------------------------------------------------------- table
@@ -190,13 +108,13 @@ export default function DevicesPage() {
       sortable: true,
       cell: (d) => (
         <NameCell
-          mono
           name={
             <Link href={`/devices/${d.id}`} className="hover:underline hover:underline-offset-[3px]">
               {d.name}
             </Link>
           }
-          sub={[d.fw_version && `fw ${d.fw_version}`, d.rssi != null && `${d.rssi} dBm`].filter(Boolean).join(" · ") || d.slug}
+          // demo H: the name in the UI face, its MQTT id under it in mono.
+          sub={<span className="font-mono text-[11.5px]">{d.slug}</span>}
         />
       ),
     },
@@ -205,13 +123,26 @@ export default function DevicesPage() {
       header: "Template",
       sortable: true,
       hideOnPhone: true,
-      cell: (d) => templateName.get(d.catalog_entry_id) ?? <span className="text-ink-muted">—</span>,
+      priority: 3,
+      fold: (d) => templateName.get(d.catalog_entry_id),
+      cell: (d) => (
+        <>
+          {templateName.get(d.catalog_entry_id) ?? <span className="text-ink-muted">—</span>}
+          {d.hardware && (
+            <Tag size="sm" className="ml-1.5">
+              Own wiring
+            </Tag>
+          )}
+        </>
+      ),
     },
     {
       id: "zone",
       header: "Zone",
       sortable: true,
       hideOnPhone: true,
+      priority: 2,
+      fold: (d) => (d.zone_id ? zoneName.get(d.zone_id) : null),
       cell: (d) => (d.zone_id ? zoneName.get(d.zone_id) : null) ?? <span className="text-ink-muted">—</span>,
     },
     { id: "status", header: "Status", sortable: true, cell: (d) => <DeviceStatusPill device={d} /> },
@@ -224,29 +155,7 @@ export default function DevicesPage() {
     },
   ];
 
-  const rowMenu = (d: DeviceResponse): DropdownMenuItem[][] => {
-    const groups: DropdownMenuItem[][] = [
-      [{ label: "Open device", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/devices/${d.id}`) }],
-    ];
-    if (canWrite) {
-      groups[0].push(
-        { label: "Edit settings", icon: <Pencil size={15} />, onClick: () => router.push(`/devices/${d.id}?tab=settings`) },
-        { label: "Connect and get firmware", icon: <Wrench size={15} />, onClick: () => router.push(`/devices/${d.id}/connect`) },
-      );
-      groups.push(
-        [
-          { label: "Rotate credential…", icon: <KeyRound size={15} />, onClick: () => void rotate(d) },
-          {
-            label: d.status === "active" ? "Disable" : "Enable",
-            icon: <Power size={15} />,
-            onClick: () => void setEnabled([d], d.status !== "active"),
-          },
-        ],
-        [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove([d]) }],
-      );
-    }
-    return groups;
-  };
+  const rowMenu = (d: DeviceResponse) => actions.menu(d);
 
   // ---------------------------------------------------------------- chips
   const chips: FilterChip[] = [];
@@ -294,17 +203,7 @@ export default function DevicesPage() {
         actions={addAction}
       />
 
-      {revealed && (
-        <SecretReveal
-          title={`New credential for ${revealed.name}`}
-          fields={[
-            { label: "username", value: revealed.credential.username },
-            { label: "password", value: revealed.credential.password, secret: true },
-          ]}
-          copyLabel="Copy credential"
-          onDismiss={() => setRevealed(null)}
-        />
-      )}
+      {actions.reveal}
 
       {error ? (
         <ErrorState
@@ -338,9 +237,7 @@ export default function DevicesPage() {
                       zoneName={d?.zone_id ? zoneName.get(d.zone_id) : undefined}
                       ruleCount={d ? (rulesPerDevice.get(d.id) ?? 0) : 0}
                       onClose={peek.close}
-                      onRotate={(x) => void rotate(x)}
-                      onToggle={(x) => void setEnabled([x], x.status !== "active")}
-                      onDelete={(x) => void remove([x]).then((gone) => gone && peek.close())}
+                      menu={(x) => actions.menu(x, { where: "peek", onDeleted: peek.close })}
                     />
                   );
                 })()
@@ -441,7 +338,7 @@ export default function DevicesPage() {
           )}
         </ListWithPeek>
       )}
-      {dialog}
+      {actions.dialog}
     </>
   );
 }

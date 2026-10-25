@@ -114,6 +114,9 @@ export function DropdownMenu({
 
     function onKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
+        // Closes the menu only, not the sheet or peek it sits in (their
+        // Esc listeners are on document too; this one runs in capture).
+        e.stopPropagation();
         close();
         return;
       }
@@ -133,8 +136,8 @@ export function DropdownMenu({
         first.focus();
       }
     }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [open]);
 
   return (

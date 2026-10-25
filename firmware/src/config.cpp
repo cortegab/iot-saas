@@ -2,6 +2,7 @@
 
 #include <esp_partition.h>
 #include <mbedtls/base64.h>
+#include <soc/soc_caps.h>
 
 #include "board.h"
 #include "crc32.h"
@@ -108,6 +109,13 @@ bool loadConfig(DeviceConfig& out, String& err) {
     if (!requireText(wifi, "ssid", "wifi", out.wifiSsid, err)) return false;
     out.wifiPassword = wifi["password"] | "";
   }
+#if !SOC_BT_SUPPORTED
+  // No Bluetooth, so no phone setup: the Wi-Fi must be typed in at Install.
+  if (out.wifiSsid == nullptr) {
+    err = "this board has no Bluetooth, so its Wi-Fi can't come from a phone: install the config with the Wi-Fi typed in";
+    return false;
+  }
+#endif
 
   JsonObjectConst prov = root["prov"];
   out.provName = prov["name"] | out.device;
@@ -126,6 +134,34 @@ bool loadConfig(DeviceConfig& out, String& err) {
   JsonObjectConst i2c = root["i2c"];
   out.i2cSda = i2c["sda"] | -1;
   out.i2cScl = i2c["scl"] | -1;
+
+  // Optional and additive, so older firmware ignores it and this one reads
+  // older configs: without it, the chip's defaults.
+  JsonObjectConst io = root["board_io"];
+  out.resetPin = io["reset_pin"] | DEFAULT_RESET_PIN;
+  out.ledType = DEFAULT_LED_TYPE;
+  out.ledPin = DEFAULT_LED_PIN;
+  out.ledActiveLow = DEFAULT_LED_ACTIVE_LOW;
+  JsonObjectConst led = io["led"];
+  if (!led.isNull()) {
+    const char* type = led["type"] | "gpio";
+    if (strcmp(type, "gpio") == 0) {
+      out.ledType = LedType::Gpio;
+    } else if (strcmp(type, "rgb") == 0) {
+      out.ledType = LedType::Rgb;
+    } else if (strcmp(type, "none") == 0) {
+      out.ledType = LedType::None;
+    } else {
+      err = "board_io.led.type must be gpio, rgb or none";
+      return false;
+    }
+    out.ledPin = out.ledType == LedType::None ? -1 : (led["pin"] | -1);
+    if (out.ledType != LedType::None && out.ledPin < 0) {
+      err = "board_io.led needs a pin";
+      return false;
+    }
+    out.ledActiveLow = led["active_low"] | false;
+  }
 
   out.metrics = root["metrics"];
   out.actuators = root["actuators"];

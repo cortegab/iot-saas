@@ -2,11 +2,11 @@
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-from app.catalog.schemas import HardwareConfig
+from app.catalog.schemas import CatalogEntryCreateRequest, HardwareConfig
 from app.devices.models import DeviceStatus
 from app.health.schemas import MetricHealthResponse
 
@@ -18,8 +18,17 @@ class DeviceCreateRequest(BaseModel):
     # Write-once — no reassignment endpoint exists. Defaults to the tenant's
     # auto-created "Legacy / Uncategorized" entry client-side when the user
     # hasn't defined any real catalog entries yet.
-    catalog_entry_id: uuid.UUID
+    catalog_entry_id: uuid.UUID | None = None
+    # Or a template created with the device, in the same transaction:
+    # onboarding "from the hardware". Exactly one of the two.
+    new_template: CatalogEntryCreateRequest | None = None
     zone_id: uuid.UUID | None = None
+
+    @model_validator(mode="after")
+    def _one_template(self) -> Self:
+        if (self.catalog_entry_id is None) == (self.new_template is None):
+            raise ValueError("Give either catalog_entry_id or new_template, not both")
+        return self
 
 
 class DeviceUpdateRequest(BaseModel):
@@ -43,6 +52,9 @@ class DeviceResponse(BaseModel):
     status: str
     last_seen_at: datetime | None
     created_at: datetime
+    # When its credential was last made (create or rotate): the connect flow
+    # reuses a credential kept in the browser only while this matches.
+    credential_rotated_at: datetime | None = None
     # Computed by devices/router.py's _to_response, preferring the push-driven
     # last_status_online (below) when present — an LWT-triggered False is
     # authoritative regardless of elapsed time — and otherwise falling back to

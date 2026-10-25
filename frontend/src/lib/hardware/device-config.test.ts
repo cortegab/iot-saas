@@ -38,6 +38,7 @@ describe("buildFirmwareConfig", () => {
       device: { tenant: "io-driven", device: "test-device" },
       mqtt: { host: "192.168.1.82", port: 1883, tls: false, username: "b9691bcb-ffdb-47bf-ae27-992f68ddb7eb", password: "secret" },
       prov: { name: "Test-Device", security: 1 },
+      board_io: { reset_pin: 19, led: { type: "gpio", pin: 2, active_low: false } },
       metrics: [
         { key: "door", bool: true, publish: "on_change" },
         { key: "water-level", publish: "periodic", interval_s: 10 },
@@ -65,9 +66,18 @@ describe("buildFirmwareConfig", () => {
     expect(buildFirmwareConfig({ ...base, wifi: { ssid: "home", password: "pw" } }).wifi).toEqual({ ssid: "home", password: "pw" });
   });
 
-  it("takes the board's chip and id from the model", () => {
+  it("takes the board's chip, id, reset button and LED from the model", () => {
     const c3 = MODELS.find((m) => m.id === "esp32c3-supermini")!;
-    expect(buildFirmwareConfig({ ...base, model: c3 })).toMatchObject({ board: "esp32c3", model: "esp32c3-supermini" });
+    expect(buildFirmwareConfig({ ...base, model: c3 })).toMatchObject({
+      board: "esp32c3",
+      model: "esp32c3-supermini",
+      board_io: { reset_pin: 9, led: { type: "gpio", pin: 8, active_low: true } },
+    });
+  });
+
+  it("treats a model from before LED types as a GPIO LED", () => {
+    const old = { ...devkit30, led: { pin: 2, active_low: false } };
+    expect(buildFirmwareConfig({ ...base, model: old }).board_io?.led).toEqual({ type: "gpio", pin: 2, active_low: false });
   });
 
   it("fits the board's config area", () => {

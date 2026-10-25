@@ -1,21 +1,20 @@
 "use client";
 
-import { History, RotateCcw } from "lucide-react";
-import { useApiSWR } from "@/hooks/useApiSWR";
-import { Badge } from "@/components/ui/Badge";
+import { RotateCcw } from "lucide-react";
+import { TableFooter } from "@/components/list/TableFooter";
+import { useServerPager } from "@/components/list/useServerPager";
 import { Button } from "@/components/ui/Button";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
-import { formatWhen, timeAgo } from "@/lib/time-ago";
+import { formatWhen } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 
 type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
 
-/** A rule's saved states, newest first (DESIGN.md §9 Versions). Restore
- * loads an older one into the editor as a draft; saving it is a normal save
- * and becomes the newest version. */
+/** A rule's saved states, newest first (demo H Versions): "Version N ·
+ * current", who and when, and what changed. Restore loads an older one into
+ * the editor as a draft; saving it is a normal save and becomes the newest. */
 export function RuleVersions({
   ruleId,
   canRestore,
@@ -25,36 +24,31 @@ export function RuleVersions({
   canRestore: boolean;
   onRestore: (v: RuleVersionResponse) => void;
 }) {
-  const { data, error, isLoading, mutate } = useApiSWR<RuleVersionResponse[]>(`/rules/${ruleId}/versions`);
+  // Paged by the API, newest first: "current" is the first row of page 1.
+  const pager = useServerPager<RuleVersionResponse>(`/rules/${ruleId}/versions`);
+  const { rows: data, total, isLoading, error, mutate } = pager;
 
   if (error) {
     return <ErrorState title="Couldn't load versions" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />;
   }
-  if (isLoading || !data) return <LoadingSkeleton rows={3} rowClassName="h-16" />;
-  if (data.length === 0) {
-    return <EmptyState icon={<History aria-hidden size={24} />} title="No versions yet" description="Each save from now on is kept here, with what changed." />;
-  }
+  if (isLoading && data.length === 0) return <LoadingSkeleton rows={3} rowClassName="h-12" />;
+  if (total === 0) return <p className="text-sm text-ink-muted">Each save from now on is kept here, with what changed.</p>;
 
   return (
-    <ol aria-label="Versions" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-card">
+    <div className="flex flex-col gap-2">
+    <ol aria-label="Versions" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
       {data.map((v, i) => (
-        <li key={v.id} className="flex flex-wrap items-start gap-3 border-b border-border px-4 py-3.5 last:border-b-0">
-          <span className="grid h-8 w-10 shrink-0 place-items-center rounded-md bg-surface-raised font-mono text-[13px] text-ink">v{v.version}</span>
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <p className="flex flex-wrap items-center gap-2 text-sm text-ink">
-              <span className="font-medium">{v.author ?? "API key or removed member"}</span>
-              <span className="text-ink-muted" title={formatWhen(v.created_at)}>
-                {timeAgo(v.created_at)}
-              </span>
-              {i === 0 && <Badge tone="online" label="Current" />}
-            </p>
-            <ul className="flex flex-col gap-0.5 text-[13px] text-ink-muted">
-              {v.change_lines.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          </div>
-          {i > 0 && canRestore && (
+        <li key={v.id} className="flex min-h-12 items-center gap-3 border-t border-border-soft px-3.5 py-2.5 text-sm first:border-t-0">
+          <span className="flex min-w-0 flex-1 flex-col">
+            <b className="font-medium text-ink">
+              Version {v.version}
+              {i === 0 && pager.page === 1 ? " · current" : ""}
+            </b>
+            <span className="text-[12.5px] text-ink-muted">
+              {[v.author ?? "API key or removed member", formatWhen(v.created_at), v.change_lines.join("; ")].filter(Boolean).join(" · ")}
+            </span>
+          </span>
+          {(i > 0 || pager.page > 1) && canRestore && (
             <Button size="sm" variant="secondary" onClick={() => onRestore(v)}>
               <RotateCcw aria-hidden size={13} />
               Restore
@@ -63,5 +57,7 @@ export function RuleVersions({
         </li>
       ))}
     </ol>
+    <TableFooter shown={total} total={total} noun={["version", "versions"]} page={pager.page} pageCount={pager.pageCount} pageSize={pager.pageSize} onPage={pager.setPage} onPageSize={pager.setPageSize} />
+    </div>
   );
 }

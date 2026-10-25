@@ -40,7 +40,10 @@ python3 release.py --dev     # build + package to infra/firmware/<version>/ and 
 
 Bump `FW_VERSION` in `src/version.h` for every release. `release.py` fails if:
 - `drivers.json` and `src/drivers/registry.cpp` list different drivers
-- a board model in `boards.json` offers a pin `src/pins.cpp` refuses for its chip
+- `src/board.h` or `src/pins.cpp` lacks a block for a chip it builds, or has one it doesn't
+- `CHIP_PINS` in `frontend/src/lib/hardware/board-pins.ts` disagrees with `src/pins.cpp`
+- a board model in `boards.json` offers a pin `src/pins.cpp` refuses for its chip, offers its own
+  reset or LED pin for wiring, or has an unknown `led.type` or capability
 - an app outgrows its OTA slot
 
 It also warns when an app is above 90% of its slot.
@@ -58,6 +61,10 @@ labelled, and that lives in `boards.json`.
 
 - **The config blob's `board`** is the chip, and the firmware checks it against its own build.
 - **Its `model`** is the board model id, which the firmware only logs.
+- **Its `board_io`** carries the model's reset button and status LED (`reset_pin`, `led: {type,
+  pin, active_low}`), so models of one chip can differ there. It's optional and additive: firmware
+  before 0.6.0 ignores it, and 0.6.0+ falls back to the chip's defaults in `src/board.h` without
+  it. The firmware reserves both pins, so a binding on one fails at boot with the owner named.
 - **Templates store the model id** (`hardware.board`). The backend checks only the id's shape, so a
   new model needs no backend change.
 
@@ -68,48 +75,65 @@ labelled, and that lives in `boards.json`.
    - `id` (kebab-case, never renamed once used), `chip`, `label`, `description`
    - `pins`: the free GPIOs on its header, a subset of the chip's `USABLE` in `src/pins.cpp`
    - `pin_labels`: printed names that differ from the number, such as VP, VN, RX or TX
-   - `reset` and `led`: these must match `src/board.h` for that chip
+   - `reset`: its provisioning-reset button (`pin`, and a `label` people read)
+   - `led`: its status LED, `type` `gpio`, `rgb` (addressable, like the S3/C6 DevKits) or `none`,
+     plus `pin` and `active_low`. Both may differ from the chip's defaults in `src/board.h`.
+   - `capabilities`: `ble` when Wi-Fi can be set up from a phone, `rgb_led` when `led.type` is `rgb`.
+     Without `ble` (the S2), the dashboard offers only Wi-Fi typed in at Install, and the firmware
+     builds no provisioning code (`SOC_BT_SUPPORTED`) and refuses a config without `wifi`.
    - `notes`: anything a person wiring it should know
 2. Bump `FW_VERSION`, then run `release.py`. It refuses pins the firmware wouldn't accept.
 3. Deploy. The dashboard offers the model as soon as the release is live.
 
-**A new model whose reset button or LED differs from its chip's `board.h`:** move those two pins
-into the config blob first (`config.h`, `net.cpp`, `main.cpp`). Today they're per chip.
-
 **A new chip** (for example the ESP32-S3):
-1. Add a PlatformIO env, plus its `#if` branches in `src/board.h` and `src/pins.cpp`.
+1. Add a PlatformIO env, plus its `#elif CONFIG_IDF_TARGET_…` block in `src/board.h` and
+   `src/pins.cpp`. A chip without one doesn't build (`#error`).
 2. Add it to `BOARDS` in `release.py` (env, esptool chip name, bootloader offset).
-3. Mirror its pin rules in `CHIP_PINS` (`frontend/src/lib/hardware/board-pins.ts`), and its pin
-   pools in `BOARDS` (`frontend/src/lib/firmware-sketch.ts`).
+3. Add it to `CHIPS` and `BOARDS` (`frontend/src/lib/firmware-sketch.ts`) and mirror its pin rules
+   in `CHIP_PINS` (`frontend/src/lib/hardware/board-pins.ts`). TypeScript then flags every
+   per-chip table that misses it, and `release.py` checks `CHIP_PINS` against `src/pins.cpp`.
 4. Add a model for it in `boards.json`.
 5. Add an alembic data migration only if stored values need renaming. They don't for a new chip.
 
-## Size (open decision)
+## Size
 
-| Board | App | Share of a 1.875 MB OTA slot |
+| Board | App (0.11.0) | Share of a 1.875 MB OTA slot |
 |---|---|---|
-| ESP32 | 1.91 MB | **97%** |
-| ESP32-C3 | 1.56 MB | 79% |
+| ESP32 | 1.39 MB | 71% |
+| ESP32-C3 | 1.55 MB | 79% |
+| ESP32-S3 | 1.40 MB | 71% |
+| ESP32-C6 | 1.70 MB | 87% |
+| ESP32-S2 | 1.13 MB | 58% (no Bluetooth, so no provisioning code at all) |
 
-**The difference is Bluetooth.** The ESP32's Arduino libraries are built with Bluedroid (BLE +
-Classic BT), and the C3's with NimBLE. Provisioning only needs BLE.
+The S3's and C6's prebuilt libraries already use NimBLE, so their envs need no `custom_sdkconfig`.
+**The C6 is the tightest**, close to the 90% warning: its prebuilt libraries carry 802.15.4
+(Thread/Zigbee) support we don't use. If a driver pushes it over, trim that with a `custom_sdkconfig`
+the way `[env:esp32]` drops Bluedroid.
 
-**Switching the ESP32 to NimBLE was tried and doesn't build.** The attempt used pioarduino's
-`custom_sdkconfig` with NimBLE on and Bluedroid off. Arduino's `WiFiProv` includes Bluedroid's
-`SimpleBLE.h` on the ESP32, so the build fails. The ways forward:
+**Not every driver builds everywhere.** OneWire 2.3.8 doesn't support the C6, so its build has no
+DS18B20 (`"chips"` in `drivers.json`, `lib_ignore` in `[env:esp32c6]`, and the driver's own
+`#ifdef`). The dashboard doesn't offer it for C6 boards.
 
-1. **Call ESP-IDF's `network_provisioning` directly instead of `WiFiProv`.** It supports NimBLE
-   and the same phone app and QR, and keeps OTA. This costs a custom-sdkconfig build (much slower
-   the first time) and a provisioning rewrite in `net.cpp`.
-2. **One big app partition on the ESP32 (no OTA slot).** Room for every driver, but ESP32 boards
-   could only be updated over USB.
-3. **Stay at 97%** and keep the ESP32 driver set small.
+**The ESP32 builds with NimBLE, not Bluedroid.** The prebuilt Arduino libraries for the ESP32 use
+Bluedroid (BLE + Classic BT), and provisioning only needs BLE. Up to 0.3.x that put the ESP32 at
+1.91 MB, 97% of a slot. `[env:esp32]` now recompiles the framework with NimBLE
+(`custom_sdkconfig`). The first build is slow (~10 min) and later builds are cached.
+
+**That's why provisioning is ours, not `WiFiProv`.** On the ESP32, Arduino's `WiFiProv` includes
+Bluedroid's `SimpleBLE.h`, which won't build against NimBLE. `src/provisioning.cpp` makes the same
+`network_provisioning` calls `WiFiProv` made, with the same service UUID, name, security levels and
+events, so the phone app and QR didn't change. `lib_ignore` keeps `WiFiProv` and the
+Bluedroid-only Arduino BLE libraries out of the build.
+
+**Checking it after a change:** the linker map should show no Bluedroid at all.
+`grep -c 'btc_\|bta_' .pio/build/esp32/firmware.map` should print `0`.
 
 ## Status LED
 
 The board's built-in LED is reserved for the firmware (ESP32 DevKits: GPIO 2; ESP32-C3 Super
-Mini: GPIO 8). It's never offered for wiring. It shows where the board is, so you don't need a
-serial monitor:
+Mini: GPIO 8; ESP32-S3 DevKitC-1: the RGB LED on GPIO 48, or 38 on v1.1; each model's `led` in
+`boards.json`). It's never offered for wiring. An RGB LED
+blinks dim blue. It shows where the board is, so you don't need a serial monitor:
 
 | LED | Meaning | What to do |
 |---|---|---|

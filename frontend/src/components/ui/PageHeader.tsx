@@ -82,7 +82,7 @@ export function PageHeader({
             </div>
           )}
           <h1
-            className={`flex flex-wrap items-center gap-3 text-[24px] font-semibold leading-[1.15] tracking-[-0.025em] text-ink md:text-[30px] ${
+            className={`flex flex-wrap items-center gap-3 text-[24px] font-semibold leading-[1.2] tracking-[-0.015em] text-ink md:text-[28px] ${
               monoTitle ? "font-mono font-medium tracking-[-0.01em]" : ""
             }`}
           >

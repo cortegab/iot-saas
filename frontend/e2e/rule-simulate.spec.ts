@@ -17,8 +17,9 @@ test("new rule: a recipe opens the workbench with its checks passing", async ({ 
   await page.goto("/rules/new");
   await expect(page.getByRole("list", { name: "Recipes" })).toBeVisible();
   await page.getByRole("button", { name: /Tell me when this device goes offline/ }).click();
-  // Step numbers show while creating.
-  await expect(page.getByText("Step 1:")).toBeAttached();
+  // Creating is a wizard (DESIGN.md §9.1): steps, and the first question.
+  await expect(page.getByRole("list", { name: "Steps" })).toContainText("Review");
+  await expect(page.getByRole("heading", { name: "What starts it?" })).toBeVisible();
   const preview = page.getByRole("complementary", { name: "Preview" });
   await expect(preview.getByText("Fires on each event, not on readings.")).toBeVisible();
   await expect(preview.getByText("Actions complete")).toBeVisible();

@@ -75,12 +75,27 @@ export function extractFieldErrors(body: unknown): Record<string, string> {
   return out;
 }
 
+/** One page of a history feed and the feed's total (the API's X-Total-Count). */
+export interface ApiPage<T> {
+  items: T[];
+  total: number;
+}
+
 async function request<T>(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
   ctx: ApiClientContext,
   body?: JsonBody,
 ): Promise<T> {
+  return (await send<T>(method, path, ctx, body)).data;
+}
+
+async function send<T>(
+  method: "GET" | "POST" | "PATCH" | "DELETE",
+  path: string,
+  ctx: ApiClientContext,
+  body?: JsonBody,
+): Promise<{ data: T; res: Response }> {
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (ctx.accessToken) headers["Authorization"] = `Bearer ${ctx.accessToken}`;
   if (ctx.tenantId) headers["X-Tenant-Id"] = ctx.tenantId;
@@ -92,7 +107,7 @@ async function request<T>(
   });
 
   if (res.status === 204) {
-    return undefined as T;
+    return { data: undefined as T, res };
   }
 
   const text = await res.text();
@@ -107,13 +122,21 @@ async function request<T>(
     );
   }
 
-  return data as T;
+  return { data: data as T, res };
+}
+
+/** A GET of a paged history feed: the rows and X-Total-Count (backend app/paging.py). */
+async function getPage<T>(path: string, ctx: ApiClientContext): Promise<ApiPage<T>> {
+  const { data, res } = await send<T[]>("GET", path, ctx);
+  const total = Number(res.headers.get("X-Total-Count"));
+  return { items: data ?? [], total: Number.isFinite(total) ? total : (data ?? []).length };
 }
 
 /** Every screen's error state should originate from an ApiRequestError caught here,
  * so "what failed" (UX_UI_Description.md's Error state) is consistent across screens. */
 export const apiClient = {
   get: <T>(path: string, ctx: ApiClientContext = {}) => request<T>("GET", path, ctx),
+  getPage: <T>(path: string, ctx: ApiClientContext = {}) => getPage<T>(path, ctx),
   post: <T>(path: string, ctx: ApiClientContext = {}, body?: JsonBody) => request<T>("POST", path, ctx, body),
   patch: <T>(path: string, ctx: ApiClientContext = {}, body?: JsonBody) => request<T>("PATCH", path, ctx, body),
   delete: <T>(path: string, ctx: ApiClientContext = {}) => request<T>("DELETE", path, ctx),

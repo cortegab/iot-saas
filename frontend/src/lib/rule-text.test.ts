@@ -34,7 +34,7 @@ describe("rule text", () => {
 
   it("summarises actions", () => {
     expect(actionsText([{ type: "actuator_command", actuator: "fan1", value: true }])).toBe("Turn fan1 on");
-    expect(actionsText([{ type: "email", to: [] }])).toBe("Email alert recipients");
+    expect(actionsText([{ type: "email", to: [] }])).toBe("Email the alert recipients");
     expect(actionsText([])).toBe("Nothing");
   });
 

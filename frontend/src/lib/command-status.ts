@@ -30,7 +30,7 @@ export function msUntilCommandDeadline(c: CommandResponse, now: number = Date.no
 }
 
 const LABELS: Record<CommandStatus, string> = {
-  confirmed: "Confirmed",
+  confirmed: "Acknowledged",
   pending: "Pending",
   "no-response": "No response",
 };

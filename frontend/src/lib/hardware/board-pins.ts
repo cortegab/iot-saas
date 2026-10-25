@@ -1,7 +1,9 @@
 /** Which GPIOs a binding may use, and for what.
  *
  * Two layers. CHIP_PINS are the chip's rules and mirror firmware/src/pins.cpp,
- * which refuses the same things at boot; keep the two in step. A board model
+ * which refuses the same things at boot; release.py fails when the two
+ * disagree, so keep this object's shape (one `chip: { usable, adc1,
+ * inputOnly }` per chip) that it reads. A board model
  * (firmware/boards.json, published in the manifest) then narrows them to the
  * pins on that board's header and gives them their printed labels. Never
  * strapping, flash, USB or the provisioning-reset button's pin. */
@@ -17,6 +19,21 @@ export const CHIP_PINS: Record<SketchBoard, { usable: number[]; adc1: number[]; 
   esp32c3: {
     usable: [0, 1, 3, 4, 5, 6, 7, 10, 20, 21],
     adc1: [0, 1, 3, 4],
+    inputOnly: [],
+  },
+  esp32s3: {
+    usable: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48],
+    adc1: [1, 2, 4, 5, 6, 7, 8, 9, 10],
+    inputOnly: [],
+  },
+  esp32c6: {
+    usable: [0, 1, 2, 3, 6, 7, 10, 11, 14, 18, 19, 20, 21, 22, 23],
+    adc1: [0, 1, 2, 3, 6],
+    inputOnly: [],
+  },
+  esp32s2: {
+    usable: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 21, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42],
+    adc1: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     inputOnly: [],
   },
 };

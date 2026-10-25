@@ -34,6 +34,9 @@ export interface DriverChannelSpec {
   data_type?: "float" | "bool";
   /** Outputs: the kind of command value it takes. */
   value_type?: "bool" | "float" | "string";
+  /** false: an uncommon reading (a motion sensor's raw axes). Adding the part
+   * doesn't make a metric for it until it's kept. Absent = common. */
+  common?: boolean;
 }
 
 export interface DriverSpec {
@@ -45,6 +48,23 @@ export interface DriverSpec {
   params: DriverParamSpec[];
   channels: DriverChannelSpec[];
   wiring: string[];
+  /** Set for drivers on the shared I2C bus: they take no pins of their own
+   * (the template's I2C bus row sets SDA/SCL) but an `address` param. */
+  bus?: "i2c";
+  /** The I2C addresses this part can be set to. */
+  addresses?: string[];
+  /** The chips whose firmware build carries this driver; absent = every chip. */
+  chips?: SketchBoard[];
+}
+
+/** Whether this board's firmware build carries the driver. */
+export function runsOn(spec: Pick<DriverSpec, "chips">, model: Pick<BoardModel, "chip"> | undefined): boolean {
+  return !model || !spec.chips || spec.chips.includes(model.chip);
+}
+
+/** The drivers this board's firmware build carries (all of them while no board resolves). */
+export function driversFor(drivers: DriverSpec[], model: Pick<BoardModel, "chip"> | undefined): DriverSpec[] {
+  return drivers.filter((d) => runsOn(d, model));
 }
 
 export interface DriverCatalog {
@@ -65,9 +85,24 @@ export interface BoardModel {
   description: string;
   pins: number[];
   pin_labels?: Record<string, string>;
+  /** Where the I2C bus goes by default on this board. */
+  i2c?: { sda: number; scl: number };
   reset: { pin: number; label: string };
-  led: { pin: number; active_low: boolean };
+  /** The status LED the firmware keeps for itself. `type` is absent in
+   * releases before 0.6.0, which only had plain GPIO LEDs. */
+  led: { type?: "gpio" | "rgb" | "none"; pin: number; active_low: boolean };
+  /** What the board can do; absent in releases before 0.6.0. */
+  capabilities?: BoardCapability[];
   notes?: string[];
+}
+
+/** `ble`: Wi-Fi can be set up from a phone. `rgb_led`: its status LED is RGB. */
+export type BoardCapability = "ble" | "rgb_led";
+
+/** Whether a board can do something. Releases from before capabilities only
+ * had ESP32 and C3 boards, which all have BLE. */
+export function hasCapability(model: Pick<BoardModel, "capabilities">, capability: BoardCapability): boolean {
+  return (model.capabilities ?? ["ble"]).includes(capability);
 }
 
 /** A release's board models. One published before models existed gets one
@@ -86,7 +121,8 @@ function legacyModels(chips: string[]): BoardModel[] {
       description: "",
       pins: CHIP_PINS[chip].usable,
       reset: { pin: BOARDS[chip].resetPin, label: BOARDS[chip].resetButton },
-      led: { pin: chip === "esp32c3" ? 8 : 2, active_low: chip === "esp32c3" },
+      led: { type: "gpio" as const, pin: chip === "esp32c3" ? 8 : 2, active_low: chip === "esp32c3" },
+      capabilities: ["ble" as const],
     }));
 }
 

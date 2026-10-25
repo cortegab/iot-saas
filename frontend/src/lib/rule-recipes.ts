@@ -178,3 +178,25 @@ export function recipesFor(device: RecipeDevice, timezone = "UTC"): Recipe[] {
 
   return out;
 }
+
+/** A recipe this device can't run, shown disabled with what it needs (demo H). */
+export interface UnavailableRecipe {
+  id: string;
+  title: string;
+  why: string;
+  icon: Recipe["icon"];
+}
+
+const EVERY_RECIPE: UnavailableRecipe[] = [
+  { id: "too-hot", title: "Turn something on when it's too hot", why: "Needs a number reading and something to switch.", icon: "fan" },
+  { id: "door-open", title: "Alert when a door stays open", why: "Needs an on/off reading such as a door contact.", icon: "door" },
+  { id: "humidity-low", title: "Warn when humidity drops", why: "Needs a humidity reading.", icon: "droplet" },
+  { id: "tank-low", title: "Stop the pump when the tank is low", why: "Needs a level reading and a pump to switch.", icon: "pump" },
+  { id: "schedule", title: "Switch something on a schedule", why: "Needs something to switch.", icon: "clock" },
+];
+
+/** The recipes `recipesFor` didn't offer for this device, in the usual order. */
+export function unavailableRecipes(offered: Recipe[]): UnavailableRecipe[] {
+  const have = new Set(offered.map((r) => r.id));
+  return EVERY_RECIPE.filter((r) => !have.has(r.id));
+}

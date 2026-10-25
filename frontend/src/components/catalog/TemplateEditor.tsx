@@ -1,56 +1,71 @@
 "use client";
 
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useMemo, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
-import { AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Copy, Lock, Plus, Trash2 } from "lucide-react";
+import { BookOpen, Copy, Cpu, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Badge, Tag } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { Callout } from "@/components/ui/Callout";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Field } from "@/components/ui/Field";
-import { Affix, Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
-import { Select } from "@/components/ui/Select";
-import { SwitchField } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
-import { HardwareSection } from "@/components/catalog/HardwareSection";
-import { UnitField } from "@/components/catalog/UnitField";
-import { EditorFrame, EditorSection, type EditorMode } from "@/components/editor/EditorFrame";
+import { WiringSection } from "@/components/catalog/WiringSection";
+import { ActuatorsSection } from "@/components/catalog/template/ActuatorsSection";
+import { GeneralSection } from "@/components/catalog/template/GeneralSection";
+import { MetricsSection } from "@/components/catalog/template/MetricsSection";
+import type { Draft, SectionProps } from "@/components/catalog/template/section-props";
+import {
+  EditorFrame,
+  EditorSection,
+  type EditorGroupDef,
+  type EditorMode,
+  type EditorSectionDef,
+} from "@/components/editor/EditorFrame";
+import { ReviewList } from "@/components/editor/ReviewList";
 import { useRecordEditor } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { ApiRequestError } from "@/lib/api-client";
-import { cn } from "@/lib/cn";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
-import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
+import { handOffCredential } from "@/lib/credential-handoff";
+import { findDriver, useDriverCatalog } from "@/lib/hardware/driver-catalog";
+import { resolveModel } from "@/lib/hardware/board-pins";
+import { blankHardware } from "@/lib/hardware/hardware-draft";
 import {
-  blankActuator,
-  blankMetric,
   blankTemplate,
   brokenUsages,
   draftToRequest,
+  keepReading,
   keyedRows,
+  matchingTemplate,
+  reconcileParts,
   renamed,
+  templateSectionOrder,
   templateToDraft,
+  unfedRows,
   usageText,
   validateTemplate,
-  type ActuatorDraft,
-  type MetricDraft,
+  type RunsOn,
   type TemplateDraft,
+  type TemplateSectionId,
 } from "@/lib/template-draft";
 import type { components } from "@/types/api";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogUsageResponse = components["schemas"]["CatalogUsageResponse"];
+type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
+type ZoneResponse = components["schemas"]["ZoneResponse"];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 const DIFF: DiffField<TemplateDraft>[] = [
   { label: "Name", get: (d) => d.name.trim() },
   { label: "Status", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
+  { label: "Runs on", get: (d) => d.runsOn, format: (v) => (v === "generic_firmware" ? "Our firmware" : "Custom firmware") },
   { label: "Metrics", get: (d) => d.metrics.map((m) => m.key.trim()) },
   { label: "Actuators", get: (d) => d.actuators.map((a) => a.key.trim()) },
   {
@@ -59,24 +74,52 @@ const DIFF: DiffField<TemplateDraft>[] = [
   },
 ];
 
-const PUBLISH_LABEL = { periodic: "Every N seconds", on_change: "When it changes", streaming: "As fast as it samples" } as const;
-const CONTROL_LABEL = { bool: "On/off switch", float: "Level (number)", string: "Choice from a list" } as const;
+/** The rail entry for a section, worded for how the devices run. */
+function railEntry(id: TemplateSectionId, d: Draft): EditorSectionDef {
+  const parts = d.runsOn === "generic_firmware";
+  switch (id) {
+    case "general":
+      return { id, label: "General", description: d.device ? "The device, and how it runs" : "Name, how it runs, availability" };
+    case "hardware":
+      return { id, label: "Wiring", description: "The board and its parts" };
+    case "metrics":
+      return { id, label: "Metrics", count: d.metrics.length, description: parts ? "What its parts read" : "What the device publishes" };
+    case "actuators":
+      return { id, label: "Actuators", count: d.actuators.length, description: parts ? "What its parts switch" : "What the platform can switch" };
+  }
+}
 
 /**
  * The device-template editor (DESIGN.md §8) on the shared editor chrome:
- * General · Metrics · Actuators. Keys follow the name until edited, used keys
- * are locked (with a rename warning when unlocked), every key shows its MQTT
- * topic, and saving a change that disconnects rules or widgets asks first.
+ * General · Wiring · Metrics · Actuators, each its own component (template/,
+ * WiringSection), in the order templateSectionOrder gives for how the
+ * devices run (`runsOn`): own code has no Wiring. Keys follow the name until
+ * edited, used keys are locked (with a rename warning when unlocked), every
+ * key shows its MQTT topic, and saving a change that disconnects rules or
+ * widgets asks first.
+ *
+ * `onboard`: adding something new (/devices/new?from=new). The same editor,
+ * with the device's name and zone on top; on our firmware its parts bring
+ * their metrics and actuators (reconcileParts). Saving creates the template
+ * and the device in one call.
  */
 export function TemplateEditor({
   entryId,
   duplicateOf,
   mode = "page",
+  onboard = false,
+  runsOn = "generic_firmware",
+  intro,
 }: {
   /** null = new template. */
   entryId: string | null;
   duplicateOf?: string | null;
   mode?: EditorMode;
+  onboard?: boolean;
+  /** How a new template's (or onboarded device's) devices run, to start with. */
+  runsOn?: RunsOn;
+  /** Above the first step's question (Add device's start cards). */
+  intro?: ReactNode;
 }) {
   const api = useApi();
   const router = useRouter();
@@ -89,24 +132,36 @@ export function TemplateEditor({
   const { data: source } = useApiSWR<CatalogEntryResponse>(duplicateOf ? `/catalog/${duplicateOf}` : null);
   const { data: all } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const { data: usage } = useApiSWR<CatalogUsageResponse>(entryId ? `/catalog/${entryId}/usage` : null);
-  const { data: catalog, error: catalogError, isLoading: catalogLoading } = useDriverCatalog();
+  const { data: catalog, isLoading: catalogLoading } = useDriverCatalog();
   const drivers = catalog?.drivers;
+  const { data: zones } = useApiSWR<ZoneResponse[]>(onboard ? "/zones" : null);
 
   const isNew = entryId == null;
-  const initial = useMemo<TemplateDraft | null>(() => {
+  const initial = useMemo<Draft | null>(() => {
+    if (onboard) {
+      const device = { name: "", zoneId: "", templateNameAuto: true };
+      // Our firmware starts at the board, ready for its first part.
+      return { ...blankTemplate(runsOn), hardware: runsOn === "generic_firmware" ? blankHardware() : null, device };
+    }
     if (!isNew) return entry ? templateToDraft(entry) : null;
     if (duplicateOf) return source ? templateToDraft(source, { duplicate: true }) : null;
-    return blankTemplate();
-  }, [isNew, entry, duplicateOf, source]);
+    return blankTemplate(runsOn);
+  }, [onboard, runsOn, isNew, entry, duplicateOf, source]);
 
   const otherNames = useMemo(() => (all ?? []).filter((e) => e.id !== entryId).map((e) => e.name), [all, entryId]);
-  const validate = useCallback((d: TemplateDraft) => validateTemplate(d, { otherNames, usage, catalog }), [otherNames, usage, catalog]);
-  const editor = useRecordEditor({ source: initial, isNew, validate });
-  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, entry?.name ?? "this template");
-
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [allOpen, setAllOpen] = useState<{ metrics: boolean | null; actuators: boolean | null }>({ metrics: null, actuators: null });
-  const [unlocked, setUnlocked] = useState<Set<string>>(new Set());
+  const validate = useCallback(
+    (d: Draft) => {
+      // Own code keeps no wiring: what's left in the draft is dropped on save.
+      const v = validateTemplate(d.runsOn === "own_code" ? { ...d, hardware: null } : d, { otherNames, usage, catalog });
+      if (!d.device) return v;
+      const name = d.device.name.trim();
+      const deviceError = !name ? "Give the device a name." : name.length > 100 ? "Keep the name under 100 characters." : null;
+      return deviceError ? { ...v, errors: { ...v.errors, "general.device": deviceError } } : v;
+    },
+    [otherNames, usage, catalog],
+  );
+  const editor = useRecordEditor<Draft>({ source: initial, isNew, validate });
+  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, onboard ? "this device" : (entry?.name ?? "this template"));
 
   if (error) {
     return (
@@ -128,26 +183,10 @@ export function TemplateEditor({
     );
   }
 
-  const set = (next: TemplateDraft) => editor.set(next);
-  const setMetric = (i: number, m: MetricDraft) => set({ ...d, metrics: d.metrics.map((x, j) => (j === i ? m : x)) });
-  const setActuator = (i: number, a: ActuatorDraft) => set({ ...d, actuators: d.actuators.map((x, j) => (j === i ? a : x)) });
+  const set = (next: Draft) => editor.set(next);
   const f = (path: string) => ({ error: editor.errorFor(path), warning: editor.warningFor(path) });
   const blur = (path: string) => () => editor.touch(path);
-
-  const isOpen = (kind: "metrics" | "actuators", row: { uid: string; origKey: string | null }, i: number) => {
-    const hasError = editor.visibleErrors.some((p) => p.startsWith(`${kind}.${i}.`));
-    if (hasError || expanded.has(row.uid) || row.origKey == null) return true;
-    const pref = allOpen[kind];
-    if (pref != null) return pref;
-    return mode === "page" && d[kind].length <= 3;
-  };
-  const toggleRow = (uid: string) =>
-    setExpanded((s) => {
-      const n = new Set(s);
-      if (n.has(uid)) n.delete(uid);
-      else n.add(uid);
-      return n;
-    });
+  const props: SectionProps = { d, set, editor, f, blur, readOnly, mode, usage };
 
   async function onSave(): Promise<boolean> {
     const before = editor.original;
@@ -166,28 +205,47 @@ export function TemplateEditor({
       });
       if (!ok) return true;
     }
+    // A new device just like an existing template's: offer that template
+    // instead of another copy (DESIGN.md §8, templates surface on reuse).
+    let twin: CatalogEntryResponse | undefined;
+    const match = d!.device && Object.keys(editor.errors).length === 0 ? matchingTemplate(d!, all ?? [], drivers) : undefined;
+    if (match) {
+      const ok = await confirm(`${match.name} has the same parts and data. Add this device to it, rather than make another template?`, {
+        title: `Matches ${match.name}`,
+        confirmLabel: `Use ${match.name}`,
+        cancelLabel: "Make a new template",
+        danger: false,
+      });
+      if (ok) twin = match;
+    }
     return editor
       .save(async (draft) => {
         const body = draftToRequest(draft, drivers);
+        const parts = {
+          runs_on: body.runs_on,
+          metrics: body.metrics as unknown as Record<string, unknown>[],
+          actuators: body.actuators as unknown as Record<string, unknown>[],
+          hardware: body.hardware as unknown as Record<string, unknown> | null,
+        };
         try {
-          if (isNew) {
-            const created = await api.post<CatalogEntryResponse>("/catalog", {
-              name: body.name,
-              metrics: body.metrics as unknown as Record<string, unknown>[],
-              actuators: body.actuators as unknown as Record<string, unknown>[],
-              hardware: body.hardware as unknown as Record<string, unknown> | null,
+          if (draft.device) {
+            const result = await api.post<DeviceCreateResponse>("/devices", {
+              name: draft.device.name.trim(),
+              ...(draft.device.zoneId ? { zone_id: draft.device.zoneId } : {}),
+              ...(twin ? { catalog_entry_id: twin.id } : { new_template: { name: body.name, ...parts } }),
             });
+            void revalidate("/devices");
+            void revalidate("/catalog");
+            handOffCredential(result.device, result.credential);
+            router.push(`/devices/${result.device.id}/connect`);
+          } else if (isNew) {
+            const created = await api.post<CatalogEntryResponse>("/catalog", { name: body.name, ...parts });
             if (!draft.enabled) await api.patch(`/catalog/${created.id}`, { status: "disabled" });
             void revalidate("/catalog");
             toast({ title: "Template created", detail: `${created.name} is ${draft.enabled ? "available in Add device" : "disabled"}.` });
             router.replace(`/templates/${created.id}`);
           } else {
-            await api.patch(`/catalog/${entryId}`, {
-              ...body,
-              metrics: body.metrics as unknown as Record<string, unknown>[],
-              actuators: body.actuators as unknown as Record<string, unknown>[],
-              hardware: body.hardware as unknown as Record<string, unknown> | null,
-            });
+            await api.patch(`/catalog/${entryId}`, { ...body, ...parts });
             await mutate();
             toast({ title: "Template saved", detail: before ? changeSummary(diffLines(before, draft, DIFF)) : undefined });
           }
@@ -222,7 +280,9 @@ export function TemplateEditor({
   }
 
   const devices = entry?.device_count ?? 0;
-  const consequence = isNew
+  const consequence = d.device
+    ? "Creating it makes the device and its template together; next comes its credential and Install."
+    : isNew
     ? d.enabled
       ? "Creating it makes it available in Add device."
       : "It's created disabled, so it won't be offered in Add device yet."
@@ -230,143 +290,188 @@ export function TemplateEditor({
       ? `Saving updates ${plural(devices, "device")} and re-sends their telemetry profile within seconds.`
       : "No devices use it yet.";
 
-  const keyField = (kind: "metrics" | "actuators", i: number, row: MetricDraft | ActuatorDraft, topic: string) => {
-    const path = `${kind}.${i}.key`;
-    const used = row.origKey ? usageText(usage?.[kind][row.origKey]) : "";
-    const locked = !!used && !unlocked.has(row.uid) && row.key === row.origKey;
-    const hint = (
-      <>
-        <span className="font-mono">{topic}</span>
-        {used && <> · used by {used}</>}
-      </>
-    );
-    return (
-      <Field
-        label={
-          <span className="flex items-center gap-1.5">
-            Key {row.keyAuto && <Tag size="sm">auto</Tag>}
-            {locked && <Lock aria-label="Locked: in use" size={11} />}
-          </span>
-        }
-        {...f(path)}
-        hint={hint}
-      >
-        <div className="flex items-center gap-2">
-          <Input
-            mono
-            value={row.key}
-            disabled={readOnly || locked}
-            onChange={(e) => {
-              const next = { ...row, key: e.target.value, keyAuto: false };
-              if (kind === "metrics") setMetric(i, next as MetricDraft);
-              else setActuator(i, next as ActuatorDraft);
-            }}
-            onBlur={blur(path)}
-          />
-          {locked && !readOnly && (
-            <Button variant="link" className="shrink-0 text-xs" onClick={() => setUnlocked((s) => new Set(s).add(row.uid))}>
-              Unlock
-            </Button>
-          )}
-        </div>
-      </Field>
-    );
+  // A reading's metric (or a command's actuator), renamed on its part card.
+  // Removing or replacing a part, or dropping a reading, names what rules and
+  // dashboards lose before it happens (DESIGN.md §8). The metrics stay.
+  const guardUnfed = (next: Draft) => {
+    const hit = unfedRows(d, next)
+      .map(({ kind, row }) => ({ row, used: row.origKey ? usageText(usage?.[kind][row.origKey]) : "" }))
+      .filter((x) => x.used);
+    if (hit.length === 0) return set(next);
+    void confirm("They keep their history, but get no new data until a part feeds them again.", {
+      title: "Stop feeding what rules and dashboards use?",
+      confirmLabel: "Change the wiring",
+      details: (
+        <ul>
+          {hit.map(({ row, used }) => (
+            <li key={row.uid}>
+              {row.name || row.key} ({row.key}): used by {used}
+            </li>
+          ))}
+        </ul>
+      ),
+    }).then((ok) => {
+      if (ok) set(next);
+    });
   };
 
-  const rowSummary = (kind: "metrics" | "actuators", i: number, row: MetricDraft | ActuatorDraft, desc: string) => {
-    const used = row.origKey ? usageText(usage?.[kind][row.origKey]) : "";
-    const hasErr = Object.keys(editor.errors).some((p) => p.startsWith(`${kind}.${i}.`));
-    const hasWarn = !!editor.warningFor(`${kind}.${i}.key`);
-    return (
-      <button
-        type="button"
-        onClick={() => toggleRow(row.uid)}
-        className={cn(
-          "group flex w-full min-w-0 items-center gap-2.5 rounded-xl border bg-surface py-2.5 pl-3 pr-2.5 text-left hover:border-accent/40",
-          hasErr ? "border-status-error" : "border-border",
-        )}
-      >
-        <span className="flex min-w-0 flex-1 flex-col leading-tight">
-          <span className="truncate text-sm font-medium text-ink">{row.name || <span className="text-ink-muted">Unnamed</span>}</span>
-          <span className="truncate text-[12.5px] text-ink-muted">{desc}</span>
-        </span>
-        {row.key && (
-          <Tag mono className="max-w-[40%] truncate max-sm:hidden">
-            {row.key}
-          </Tag>
-        )}
-        {used && <span className="whitespace-nowrap text-[11.5px] text-ink-muted max-sm:hidden">used by {used}</span>}
-        {hasErr && <AlertCircle aria-label="Has errors" size={15} className="text-status-error" />}
-        {!hasErr && hasWarn && <AlertTriangle aria-label="Has warnings" size={15} className="text-status-pending" />}
-        <span className="inline-flex items-center gap-1 text-ink-muted group-hover:text-accent-strong">
-          <span className="hidden text-xs font-semibold group-hover:inline">Edit</span>
-          <ChevronRight aria-hidden size={15} />
-        </span>
-      </button>
-    );
+  const renameTarget = (kind: "inputs" | "outputs", uid: string, name: string) =>
+    kind === "inputs"
+      ? set({ ...d, metrics: d.metrics.map((m) => (m.uid === uid ? renamed(m, name) : m)) })
+      : set({ ...d, actuators: d.actuators.map((a) => (a.uid === uid ? renamed(a, name) : a)) });
+  // Its key's problem (clash, reserved, invalid), shown on the part card too.
+  const targetError = (kind: "inputs" | "outputs", uid: string) => {
+    const rows = kind === "inputs" ? d.metrics : d.actuators;
+    const i = rows.findIndex((r) => r.uid === uid);
+    return i >= 0 && rows[i].key.trim() ? editor.errors[`${kind === "inputs" ? "metrics" : "actuators"}.${i}.key`] : undefined;
   };
 
-  const rowCard = (children: ReactNode, onCollapse: () => void, onRemove: () => void, title: string) => (
-    <fieldset className="min-w-0 rounded-xl border border-border bg-surface px-3.5 pb-3.5 pt-3">
-      <legend className="sr-only">{title}</legend>
-      <div className="mb-3 flex items-center gap-2">
-        <button type="button" onClick={onCollapse} aria-label="Collapse" className="-ml-1.5 grid h-7 w-7 place-items-center rounded-md text-ink-muted hover:bg-surface-raised">
-          <ChevronDown aria-hidden size={15} />
-        </button>
-        <span className="flex-1 truncate text-sm font-medium text-ink">{title}</span>
-        {!readOnly && (
-          <Button variant="link-danger" className="text-[12.5px]" onClick={onRemove}>
-            Remove
-          </Button>
-        )}
-      </div>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">{children}</div>
-    </fieldset>
+  // Adding a part brings its metrics and actuators (reconcileParts).
+  const wiring = (
+    <WiringSection
+      lead="Pick the board, then add each part. Every part brings its metrics or actuators: name them on the part, and fine-tune them below."
+      hardware={d.hardware}
+      rows={keyedRows(d)}
+      readOnly={readOnly}
+      onChange={(hardware) => guardUnfed({ ...reconcileParts(d, hardware, catalog), device: d.device })}
+      field={(path) => ({ ...f(path), onBlur: blur(path) })}
+      onRenameTarget={renameTarget}
+      targetError={targetError}
+      onKeepReading={(bindingUid, channel, keep) => guardUnfed({ ...keepReading(d, bindingUid, channel, keep, catalog), device: d.device })}
+      guideHref={entryId ? `/templates/${entryId}/wiring` : undefined}
+    >
+      {!catalogLoading && !catalog && (
+        <p className="text-sm text-ink-muted">
+          No firmware release is published yet, so there&apos;s nothing to wire. Choose <b className="text-ink">Custom firmware</b> under
+          Runs on to list the device&apos;s data instead.
+        </p>
+      )}
+    </WiringSection>
   );
-
-  const expandToggle = (kind: "metrics" | "actuators") => {
-    if (d[kind].length < 2) return undefined;
-    const openNow = d[kind].every((r, i) => isOpen(kind, r, i));
-    return (
-      <Button
-        variant="link"
-        className="inline-flex items-center gap-1 text-[12.5px] font-medium"
-        onClick={() => {
-          setExpanded(new Set());
-          setAllOpen((s) => ({ ...s, [kind]: !openNow }));
-        }}
-      >
-        {openNow ? <ChevronDown aria-hidden size={13} /> : <ChevronRight aria-hidden size={13} />}
-        {openNow ? "Collapse all" : "Expand all"}
-      </Button>
-    );
+  const body: Record<TemplateSectionId, ReactNode> = {
+    general: <GeneralSection {...props} zones={zones} />,
+    hardware: wiring,
+    metrics: <MetricsSection {...props} />,
+    actuators: <ActuatorsSection {...props} />,
   };
+  const order = templateSectionOrder({ runsOn: d.runsOn });
+  const parts = d.runsOn === "generic_firmware";
 
-  const span2 = "col-span-2";
+  // DESIGN.md §7/§8: creating is a wizard (Basics → Hardware → Data →
+  // Review); editing is tabs (General · Wiring · Data).
+  const groups: EditorGroupDef[] = isNew
+    ? [
+        {
+          id: "basics",
+          label: "Basics",
+          sections: ["general"],
+          question: d.device ? "What is it?" : "Name the template",
+          lead: d.device ? "Name the device and say what it runs on." : "Then say what devices of this kind run on.",
+        },
+        ...(parts
+          ? [
+              {
+                id: "hardware",
+                label: "Hardware",
+                sections: ["hardware"],
+                question: "Which board and parts?",
+                lead: "Pick the board, then add each part wired to it. Every part brings its metrics or actuators.",
+              },
+            ]
+          : []),
+        {
+          id: "data",
+          label: "Data",
+          sections: ["metrics", "actuators"],
+          question: "What does it publish and switch?",
+          lead: parts ? "Your parts brought these. Rename them, or fine-tune how often they publish." : "List the data your firmware sends, and anything it can switch.",
+        },
+        { id: "review", label: "Review", sections: ["review"], question: d.device ? "Check and create" : "Check and create the template", lead: consequence },
+      ]
+    : [
+        { id: "general", label: "General", sections: ["general"] },
+        ...(parts ? [{ id: "wiring", label: "Wiring", sections: ["hardware"] }] : []),
+        { id: "data", label: "Data", sections: ["metrics", "actuators"] },
+      ];
+
+  const none = (n: number, s: string) => (n ? undefined : <span className="text-ink-muted">{s}</span>);
+  const review = isNew && (
+    <EditorSection id="review" title="Summary">
+      <ReviewList
+        rows={[
+          d.device
+            ? { label: "Device", value: d.device.name.trim() || <span className="text-ink-muted">Unnamed</span>, step: "basics" }
+            : { label: "Template", value: d.name.trim() || <span className="text-ink-muted">Unnamed</span>, step: "basics" },
+          { label: "Runs on", value: parts ? "Our firmware" : "Custom firmware", step: "basics" },
+          ...(parts
+            ? [
+                {
+                  label: "Board and parts",
+                  value: d.hardware ? (
+                    <>
+                      {resolveModel(catalog?.models, d.hardware.board)?.label ?? d.hardware.board}
+                      <span className="block text-[13px] text-ink-muted">
+                        {[...d.hardware.inputs, ...d.hardware.outputs].map((b) => findDriver(drivers ?? [], b.driver)?.label ?? b.driver).join("; ") || "No parts"}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-ink-muted">No wiring</span>
+                  ),
+                  step: "hardware",
+                },
+              ]
+            : []),
+          {
+            label: "Metrics",
+            value: none(d.metrics.length, "None") ?? (
+              <>
+                {d.metrics.map((m, i) => (
+                  <Fragment key={m.uid}>
+                    {i > 0 && ", "}
+                    {m.name || "Unnamed"} <span className="font-mono text-xs text-ink-muted">{m.key}</span>
+                  </Fragment>
+                ))}
+              </>
+            ),
+            step: "data",
+          },
+          { label: "Actuators", value: none(d.actuators.length, "None") ?? d.actuators.map((a) => a.name || "Unnamed").join(", "), step: "data" },
+        ]}
+      />
+      {editor.visibleErrors.length > 0 && (
+        <div role="alert">
+          <Callout tone="error">
+            <b className="font-medium">{plural(editor.visibleErrors.length, "problem")} to fix.</b> The marked steps above show where.
+          </Callout>
+        </div>
+      )}
+    </EditorSection>
+  );
 
   return (
     <>
       <EditorFrame
         mode={mode}
-        noun="device template"
-        title={isNew ? (d.name.trim() || "New device template") : d.name.trim() || entry!.name}
+        noun={d.device ? "device" : "device template"}
+        title={d.device ? "Add device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
         eyebrow={
-          <>
-            Device template
-            {!isNew && (d.enabled ? <Badge tone="online" label="Enabled" /> : <Badge tone="unknown" shape="square" label="Disabled" />)}
+          d.device ? undefined : <>
+            {"Device template"}
+            {!isNew && (d.enabled ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />)}
             {!isNew && <span>· {plural(devices, "device")}</span>}
           </>
         }
-        consequence={consequence}
-        sections={[
-          { id: "general", label: "General", description: "Name and availability" },
-          { id: "metrics", label: "Metrics", count: d.metrics.length, description: "What the device publishes" },
-          { id: "actuators", label: "Actuators", count: d.actuators.length, description: "What the platform can switch" },
-          { id: "hardware", label: "Wiring", description: "For installing from the browser" },
-        ]}
+        // Adding something new says what the wizard does (demo H); a new template
+        // says it on its Review step.
+        consequence={d.device ? "Say what it runs on and what's wired to it. Its template is made for you." : isNew ? undefined : consequence}
+        sections={order.map((id) => railEntry(id, d))}
+        nav={isNew ? "steps" : "tabs"}
+        groups={groups}
+        onTouch={editor.touchAll}
+        intro={intro}
         status={editor}
         readOnly={readOnly}
-        saveLabel={isNew ? "Create template" : "Save"}
+        saveLabel={d.device ? "Create device" : isNew ? "Create template" : "Save"}
         onSave={onSave}
         onDiscard={editor.discard}
         headerActions={
@@ -377,230 +482,22 @@ export function TemplateEditor({
             </Button>
           ) : undefined
         }
-        menu={!isNew && !readOnly ? [[{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]] : undefined}
+        menu={
+          !isNew
+            ? [
+                [
+                  { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${entryId}`) },
+                  ...(entry?.hardware && entry.runs_on === "generic_firmware" ? [{ label: "Wiring guide", icon: <BookOpen size={15} />, onClick: () => router.push(`/templates/${entryId}/wiring`) }] : []),
+                ],
+                ...(readOnly ? [] : [[{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]]),
+              ]
+            : undefined
+        }
       >
-        <EditorSection id="general" title="General">
-          <div className="grid gap-3.5 @[640px]:grid-cols-2">
-            <Field label="Template name" {...f("general.name")}>
-              <Input
-                value={d.name}
-                disabled={readOnly}
-                placeholder="e.g. Climate sensor v2"
-                onChange={(e) => set({ ...d, name: e.target.value })}
-                onBlur={blur("general.name")}
-              />
-            </Field>
-            <SwitchField
-              label="Status"
-              checked={d.enabled}
-              disabled={readOnly}
-              onChange={(enabled) => set({ ...d, enabled })}
-              onLabel="Enabled"
-              offLabel="Disabled"
-              onHint="Offered in Add device."
-              offHint="Hidden from Add device. Devices that already use it keep working."
-            />
-          </div>
-        </EditorSection>
-
-        <EditorSection
-          id="metrics"
-          title="Metrics"
-          lead="What the device publishes. Each key is the last segment of an MQTT topic."
-          actions={expandToggle("metrics")}
-        >
-          <div className="flex flex-col gap-2">
-            {d.metrics.length === 0 && <p className="text-sm text-ink-muted">No metrics. Add one for each reading the device sends.</p>}
-            {d.metrics.map((m, i) => {
-              const desc =
-                m.data_type === "bool"
-                  ? "On/off flag"
-                  : [m.unit, m.min !== "" || m.max !== "" ? `${m.min || "…"} to ${m.max || "…"}` : null, PUBLISH_LABEL[m.publish].toLowerCase()]
-                      .filter(Boolean)
-                      .join(" · ");
-              if (!isOpen("metrics", m, i)) return <div key={m.uid}>{rowSummary("metrics", i, m, desc)}</div>;
-              const p = `metrics.${i}.`;
-              return (
-                <div key={m.uid}>
-                  {rowCard(
-                    <>
-                      <Field label="Name" {...f(p + "name")} className={span2}>
-                        <Input value={m.name} disabled={readOnly} placeholder="e.g. Temperature" onChange={(e) => setMetric(i, renamed(m, e.target.value))} onBlur={blur(p + "name")} />
-                      </Field>
-                      <div className={span2}>{keyField("metrics", i, m, `…/{device}/${m.key.trim() || "key"}`)}</div>
-                      <Field label="Type">
-                        <Select
-                          value={m.data_type}
-                          disabled={readOnly}
-                          onChange={(e) => setMetric(i, { ...m, data_type: e.target.value as MetricDraft["data_type"] })}
-                        >
-                          <option value="float">Number</option>
-                          <option value="bool">On/off</option>
-                        </Select>
-                      </Field>
-                      {m.data_type === "float" ? (
-                        <>
-                          <Field label="Unit" optional>
-                            <UnitField value={m.unit} onChange={(unit) => setMetric(i, { ...m, unit })} />
-                          </Field>
-                          <Field label="Decimals" {...f(p + "decimals")}>
-                            <Input inputMode="numeric" value={m.decimals} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, decimals: e.target.value })} onBlur={blur(p + "decimals")} />
-                          </Field>
-                          <Field label="Min" optional {...f(p + "min")}>
-                            <Input inputMode="decimal" value={m.min} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, min: e.target.value })} onBlur={blur(p + "min")} />
-                          </Field>
-                          <Field label="Max" optional {...f(p + "max")}>
-                            <Input inputMode="decimal" value={m.max} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, max: e.target.value })} onBlur={blur(p + "max")} />
-                          </Field>
-                        </>
-                      ) : (
-                        <p className="col-span-3 self-end pb-2 text-xs text-ink-muted">Sends 0 or 1. No unit or range.</p>
-                      )}
-                      <Field label="Publish" className={span2}>
-                        <Select value={m.publish} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, publish: e.target.value as MetricDraft["publish"] })}>
-                          {(Object.keys(PUBLISH_LABEL) as MetricDraft["publish"][]).map((k) => (
-                            <option key={k} value={k}>
-                              {PUBLISH_LABEL[k]}
-                            </option>
-                          ))}
-                        </Select>
-                      </Field>
-                      {m.publish === "on_change" ? (
-                        <Field label="Change of at least" optional {...f(p + "deadband")} className={span2}>
-                          <Affix suffix={m.unit || "units"}>
-                            <Input inputMode="decimal" value={m.deadband} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, deadband: e.target.value })} onBlur={blur(p + "deadband")} />
-                          </Affix>
-                        </Field>
-                      ) : (
-                        <Field label="Every" optional {...f(p + "interval")} className={span2}>
-                          <Affix suffix="s">
-                            <Input inputMode="numeric" value={m.interval} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, interval: e.target.value })} onBlur={blur(p + "interval")} />
-                          </Affix>
-                        </Field>
-                      )}
-                    </>,
-                    () => {
-                      setExpanded((s) => {
-                        const n = new Set(s);
-                        n.delete(m.uid);
-                        return n;
-                      });
-                      setAllOpen((s) => ({ ...s, metrics: false }));
-                    },
-                    () => set({ ...d, metrics: d.metrics.filter((x) => x.uid !== m.uid) }),
-                    m.name || "New metric",
-                  )}
-                </div>
-              );
-            })}
-            {!readOnly && (
-              <Button
-                variant="link"
-                className="self-start"
-                onClick={() => {
-                  const m = blankMetric();
-                  set({ ...d, metrics: [...d.metrics, m] });
-                  setExpanded((s) => new Set(s).add(m.uid));
-                }}
-              >
-                <Plus aria-hidden size={14} />
-                Add metric
-              </Button>
-            )}
-          </div>
-        </EditorSection>
-
-        <EditorSection
-          id="actuators"
-          title="Actuators"
-          lead="What the platform can switch. Commands go out on QoS 1 with a 30 s TTL."
-          actions={expandToggle("actuators")}
-        >
-          <div className="flex flex-col gap-2">
-            {d.actuators.length === 0 && <p className="text-sm text-ink-muted">No actuators. Sensors-only devices don&apos;t need any.</p>}
-            {d.actuators.map((a, i) => {
-              const desc = a.value_type === "bool" ? `On/off · sends ${a.on || "…"} / ${a.off || "…"}` : CONTROL_LABEL[a.value_type];
-              if (!isOpen("actuators", a, i)) return <div key={a.uid}>{rowSummary("actuators", i, a, desc)}</div>;
-              const p = `actuators.${i}.`;
-              return (
-                <div key={a.uid}>
-                  {rowCard(
-                    <>
-                      <Field label="Name" {...f(p + "name")} className={span2}>
-                        <Input value={a.name} disabled={readOnly} placeholder="e.g. Fan" onChange={(e) => setActuator(i, renamed(a, e.target.value))} onBlur={blur(p + "name")} />
-                      </Field>
-                      <div className={span2}>{keyField("actuators", i, a, `…/{device}/cmd/${a.key.trim() || "key"}`)}</div>
-                      <Field label="Control" className={span2}>
-                        <Select value={a.value_type} disabled={readOnly} onChange={(e) => setActuator(i, { ...a, value_type: e.target.value as ActuatorDraft["value_type"] })}>
-                          {(Object.keys(CONTROL_LABEL) as ActuatorDraft["value_type"][]).map((k) => (
-                            <option key={k} value={k}>
-                              {CONTROL_LABEL[k]}
-                            </option>
-                          ))}
-                        </Select>
-                      </Field>
-                      {a.value_type === "bool" && (
-                        <>
-                          <Field label="Sends for On" {...f(p + "on")}>
-                            <Input mono value={a.on} disabled={readOnly} onChange={(e) => setActuator(i, { ...a, on: e.target.value })} onBlur={blur(p + "on")} />
-                          </Field>
-                          <Field label="Sends for Off" {...f(p + "off")}>
-                            <Input mono value={a.off} disabled={readOnly} onChange={(e) => setActuator(i, { ...a, off: e.target.value })} onBlur={blur(p + "off")} />
-                          </Field>
-                        </>
-                      )}
-                      {a.value_type === "string" && (
-                        <Field label="Allowed values" hint="Separated by commas, e.g. open, closed, half" {...f(p + "allowed")} className={span2}>
-                          <Input mono value={a.allowed} disabled={readOnly} onChange={(e) => setActuator(i, { ...a, allowed: e.target.value })} onBlur={blur(p + "allowed")} />
-                        </Field>
-                      )}
-                      {a.value_type === "float" && <p className="col-span-2 self-end pb-2 text-xs text-ink-muted">Sends the number you choose.</p>}
-                    </>,
-                    () => {
-                      setExpanded((s) => {
-                        const n = new Set(s);
-                        n.delete(a.uid);
-                        return n;
-                      });
-                      setAllOpen((s) => ({ ...s, actuators: false }));
-                    },
-                    () => set({ ...d, actuators: d.actuators.filter((x) => x.uid !== a.uid) }),
-                    a.name || "New actuator",
-                  )}
-                </div>
-              );
-            })}
-            {!readOnly && (
-              <Button
-                variant="link"
-                className="self-start"
-                onClick={() => {
-                  const a = blankActuator();
-                  set({ ...d, actuators: [...d.actuators, a] });
-                  setExpanded((s) => new Set(s).add(a.uid));
-                }}
-              >
-                <Plus aria-hidden size={14} />
-                Add actuator
-              </Button>
-            )}
-          </div>
-        </EditorSection>
-
-        <EditorSection
-          id="hardware"
-          title="Wiring"
-          lead="How the board is wired: which sensor reads each metric and which output drives each actuator. Optional, but with it every device installs from the browser with no code."
-        >
-          <HardwareSection
-            hardware={d.hardware}
-            rows={keyedRows(d)}
-            catalog={{ data: catalog, loading: catalogLoading, error: !!catalogError }}
-            readOnly={readOnly}
-            onChange={(hardware) => set({ ...d, hardware })}
-            field={(path) => ({ ...f(path), onBlur: blur(path) })}
-          />
-        </EditorSection>
+        {order.map((id) => (
+          <Fragment key={id}>{body[id]}</Fragment>
+        ))}
+        {review}
       </EditorFrame>
       {confirmDialog}
       {guardDialog}

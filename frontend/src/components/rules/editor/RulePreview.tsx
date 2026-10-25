@@ -213,7 +213,7 @@ export function RulePreview({
 
       <PreviewCard title="Would send">
         {sends.length === 0 ? (
-          <p className="text-[13px] text-ink-muted">Nothing yet. Add an action.</p>
+          <p className="text-[13px] text-ink-muted">No actions yet.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {sends.map((s, i) => (
@@ -271,12 +271,9 @@ export function RulePreview({
         </ul>
       </PreviewCard>
 
-      <PreviewCard title="Other rules on these actuators">
-        {targets.length === 0 ? (
-          <p className="text-[13px] text-ink-muted">This rule doesn&apos;t switch an actuator.</p>
-        ) : others.length === 0 ? (
-          <p className="text-[13px] text-ink-muted">No other enabled rule drives them.</p>
-        ) : (
+      {/* Only when there are some (demo H). */}
+      {others.length > 0 && (
+        <PreviewCard title="Other rules on these actuators">
           <ul className="flex flex-col gap-1.5">
             {others.map((o, i) => (
               <li key={i} className="flex flex-col text-[13px]">
@@ -289,8 +286,8 @@ export function RulePreview({
               </li>
             ))}
           </ul>
-        )}
-      </PreviewCard>
+        </PreviewCard>
+      )}
 
       {signals.length > 0 && (
         <details className="group rounded-xl border border-border bg-surface p-4 shadow-card">

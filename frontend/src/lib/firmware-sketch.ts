@@ -30,7 +30,12 @@ const PLACEHOLDER_METRIC: SketchMetric = { name: "temperature", key: null };
 const CREDENTIAL_PLACEHOLDER = "<paste your device credential here>";
 const FW_VERSION = "1.0.0";
 
-export type SketchBoard = "esp32" | "esp32c3";
+/** Every chip the firmware builds for and the sketch supports, in the order
+ * they're offered. Adding one means a block in firmware/src/board.h and
+ * pins.cpp, here in BOARDS, and in CHIP_PINS (lib/hardware/board-pins.ts);
+ * release.py checks they agree. */
+export const CHIPS = ["esp32", "esp32c3", "esp32s3", "esp32c6", "esp32s2"] as const;
+export type SketchBoard = (typeof CHIPS)[number];
 
 /** What differs per board: the Arduino IDE settings, the provisioning-reset button, the BLE
  * memory handler WiFiProv frees after provisioning, and the GPIOs handed out —
@@ -38,11 +43,29 @@ export type SketchBoard = "esp32" | "esp32c3";
  * things to one pin. No strapping, flash or USB pins. */
 export const BOARDS: Record<
   SketchBoard,
-  { label: string; arduinoBoard: string; ideSettings: string[]; resetPin: number; resetButton: string; bleHandler: string; inputs: number[]; outputs: number[] }
+  {
+    label: string;
+    /** One line for the sketch's board choice. */
+    blurb: string;
+    /** Has Bluetooth, so Wi-Fi can come from a phone; without, it's typed in. */
+    ble: boolean;
+    arduinoBoard: string;
+    /** PlatformIO's `board =` for the same chip. */
+    pioBoard: string;
+    ideSettings: string[];
+    resetPin: number;
+    resetButton: string;
+    bleHandler: string;
+    inputs: number[];
+    outputs: number[];
+  }
 > = {
   esp32: {
     label: "ESP32 DevKit",
+    blurb: "Classic ESP32, 30/38-pin dev boards.",
+    ble: true,
     arduinoBoard: "ESP32 Dev Module",
+    pioBoard: "esp32dev",
     ideSettings: [],
     // A button between GPIO 19 and GND: on the header of both the 30- and the
     // 38-pin DevKit (GPIO 0, the BOOT button, isn't on the 30-pin header).
@@ -59,7 +82,10 @@ export const BOARDS: Record<
   },
   esp32c3: {
     label: "ESP32-C3",
+    blurb: "ESP32-C3 DevKitM, Super Mini and similar.",
+    ble: true,
     arduinoBoard: "ESP32C3 Dev Module",
+    pioBoard: "esp32-c3-devkitm-1",
     ideSettings: ["USB CDC On Boot: Enabled", "Flash Mode: DIO"],
     resetPin: 9,
     resetButton: "BOOT",
@@ -68,6 +94,54 @@ export const BOARDS: Record<
     // are free with USB CDC on boot and go last.
     inputs: [4, 5, 6, 7, 10],
     outputs: [3, 1, 0, 20, 21],
+  },
+  esp32s3: {
+    label: "ESP32-S3",
+    blurb: "ESP32-S3 DevKitC-1 and similar.",
+    ble: true,
+    arduinoBoard: "ESP32S3 Dev Module",
+    pioBoard: "esp32-s3-devkitc-1",
+    ideSettings: [],
+    resetPin: 0,
+    resetButton: "BOOT",
+    bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BLE",
+    // Left out: strapping 0, 3, 45, 46; USB 19, 20; flash/PSRAM 26–37; UART0
+    // 43/44; and 38 and 48, a DevKitC-1 revision's RGB LED each.
+    inputs: [4, 5, 6, 7, 15, 16, 17, 18],
+    // 8/9 are the default I2C pins (SDA/SCL), so they're handed out last.
+    outputs: [10, 11, 12, 13, 14, 21, 47, 8, 9],
+  },
+  esp32c6: {
+    label: "ESP32-C6",
+    blurb: "ESP32-C6 DevKitC-1 and similar.",
+    ble: true,
+    arduinoBoard: "ESP32C6 Dev Module",
+    pioBoard: "esp32-c6-devkitc-1",
+    ideSettings: [],
+    resetPin: 9,
+    resetButton: "BOOT",
+    bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BLE",
+    // Left out: strapping 4, 5, 8 (RGB LED), 9 (BOOT), 15; USB 12, 13; UART0
+    // 16, 17; flash 24-30.
+    inputs: [2, 3, 6, 7, 10, 11],
+    // 23/22 are the default I2C pins (SDA/SCL), so they're handed out last.
+    outputs: [18, 19, 20, 21, 14, 0, 1, 23, 22],
+  },
+  esp32s2: {
+    label: "ESP32-S2",
+    blurb: "Lolin S2 Mini and similar. No Bluetooth: Wi-Fi typed in.",
+    ble: false,
+    arduinoBoard: "LOLIN S2 Mini",
+    pioBoard: "lolin_s2_mini",
+    ideSettings: ["USB CDC On Boot: Enabled"],
+    resetPin: 0,
+    resetButton: "the 0 (BOOT) button",
+    // No Bluetooth: the sketch never provisions from a phone on this chip.
+    bleHandler: "",
+    // Left out: strapping 0, 45, 46; USB 19, 20; flash/PSRAM 26-32; 15 (LED).
+    inputs: [3, 4, 5, 6, 7, 8, 9, 10],
+    // 33/35 are the default I2C pins (SDA/SCL), so they're handed out last.
+    outputs: [11, 12, 13, 14, 16, 17, 18, 21, 33, 35],
   },
 };
 

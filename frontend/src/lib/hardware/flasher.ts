@@ -31,6 +31,10 @@ export interface FirmwareManifest {
       cfg: { offset: number; size: number };
       /** Where saved Wi-Fi lives. Missing from releases before 0.3.1. */
       nvs?: { offset: number; size: number };
+      /** The driver ids this build carries. Missing from releases before
+       * 0.7.0, which carried every driver; the dashboard filters by each
+       * driver's `chips`, which says the same. */
+      drivers?: string[];
     }
   >;
   /** The board models people pick (firmware/boards.json). Missing from
@@ -48,6 +52,10 @@ export interface FlashProgress {
   file?: string;
   written?: number;
   total?: number;
+  /** While writing: how far the whole write is, 0–1 (overallFraction). */
+  fraction?: number;
+  /** The link speed of this attempt; below BAUD_LADDER[0] after a drop. */
+  baudrate: number;
 }
 
 export interface FlashTimings {
@@ -56,6 +64,8 @@ export interface FlashTimings {
   writeMs: number;
   totalMs: number;
   bytes: number;
+  /** The link speed that finished the job. */
+  baudrate: number;
   /** Whether the saved Wi-Fi was erased (full mode with eraseWifi). */
   wifiErased: boolean;
   /** Anything skipped, in words (e.g. a release too old to erase Wi-Fi). */
@@ -100,6 +110,7 @@ export interface FlashOptions {
   /** From navigator.serial.requestPort(), which needs the click's user gesture:
    * call it in the click handler before any other await. */
   port: SerialPort;
+  /** Where to start on BAUD_LADDER; a speed that worked before on this port wins. */
   baudrate?: number;
   base?: string;
   onProgress?: (p: FlashProgress) => void;
@@ -142,8 +153,9 @@ export class FlashError extends Error {
   }
 }
 
-/** A raw Web Serial / esptool-js failure, in words. */
-export function explainFlashError(err: unknown, stage: FlashStage): FlashError {
+/** A raw Web Serial / esptool-js failure, in words. `synced`: the board's
+ * bootloader had answered (its chip was identified) before it failed. */
+export function explainFlashError(err: unknown, stage: FlashStage, synced = false): FlashError {
   if (err instanceof FlashError) return err;
   const raw = err instanceof Error ? err.message : String(err);
   const name = err instanceof Error ? err.name : "";
@@ -155,6 +167,12 @@ export function explainFlashError(err: unknown, stage: FlashStage): FlashError {
     );
   if (/device has been lost|disconnected/i.test(raw) || name === "NetworkError")
     return new FlashError("The board disconnected. Check the USB cable, plug the board in again, and try again.", stage, false);
+  if (stage === "connecting" && synced)
+    return new FlashError(
+      "The board answered, then stopped responding. Unplug anything wired to GPIO 0, 2, 12 or 15, use a USB port on the computer itself (not a hub), and try again.",
+      stage,
+      false,
+    );
   if (stage === "connecting")
     return new FlashError(
       "The board didn't answer. Hold its BOOT button while you click Install, and let go once the progress starts.",
@@ -164,74 +182,168 @@ export function explainFlashError(err: unknown, stage: FlashStage): FlashError {
   return new FlashError(raw, stage, stage === "writing");
 }
 
-/** Flashes the board on `port` and restarts it. Throws a FlashError with a
- * message a person can act on; the port is always released. */
+/** Link speeds, fastest first. A board that answers but drops out steps down
+ * one rung at a time; 115200 is the ROM bootloader's own speed, which always
+ * works once the board answers. */
+export const BAUD_LADDER = [921600, 460800, 115200] as const;
+const LOG_LINES = 80;
+
+/** The next slower speed after `baud`, or null at the bottom of the ladder. */
+export function nextSlower(baud: number): number | null {
+  return BAUD_LADDER.find((b) => b < baud) ?? null;
+}
+
+/** After a failed attempt at `baud`: the speed to try next, or null to give
+ * up. Only a board that answered and then dropped (while connecting), or a
+ * transfer that dropped (while writing), is worth a slower try; a board that
+ * never answered, a busy port or the wrong board isn't. */
+export function nextAttempt(f: { stage: FlashStage; synced: boolean; retryable: boolean; baud: number }): number | null {
+  const dropped = (f.stage === "connecting" && f.synced) || (f.stage === "writing" && f.retryable);
+  return dropped ? nextSlower(f.baud) : null;
+}
+
+/** How far the whole write is (0–1): esptool reports per file, so each file
+ * counts by its size. */
+export function overallFraction(sizes: number[], index: number, written: number, total: number): number {
+  const sum = (xs: number[]) => xs.reduce((n, x) => n + x, 0);
+  const all = sum(sizes);
+  if (all <= 0) return 1;
+  const part = total > 0 ? Math.min(1, written / total) : 1;
+  return Math.min(1, (sum(sizes.slice(0, index)) + (sizes[index] ?? 0) * part) / all);
+}
+
+/** The release build for the chip esptool reports ("ESP32-C3"), if any. */
+export function chipForName(manifest: Pick<FirmwareManifest, "boards">, chipName: string): SketchBoard | null {
+  const hit = Object.entries(manifest.boards).find(([, b]) => b.chip === chipName);
+  return hit ? (hit[0] as SketchBoard) : null;
+}
+
+/** "Detect my board" (DESIGN.md §8): asks the board on `port` which chip it is
+ * and restarts it, writing nothing. Returns esptool's chip name ("ESP32-C3").
+ * Boards with the same chip look alike, so this narrows the model list; the
+ * person still picks the model. Throws a FlashError a person can act on. */
+export async function detectChip(port: SerialPort): Promise<string> {
+  const { ESPLoader, Transport } = await import("esptool-js");
+  const quiet = { clean: () => {}, write: () => {}, writeLine: () => {} };
+  const transport = new Transport(port, false);
+  let loader: InstanceType<typeof ESPLoader> | null = null;
+  try {
+    loader = new ESPLoader({ transport, baudrate: 115200, terminal: quiet });
+    await loader.main();
+    const name = loader.chip.CHIP_NAME;
+    await loader.after("hard_reset");
+    return name;
+  } catch (err) {
+    throw explainFlashError(err, "connecting", loader?.chip != null);
+  } finally {
+    await transport.disconnect().catch(() => {});
+  }
+}
+
+// The speed that last worked for each plugged-in board (Chrome keeps the same
+// SerialPort until it's unplugged), so a board that drops at full speed
+// doesn't pay for the failed attempts again. Forgotten on reload.
+const goodBaud = new WeakMap<SerialPort, number>();
+
+/** Flashes the board on `port` and restarts it, stepping down BAUD_LADDER when
+ * the link drops. Throws a FlashError with a message a person can act on; the
+ * port is always released. */
 export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
-  const { manifest, board, mode, configBlob, port, baudrate = 921600, base = FIRMWARE_BASE } = opts;
+  const { manifest, board, mode, configBlob, port, base = FIRMWARE_BASE } = opts;
   const target = manifest.boards[board];
   if (!target) throw new Error(`Firmware ${manifest.version} has no build for ${board}.`);
   if (configBlob.length > target.cfg.size) throw new Error("The device config is larger than the board's config area.");
 
   // esptool-js touches `window` at import; load it only when flashing.
   const { ESPLoader, Transport } = await import("esptool-js");
-  let stage: FlashStage = "connecting";
   const report = opts.onProgress ?? (() => {});
-  const progress = (p: FlashProgress) => {
-    stage = p.stage;
-    report(p);
+  // The last lines of esptool's log, printed to the console when it fails, so
+  // a failed install can be diagnosed from the browser's dev tools.
+  const lines: string[] = [];
+  const log = (line: string) => {
+    lines.push(line);
+    if (lines.length > LOG_LINES) lines.shift();
+    opts.onLog?.(line);
   };
-  const log = opts.onLog ?? (() => {});
   const terminal = { clean: () => {}, write: log, writeLine: log };
-  const transport = new Transport(port, false);
   const t0 = performance.now();
+  // Downloaded once, however many attempts it takes.
+  let parts: FlashFile[] | null = null;
+  let baud = goodBaud.get(port) ?? opts.baudrate ?? BAUD_LADDER[0];
 
-  try {
-    progress({ stage: "connecting" });
-    const loader = new ESPLoader({ transport, baudrate, terminal });
-    await loader.main();
-    const chip = loader.chip.CHIP_NAME;
-    if (chip !== target.chip) {
-      throw new FlashError(`This board is an ${chip}, but you picked ${target.chip}. Pick the matching board and try again.`, stage, false);
-    }
-    const t1 = performance.now();
-
-    progress({ stage: "downloading" });
-    const parts =
-      mode === "full"
-        ? await Promise.all(
-            target.parts.map(async (part) => ({ name: part.path, data: await fetchPart(base, manifest.version, part), address: part.offset })),
-          )
-        : [];
-    const { files, notes } = flashFiles(target, { mode, parts, configBlob, eraseWifi: opts.eraseWifi });
-    notes.forEach(log);
-    const t2 = performance.now();
-
-    await loader.writeFlash({
-      fileArray: files.map(({ data, address }) => ({ data, address })),
-      flashSize: "keep",
-      flashMode: "keep",
-      flashFreq: "keep",
-      eraseAll: false,
-      compress: true,
-      reportProgress: (i, written, total) => progress({ stage: "writing", file: files[i]?.name, written, total }),
-    });
-    const t3 = performance.now();
-
-    progress({ stage: "restarting" });
-    await loader.after("hard_reset");
-    progress({ stage: "done" });
-    return {
-      connectMs: t1 - t0,
-      downloadMs: t2 - t1,
-      writeMs: t3 - t2,
-      totalMs: performance.now() - t0,
-      bytes: files.reduce((n, f) => n + f.data.length, 0),
-      wifiErased: files.some((f) => target.nvs != null && f.address === target.nvs.offset),
-      notes,
+  for (;;) {
+    let stage: FlashStage = "connecting";
+    let synced = false;
+    const progress = (p: Omit<FlashProgress, "baudrate">) => {
+      stage = p.stage;
+      report({ ...p, baudrate: baud });
     };
-  } catch (err) {
-    throw explainFlashError(err, stage);
-  } finally {
-    await transport.disconnect().catch(() => {});
+    const transport = new Transport(port, false);
+    let loader: InstanceType<typeof ESPLoader> | null = null;
+    const ta = performance.now();
+    try {
+      progress({ stage: "connecting" });
+      // main() also loads esptool's stub and switches to `baud`.
+      loader = new ESPLoader({ transport, baudrate: baud, terminal });
+      await loader.main();
+      synced = true;
+      const chip = loader.chip.CHIP_NAME;
+      if (chip !== target.chip) {
+        throw new FlashError(`This board is an ${chip}, but you picked ${target.chip}. Pick the matching board and try again.`, stage, false);
+      }
+      const t1 = performance.now();
+
+      progress({ stage: "downloading" });
+      parts ??=
+        mode === "full"
+          ? await Promise.all(
+              target.parts.map(async (part) => ({ name: part.path, data: await fetchPart(base, manifest.version, part), address: part.offset })),
+            )
+          : [];
+      const { files, notes } = flashFiles(target, { mode, parts, configBlob, eraseWifi: opts.eraseWifi });
+      notes.forEach(log);
+      const sizes = files.map((f) => f.data.length);
+      const t2 = performance.now();
+
+      await loader.writeFlash({
+        fileArray: files.map(({ data, address }) => ({ data, address })),
+        flashSize: "keep",
+        flashMode: "keep",
+        flashFreq: "keep",
+        eraseAll: false,
+        compress: true,
+        reportProgress: (i, written, total) =>
+          progress({ stage: "writing", file: files[i]?.name, written, total, fraction: overallFraction(sizes, i, written, total) }),
+      });
+      const t3 = performance.now();
+
+      progress({ stage: "restarting" });
+      await loader.after("hard_reset");
+      progress({ stage: "done" });
+      goodBaud.set(port, baud);
+      return {
+        connectMs: t1 - ta,
+        downloadMs: t2 - t1,
+        writeMs: t3 - t2,
+        totalMs: performance.now() - t0,
+        bytes: files.reduce((n, f) => n + f.data.length, 0),
+        baudrate: baud,
+        wifiErased: files.some((f) => target.nvs != null && f.address === target.nvs.offset),
+        notes,
+      };
+    } catch (err) {
+      synced ||= loader?.chip != null;
+      const failure = explainFlashError(err, stage, synced);
+      // Our own FlashErrors (the wrong board) are final.
+      const next = err instanceof FlashError ? null : nextAttempt({ stage, synced, retryable: failure.retryable, baud });
+      if (next == null) {
+        console.warn(`Install failed while ${stage} at ${baud} baud. esptool log:\n${lines.join("\n")}`);
+        throw failure;
+      }
+      log(`Lost the board at ${baud} baud while ${stage}; trying again at ${next}.`);
+      baud = next;
+    } finally {
+      await transport.disconnect().catch(() => {});
+    }
   }
 }

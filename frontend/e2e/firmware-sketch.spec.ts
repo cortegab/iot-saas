@@ -19,22 +19,33 @@ async function apiHeaders(request: APIRequestContext) {
 }
 
 // The connect flow rotates the credential — never point this at a real board.
+// Its own template has no wiring, so the flow takes the sketch path whatever
+// the workspace's other templates hold.
 const test = withLogin.extend<{ throwawayDevice: { id: string; name: string } }>({
   throwawayDevice: async ({ request }, use) => {
     const headers = await apiHeaders(request);
-    const catalog = await (await request.get(`${API_URL}/catalog`, { headers })).json();
+    const stamp = Date.now();
+    const template = await (
+      await request.post(`${API_URL}/catalog`, {
+        headers,
+        data: { name: `E2E sketch ${stamp}`, metrics: [{ key: "temperature", name: "Temperature", unit: "°C" }], actuators: [] },
+      })
+    ).json();
     const created = await request.post(`${API_URL}/devices`, {
       headers,
-      data: { name: `E2E sketch ${Date.now()}`, catalog_entry_id: catalog[0].id },
+      data: { name: `E2E sketch ${stamp}`, catalog_entry_id: template.id },
     });
     expect(created.ok(), `POST /devices failed: ${created.status()}`).toBeTruthy();
     const device = (await created.json()).device;
     await use({ id: device.id, name: device.name });
     await request.delete(`${API_URL}/devices/${device.id}`, { headers });
+    await request.delete(`${API_URL}/catalog/${template.id}`, { headers });
   },
 });
 
-/** Reads the one-time credential and continues to Options; returns the password. */
+/** Reads the one-time credential and continues to Options; returns the password.
+ * The broker host defaults to this page's (localhost here), which Options
+ * refuses because a board can't reach it, so it gets a LAN address. */
 async function storeCredential(page: Page, deviceId: string): Promise<string> {
   const reveal = page.getByRole("region", { name: "One-time secret" });
   await expect(reveal.getByText(deviceId, { exact: true })).toBeVisible();
@@ -43,6 +54,7 @@ async function storeCredential(page: Page, deviceId: string): Promise<string> {
   expect(password.length).toBeGreaterThan(10);
   await reveal.getByLabel("I've stored it").check();
   await reveal.getByRole("button", { name: "Continue" }).click();
+  await page.getByLabel("Broker host").fill("192.168.1.10");
   return password;
 }
 
@@ -62,10 +74,11 @@ test("connect flow: phone provisioning with a QR from the credential, or typed W
   await page.getByRole("button", { name: "Create credential" }).click();
   const password = await storeCredential(page, throwawayDevice.id);
 
-  // Options: no code here; defaults are a phone and Security 2.
+  // Options: no code here; Wi-Fi from a phone by default, always Security 1
+  // (Security 2 is off: docs/ble-provisioning.md).
   await expect(page.getByRole("heading", { name: "Options" })).toBeVisible();
   await expect(page.getByLabel("Generated sketch")).toHaveCount(0);
-  await expect(page.getByRole("radio", { name: /2 – SRP6a/ })).toBeChecked();
+  await expect(page.getByRole("radio", { name: /SRP6a/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Flash: download, plus a collapsed preview that masks the password.
@@ -77,28 +90,15 @@ test("connect flow: phone provisioning with a QR from the credential, or typed W
   await expect(sketch).toContainText(`MQTT_USERNAME = "${throwawayDevice.id}"`);
   await expect(sketch).toContainText('MQTT_PASSWORD = "••••••••"');
   await expect(sketch).not.toContainText(password);
-  await expect(sketch).toContainText("NETWORK_PROV_SECURITY_2, (const char*)&SEC2_PARAMS");
-  await expect(sketch).toContainText("SEC2_VERIFIER");
+  await expect(sketch).toContainText("NETWORK_PROV_SECURITY_1, MQTT_PASSWORD");
+  await expect(sketch).not.toContainText("SEC2_VERIFIER");
   await expect(sketch).not.toContainText(OLD_GATT_UUID);
   await page.getByRole("button", { name: "Continue" }).click();
 
   // Wi-Fi from your phone: the QR is the device name + its credential.
+  // Security 1: no username, the password is the PoP.
   await expect(page.getByRole("heading", { name: "Wi-Fi from your phone" })).toBeVisible();
   await expect(page.getByRole("img", { name: `Provisioning QR for ${throwawayDevice.name}` })).toBeVisible();
-  expect(await qrPayload(page)).toEqual({
-    ver: "v1",
-    name: throwawayDevice.name,
-    username: throwawayDevice.id,
-    pop: password,
-    transport: "ble",
-    network: "wifi",
-    security: 2,
-  });
-
-  // Security 1: no username, the password is the PoP.
-  await stepButton(page, /Options/).click();
-  await page.getByRole("radio", { name: /1 – PoP/ }).check();
-  await stepButton(page, /From your phone/).click();
   expect(await qrPayload(page)).toEqual({ ver: "v1", name: throwawayDevice.name, pop: password, transport: "ble", network: "wifi", security: 1 });
 
   // Typed Wi-Fi: no provisioning in the sketch, and step 4 is skipped.
@@ -142,8 +142,8 @@ test("rotating the credential makes a new QR", async ({ page, context, throwaway
 test("adding a device hands its credential straight to the connect flow", async ({ page, request }) => {
   const name = `E2E add ${Date.now()}`;
   await page.goto("/devices/new");
-  await page.getByLabel("Name").fill(name);
-  await page.getByRole("button", { name: "Create and connect" }).click();
+  await page.getByLabel("Device name").fill(name);
+  await page.getByRole("button", { name: "Create device" }).click();
   await expect(page).toHaveURL(/\/devices\/[0-9a-f-]+\/connect$/);
   const deviceId = page.url().split("/devices/")[1].split("/")[0];
   try {
@@ -151,6 +151,29 @@ test("adding a device hands its credential straight to the connect flow", async 
     const reveal = page.getByRole("region", { name: "One-time secret" });
     await expect(reveal.getByText(deviceId, { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Create credential" })).toHaveCount(0);
+
+    // DESIGN.md §8: it survives a reload (this tab's sessionStorage only)…
+    await page.reload();
+    await expect(reveal.getByText(deviceId, { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.includes("credential")))).toEqual([]);
+
+    // On a phone: "Step n of N", and nothing scrolls sideways.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByText(/Step\s*1 of 5/)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    // …and leaving before storing it asks first.
+    await page.getByRole("button", { name: "I'll do this later" }).click();
+    const ask = page.getByRole("alertdialog");
+    await expect(ask).toContainText("Leave before storing the password?");
+    await ask.getByRole("button", { name: "Stay" }).click();
+    await expect(page).toHaveURL(/\/connect$/);
+    await page.getByRole("button", { name: "I'll do this later" }).click();
+    await page.getByRole("alertdialog").getByRole("button", { name: "Leave" }).click();
+    await expect(page).toHaveURL(new RegExp(`/devices/${deviceId}$`));
+    // Left: it's forgotten.
+    expect(await page.evaluate((id) => sessionStorage.getItem(`iot:credential:${id}`), deviceId)).toBeNull();
   } finally {
     await request.delete(`${API_URL}/devices/${deviceId}`, { headers: await apiHeaders(request) });
   }

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo H: Guided</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root { --canvas:#f7f7f8; --surface:#fff; --raised:#f2f2f5; --border:#e3e3e8; --soft:#eeeef2; --ink:#15161a; --muted:#62646f; --accent:#4f46e5; --accent-strong:#4338ca; --on-accent:#fff; --warn-bg:#fffbeb; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --canvas:#0f1014; --surface:#16171c; --raised:#1e2027; --border:#2a2c34; --soft:#222329; --ink:#ececf1; --muted:#9a9ca8; --accent:#818cf8; --accent-strong:#a5b4fc; --on-accent:#0f1014; --warn-bg:#2a2211; color-scheme: dark; } }
+:root[data-theme="dark"] { --canvas:#0f1014; --surface:#16171c; --raised:#1e2027; --border:#2a2c34; --soft:#222329; --ink:#ececf1; --muted:#9a9ca8; --accent:#818cf8; --accent-strong:#a5b4fc; --on-accent:#0f1014; --warn-bg:#2a2211; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; font: 14.5px/1.55 "Geist", system-ui, sans-serif; color: var(--ink); background: var(--canvas); }
+main { max-width: 1040px; margin: 0 auto; padding: 40px 16px 80px; }
+h1 { font-size: 30px; font-weight: 600; letter-spacing: -.015em; margin: 0 0 6px; }
+h2 { font-size: 18px; font-weight: 600; margin: 40px 0 12px; }
+h3 { font-size: 15px; font-weight: 600; margin: 0 0 6px; }
+p { margin: 0 0 12px; }
+.lead { color: var(--muted); max-width: 720px; }
+a { color: var(--accent); }
+code { font-family: "Geist Mono", monospace; font-size: 12.5px; background: var(--raised); padding: 1px 5px; border-radius: 5px; }
+.open { display: inline-flex; align-items: center; height: 40px; padding: 0 18px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 500; text-decoration: none; margin: 8px 0 4px; }
+.open:hover { background: var(--accent-strong); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; }
+.card ul, ul.plain { margin: 0; padding-left: 18px; }
+.card li, ul.plain li { margin: 3px 0; }
+.try { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 20px; }
+@media (max-width: 760px) { .try { grid-template-columns: minmax(0, 1fr); } }
+.try a { display: block; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); text-decoration: none; color: var(--ink); }
+.try a:hover { border-color: var(--accent); }
+.try b { display: block; font-weight: 500; }
+.try span { font-size: 13px; color: var(--muted); }
+.tbl-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--soft); font-size: 14px; }
+th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+tr:last-child td { border-bottom: 0; }
+td:first-child { white-space: nowrap; font-weight: 500; }
+.note { background: var(--warn-bg); border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Demo H: Guided</h1>
+  <p class="lead">A clickable prototype of the whole iodriven app, built to work at laptop and phone widths. To create something, you go step by step; to edit, you use short tabs; one item at a time opens in a side panel. It keeps DESIGN.md's colours, fonts and status words. Nothing is saved, and the readings are simulated.</p>
+  <p class="lead">The bar at the top of the demo sets the frame width (1440, 1366, 1280, 1150, 820, 390), switches light and dark, and simulates a lost live connection.</p>
+  <a class="open" href="demo-h-guided.html">Open demo H</a>
+
+  <h2>Try these</h2>
+  <ul class="try">
+    <li><a href="demo-h-guided.html#/rules/new"><b>Make a rule from a recipe</b><span>Pick a device and recipe, then When → If → Then → Behaviour → Review</span></a></li>
+    <li><a href="demo-h-guided.html#/rules/r1"><b>Edit a rule</b><span>Click a phrase in the sentence; open a condition; add an Any-of group</span></a></li>
+    <li><a href="demo-h-guided.html#/rules/r1?tab=then"><b>Ladder view</b><span>Switch Form → Ladder; click a contact or coil; try the 390 width</span></a></li>
+    <li><a href="demo-h-guided.html#/rules/r4?tab=when"><b>Schedule picker</b><span>Certain days, 24-hour time, next three runs, time zone</span></a></li>
+    <li><a href="demo-h-guided.html#/rules"><b>Rules list</b><span>KPIs as filters, 24 h strips, "shares" conflicts, Ladder overview</span></a></li>
+    <li><a href="demo-h-guided.html#/notifications"><b>Alarms</b><span>Acknowledge with a note; Active / Acknowledged / Cleared</span></a></li>
+    <li><a href="demo-h-guided.html#/dashboards/db1?edit=1"><b>Edit a dashboard</b><span>Click a widget to change it; add one in three steps</span></a></li>
+    <li><a href="demo-h-guided.html#/devices/d4?tab=controls"><b>Controls</b><span>Requested vs reported; send a command to an offline device and wait 30 s</span></a></li>
+    <li><a href="demo-h-guided.html#/templates/new"><b>New template</b><span>Basics → Hardware → Data → Review; parts bring their metrics</span></a></li>
+    <li><a href="demo-h-guided.html#/devices/new"><b>Add a device</b><span>Then Connect: the credential survives a reload</span></a></li>
+  </ul>
+
+  <h2>What's in it</h2>
+  <div class="grid">
+    <section class="card"><h3>Rules: Form</h3><ul>
+      <li>The rule as one sentence on top; each phrase opens a small editor (a bottom sheet on phones)</li>
+      <li>New rule: recipes, then a 5-step wizard; edit: tabs When · If · Then · Behaviour · Activity</li>
+      <li>Conditions and actions as one-line rows; each opens in a side panel. All/Any groups, nested</li>
+      <li>Hold time, minimum interval and clear delay always visible; Re-arm vs Latch as illustrated cards</li>
+      <li>One check: a red count blocks saving, an amber "!" warns and never blocks</li>
+      <li>Preview beside the editor on wide screens (24 h replay, Would send, Checks, conflicts, dry run); a Preview button elsewhere</li>
+    </ul></section>
+    <section class="card"><h3>Rules: Ladder (expert)</h3><ul>
+      <li>The same rule and the same side panels as the Form</li>
+      <li>Horizontal when it fits; a vertical rung on narrow screens, with no sideways scrolling</li>
+      <li>Draws what today's ladder leaves out: the clear rung, clear-delay and hold timers, the interval, and latch with its reset</li>
+      <li>Every element can be focused; the arrow keys move between them and Enter opens one</li>
+    </ul></section>
+    <section class="card"><h3>Notifications → alarms</h3><ul>
+      <li>Active, Acknowledged and Cleared, with repeats grouped (×4)</li>
+      <li>Acknowledge with a note, one or many; everyone sees who and when</li>
+      <li>A timeline for each alarm; severity, device and rule filters; the bell counts active alarms only</li>
+    </ul></section>
+    <section class="card"><h3>Dashboards, Controls, Connect</h3><ul>
+      <li>Dashboard edit: click a widget to change its type, source, title and size; add one in three steps; a reorderable list on phones</li>
+      <li>Controls: requested vs reported, a 30 s countdown, then "No response" with Retry; a command timeline</li>
+      <li>Connect: a step-by-step wizard. The one-time password survives a reload, and leaving before you've stored it asks first</li>
+    </ul></section>
+    <section class="card"><h3>From the first round</h3><ul>
+      <li>Icon rail on laptops, full sidebar from 1440, bottom tab bar on phones</li>
+      <li>Templates and Add device: a wizard to create, tabs to edit, a side panel for each part, metric or actuator</li>
+      <li>Lists fold columns as space shrinks and become cards on phones; filters move into a panel</li>
+      <li>24-hour chart axis with the time zone named; a reconnecting banner; skip link; arrow keys in tabs and menus</li>
+    </ul></section>
+    <section class="card"><h3>DESIGN.md changes H would need</h3><ul>
+      <li>§4 shell: icon rail below 1440, bottom tab bar on phones</li>
+      <li>§7 editors: a wizard for creating; one item at a time in a side panel</li>
+      <li>§9.2 rules: tabs instead of the section rail and three columns; the preview beside the editor only when there's room</li>
+      <li>§9.3: the sentence's small editors become bottom sheets on phones</li>
+      <li>New: the alarm lifecycle (states, acknowledge, timeline); dashboard widget panel</li>
+    </ul></section>
+  </div>
+
+  <h2>Shown here, but needs backend work</h2>
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Feature</th><th>What it needs</th></tr></thead>
+    <tbody>
+      <tr><td>Alarm lifecycle</td><td>Stored states, acknowledge with who, when and a note, grouping of repeats, a timeline per alarm.</td></tr>
+      <tr><td>Reported actuator state</td><td>Devices report their real state and say whether a command was applied (an additive change to the device contract, made in both deployment variants).</td></tr>
+      <tr><td>"No response" commands</td><td>A server-side sweep of each command's 30 s time limit, so the result is stored, not worked out in the browser.</td></tr>
+      <tr><td>Widget titles</td><td>An optional title on each widget.</td></tr>
+    </tbody>
+  </table></div>
+
+  <h2>Rebuilding</h2>
+  <p>The demo is generated from <code>src/</code>: shared <code>base.css</code>, <code>data.js</code>, <code>core-*.js</code>, plus <code>h.css</code>, <code>h.js</code>, <code>h-rules.js</code> and <code>h-extras.js</code>. Run <code>bash docs/design/redesign/src/build.sh</code> after editing. Demos I and J (the other two directions) were explored and not kept.</p>
+  <p class="note">This is a design prototype. DESIGN.md adopted it on 2026-10-20; the platform's code follows PR by PR (DESIGN.md §14).</p>
+</main>
+</body>
+</html>

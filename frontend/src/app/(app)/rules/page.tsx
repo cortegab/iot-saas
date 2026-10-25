@@ -1,17 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { mutate as revalidate } from "swr";
-import { AlertTriangle, ListChecks, Pencil, Plus, Power, Trash2 } from "lucide-react";
-import { useApi } from "@/hooks/useApi";
+import { AlertTriangle, ListChecks, Plus } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
-import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { KpiStrip } from "@/components/ui/KpiStrip";
 import { MiniStrip, type StripCell } from "@/components/ui/MiniStrip";
@@ -19,7 +14,6 @@ import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
-import { useToast } from "@/components/ui/Toast";
 import { DataTable, NameCell, type DataColumn } from "@/components/list/DataTable";
 import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/ListToolbar";
 import { FirstUse, NoResults } from "@/components/list/ListStates";
@@ -30,18 +24,23 @@ import { RulePeek } from "@/components/rules/RulePeek";
 import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { usePeek } from "@/components/list/usePeek";
 import { RulesTabs } from "@/components/rules/RulesTabs";
+import { useRuleActions } from "@/components/rules/useRuleActions";
 import { ApiRequestError } from "@/lib/api-client";
-import { actionsText, ruleStateKey, sharedActuators, triggerText, type RuleStateKey } from "@/lib/rule-text";
+import { RULE_STATE, actionsText, ruleStateKey, sharedActuators, triggerKindText, triggerText, type RuleStateKey } from "@/lib/rule-text";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
 
-const STATE: Record<RuleStateKey, { label: string; tone: "online" | "pending" | "unknown"; shape: "solid" | "square" }> = {
-  armed: { label: "Armed", tone: "online", shape: "solid" },
-  latched: { label: "Latched", tone: "pending", shape: "square" },
-  disabled: { label: "Disabled", tone: "unknown", shape: "square" },
-};
+/** The Trigger filter (DESIGN.md §6 rules list). */
+const TRIGGERS = [
+  { value: "metric", label: "On each reading" },
+  { value: "schedule", label: "On a schedule" },
+  { value: "manual", label: "Manually" },
+  { value: "device_status", label: "Device online / offline" },
+];
+
+const triggerType = (r: RuleResponse) => ((r.trigger as Record<string, unknown>).type as string | undefined) ?? "metric";
 
 /** Unique devices a rule touches, in a stable order. */
 function ruleDevices(rule: RuleResponse): { id: string; name: string }[] {
@@ -58,18 +57,14 @@ function devicesLine(rule: RuleResponse): string {
 }
 
 export default function RulesPage() {
-  const api = useApi();
-  const router = useRouter();
-  const toast = useToast();
   const { can } = usePermissions();
   const canWrite = can("rules.write");
-  const { confirm, dialog } = useConfirm();
   // refreshInterval: rule health is time-based (a signal crosses its staleness
   // bound with no user action), and the rule_health realtime event only fires
   // for tenants with a live worker — this is the belt-and-suspenders.
   const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>("/rules", { refreshInterval: 30_000 });
 
-  const list = useListState({ state: "all", device: "all", view: "list" }, { key: "name", dir: "asc" });
+  const list = useListState({ state: "all", device: "all", trigger: "all", view: "list" }, { key: "name", dir: "asc" });
 
   const shared = useMemo(() => sharedActuators(rules ?? []), [rules]);
   // The mini strips; rule_execution frames revalidate rules, this follows.
@@ -82,19 +77,23 @@ export default function RulesPage() {
     return Array.from(map, ([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [rules]);
 
+  const firedIn24h = useCallback((r: RuleResponse) => (activityByRule.get(r.id)?.fired ?? 0) > 0, [activityByRule]);
+
   const counts = useMemo(() => {
-    const c = { armed: 0, latched: 0, disabled: 0, stale: 0 };
+    const c = { armed: 0, latched: 0, disabled: 0, stale: 0, fired: 0 };
     for (const r of rules ?? []) {
       c[ruleStateKey(r)] += 1;
       if (r.enabled && !r.health.evaluatable) c.stale += 1;
+      if (firedIn24h(r)) c.fired += 1;
     }
     return c;
-  }, [rules]);
+  }, [rules, firedIn24h]);
 
   const filtered = useMemo(() => {
     const rows = (rules ?? []).filter((r) => {
       const st = list.filters.state;
-      if (st === "stale" ? !(r.enabled && !r.health.evaluatable) : st !== "all" && ruleStateKey(r) !== st) return false;
+      if (st === "stale" ? !(r.enabled && !r.health.evaluatable) : st === "fired" ? !firedIn24h(r) : st !== "all" && ruleStateKey(r) !== st) return false;
+      if (list.filters.trigger !== "all" && triggerType(r) !== list.filters.trigger) return false;
       if (list.filters.device !== "all" && !ruleDevices(r).some((d) => d.id === list.filters.device)) return false;
       return matchesQuery(list.q, r.name, devicesLine(r), triggerText(r), actionsText(r.actions));
     });
@@ -103,145 +102,90 @@ export default function RulesPage() {
       if (key === "trigger") return triggerText(r);
       return r.name;
     });
-  }, [rules, list.filters, list.q, list.sort]);
+  }, [rules, list.filters, list.q, list.sort, firedIn24h]);
 
   const { pageRows, pageCount, page } = paginate(filtered, list.page, list.pageSize);
   // A row peeks (DESIGN.md §7); a rule is edited on /rules/{id}.
   const peek = usePeek({ rows: pageRows, rowKey: (r) => r.id, pageHref: (id) => `/rules/${id}`, newHref: "/rules/new" });
 
-  // A rule's device pages cache their rules under `/devices/{id}/rules`.
-  function afterChange(rule: RuleResponse) {
-    void mutate();
-    for (const d of rule.devices) void revalidate(`/devices/${d.device_id}/rules`);
-  }
+  const actions = useRuleActions();
 
-  async function setEnabled(rule: RuleResponse, enabled: boolean, undoable = true) {
-    try {
-      await api.patch(`/rules/${rule.id}`, { enabled });
-      afterChange(rule);
-      toast({
-        title: `${rule.name} ${enabled ? "enabled" : "disabled"}`,
-        detail: enabled ? "Fires when its trigger and conditions are met." : "Keeps its settings and history, but won't fire.",
-        action: undoable ? { label: "Undo", onClick: () => void setEnabled(rule, !enabled, false) } : undefined,
-      });
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't update the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
-    }
-  }
-
-  /** Resolves true once the rule is deleted. */
-  async function remove(rule: RuleResponse): Promise<boolean> {
-    const ok = await confirm(
-      "It stops evaluating immediately. Actuators keep their current state. This can't be undone; to pause it instead, disable it.",
-      { title: `Delete ${rule.name}?`, confirmLabel: "Delete rule" },
+  /** Under the name (demo H): the last 24 hours as a strip and "fired N×",
+   * or the schedule, then what needs a look (shares an actuator / can't evaluate). */
+  function activityLine(r: RuleResponse) {
+    const a = activityByRule.get(r.id);
+    const schedule = r.trigger.type === "schedule";
+    // The current cell shows today's health: stale inputs are unknown (hatched), never "idle".
+    const cells: StripCell[] = a ? [...a.cells] : [];
+    if (r.enabled && !r.health.evaluatable && cells.length > 0 && cells[cells.length - 1] === "idle") cells[cells.length - 1] = "unknown";
+    return (
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        {!schedule && a && <MiniStrip cells={cells} label={`Fired ${a.fired} time${a.fired === 1 ? "" : "s"} in 24 h`} />}
+        <span>{schedule ? triggerText(r) : a ? (a.fired ? `fired ${a.fired}× in 24 h` : "quiet in 24 h") : devicesLine(r)}</span>
+        {shared.get(r.id)?.map((x) => (
+          <Tag key={x} tone="warn" size="sm">
+            <AlertTriangle aria-hidden size={11} />
+            shares {x}
+          </Tag>
+        ))}
+        {!shared.has(r.id) && r.enabled && !r.health.evaluatable && <Tag size="sm">can&apos;t evaluate</Tag>}
+      </span>
     );
-    if (!ok) return false;
-    try {
-      await api.delete(`/rules/${rule.id}`);
-      afterChange(rule);
-      toast({ title: `${rule.name} deleted` });
-      return true;
-    } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
-      return false;
-    }
   }
 
+  // demo H: Rule (with its last day folded in) · Trigger · Action · State · ⋯
   const columns: DataColumn<RuleResponse>[] = [
     {
       id: "name",
       header: "Rule",
       sortable: true,
       cell: (r) => (
-        <div className="flex min-w-0 flex-col gap-1">
-          <NameCell
-            name={
-              <Link href={`/rules/${r.id}`} className="hover:underline hover:underline-offset-[3px]">
-                {r.name}
-              </Link>
-            }
-            sub={devicesLine(r)}
-          />
-          {shared.has(r.id) && (
-            <span className="flex flex-wrap gap-1.5">
-              {shared.get(r.id)!.map((a) => (
-                <Tag key={a} tone="warn" size="sm">
-                  <AlertTriangle aria-hidden size={11} />
-                  shares {a}
-                </Tag>
-              ))}
-            </span>
-          )}
-        </div>
+        <NameCell
+          name={
+            <Link href={`/rules/${r.id}`} className="hover:underline hover:underline-offset-[3px]">
+              {r.name}
+            </Link>
+          }
+          sub={activityLine(r)}
+        />
       ),
     },
     {
       id: "trigger",
-      header: "When",
+      header: "Trigger",
       sortable: true,
       hideOnPhone: true,
-      cell: (r) => <code className="font-mono text-xs text-ink">{triggerText(r)}</code>,
+      priority: 3,
+      fold: (r) => triggerKindText(r),
+      cell: (r) => <span className="text-ink">{triggerKindText(r)}</span>,
     },
-    { id: "action", header: "Then", hideOnPhone: true, cell: (r) => <span className="text-ink">{actionsText(r.actions)}</span> },
-    {
-      id: "activity",
-      header: "Last 24 h",
-      hideOnPhone: true,
-      cell: (r) => {
-        // Schedule rules fire on their schedule; the strip would say nothing.
-        if (r.trigger.type === "schedule") return <span className="text-xs text-ink-muted">{triggerText(r)}</span>;
-        const a = activityByRule.get(r.id);
-        if (!a) return <span className="text-xs text-ink-muted">—</span>;
-        // The current cell shows today's health: stale inputs are unknown
-        // (hatched), never "idle".
-        const cells: StripCell[] = [...a.cells];
-        if (r.enabled && !r.health.evaluatable && cells.length > 0 && cells[cells.length - 1] === "idle") cells[cells.length - 1] = "unknown";
-        return (
-          <span className="flex flex-col gap-1">
-            <MiniStrip cells={cells} label={`Fired ${a.fired} time${a.fired === 1 ? "" : "s"} in 24 h`} />
-            <span className="text-[11.5px] text-ink-muted">{a.fired ? `fired ${a.fired}× in 24 h` : "quiet in 24 h"}</span>
-          </span>
-        );
-      },
-    },
+    { id: "action", header: "Action", hideOnPhone: true, priority: 2, fold: (r) => actionsText(r.actions), cell: (r) => <span className="text-ink">{actionsText(r.actions)}</span> },
     {
       id: "state",
       header: "State",
       sortable: true,
       cell: (r) => {
-        const s = STATE[ruleStateKey(r)];
-        return (
-          <span className="flex flex-wrap items-center gap-1.5">
-            <Badge tone={s.tone} shape={s.shape} label={s.label} />
-            {r.enabled && !r.health.evaluatable && <Tag tone="warn">Can&apos;t evaluate</Tag>}
-          </span>
-        );
+        const s = RULE_STATE[ruleStateKey(r)];
+        return <Badge tone={s.tone} shape={s.shape} variant="dot" label={s.label} />;
       },
     },
   ];
 
-  const rowMenu = (r: RuleResponse): DropdownMenuItem[][] => {
-    const groups: DropdownMenuItem[][] = [
-      [{ label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => router.push(`/rules/${r.id}`) }],
-    ];
-    if (canWrite) {
-      groups.push(
-        [{ label: r.enabled ? "Disable" : "Enable", icon: <Power size={15} />, onClick: () => void setEnabled(r, !r.enabled) }],
-        [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(r) }],
-      );
-    }
-    return groups;
-  };
+  const rowMenu = (r: RuleResponse) => actions.menu(r);
 
   const chips: FilterChip[] = [];
   if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
   if (list.filters.state !== "all") {
-    const label = list.filters.state === "stale" ? "Can't evaluate" : STATE[list.filters.state as RuleStateKey]?.label;
+    const label = list.filters.state === "stale" ? "Can't evaluate" : list.filters.state === "fired" ? "Fired in 24 h" : RULE_STATE[list.filters.state as RuleStateKey]?.label;
     chips.push({ id: "state", label: `State: ${label}`, onRemove: () => list.setFilter("state", "all") });
   }
   if (list.filters.device !== "all") {
     const name = deviceOptions.find((d) => d.value === list.filters.device)?.label ?? "unknown";
     chips.push({ id: "device", label: `Device: ${name}`, onRemove: () => list.setFilter("device", "all") });
+  }
+  if (list.filters.trigger !== "all") {
+    const label = TRIGGERS.find((t) => t.value === list.filters.trigger)?.label ?? list.filters.trigger;
+    chips.push({ id: "trigger", label: `Trigger: ${label}`, onRemove: () => list.setFilter("trigger", "all") });
   }
 
   const total = rules?.length ?? 0;
@@ -256,7 +200,7 @@ export default function RulesPage() {
     <>
       <PageHeader
         title="Rules"
-        description="Evaluated in memory the moment a reading arrives. Breach to actuator command is typically under 500 ms."
+        description="Every reading is checked against these the moment it arrives."
         actions={newAction}
       />
       <RulesTabs active="rules" />
@@ -284,14 +228,31 @@ export default function RulesPage() {
             active={list.filters.state === "all" ? null : list.filters.state}
             onSelect={(id) => list.setFilter("state", list.filters.state === id ? "all" : id)}
             items={[
-              { id: "armed", label: "Armed", value: counts.armed, sub: "ready to fire", tone: "online" },
-              { id: "latched", label: "Latched", value: counts.latched, sub: "waiting for a reset", tone: "pending", shape: "square" },
-              { id: "stale", label: "Can't evaluate", value: counts.stale, sub: "an input isn't reporting", tone: "offline" },
-              { id: "disabled", label: "Disabled", value: counts.disabled, sub: "won't fire", tone: "unknown", shape: "square" },
+              { id: "armed", label: "Armed", value: counts.armed, sub: "waiting for their condition", tone: "online" },
+              { id: "fired", label: "Fired", value: counts.fired, sub: "in the last 24 h", tone: "accent" },
+              { id: "latched", label: "Latched", value: counts.latched, sub: "need a reset", tone: "pending", shape: "square" },
+              { id: "stale", label: "Can't evaluate", value: counts.stale, sub: "an input has no data", tone: "unknown", shape: "hollow" },
+              { id: "disabled", label: "Disabled", value: counts.disabled, sub: "not evaluated", tone: "unknown", shape: "square" },
             ]}
           />
 
-          <ListToolbar query={list.q} onQuery={list.setQuery} placeholder="Search rules, devices or actions">
+          <ListToolbar
+            query={list.q}
+            onQuery={list.setQuery}
+            placeholder="Search rules"
+            activeFilters={[list.filters.device, list.filters.trigger].filter((v) => v !== "all").length}
+            view={
+              <SegmentedControl
+                ariaLabel="Rules view"
+                value={list.filters.view === "ladder" ? "ladder" : "list"}
+                onChange={(v) => list.setFilter("view", v)}
+                options={[
+                  { value: "list", label: "List" },
+                  { value: "ladder", label: "Ladder" },
+                ]}
+              />
+            }
+          >
             <Select
               aria-label="Filter by device"
               value={list.filters.device}
@@ -305,15 +266,19 @@ export default function RulesPage() {
                 </option>
               ))}
             </Select>
-            <SegmentedControl
-              ariaLabel="Rules view"
-              value={list.filters.view === "ladder" ? "ladder" : "list"}
-              onChange={(v) => list.setFilter("view", v)}
-              options={[
-                { value: "list", label: "List" },
-                { value: "ladder", label: "Ladder" },
-              ]}
-            />
+            <Select
+              aria-label="Filter by trigger"
+              value={list.filters.trigger}
+              onChange={(e) => list.setFilter("trigger", e.target.value)}
+              className="w-auto min-w-[170px]"
+            >
+              <option value="all">All triggers</option>
+              {TRIGGERS.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </Select>
           </ListToolbar>
 
           <FilterChips chips={chips} onClearAll={list.clearAll} />
@@ -321,7 +286,19 @@ export default function RulesPage() {
           {filtered.length === 0 ? (
             <NoResults noun="rules" hidden={total} onClear={list.clearAll} />
           ) : list.filters.view === "ladder" ? (
-            <LadderOverview rules={filtered} />
+            <div className="flex flex-col gap-2">
+              <LadderOverview rules={pageRows} />
+              <TableFooter
+                shown={filtered.length}
+                total={total}
+                noun={["rule", "rules"]}
+                page={page}
+                pageCount={pageCount}
+                pageSize={list.pageSize}
+                onPage={list.setPage}
+                onPageSize={list.setPageSize}
+              />
+            </div>
           ) : (
             <ListWithPeek
               label="Rule"
@@ -335,8 +312,7 @@ export default function RulesPage() {
                         activity={activityByRule.get(peek.peekId!)}
                         shares={shared.get(peek.peekId!)}
                         onClose={peek.close}
-                        onToggle={(r) => void setEnabled(r, !r.enabled)}
-                        onDelete={(r) => void remove(r).then((gone) => gone && peek.close())}
+                        menu={(r) => actions.menu(r, { where: "peek", onDeleted: peek.close })}
                       />
                     )
                   : null
@@ -372,7 +348,7 @@ export default function RulesPage() {
           )}
         </>
       )}
-      {dialog}
+      {actions.dialog}
     </>
   );
 }

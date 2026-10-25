@@ -35,7 +35,7 @@ interface Command {
 const MAX_RESULTS = 40;
 
 /** DESIGN.md §4 ⌘K command palette — navigation and actions in one list:
- * "Go to", "Create" (only what the role may do), theme, and search across
+ * "Go to" and "Actions" (creating only what the role may do; the theme), and search across
  * devices, rules, templates, dashboards and members. */
 export function CommandPalette({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open || typeof document === "undefined") return null;
@@ -73,7 +73,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       { label: "New API key", href: "/keys/new", icon: Plus, requires: "keys.manage" },
     ];
     for (const c of create) {
-      if (can(c.requires)) out.push({ id: `new:${c.href}`, group: "Create", label: c.label, icon: Plus, run: go(c.href) });
+      if (can(c.requires)) out.push({ id: `new:${c.href}`, group: "Actions", label: c.label, icon: Plus, run: go(c.href) });
     }
     out.push({
       id: "theme",
@@ -139,11 +139,17 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   }, [can, data, router, setPreference, theme]);
 
   const q = query.trim().toLowerCase();
-  // Without a query, show navigation and actions only; records appear once you type.
+  // Without a query: navigation, a few records and actions; everything else once you type.
   const items = (
     q
       ? commands.filter((c) => `${c.label} ${c.hint ?? ""} ${c.group}`.toLowerCase().includes(q))
-      : commands.filter((c) => c.group === "Go to" || c.group === "Create" || c.group === "Actions")
+      : [
+          // Before you type (demo H): where to go, a few devices and rules, then actions.
+          ...commands.filter((c) => c.group === "Go to"),
+          ...commands.filter((c) => c.group === "Devices").slice(0, 3),
+          ...commands.filter((c) => c.group === "Rules").slice(0, 3),
+          ...commands.filter((c) => c.group === "Actions"),
+        ]
   ).slice(0, MAX_RESULTS);
   const safeSel = Math.max(0, Math.min(sel, items.length - 1));
 
@@ -240,7 +246,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
             aria-autocomplete="list"
             aria-activedescendant={items.length ? `${listId}-${safeSel}` : undefined}
             aria-label="Search or run a command"
-            placeholder="Search devices, rules, templates, actions…"
+            placeholder="Search or run…"
             autoComplete="off"
             spellCheck={false}
             className="min-w-0 flex-1 border-0 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-muted/70 focus-visible:outline-none"
@@ -252,7 +258,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
             rows
           ) : (
             <li role="presentation" className="p-5 text-center text-sm text-ink-muted">
-              Nothing matches “{query}”.
+              No matches
             </li>
           )}
         </ul>

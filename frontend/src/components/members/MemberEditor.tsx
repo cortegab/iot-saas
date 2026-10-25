@@ -11,6 +11,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -32,6 +33,13 @@ interface MemberDraft {
   email: string;
   role: Role;
 }
+
+/** The invite's role hint (demo H wording). */
+const INVITE_HINT: Record<Role, string> = {
+  owner: "Everything, including renaming the workspace and managing owners.",
+  admin: "Can change devices, rules and members (not owners).",
+  viewer: "Can see everything, change nothing.",
+};
 
 export const ROLE_HELP: Record<Role, string> = {
   owner: "Everything, including renaming the workspace and managing owners.",
@@ -108,7 +116,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
             const email = v.email.trim().toLowerCase();
             const sent = await api.post<InvitationResponse>("/tenants/invitations", { email, role: v.role });
             await revalidate("/tenants/invitations");
-            toast({ title: "Invite sent", detail: `${email} joins as ${ROLE_LABEL[v.role]}.` });
+            toast({ title: "Invite sent", detail: `${email} has 7 days to accept.` });
             // An invite has no page of its own: back to the list, showing it.
             router.push(`/members?peek=invite.${sent.id}`);
           } else {
@@ -148,10 +156,10 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
       <EditorFrame
         mode={mode}
         noun={isNew ? "invite" : "member"}
-        title={isNew ? "Invite member" : member!.name || member!.email}
+        title={isNew ? "Invite a member" : member!.name || member!.email}
         eyebrow={
           isNew ? (
-            "New member"
+            undefined
           ) : (
             <>
               Member{member!.joined_at && <span>· joined {formatWhen(member!.joined_at)}</span>}
@@ -159,7 +167,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
             </>
           )
         }
-        consequence={isNew ? "Nothing changes in the workspace until they accept." : "A role change applies on their next request."}
+        consequence={isNew ? "They get an email with a link that works for 7 days." : "A role change applies on their next request."}
         sections={[{ id: "member", label: "Member" }]}
         status={editor}
         readOnly={readOnly}
@@ -172,7 +180,38 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
             : undefined
         }
       >
-        <EditorSection id="member" title={isNew ? "Who" : "Member"}>
+        {isNew ? (
+          // demo H Invite: Email and Role side by side, the role as a segmented control.
+          <EditorSection id="member" title="Who">
+            <div className="grid items-start gap-4 sm:grid-cols-2">
+              <Field label="Email" error={editor.errorFor("member.email")}>
+                <Input
+                  type="email"
+                  autoFocus
+                  value={d.email}
+                  placeholder="name@example.com"
+                  onChange={(e) => editor.set({ ...d, email: e.target.value })}
+                  onBlur={() => editor.touch("member.email")}
+                />
+              </Field>
+              <div className="flex flex-col gap-[5px]">
+                <span className="text-[13px] font-medium text-ink">Role</span>
+                <SegmentedControl
+                  ariaLabel="Role"
+                  size="md"
+                  value={d.role}
+                  onChange={(role) => {
+                    editor.set({ ...d, role });
+                    editor.touch("member.role");
+                  }}
+                  options={ROLES.filter((r) => r !== "owner" || iAmOwner).map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
+                />
+                <span className={cn("text-[12.5px]", roleError ? "text-status-error" : "text-ink-muted")}>{roleError ?? INVITE_HINT[d.role]}</span>
+              </div>
+            </div>
+          </EditorSection>
+        ) : (
+        <EditorSection id="member" title="Member">
           {isNew ? (
             <Field label="Email" error={editor.errorFor("member.email")} hint="They get an email with a link that expires in 7 days.">
               <Input
@@ -237,6 +276,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
             </p>
           </fieldset>
         </EditorSection>
+        )}
       </EditorFrame>
       {dialog}
       {actionDialog}

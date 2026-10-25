@@ -5,6 +5,9 @@ const nextConfig = {
   // for the production Docker image — see frontend/Dockerfile.prod. Has no
   // effect on `next dev`.
   output: "standalone",
+  // Dev only: the static-route badge sits bottom-left, over the phone tab bar
+  // (DESIGN.md §12: nothing floating covers content), so it's off.
+  devIndicators: { appIsrStatus: false },
   // Routes moved to the demo G structure (docs/design/DESIGN.md §4); old URLs
   // keep working for bookmarks and links in sent notification emails.
   async redirects() {

@@ -35,6 +35,10 @@ export interface FirmwareConfig {
   /** Bench test only: Wi-Fi typed in instead of provisioned from a phone. */
   wifi?: { ssid: string; password: string };
   i2c?: { sda: number; scl: number };
+  /** The board model's reset button and status LED. Optional and additive:
+   * firmware before 0.6.0 ignores it, and 0.6.0+ falls back to the chip's
+   * defaults (firmware/src/board.h) when it's absent. */
+  board_io?: { reset_pin: number; led: { type: "gpio" | "rgb" | "none"; pin: number; active_low: boolean } };
   metrics: { key: string; bool?: boolean; publish?: string; interval_s?: number; deadband?: number }[];
   actuators: { key: string; type: string }[];
   inputs: HardwareBinding[];

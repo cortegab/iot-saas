@@ -12,7 +12,7 @@ Two ways in:
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.db import add_post_commit_callback, set_tenant_context
@@ -94,16 +94,27 @@ async def add_notification(
 
 
 async def list_notifications(
-    session: AsyncSession, tenant_id: uuid.UUID, limit: int = 50
+    session: AsyncSession, tenant_id: uuid.UUID, limit: int = 50, offset: int = 0
 ) -> list[Notification]:
-    """The feed: newest first, dismissed rows left out."""
+    """The feed: newest first, dismissed rows left out; id breaks ties so
+    pages never repeat or skip a row."""
     result = await session.execute(
         select(Notification)
         .where(Notification.tenant_id == tenant_id, Notification.dismissed_at.is_(None))
-        .order_by(Notification.created_at.desc())
+        .order_by(Notification.created_at.desc(), Notification.id.desc())
         .limit(limit)
+        .offset(offset)
     )
     return list(result.scalars().all())
+
+
+async def count_notifications(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    result = await session.execute(
+        select(func.count())
+        .select_from(Notification)
+        .where(Notification.tenant_id == tenant_id, Notification.dismissed_at.is_(None))
+    )
+    return int(result.scalar_one())
 
 
 async def mark_all_read(session: AsyncSession, tenant_id: uuid.UUID) -> list[Notification]:

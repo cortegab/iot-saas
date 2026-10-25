@@ -9,7 +9,7 @@ once at creation/rotation and never retrievable afterward.
 import secrets
 import uuid
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, NamedTuple
 
 from sqlalchemy import func, select, text, update
@@ -101,6 +101,7 @@ async def create_device(
         catalog_entry_id=catalog_entry_id,
         zone_id=zone_id,
         token_hash=auth_service.hash_secret(secret),
+        credential_rotated_at=datetime.now(UTC),
         status=DeviceStatus.ACTIVE.value,
     )
     session.add(device)
@@ -141,6 +142,27 @@ async def count_devices_by_zone(
     return {zone_id: count for zone_id, count in result.all()}
 
 
+async def create_device_with_template(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    name: str,
+    template_name: str,
+    metrics: list[dict[str, Any]],
+    actuators: list[dict[str, Any]],
+    hardware: dict[str, Any] | None,
+    zone_id: uuid.UUID | None = None,
+    runs_on: str | None = None,
+) -> tuple[Device, str]:
+    """A new template and its first device, in this session's transaction:
+    if either fails, neither exists. Raises catalog_service.KEY_ERRORS for a
+    bad template, as creating one alone does."""
+    entry = await catalog_service.create_catalog_entry(
+        session, tenant_id, template_name, metrics, actuators, hardware=hardware, runs_on=runs_on
+    )
+    await session.flush()
+    return await create_device(session, tenant_id, name, entry.id, zone_id=zone_id)
+
+
 async def list_device_ids_for_catalog_entry(
     session: AsyncSession, tenant_id: uuid.UUID, catalog_entry_id: uuid.UUID
 ) -> list[uuid.UUID]:
@@ -150,6 +172,23 @@ async def list_device_ids_for_catalog_entry(
         )
     )
     return list(result.scalars().all())
+
+
+async def list_own_hardware_for_catalog_entry(
+    session: AsyncSession, tenant_id: uuid.UUID, catalog_entry_id: uuid.UUID
+) -> list[tuple[str, dict[str, Any]]]:
+    """(name, wiring) of each device on this entry that has its own wiring —
+    what a template edit must still line up with (catalog_service.check_hardware)."""
+    result = await session.execute(
+        select(Device.name, Device.hardware)
+        .where(
+            Device.tenant_id == tenant_id,
+            Device.catalog_entry_id == catalog_entry_id,
+            Device.hardware.is_not(None),
+        )
+        .order_by(Device.name)
+    )
+    return [(name, hardware) for name, hardware in result.tuples().all() if hardware is not None]
 
 
 async def get_device(session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID) -> Device:
@@ -208,6 +247,7 @@ async def rotate_credential(
     device = await get_device(session, tenant_id, device_id)
     secret = _generate_credential_secret()
     device.token_hash = auth_service.hash_secret(secret)
+    device.credential_rotated_at = datetime.now(UTC)
     await session.flush()
     # A rotation usually precedes flashing freshly generated firmware —
     # re-publish the retained config so it's waiting on that first connect.

@@ -4,6 +4,9 @@ import { test } from "./fixtures";
 test("workspace settings: time zone and alert recipients save, then restore", async ({ page }) => {
   const email = `e2e-alerts-${Date.now()}@example.com`;
   await page.goto("/settings");
+  // One stacked page: no section rail or jump bar (demo H).
+  await expect(page.getByRole("navigation", { name: "Sections" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 1, name: "Workspace settings" })).toBeVisible();
   const tz = page.getByLabel("Time zone");
   const original = await tz.inputValue();
   const next = original === "Europe/Madrid" ? "America/Lima" : "Europe/Madrid";
@@ -12,7 +15,7 @@ test("workspace settings: time zone and alert recipients save, then restore", as
   await page.getByLabel("Add recipient").fill(email);
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByRole("list", { name: "Alert recipients" }).getByText(email)).toBeVisible();
-  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Settings saved")).toBeVisible();
 
   // It stuck: a reload shows the saved values.

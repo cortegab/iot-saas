@@ -20,5 +20,9 @@ bool claimPin(JsonObjectConst binding, const char* role, PinUse use, int& pin, S
 // Same rules for a pin that isn't in a binding (the I2C bus).
 bool claimRawPin(int pin, PinUse use, const char* owner, String& err);
 
+// Marks a pin the firmware itself uses (reset button, status LED), so a
+// binding that asks for it fails with its owner named. -1 = nothing to reserve.
+void reservePin(int pin, const char* owner);
+
 // Whether a pin has internal pull resistors (the ESP32's 34–39 don't).
 bool hasInternalPull(int pin);

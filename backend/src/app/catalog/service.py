@@ -97,6 +97,44 @@ class HardwareMappingError(Exception):
     the user-facing reason."""
 
 
+class RunsOnHardwareError(Exception):
+    """Raised when a template that runs its own code would keep wiring: only
+    templates on the generic firmware are wired (DESIGN.md §8 "Runs on")."""
+
+
+# The errors a template's keys or wiring can fail with — a 400 wherever a
+# template is created or edited (the catalog routes, and a device created
+# with a new template).
+KEY_ERRORS = (
+    DuplicateKeyError,
+    ReservedMetricKeyError,
+    InvalidKeyError,
+    HardwareMappingError,
+    RunsOnHardwareError,
+)
+
+
+def key_error_detail(exc: Exception) -> str:
+    """The user-facing reason for one of KEY_ERRORS."""
+    if isinstance(exc, HardwareMappingError):
+        return str(exc)
+    if isinstance(exc, RunsOnHardwareError):
+        return "A template that runs its own code has no wiring. Remove the wiring, or set it to run our firmware."
+    if isinstance(exc, DuplicateKeyError):
+        return f"Duplicate key: {exc}"
+    if isinstance(exc, ReservedMetricKeyError):
+        return f"'{exc}' is a reserved metric key"
+    return (
+        f"Key '{exc}' isn't valid. Use letters, digits, - and _ only "
+        "(no spaces, / + # or a leading $), up to 64 characters."
+    )
+
+
+def _check_runs_on(runs_on: str, hardware: dict[str, Any] | None) -> None:
+    if runs_on == "own_code" and hardware is not None:
+        raise RunsOnHardwareError
+
+
 def check_hardware(
     hardware: dict[str, Any] | None,
     metrics: list[dict[str, Any]],
@@ -240,16 +278,20 @@ async def create_catalog_entry(
     actuators: list[dict[str, Any]],
     is_legacy: bool = False,
     hardware: dict[str, Any] | None = None,
+    runs_on: str | None = None,
 ) -> DeviceCatalogEntry:
     normalized_metrics = _normalize_metrics(metrics)
     normalized_actuators = _normalize_actuators(actuators)
     check_hardware(hardware, normalized_metrics, normalized_actuators)
+    runs_on = runs_on or ("generic_firmware" if hardware is not None else "own_code")
+    _check_runs_on(runs_on, hardware)
     entry = DeviceCatalogEntry(
         tenant_id=tenant_id,
         name=name,
         metrics=normalized_metrics,
         actuators=normalized_actuators,
         hardware=hardware,
+        runs_on=runs_on,
         is_legacy=is_legacy,
     )
     session.add(entry)
@@ -293,6 +335,7 @@ async def update_catalog_entry(
     entry_status: str | None,
     hardware: dict[str, Any] | None = None,
     hardware_set: bool = False,
+    runs_on: str | None = None,
 ) -> DeviceCatalogEntry:
     before_metrics, before_actuators = list(entry.metrics), list(entry.actuators)
     new_metrics = (
@@ -310,6 +353,9 @@ async def update_catalog_entry(
     # save rather than left pointing at nothing.
     new_hardware = hardware if hardware_set else entry.hardware
     check_hardware(new_hardware, new_metrics, new_actuators)
+    _check_runs_on(runs_on or entry.runs_on, new_hardware)
+    if metrics is not None or actuators is not None:
+        await _check_device_hardware(session, entry, new_metrics, new_actuators)
 
     if name is not None:
         entry.name = name
@@ -321,6 +367,8 @@ async def update_catalog_entry(
         entry.actuators = new_actuators
     if hardware_set:
         entry.hardware = hardware
+    if runs_on is not None:
+        entry.runs_on = runs_on
     if entry_status is not None:
         entry.status = entry_status
     if entry.metrics != before_metrics or entry.actuators != before_actuators:
@@ -333,6 +381,30 @@ def _changed_count(before: list[dict[str, Any]], after: list[dict[str, Any]]) ->
     old = {m.get("key"): m for m in before}
     new = {m.get("key"): m for m in after}
     return sum(1 for k in old.keys() | new.keys() if old.get(k) != new.get(k))
+
+
+async def _check_device_hardware(
+    session: AsyncSession,
+    entry: DeviceCatalogEntry,
+    metrics: list[dict[str, Any]],
+    actuators: list[dict[str, Any]],
+) -> None:
+    """A device with its own wiring is checked against the template's keys
+    too: removing a key that wiring still feeds fails the update, rather
+    than leaving a device whose next Install the firmware rejects at boot."""
+    # Local imports: devices.service imports this module (create_device).
+    from app.devices import service as devices_service
+
+    for name, hardware in await devices_service.list_own_hardware_for_catalog_entry(
+        session, entry.tenant_id, entry.id
+    ):
+        try:
+            check_hardware(hardware, metrics, actuators)
+        except HardwareMappingError as exc:
+            raise HardwareMappingError(
+                f"{name} has its own wiring, and it no longer fits: {exc}. "
+                "Fix that device's wiring or reset it to the template's first."
+            ) from exc
 
 
 async def _notify_template_changed(

@@ -14,6 +14,9 @@ from pydantic import BaseModel, Field
 MetricDataType = Literal["float", "bool"]
 ActuatorValueType = Literal["bool", "float", "string"]
 CatalogEntryStatus = Literal["active", "disabled"]
+# How a template's devices run (DESIGN.md §8 "Runs on"): our generic firmware,
+# wired by `hardware`, or the device's own code / a gateway (no wiring).
+RunsOn = Literal["generic_firmware", "own_code"]
 # "periodic": device publishes on a fixed interval (the default — matches
 # today's implicit behavior). "on_change": device publishes only when the
 # value moves past `publish_deadband`. "streaming": device publishes as fast
@@ -106,6 +109,8 @@ class CatalogEntryCreateRequest(BaseModel):
     metrics: list[CatalogMetric] = Field(default_factory=list)
     actuators: list[CatalogActuator] = Field(default_factory=list)
     hardware: HardwareConfig | None = None
+    # Omitted: our firmware when wiring is given, own code otherwise.
+    runs_on: RunsOn | None = None
 
 
 class CatalogEntryUpdateRequest(BaseModel):
@@ -115,6 +120,7 @@ class CatalogEntryUpdateRequest(BaseModel):
     status: CatalogEntryStatus | None = None
     # Explicit null clears the wiring; omitted leaves it unchanged.
     hardware: HardwareConfig | None = None
+    runs_on: RunsOn | None = None
 
 
 class KeyUsageResponse(BaseModel):
@@ -137,6 +143,7 @@ class CatalogEntryResponse(BaseModel):
     metrics: list[CatalogMetric]
     actuators: list[CatalogActuator]
     hardware: HardwareConfig | None = None
+    runs_on: RunsOn
     status: CatalogEntryStatus
     is_legacy: bool
     device_count: int

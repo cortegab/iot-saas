@@ -5,8 +5,6 @@ import { createContext, useContext, useEffect } from "react";
 export interface ShellState {
   /** Opens the ⌘K command palette. */
   openPalette: () => void;
-  /** Opens the mobile navigation drawer. */
-  openNav: () => void;
   setWide: (wide: boolean) => void;
 }
 

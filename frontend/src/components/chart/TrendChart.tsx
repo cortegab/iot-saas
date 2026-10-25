@@ -103,6 +103,7 @@ export function TrendChart({
   meta,
   thresholds = NO_THRESHOLDS,
   fillHeight = false,
+  rangeMs: controlledRange,
 }: {
   deviceId: string;
   metric: string;
@@ -117,8 +118,12 @@ export function TrendChart({
    * react-grid-layout cell already provides a real pixel height ancestor)
    * and the chart resizes with it via the ResizeObserver below. */
   fillHeight?: boolean;
+  /** Set by the host (a dashboard's one range for every trend widget): the
+   * chart then shows no range buttons of its own. */
+  rangeMs?: number;
 }) {
-  const [rangeMs, setRangeMs] = useState(DEFAULT_RANGE_MS);
+  const [ownRange, setRangeMs] = useState(DEFAULT_RANGE_MS);
+  const rangeMs = controlledRange ?? ownRange;
   const rangeLabel = RANGE_OPTIONS.find((o) => o.ms === rangeMs)?.label ?? "";
   const resolution = resolutionFor(rangeMs);
   const colors = useThemeColors();
@@ -391,7 +396,8 @@ export function TrendChart({
 
   return (
     <div className={`flex flex-col gap-2 ${fillHeight ? "h-full min-h-0" : ""}`}>
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between empty:hidden">
+        {controlledRange == null ? (
         <div className="flex gap-1" role="group" aria-label="Time range">
           {RANGE_OPTIONS.map((opt) => (
             <button
@@ -409,6 +415,9 @@ export function TrendChart({
             </button>
           ))}
         </div>
+        ) : (
+          null
+        )}
         {aggregatedLabel && (
           <span className="text-xs text-ink-muted" title="This range is too wide to show every raw reading">
             Aggregated — {aggregatedLabel}

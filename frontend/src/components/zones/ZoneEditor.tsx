@@ -128,7 +128,7 @@ export function ZoneEditor({
         noun="zone"
         title={d.name.trim() || (isNew ? "New zone" : zone!.name)}
         eyebrow={<>Zone{!isNew && <span>· {plural(devices, "device")}</span>}</>}
-        consequence={isNew ? "Once it exists, pick it in a device's settings." : devices ? `Renaming updates the zone shown on its ${plural(devices, "device")}.` : "No devices are in this zone yet."}
+        consequence={isNew ? "Devices are added to a zone from their own settings." : `${plural(devices, "device")} in it. Devices are moved from their own settings.`}
         sections={[{ id: "zone", label: "Zone" }]}
         status={editor}
         readOnly={readOnly}

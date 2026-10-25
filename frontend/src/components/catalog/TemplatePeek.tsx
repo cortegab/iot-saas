@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy, Cpu, Link2, Pencil, Power, Trash2 } from "lucide-react";
-import { useApiSWR } from "@/hooks/useApiSWR";
+import { BookOpen, Copy, Cpu, Link2, Pencil, Power, Trash2 } from "lucide-react";
+import { resolveModel } from "@/lib/hardware/board-pins";
+import { findDriver, useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
@@ -14,38 +15,8 @@ import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
-type CatalogUsageResponse = components["schemas"]["CatalogUsageResponse"];
-type KeyUsageResponse = components["schemas"]["KeyUsageResponse"];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-function usedBy(u: KeyUsageResponse | undefined): string | null {
-  if (!u || (u.rules === 0 && u.widgets === 0)) return null;
-  return [u.rules && plural(u.rules, "rule"), u.widgets && plural(u.widgets, "widget")].filter(Boolean).join(", ");
-}
-
-function KeyList({ items, usage }: { items: { key: string; label: string; unit?: string | null }[]; usage: Record<string, KeyUsageResponse> | undefined }) {
-  if (items.length === 0) return <p className="text-[13px] text-ink-muted">None.</p>;
-  return (
-    <ul className="flex flex-col divide-y divide-border-soft rounded-lg border border-border">
-      {items.map((it) => {
-        const used = usedBy(usage?.[it.key]);
-        return (
-          <li key={it.key} className="flex items-center justify-between gap-3 px-3 py-2 text-[13.5px]">
-            <span className="flex min-w-0 items-center gap-2">
-              <Tag mono>{it.key}</Tag>
-              <span className="truncate text-ink-muted">
-                {it.label}
-                {it.unit ? ` · ${it.unit}` : ""}
-              </span>
-            </span>
-            {used && <span className="whitespace-nowrap text-[12px] text-ink-muted">{used}</span>}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 /** A device template at a glance: what it reports and controls, and what
  * depends on each key. It's edited on /templates/{id}. */
@@ -64,12 +35,13 @@ export function TemplatePeek({
   const toast = useToast();
   const { can } = usePermissions();
   const canWrite = can("templates.write");
-  const { data: usage } = useApiSWR<CatalogUsageResponse>(entry ? `/catalog/${entry.id}/usage` : null);
+  const { data: driverCatalog } = useDriverCatalog();
   if (!entry) return <PeekPlaceholder noun="template" missing onClose={onClose} />;
 
   const menu: DropdownMenuItem[][] = [
     [
       { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${entry.id}`) },
+      ...(entry.runs_on === "generic_firmware" && entry.hardware ? [{ label: "Wiring guide", icon: <BookOpen size={15} />, onClick: () => router.push(`/templates/${entry.id}/wiring`) }] : []),
       {
         label: "Copy link",
         icon: <Link2 size={15} />,
@@ -100,11 +72,14 @@ export function TemplatePeek({
       eyebrow={
         <>
           Device template{" "}
-          {entry.status === "active" ? <Badge tone="online" label="Enabled" /> : <Badge tone="unknown" shape="square" label="Disabled" />}
+          {entry.status === "active" ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />}
           {entry.is_legacy && <Tag size="sm">Legacy</Tag>}
         </>
       }
       facts={[
+        ["Runs on", entry.runs_on === "generic_firmware" ? "Our firmware" : "Custom firmware"],
+        ["Board", entry.hardware ? (resolveModel(driverCatalog?.models, entry.hardware.board)?.label ?? entry.hardware.board) : null],
+        ["Parts", entry.hardware ? [...(entry.hardware.inputs ?? []), ...(entry.hardware.outputs ?? [])].map((b) => findDriver(driverCatalog?.drivers, b.driver)?.label ?? b.driver).join(", ") || "None" : null],
         [
           "Devices",
           entry.device_count ? (
@@ -119,17 +94,21 @@ export function TemplatePeek({
       ]}
       primary={
         <Link href={`/templates/${entry.id}`} className={buttonClassName({ size: "sm" })}>
-          <Pencil aria-hidden size={14} /> {canWrite ? "Edit template" : "View template"}
+          <Pencil aria-hidden size={14} /> {canWrite ? "Edit" : "View"}
         </Link>
       }
       menu={menu}
       onClose={onClose}
     >
-      <PeekSection title={`Metrics · ${entry.metrics.length}`}>
-        <KeyList items={entry.metrics.map((m) => ({ key: m.key ?? m.name, label: m.name, unit: m.unit }))} usage={usage?.metrics} />
-      </PeekSection>
-      <PeekSection title={`Actuators · ${entry.actuators.length}`}>
-        <KeyList items={entry.actuators.map((a) => ({ key: a.key ?? a.name, label: a.name }))} usage={usage?.actuators} />
+      <PeekSection title="What you'll see">
+        <dl className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13.5px]">
+          <dt className="text-ink-muted">Metrics</dt>
+          <dd className="m-0 text-ink">
+            {entry.metrics.length ? entry.metrics.map((m) => `${m.name}${m.unit && m.data_type !== "bool" ? ` ${m.unit}` : m.data_type === "bool" ? " On/Off" : ""}`).join(", ") : <span className="text-ink-muted">None</span>}
+          </dd>
+          <dt className="text-ink-muted">Actuators</dt>
+          <dd className="m-0 text-ink">{entry.actuators.length ? entry.actuators.map((a) => a.name).join(", ") : <span className="text-ink-muted">None</span>}</dd>
+        </dl>
       </PeekSection>
     </PeekFrame>
   );

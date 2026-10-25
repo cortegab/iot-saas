@@ -180,12 +180,26 @@ async def record_version(
 
 
 async def list_versions(
-    session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID, limit: int = 50
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    rule_id: uuid.UUID,
+    limit: int = 50,
+    offset: int = 0,
 ) -> list[RuleVersion]:
     result = await session.execute(
         select(RuleVersion)
         .where(RuleVersion.tenant_id == tenant_id, RuleVersion.rule_id == rule_id)
         .order_by(RuleVersion.version.desc())
         .limit(limit)
+        .offset(offset)
     )
     return list(result.scalars().all())
+
+
+async def count_versions(session: AsyncSession, tenant_id: uuid.UUID, rule_id: uuid.UUID) -> int:
+    result = await session.execute(
+        select(func.count())
+        .select_from(RuleVersion)
+        .where(RuleVersion.tenant_id == tenant_id, RuleVersion.rule_id == rule_id)
+    )
+    return int(result.scalar_one())

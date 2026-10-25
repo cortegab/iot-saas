@@ -15,10 +15,10 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 import aiomqtt
-from sqlalchemy import select, update
+from sqlalchemy import ColumnElement, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.commands.models import Command
@@ -135,16 +135,69 @@ async def record_ack(
     )
 
 
+CommandStatusFilter = Literal["confirmed", "pending", "no_response"]
+
+
+def _commands_filter(
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    actuator: str | None,
+    status: CommandStatusFilter | None,
+) -> list[ColumnElement[bool]]:
+    """The timeline's filters, in SQL so they hold across pages. A command is
+    confirmed once acked; otherwise pending until issued_at + ttl, then no
+    response (the frontend's lib/command-status.ts, same rule)."""
+    where: list[ColumnElement[bool]] = [
+        Command.tenant_id == tenant_id,
+        Command.device_id == device_id,
+    ]
+    if actuator:
+        where.append(Command.actuator == actuator)
+    deadline = Command.issued_at + func.make_interval(0, 0, 0, 0, 0, 0, Command.ttl_seconds)
+    if status == "confirmed":
+        where.append(Command.acked_at.is_not(None))
+    elif status == "pending":
+        where.extend([Command.acked_at.is_(None), deadline > func.now()])
+    elif status == "no_response":
+        where.extend([Command.acked_at.is_(None), deadline <= func.now()])
+    return where
+
+
 async def list_commands(
-    session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+    actuator: str | None = None,
+    status: CommandStatusFilter | None = None,
 ) -> list[Command]:
+    """Newest first; id breaks ties so pages never repeat or skip a row."""
     result = await session.execute(
         select(Command)
-        .where(Command.tenant_id == tenant_id, Command.device_id == device_id)
-        .order_by(Command.published_at.desc())
-        .limit(100)
+        .where(*_commands_filter(tenant_id, device_id, actuator, status))
+        .order_by(Command.published_at.desc(), Command.id.desc())
+        .limit(limit)
+        .offset(offset)
     )
     return list(result.scalars().all())
+
+
+async def count_commands(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    *,
+    actuator: str | None = None,
+    status: CommandStatusFilter | None = None,
+) -> int:
+    result = await session.execute(
+        select(func.count())
+        .select_from(Command)
+        .where(*_commands_filter(tenant_id, device_id, actuator, status))
+    )
+    return int(result.scalar_one())
 
 
 async def request_manual_command(
