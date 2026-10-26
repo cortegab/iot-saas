@@ -44,12 +44,12 @@ test("a device peeks from the list and is edited in its Settings tab", async ({ 
   await expect(page.getByRole("button", { name: "Delete device…" })).toBeVisible();
 });
 
-test("devices list: KPI filter, chips and a search that matches nothing", async ({ page }) => {
+test("devices list: status filter, chips and a search that matches nothing", async ({ page }) => {
   await page.goto("/devices");
   const table = page.getByRole("table", { name: "Devices" });
   await expect(table).toBeVisible();
 
-  // A KPI tile toggles the status filter, mirrored in the URL and as a chip.
+  // The toolbar status filter, mirrored in the URL and as a chip.
   const kpis = page.getByRole("group", { name: "Filter by status" });
   await kpis.getByRole("button", { name: /Offline/ }).click();
   await expect(page).toHaveURL(/status=offline/);

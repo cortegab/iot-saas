@@ -9,7 +9,6 @@ import { Button, buttonClassName } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Badge";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { KpiStrip } from "@/components/ui/KpiStrip";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
@@ -32,10 +31,9 @@ type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-/** DESIGN.md §6 catalog standard for Devices: KPI strip (status filter),
- * toolbar, chips, bulk actions, sortable table, footer, designed states. */
+/** DESIGN.md §6 catalog standard for Devices: toolbar (with the status
+ * filter and its counts), chips, bulk actions, sortable table, footer,
+ * designed states. */
 export default function DevicesPage() {
   const { can } = usePermissions();
   const canWrite = can("devices.write");
@@ -193,14 +191,13 @@ export default function DevicesPage() {
 
   return (
     <>
+      {/* DESIGN.md §6: the primary action lives in the toolbar; the header
+          holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
+        inline
         title="Devices"
-        description={
-          devices
-            ? `${plural(total, "device")}. Open a device for its readings and controls.`
-            : "Open a device for its readings and controls."
-        }
-        actions={addAction}
+        description="Open a device for its readings and controls."
+        actions={!error && devices && total > 0 ? undefined : addAction}
       />
 
       {actions.reveal}
@@ -244,19 +241,25 @@ export default function DevicesPage() {
               : null
           }
         >
-          <KpiStrip
-            ariaLabel="Filter by status"
-            active={list.filters.status === "all" ? null : list.filters.status}
-            onSelect={(id) => list.setFilter("status", list.filters.status === id ? "all" : id)}
-            items={[
-              { id: "online", label: "Online", value: counts.online, sub: `of ${plural(total, "device")}`, tone: "online" },
-              { id: "offline", label: "Offline", value: counts.offline, sub: "not reporting now", tone: "offline" },
-              { id: "never", label: "Never connected", value: counts.never, sub: "waiting for first message", tone: "pending", shape: "hollow" },
-              { id: "disabled", label: "Disabled", value: counts.disabled, sub: "not evaluated by rules", tone: "unknown", shape: "square" },
-            ]}
-          />
-
-          <ListToolbar query={list.q} onQuery={list.setQuery} placeholder="Search name or template">
+          <ListToolbar
+            query={list.q}
+            onQuery={list.setQuery}
+            placeholder="Search name or template"
+            activeFilters={[list.filters.template, list.filters.zone].filter((v) => v !== "all").length}
+            actions={addAction}
+            quick={{
+              label: "Filter by status",
+              value: list.filters.status,
+              onChange: (v) => list.setFilter("status", v),
+              options: [
+                { value: "all", label: "All", count: total },
+                { value: "online", label: "Online", count: counts.online, tone: "online", hint: "Reporting now" },
+                { value: "offline", label: "Offline", count: counts.offline, tone: "offline", hint: "Not reporting now", alert: true },
+                { value: "never", label: "Never connected", count: counts.never, tone: "pending", shape: "hollow", hint: "Waiting for the first message" },
+                { value: "disabled", label: "Disabled", count: counts.disabled, tone: "unknown", shape: "square", hint: "Not evaluated by rules" },
+              ],
+            }}
+          >
             <Select
               aria-label="Filter by template"
               value={list.filters.template}

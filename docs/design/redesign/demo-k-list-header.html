@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demo K: List headers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* DESIGN.md §3 tokens */
+:root {
+  --canvas:#f7f7f8; --surface:#fff; --raised:#f2f2f5; --border:#e3e3e8; --soft:#eeeef2; --ink:#15161a; --muted:#62646f;
+  --accent:#4f46e5; --accent-strong:#4338ca; --accent-muted:#eef0ff; --on-accent:#fff;
+  --online:#15803d; --offline:#dc2626; --pending:#b45309; --unknown:#6b7280;
+  --sidebar:#fbfbfc; --row-hover:#f8f8fb; --input:#fff; --shadow-card:0 1px 2px rgba(30,30,60,.05);
+  --page:#e9e9ee; --warn-bg:#fffbeb;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --canvas:#0f1014; --surface:#16171c; --raised:#1e2027; --border:#2a2c34; --soft:#222329; --ink:#ececf1; --muted:#9a9ca8;
+  --accent:#818cf8; --accent-strong:#a5b4fc; --accent-muted:#1f2040; --on-accent:#0f1014;
+  --online:#4ade80; --offline:#f87171; --pending:#fbbf24; --unknown:#9ca3af;
+  --sidebar:#121318; --row-hover:#1a1b21; --input:#121318; --shadow-card:none; --page:#08090c; --warn-bg:#2a2211;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --canvas:#0f1014; --surface:#16171c; --raised:#1e2027; --border:#2a2c34; --soft:#222329; --ink:#ececf1; --muted:#9a9ca8;
+  --accent:#818cf8; --accent-strong:#a5b4fc; --accent-muted:#1f2040; --on-accent:#0f1014;
+  --online:#4ade80; --offline:#f87171; --pending:#fbbf24; --unknown:#9ca3af;
+  --sidebar:#121318; --row-hover:#1a1b21; --input:#121318; --shadow-card:none; --page:#08090c; --warn-bg:#2a2211;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font: 14.5px/1.5 "Geist", system-ui, sans-serif; color: var(--ink); background: var(--page); }
+button, input, select { font: inherit; color: inherit; }
+.mono { font-family: "Geist Mono", ui-monospace, monospace; }
+
+/* Demo chrome */
+.bar { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--border); }
+.bar b { font-weight: 600; margin-right: 4px; }
+.grp { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.grp .seg button { height: 28px; }
+.metric { margin-left: auto; font-size: 13px; color: var(--muted); }
+.metric strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+.intro { max-width: 1440px; margin: 0 auto; padding: 24px 16px 8px; }
+.intro h1 { font-size: 26px; font-weight: 600; letter-spacing: -.015em; margin: 0 0 6px; }
+.intro .lead { color: var(--muted); margin: 0 0 18px; max-width: 80ch; }
+.notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 900px) { .notes { grid-template-columns: minmax(0, 1fr); } }
+.note { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; }
+.note h2 { font-size: 15px; font-weight: 600; margin: 0 0 4px; }
+.note .verdict { margin: 0 0 10px; color: var(--muted); }
+.note h3 { font-size: 12.5px; font-weight: 500; color: var(--muted); margin: 10px 0 4px; text-transform: none; }
+.note ul { margin: 0; padding-left: 18px; }
+.note li { margin: 3px 0; }
+.rec { display: inline-block; font-size: 12px; font-weight: 500; padding: 1px 8px; border-radius: 999px; background: var(--accent-muted); color: var(--accent-strong); margin-left: 6px; vertical-align: 2px; }
+.cmp-wrap { overflow-x: auto; margin-top: 14px; }
+.cmp { width: 100%; border-collapse: collapse; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; font-size: 13.5px; }
+.cmp th, .cmp td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--soft); }
+.cmp thead th { color: var(--muted); font-weight: 500; font-size: 12.5px; }
+.cmp tbody th { font-weight: 500; white-space: nowrap; }
+.cmp tr:last-child > * { border-bottom: 0; }
+.cmp td.on { background: var(--accent-muted); }
+.stage { padding: 16px 16px 60px; }
+
+/* The app frame */
+.frame { width: var(--w, 1440px); max-width: 100%; margin: 0 auto; display: flex; min-height: 720px; background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; container-type: inline-size; }
+.rail { flex: 0 0 64px; background: var(--sidebar); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 0; color: var(--muted); }
+.rail .logo { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, var(--accent), #2563eb); color: #fff; display: grid; place-items: center; font-weight: 600; margin-bottom: 10px; }
+.rail span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 10px; }
+.rail span.on { background: var(--accent-muted); color: var(--accent); }
+.content { flex: 1; min-width: 0; padding: 36px 40px 40px; display: flex; flex-direction: column; gap: 20px; }
+
+/* Page header (§4) */
+.ph { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.ph h1 { margin: 0; font-size: 28px; font-weight: 600; letter-spacing: -.015em; line-height: 1.2; }
+.ph p { margin: 6px 0 0; color: var(--muted); max-width: 64ch; }
+.ph.inline { align-items: baseline; justify-content: flex-start; column-gap: 16px; row-gap: 4px; }
+.ph.inline p { margin: 0; }
+.ph.inline .sp { flex: 1 1 0; }
+.ph.inline .btn { align-self: center; }
+
+/* Controls */
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 0; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-weight: 500; cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--accent-strong); }
+.btn2 { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); cursor: pointer; white-space: nowrap; }
+.sel { height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--input); min-width: 150px; }
+.search { position: relative; flex: 1 1 220px; max-width: 320px; min-width: 0; display: flex; }
+.search svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.search input { width: 100%; height: 36px; padding: 0 10px 0 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--input); }
+.search input:focus, .sel:focus, .btn:focus-visible, .btn2:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tb { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.tb .sp { flex: 1 1 0; }
+.count { color: var(--muted); font-size: 13.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.phone-only { display: none !important; }
+
+/* Status dot + pill (§3 status vocabulary) */
+.t-online { --tone: var(--online); } .t-offline { --tone: var(--offline); } .t-pending { --tone: var(--pending); } .t-unknown { --tone: var(--unknown); } .t-accent { --tone: var(--accent); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--tone); flex: none; }
+.dot.hollow { background: transparent; box-shadow: inset 0 0 0 2px var(--tone); }
+.dot.square { border-radius: 2px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--tone); background: color-mix(in srgb, var(--tone) 11%, transparent); white-space: nowrap; }
+
+/* KPI strip: today (tall) and the sketch's one line */
+.kpi { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-card); }
+.kpi button { display: flex; flex-direction: column; gap: 2px; padding: 16px 18px; border: 0; border-left: 1px solid var(--soft); background: none; text-align: left; cursor: pointer; min-width: 0; }
+.kpi button:first-child { border-left: 0; }
+.kpi button:hover { background: var(--row-hover); }
+.kpi button[aria-pressed="true"] { background: color-mix(in srgb, var(--tone) 7%, transparent); box-shadow: inset 0 -2px 0 var(--tone); }
+.kpi .lab { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--muted); }
+.kpi .num { font-size: 28px; font-weight: 600; letter-spacing: -.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.kpi .sub { font-size: 12.5px; color: var(--muted); }
+.kpi.compact button { flex-direction: row; align-items: center; gap: 10px; padding: 12px 18px; }
+.kpi.compact .num { font-size: 26px; }
+.kpi.compact .lab2 { color: var(--muted); font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Option B: segmented status filter with counts */
+.seg { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--raised); }
+.seg button { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 11px; border: 0; border-radius: 6px; background: none; cursor: pointer; color: var(--muted); white-space: nowrap; }
+.seg button[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgba(30,30,60,.12); }
+.seg .n, .tabs .n { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--ink); }
+.seg .n.hot, .tabs .n.hot { color: var(--offline); }
+
+/* Option C: one list card with status tabs */
+.tabs { display: flex; flex-wrap: wrap; gap: 2px 18px; padding: 0 16px; border-bottom: 1px solid var(--soft); }
+.tabs button { display: inline-flex; align-items: center; gap: 7px; padding: 12px 2px 11px; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; cursor: pointer; color: var(--muted); white-space: nowrap; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 500; }
+.tabs .n { font-size: 12.5px; padding: 0 7px; border-radius: 999px; background: var(--raised); font-weight: 500; line-height: 20px; }
+.tabs .n.hot { background: color-mix(in srgb, var(--offline) 12%, transparent); }
+.tcard .tb.in { padding: 12px 16px; border-bottom: 1px solid var(--soft); }
+
+/* Table (§6) */
+.tcard { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; box-shadow: var(--shadow-card); }
+table.list { width: 100%; border-collapse: collapse; }
+.list th { text-align: left; font-size: 13px; font-weight: 500; color: var(--muted); padding: 11px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.list th .ar { display: inline-flex; vertical-align: -2px; margin-left: 4px; opacity: .55; }
+.list th.sorted { color: var(--ink); } .list th.sorted .ar { opacity: 1; color: var(--accent); }
+.list td { padding: 12px; border-bottom: 1px solid var(--soft); vertical-align: middle; }
+.list tr:last-child td { border-bottom: 0; }
+.list tbody tr:hover td { background: var(--row-hover); cursor: pointer; }
+.list .r { text-align: right; } .list th.r { text-align: right; }
+.list .ck { width: 44px; padding-right: 0; }
+.list .menu { width: 44px; text-align: center; color: var(--muted); }
+.ckb { width: 16px; height: 16px; border: 1.5px solid var(--border); border-radius: 4px; display: inline-block; vertical-align: middle; background: var(--input); }
+.nm b { font-weight: 500; display: block; }
+.nm small { color: var(--muted); font-size: 12.5px; }
+.list tr.dim td:not(.menu) > * { opacity: .6; }
+.tfoot { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--soft); color: var(--muted); font-size: 13px; }
+.cards { list-style: none; margin: 0; padding: 0; display: none; }
+.cards li { padding: 12px 14px; border-bottom: 1px solid var(--soft); display: grid; gap: 4px; }
+.cards li:last-child { border-bottom: 0; }
+.cards .top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.cards .meta { color: var(--muted); font-size: 13px; }
+
+/* §6 narrowing: P3 goes below 860 px, P2 below 720 px; cards at 600 px */
+@container (max-width: 900px) { .p3 { display: none; } .content { padding: 28px 24px 32px; } }
+@container (max-width: 760px) { .p2 { display: none; } }
+@container (max-width: 640px) {
+  .rail { display: none; }
+  .content { padding: 20px 16px 28px; gap: 16px; }
+  .ph h1 { font-size: 24px; }
+  .wide-only { display: none !important; }
+  .phone-only { display: inline-flex !important; }
+  select.phone-only { display: block !important; width: 100%; }
+  .search { flex-basis: 140px; max-width: none; }
+  table.list { display: none; }
+  .cards { display: block; }
+  .kpi { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi button { border-top: 1px solid var(--soft); }
+  .kpi button:nth-child(odd) { border-left: 0; }
+  .kpi button:nth-child(-n+2) { border-top: 0; }
+  .ph.inline .sp { display: none; }
+  .ph.inline .btn { order: 2; margin-left: auto; }
+  .ph.inline p { order: 3; flex-basis: 100%; }
+}
+</style>
+</head>
+<body>
+
+<div class="bar" id="bar">
+  <span class="grp"><b>Demo K</b></span>
+  <span class="grp">Layout
+    <span class="seg" role="radiogroup" aria-label="Layout">
+      <button data-opt="cur">Today</button><button data-opt="a">A · Sketch, refined</button><button data-opt="b">B · Status in toolbar</button><button data-opt="c">C · One list card</button>
+    </span></span>
+  <span class="grp">Page
+    <span class="seg" role="radiogroup" aria-label="Page">
+      <button data-page="devices">Devices</button><button data-page="rules">Rules</button><button data-page="templates">Templates</button>
+    </span></span>
+  <span class="grp">Width
+    <span class="seg" role="radiogroup" aria-label="Width">
+      <button data-w="1440">1440</button><button data-w="1024">1024</button><button data-w="390">390</button>
+    </span></span>
+  <span class="grp">Theme
+    <span class="seg" role="radiogroup" aria-label="Theme">
+      <button data-theme="light">Light</button><button data-theme="dark">Dark</button>
+    </span></span>
+  <span class="metric" id="metric"></span>
+</div>
+
+<div class="intro">
+  <h1>Demo K: list page headers</h1>
+  <p class="lead">Your Paint sketch of the Devices page, weighed against today's list layout (DESIGN.md §6), and three ways to build on it. The search and the status figures, segments and tabs filter the list. Every option keeps the table, the footer and pager, the peek and the empty, loading and error states as they are. Only what sits above the table changes.</p>
+  <div class="notes">
+    <section class="note">
+      <h2>Your sketch</h2>
+      <p class="verdict">The direction is right: the table starts sooner, and the page reads as one band of controls above the list.</p>
+      <h3>What it gets right</h3>
+      <ul>
+        <li><b>The description goes beside the title.</b> That saves a line and loses nothing.</li>
+        <li><b>KPIs fit on one line.</b> The numbers are what matter. The explanation lines were most of the strip's height.</li>
+        <li><b>The primary button sits with the controls.</b> The top of the page becomes one band instead of three.</li>
+      </ul>
+      <h3>What I'd reconsider</h3>
+      <ul>
+        <li><b>The KPI strip is already a status filter.</b> Clicking a figure filters the list. As its own card it still costs about 60 px, and only 2 of the 7 lists have one, so the lists don't share one layout. B and C fold it into the filter.</li>
+        <li><b>A button in the toolbar needs a second place.</b> The toolbar isn't shown while the list loads, fails or is empty, so the button has to jump back to the header then. C avoids that.</li>
+        <li>The short explanations ("waiting for first message") become hover text, which touch screens don't show.</li>
+        <li>The stray marks by the numbers, the arrow on the left of "Last seen" and the cut-off table bottom are Paint artefacts. They're left out here.</li>
+      </ul>
+    </section>
+    <section class="note" id="optnote"></section>
+  </div>
+  <div class="cmp-wrap"><table class="cmp" id="cmp"></table></div>
+</div>
+
+<div class="stage"><div class="frame" id="frame"></div></div>
+
+<script>
+const I = {
+  search: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  plus: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  more: '<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>',
+  sort: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20V4M4 8l4-4 4 4M16 4v16M12 16l4 4 4-4"/></svg>',
+  up: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+  filter: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M7 12h10M10 18h4"/></svg>',
+  rail: [
+    '<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/>',
+    '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+    '<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10 21h4"/>',
+    '<path d="M4 6l2 2 3-3M4 14l2 2 3-3M13 7h7M13 15h7"/>',
+    '<path d="M12 2l9 5-9 5-9-5zM3 12l9 5 9-5M3 17l9 5 9-5"/>',
+    '<path d="M12 22s7-6.5 7-12a7 7 0 0 0-14 0c0 5.5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>',
+    '<circle cx="9" cy="8" r="3.5"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6M16 4.5a3.5 3.5 0 0 1 0 7M18 15c2.5.5 4 2.5 4 6"/>',
+  ],
+};
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+const PAGES = {
+  devices: {
+    title: "Devices", noun: ["device", "devices"], desc: "Open a device for its readings and controls.", btn: "Add device",
+    search: "Search name or template", kpi: true, bulk: true, rail: 1, filters: ["All templates", "All zones"],
+    statuses: [
+      { id: "online", label: "Online", tone: "online", sub: (n) => `of ${n} devices` },
+      { id: "offline", label: "Offline", tone: "offline", sub: () => "not reporting now", hot: true },
+      { id: "never", label: "Never connected", tone: "pending", shape: "hollow", sub: () => "waiting for first message" },
+      { id: "disabled", label: "Disabled", tone: "unknown", shape: "square", sub: () => "not evaluated by rules" },
+    ],
+    cols: [
+      { label: "Device", sorted: true, cell: (r) => `<div class="nm"><b>${esc(r.name)}</b><small class="mono">${esc(r.key)}</small></div>` },
+      { label: "Template", p: "p3", cell: (r) => esc(r.tpl) },
+      { label: "Zone", p: "p2", cell: (r) => (r.zone ? esc(r.zone) : '<span style="color:var(--muted)">—</span>') },
+      { label: "Status", status: true },
+      { label: "Last seen", cls: "r", cell: (r) => `<span style="color:var(--muted)">${esc(r.seen)}</span>` },
+    ],
+    meta: (r) => [r.tpl, r.zone || "No zone", r.seen].join(" · "),
+    rows: [
+      { name: "asdf", key: "asdf", tpl: "ESP32 Switch", zone: null, status: "never", seen: "never" },
+      { name: "Bay 1 climate", key: "bay1-climate", tpl: "Greenhouse node", zone: "Greenhouse", status: "online", seen: "just now" },
+      { name: "Bay 2 climate", key: "bay2-climate", tpl: "Greenhouse node", zone: "Greenhouse", status: "online", seen: "just now" },
+      { name: "Cold room 1", key: "cold-room-1", tpl: "Cold room probe", zone: "Cold store", status: "online", seen: "12 s ago" },
+      { name: "ESP32-L1", key: "esp32-l1", tpl: "ESP32 Led", zone: "Taller", status: "offline", seen: "Mon 5 Oct 09:14" },
+      { name: "ESP32-S1", key: "esp-s1", tpl: "ESP32 Switch", zone: "Taller", status: "offline", seen: "Tue 6 Oct 12:32" },
+      { name: "Inertial Sensor 1", key: "inertial-sensor-1", tpl: "Inertial-Sensor", zone: "Taller", status: "offline", seen: "Thu 15 Oct 13:06" },
+      { name: "Pump house", key: "pump-house", tpl: "Pump controller", zone: "Pump house", status: "online", seen: "3 s ago" },
+      { name: "Spare node", key: "spare-node", tpl: "Greenhouse node", zone: null, status: "disabled", seen: "Fri 2 Oct 17:40" },
+      { name: "Tank level", key: "tank-level", tpl: "Level sensor", zone: "Pump house", status: "online", seen: "40 s ago" },
+    ],
+  },
+  rules: {
+    title: "Rules", noun: ["rule", "rules"], desc: "Every reading is checked against these the moment it arrives.", btn: "New rule",
+    search: "Search rules", kpi: true, bulk: true, rail: 3, filters: ["All devices", "All triggers"],
+    statuses: [
+      { id: "armed", label: "Armed", tone: "online", sub: () => "waiting for their condition" },
+      { id: "fired", label: "Fired", tone: "accent", sub: () => "in the last 24 h" },
+      { id: "latched", label: "Latched", tone: "pending", shape: "square", sub: () => "need a reset", hot: true },
+      { id: "stale", label: "Can't evaluate", tone: "unknown", shape: "hollow", sub: () => "an input has no data", hot: true },
+      { id: "disabled", label: "Disabled", tone: "unknown", shape: "square", sub: () => "not evaluated" },
+    ],
+    cols: [
+      { label: "Rule", sorted: true, cell: (r) => `<div class="nm"><b>${esc(r.name)}</b><small>${esc(r.dev)}</small></div>` },
+      { label: "Trigger", p: "p2", cell: (r) => esc(r.trig) },
+      { label: "Action", p: "p3", cell: (r) => esc(r.act) },
+      { label: "State", status: true },
+    ],
+    meta: (r) => [r.dev, r.trig].join(" · "),
+    rows: [
+      { name: "Cold room too warm", dev: "Cold room 1", trig: "Temperature above 6 °C for 60 s", act: "Notify Ops", status: "fired" },
+      { name: "Cool bay 1 above 30 °C", dev: "Bay 1 climate", trig: "Temperature above 30 °C for 10 s", act: "Fan 1 → On", status: "armed" },
+      { name: "Bay 2 humidity", dev: "Bay 2 climate", trig: "Humidity below 40 % for 30 s", act: "Mister → On", status: "armed" },
+      { name: "Night lights", dev: "ESP32-L1", trig: "Every day at 20:00", act: "Light → On", status: "disabled" },
+      { name: "Pump dry run", dev: "Pump house", trig: "Current below 0.5 A for 20 s", act: "Pump → Off", status: "stale" },
+      { name: "Tank overflow stop", dev: "Tank level", trig: "Level above 95 % for 5 s", act: "Pump → Off, latch", status: "latched" },
+      { name: "Weekend vent", dev: "Bay 1 climate", trig: "Sat, Sun at 08:00", act: "Vent → Open", status: "armed" },
+    ],
+  },
+  templates: {
+    title: "Device templates", noun: ["template", "templates"], desc: "What a kind of device publishes and what it can switch.", btn: "New template",
+    search: "Search templates", kpi: false, bulk: false, rail: 4, filters: ["Any firmware"],
+    statuses: [
+      { id: "enabled", label: "Enabled", tone: "online", sub: () => "can be picked for new devices" },
+      { id: "disabled", label: "Disabled", tone: "unknown", shape: "square", sub: () => "hidden from Add device" },
+    ],
+    cols: [
+      { label: "Template", sorted: true, cell: (r) => `<div class="nm"><b>${esc(r.name)}</b><small>${esc(r.fw)}</small></div>` },
+      { label: "Metrics", cls: "r", p: "p3", cell: (r) => r.m },
+      { label: "Actuators", cls: "r", p: "p3", cell: (r) => r.a },
+      { label: "Devices", cls: "r", p: "p2", cell: (r) => r.d },
+      { label: "Status", status: true },
+    ],
+    meta: (r) => `${r.fw} · ${r.m} metrics · ${r.a} actuators · ${r.d} devices`,
+    rows: [
+      { name: "Cold room probe", fw: "Custom firmware", m: 1, a: 0, d: 1, status: "enabled" },
+      { name: "ESP32 Led", fw: "Our firmware", m: 0, a: 1, d: 1, status: "enabled" },
+      { name: "ESP32 Switch", fw: "Our firmware", m: 0, a: 1, d: 2, status: "enabled" },
+      { name: "Greenhouse node", fw: "Our firmware", m: 3, a: 2, d: 3, status: "enabled" },
+      { name: "Inertial-Sensor", fw: "Our firmware", m: 6, a: 0, d: 1, status: "enabled" },
+      { name: "Level sensor", fw: "Custom firmware", m: 1, a: 0, d: 1, status: "enabled" },
+      { name: "Old prototype", fw: "Custom firmware", m: 2, a: 0, d: 0, status: "disabled" },
+      { name: "Pump controller", fw: "Custom firmware", m: 2, a: 1, d: 1, status: "enabled" },
+    ],
+  },
+};
+
+const OPTS = {
+  cur: {
+    name: "Today", verdict: "Today's layout under DESIGN.md §6, shown for comparison.",
+    keeps: ["Title, then the description and count on their own line", "The primary button on the right of the header", "KPI strip (Devices, Rules): label, big number, explanation", "Then search and filters, then the table"],
+    trade: ["The top area takes three bands before the table starts", "Only Devices and Rules have a status overview; the other five lists don't"],
+    design: [],
+  },
+  a: {
+    name: "A · Your sketch, refined", verdict: "The closest to your drawing, with its rough edges fixed. The smallest change.",
+    keeps: ["The description beside the title; the count moves to the table footer, which already shows it", "One-line KPI cells: dot, number, label. The explanation moves to hover text and a screen-reader label", "The primary button at the end of the filter row. While the list loads, fails or is empty, it moves back to the header"],
+    trade: ["The KPI strip is still its own card, and only 2 of 7 lists have one", "The button has two places, depending on the page's state", "No one sees the explanations on touch screens"],
+    design: ["§6 anatomy 1–3 and the §5 KPI strip: about 3 small component changes (PageHeader, KpiStrip, ListToolbar)"],
+  },
+  b: {
+    name: "B · Status in the toolbar", verdict: "The densest option: the KPI strip becomes the status filter it already acts as.",
+    keeps: ["The description beside the title", "No KPI card. A Status control with counts (All · Online · Offline · …) sits under the search, with an offline or problem count in red when it isn't zero", "Every list gets one: Templates All · Enabled · Disabled; Zones In use · Empty; Members by role", "The primary button at the end of the search row, as in your sketch (the header while loading or empty)"],
+    trade: ["The figures shrink from 26 px to 14 px, which weakens the at-a-glance read", "Laptops get two toolbar rows; on phones the control becomes a Status select", "Same two places for the button as A"],
+    design: ["§6: the KPI strip leaves list pages; a status filter with counts joins the toolbar on every list. ListToolbar already has this control (`quick`)"],
+  },
+  c: {
+    name: "C · One list card with status tabs", rec: true, verdict: "Saves as much space as B, gives all 7 lists one layout, and the button never moves.",
+    keeps: ["The header is one line: title, description and the primary button on the right, the same in every state (loading, error, empty, read-only)", "The list is one card: status tabs with counts on top (they're the filter), then search and filters, then the table, then the footer", "An offline or problem count is tinted red when it isn't zero, so the at-a-glance warning stays", "Every list gets tabs: Templates All · Enabled · Disabled, and the same on the others"],
+    trade: ["The button sits in the header row, not the filter row you drew. That row is now right above the card, about 50 px from the filters", "The figures are smaller than KPI numbers", "On phones the tabs become a Status select"],
+    design: ["§6: a new ListCard (tabs, toolbar, table, footer), and the KPI strip leaves list pages. PageHeader gets an inline variant"],
+  },
+};
+
+const S = { opt: "c", page: "devices", w: 1440, q: "", f: { devices: "all", rules: "all", templates: "all" } };
+const frame = document.getElementById("frame");
+
+const st = (P, id) => P.statuses.find((s) => s.id === id);
+const dot = (s) => `<span class="dot ${s.shape || ""} t-${s.tone}"></span>`;
+const pill = (s) => `<span class="pill t-${s.tone}"><span class="dot ${s.shape || ""}"></span>${esc(s.label)}</span>`;
+const plural = (P, n) => `${n} ${n === 1 ? P.noun[0] : P.noun[1]}`;
+const counts = (P) => Object.fromEntries(P.statuses.map((s) => [s.id, P.rows.filter((r) => r.status === s.id).length]));
+const rowsOf = (P) => P.rows.filter((r) => (S.f[S.page] === "all" || r.status === S.f[S.page]) && (!S.q || JSON.stringify(r).toLowerCase().includes(S.q.toLowerCase())));
+const btn = (P) => `<button class="btn">${I.plus}${esc(P.btn)}</button>`;
+const countText = (P, shown) => (shown === P.rows.length ? plural(P, shown) : `${shown} of ${plural(P, P.rows.length)}`);
+
+function header(P) {
+  const n = P.rows.length;
+  if (S.opt === "cur") return `<header class="ph"><div><h1>${P.title}</h1><p>${S.page === "devices" ? plural(P, n) + ". " : ""}${P.desc}</p></div>${btn(P)}</header>`;
+  return `<header class="ph inline"><h1>${P.title}</h1><p>${P.desc}</p>${S.opt === "c" ? `<span class="sp"></span>${btn(P)}` : ""}</header>`;
+}
+
+function kpi(P, c, compact) {
+  if (!P.kpi) return "";
+  const n = P.rows.length;
+  return `<div class="kpi ${compact ? "compact" : ""}" role="group" aria-label="Filter by status" style="--n:${P.statuses.length}">${P.statuses
+    .map((s) => {
+      const on = S.f[S.page] === s.id;
+      return compact
+        ? `<button class="t-${s.tone}" data-kpi="${s.id}" aria-pressed="${on}" title="${esc(s.label)}: ${esc(s.sub(n))}">${dot(s)}<span class="num">${c[s.id]}</span><span class="lab2">${esc(s.label)}</span><span class="sr">, ${esc(s.sub(n))}</span></button>`
+        : `<button class="t-${s.tone}" data-kpi="${s.id}" aria-pressed="${on}"><span class="lab">${dot(s)}${esc(s.label)}</span><span class="num">${c[s.id]}</span><span class="sub">${esc(s.sub(n))}</span></button>`;
+    })
+    .join("")}</div>`;
+}
+
+function search(P) {
+  return `<label class="search">${I.search}<input type="search" data-q placeholder="${esc(P.search)}" aria-label="${esc(P.search)}" value="${esc(S.q)}"></label>`;
+}
+function filters(P) {
+  return P.filters.map((f) => `<select class="sel wide-only" aria-label="${esc(f)}"><option>${esc(f)}</option></select>`).join("") + `<button class="btn2 phone-only">${I.filter}Filters</button>`;
+}
+function statusSelect(P, c) {
+  const n = P.rows.length;
+  return `<select class="sel phone-only" data-stsel aria-label="Status"><option value="all"${S.f[S.page] === "all" ? " selected" : ""}>All ${P.noun[1]} (${n})</option>${P.statuses
+    .map((s) => `<option value="${s.id}"${S.f[S.page] === s.id ? " selected" : ""}>${esc(s.label)} (${c[s.id]})</option>`)
+    .join("")}</select>`;
+}
+const isHot = (s, v) => s.hot && v > 0;
+
+function segments(P, c) {
+  const n = P.rows.length, cur = S.f[S.page];
+  return `<span class="seg wide-only" role="radiogroup" aria-label="Status"><button role="radio" data-st="all" aria-checked="${cur === "all"}">All <span class="n">${n}</span></button>${P.statuses
+    .map((s) => `<button role="radio" data-st="${s.id}" aria-checked="${cur === s.id}" title="${esc(s.sub(n))}">${dot(s)}${esc(s.label)} <span class="n ${isHot(s, c[s.id]) ? "hot" : ""}">${c[s.id]}</span></button>`)
+    .join("")}</span>${statusSelect(P, c)}`;
+}
+
+function tabs(P, c) {
+  const n = P.rows.length, cur = S.f[S.page];
+  return `<div class="tabs wide-only" role="tablist" aria-label="Status"><button role="tab" data-st="all" aria-selected="${cur === "all"}">All <span class="n">${n}</span></button>${P.statuses
+    .map((s) => `<button role="tab" data-st="${s.id}" aria-selected="${cur === s.id}" title="${esc(s.sub(n))}">${dot(s)}${esc(s.label)}<span class="n ${isHot(s, c[s.id]) ? "hot" : ""}">${c[s.id]}</span></button>`)
+    .join("")}</div>`;
+}
+
+function table(P, rows) {
+  const head = `<tr>${P.bulk ? '<th class="ck"><span class="ckb"></span></th>' : ""}${P.cols
+    .map((col) => `<th class="${col.cls || ""} ${col.p || ""} ${col.sorted ? "sorted" : ""}">${col.label}<span class="ar">${col.sorted ? I.up : I.sort}</span></th>`)
+    .join("")}<th class="menu"><span class="sr">Actions</span></th></tr>`;
+  const body = rows
+    .map((r) => `<tr class="${r.status === "disabled" ? "dim" : ""}">${P.bulk ? '<td class="ck"><span class="ckb"></span></td>' : ""}${P.cols
+      .map((col) => `<td class="${col.cls || ""} ${col.p || ""}"><span>${col.status ? pill(st(P, r.status)) : col.cell(r)}</span></td>`)
+      .join("")}<td class="menu">${I.more}</td></tr>`)
+    .join("");
+  const cards = rows
+    .map((r) => `<li><div class="top"><b>${esc(r.name)}</b>${pill(st(P, r.status))}</div><div class="meta">${esc(P.meta(r))}</div></li>`)
+    .join("");
+  const empty = rows.length ? "" : `<div style="padding:28px 16px;text-align:center;color:var(--muted)">No ${P.noun[1]} match. <a href="#" data-clear style="color:var(--accent)">Clear filters</a></div>`;
+  return `<table class="list"><thead>${head}</thead><tbody>${body}</tbody></table><ul class="cards">${cards}</ul>${empty}`;
+}
+
+function body(P) {
+  const c = counts(P), rows = rowsOf(P);
+  const foot = `<div class="tfoot"><span>${countText(P, rows.length)}</span><span>Rows per page: 25</span></div>`;
+  if (S.opt === "c") {
+    return `<section class="tcard">${tabs(P, c)}<div class="tb in">${search(P)}${filters(P)}${statusSelect(P, c)}<span class="sp wide-only"></span><span class="count wide-only">${countText(P, rows.length)}</span></div>${table(P, rows)}${foot}</section>`;
+  }
+  let out = "";
+  if (S.opt === "cur") out += kpi(P, c, false) + `<div class="tb">${search(P)}${filters(P)}</div>`;
+  if (S.opt === "a") out += kpi(P, c, true) + `<div class="tb">${search(P)}${filters(P)}<span class="sp"></span>${btn(P)}</div>`;
+  if (S.opt === "b") out += `<div class="tb">${search(P)}${filters(P)}<span class="sp"></span>${btn(P)}</div><div class="tb">${segments(P, c)}<span class="sp wide-only"></span><span class="count wide-only">${countText(P, rows.length)}</span></div>`;
+  return out + `<section class="tcard">${table(P, rows)}${foot}</section>`;
+}
+
+function renderFrame() {
+  const P = PAGES[S.page];
+  frame.style.setProperty("--w", S.w + "px");
+  frame.innerHTML = `<nav class="rail" aria-label="App"><div class="logo">I</div>${I.rail
+    .map((p, i) => `<span class="${i === P.rail ? "on" : ""}"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${p}</svg></span>`)
+    .join("")}</nav><div class="content">${header(P)}${body(P)}</div>`;
+}
+
+// Distance from the top of the title to the top of the table (or the first card on phones).
+function gap() {
+  const h1 = frame.querySelector(".ph h1");
+  const t = frame.querySelector("table.list");
+  const target = t && t.offsetParent !== null ? t : frame.querySelector(".cards");
+  return Math.round(target.getBoundingClientRect().top - h1.getBoundingClientRect().top);
+}
+
+function render() {
+  const keep = S.opt, saveFilter = S.f[S.page], saveQ = S.q;
+  // Measure every layout with no filter, so the numbers compare like for like.
+  S.f[S.page] = "all"; S.q = "";
+  const g = {};
+  for (const o of Object.keys(OPTS)) { S.opt = o; renderFrame(); g[o] = gap(); }
+  S.opt = keep; S.f[S.page] = saveFilter; S.q = saveQ;
+  renderFrame();
+
+  document.getElementById("metric").innerHTML = `Table starts <strong>${g[S.opt]} px</strong> below the title (today: ${g.cur} px)`;
+  for (const b of document.querySelectorAll("#bar [data-opt]")) b.setAttribute("aria-checked", b.dataset.opt === S.opt);
+  for (const b of document.querySelectorAll("#bar [data-page]")) b.setAttribute("aria-checked", b.dataset.page === S.page);
+  for (const b of document.querySelectorAll("#bar [data-w]")) b.setAttribute("aria-checked", +b.dataset.w === S.w);
+  const dark = document.documentElement.dataset.theme === "dark" || (!document.documentElement.dataset.theme && matchMedia("(prefers-color-scheme: dark)").matches);
+  for (const b of document.querySelectorAll("#bar [data-theme]")) b.setAttribute("aria-checked", (b.dataset.theme === "dark") === dark);
+
+  const O = OPTS[S.opt];
+  document.getElementById("optnote").innerHTML = `<h2>${O.name}${O.rec ? '<span class="rec">Recommended</span>' : ""}</h2><p class="verdict">${O.verdict}</p><h3>${S.opt === "cur" ? "How it works" : "What it does"}</h3><ul>${O.keeps.map((x) => `<li>${x}</li>`).join("")}</ul><h3>Trade-offs</h3><ul>${O.trade.map((x) => `<li>${x}</li>`).join("")}</ul>${O.design.length ? `<h3>DESIGN.md change</h3><ul>${O.design.map((x) => `<li>${x.replace(/`([^`]+)`/g, "<code>$1</code>")}</li>`).join("")}</ul>` : ""}`;
+
+  const cols = ["cur", "a", "b", "c"];
+  const rowsCmp = [
+    ["Table starts below the title", cols.map((o) => `${g[o]} px`)],
+    ["Status counts", ["Large, with an explanation line", "Large, one line", "In the status filter, 14 px", "In the status tabs, 14 px"]],
+    ["Primary button", ["Header", "Filter row (header while loading or empty)", "Search row (header while loading or empty)", "Header row, in every state"]],
+    ["Same layout on all 7 lists", ["No: KPIs on 2", "No: KPIs on 2", "Yes", "Yes"]],
+    ["Status explanations", ["Visible", "Hover only", "Hover only", "Hover only"]],
+    ["Code change", ["—", "Small: 3 components", "Medium: toolbar on 7 pages", "Medium: new ListCard on 7 pages"]],
+  ];
+  document.getElementById("cmp").innerHTML = `<thead><tr><th>${PAGES[S.page].title} at ${S.w} px</th>${cols.map((o) => `<th>${OPTS[o].name}</th>`).join("")}</tr></thead><tbody>${rowsCmp
+    .map(([h, v]) => `<tr><th>${h}</th>${v.map((x, i) => `<td class="${cols[i] === S.opt ? "on" : ""}">${x}</td>`).join("")}</tr>`)
+    .join("")}</tbody>`;
+}
+
+document.getElementById("bar").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.dataset.opt) S.opt = b.dataset.opt;
+  if (b.dataset.page) { S.page = b.dataset.page; S.q = ""; }
+  if (b.dataset.w) S.w = +b.dataset.w;
+  if (b.dataset.theme) document.documentElement.dataset.theme = b.dataset.theme;
+  render();
+});
+frame.addEventListener("click", (e) => {
+  const k = e.target.closest("[data-kpi]");
+  if (k) { S.f[S.page] = S.f[S.page] === k.dataset.kpi ? "all" : k.dataset.kpi; return render(); }
+  const s = e.target.closest("[data-st]");
+  if (s) { S.f[S.page] = s.dataset.st; return render(); }
+  if (e.target.closest("[data-clear]")) { e.preventDefault(); S.f[S.page] = "all"; S.q = ""; render(); }
+});
+frame.addEventListener("change", (e) => {
+  if (e.target.matches("[data-stsel]")) { S.f[S.page] = e.target.value; render(); }
+});
+frame.addEventListener("input", (e) => {
+  if (!e.target.matches("[data-q]")) return;
+  S.q = e.target.value;
+  const pos = e.target.selectionStart;
+  render();
+  const inp = frame.querySelector("[data-q]");
+  inp.focus();
+  inp.setSelectionRange(pos, pos);
+});
+document.fonts.ready.then(render);
+render();
+</script>
+</body>
+</html>

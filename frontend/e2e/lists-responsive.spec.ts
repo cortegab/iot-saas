@@ -37,16 +37,17 @@ test("devices on a phone: cards, a Filters sheet, and no sideways scroll", async
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("rules: KPIs filter, the Trigger filter makes a chip, and Ladder shows cards", async ({ page, ruleUnderTest }) => {
+test("rules: the state filter, the Trigger filter makes a chip, and Ladder shows cards", async ({ page, ruleUnderTest }) => {
   await page.goto("/rules");
-  const kpis = page.getByRole("group", { name: "Filter by state" });
+  const kpis = page.getByRole("group", { name: "Filter by state" }); // the toolbar status filter (DESIGN.md §6)
   for (const name of ["Armed", "Fired", "Latched", "Can't evaluate", "Disabled"]) {
     await expect(kpis.getByRole("button", { name: new RegExp(`^${name}`) })).toBeVisible();
   }
   await kpis.getByRole("button", { name: /^Fired/ }).click();
   await expect(page).toHaveURL(/state=fired/);
   await expect(page.getByText("State: Fired in 24 h")).toBeVisible();
-  await kpis.getByRole("button", { name: /^Fired/ }).click();
+  await kpis.getByRole("button", { name: /^All/ }).click();
+  await expect(page).not.toHaveURL(/state=/);
 
   await page.getByRole("searchbox", { name: "Search rules" }).fill(ruleUnderTest.name);
   // The search is debounced into the URL; let it land before the next filter.

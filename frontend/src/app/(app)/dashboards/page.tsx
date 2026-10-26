@@ -135,7 +135,14 @@ export default function DashboardsPage() {
 
   return (
     <>
-      <PageHeader title="Dashboards" description="Your own views of live readings and controls. Only you see your dashboards." actions={newButton} />
+      {/* DESIGN.md §6: the primary action lives in the toolbar; the header
+          holds it only while there's no toolbar (loading, error, first use). */}
+      <PageHeader
+        inline
+        title="Dashboards"
+        description="Your own views of live readings and controls. Only you see your dashboards."
+        actions={!error && dashboards && total > 0 ? undefined : newButton}
+      />
 
       {error ? (
         <ErrorState
@@ -172,7 +179,7 @@ export default function DashboardsPage() {
             />
           ) : (
             <>
-              <ListToolbar query={list.q} onQuery={list.setQuery} placeholder="Search dashboards" />
+              <ListToolbar query={list.q} onQuery={list.setQuery} placeholder="Search dashboards" actions={newButton} />
               <FilterChips chips={chips} onClearAll={list.clearAll} />
               {filtered.length === 0 ? (
                 <NoResults noun="dashboards" onClear={list.clearAll} />

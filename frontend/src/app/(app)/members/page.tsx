@@ -160,10 +160,13 @@ export default function MembersPage() {
 
   return (
     <>
+      {/* DESIGN.md §6: the primary action lives in the toolbar; the header
+          holds it only while there's no toolbar (loading, error). */}
       <PageHeader
+        inline
         title="Members"
         description="People in this workspace and what they can do."
-        actions={inviteButton}
+        actions={!error && members ? undefined : inviteButton}
       />
       {error ? (
         <ErrorState title="Couldn't load members" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
@@ -191,6 +194,7 @@ export default function MembersPage() {
             query={list.q}
             onQuery={list.setQuery}
             placeholder="Search members"
+            actions={inviteButton}
             quick={
               canManage
                 ? {
@@ -199,8 +203,8 @@ export default function MembersPage() {
                     onChange: (v) => list.setFilter("show", v),
                     options: [
                       { value: "all", label: "All", count: counts.all },
-                      { value: "active", label: "Active", count: counts.active },
-                      { value: "invited", label: "Invited", count: counts.invited },
+                      { value: "active", label: "Active", count: counts.active, tone: "online", hint: "Members of this workspace" },
+                      { value: "invited", label: "Invited", count: counts.invited, tone: "pending", shape: "hollow", hint: "Invited, not joined yet" },
                     ],
                   }
                 : undefined

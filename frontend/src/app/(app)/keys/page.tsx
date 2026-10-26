@@ -136,7 +136,14 @@ export default function KeysPage() {
 
   return (
     <>
-      <PageHeader title="API keys" description="For scripts and other systems: Authorization: Bearer." actions={newButton} />
+      {/* DESIGN.md §6: the primary action lives in the toolbar; the header
+          holds it only while there's no toolbar (loading, error, first use). */}
+      <PageHeader
+        inline
+        title="API keys"
+        description="For scripts and other systems: Authorization: Bearer."
+        actions={!error && keys && total > 0 ? undefined : newButton}
+      />
       {error ? (
         <ErrorState title="Couldn't load API keys" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
       ) : isLoading || !keys ? (
@@ -165,13 +172,14 @@ export default function KeysPage() {
                 query={list.q}
                 onQuery={list.setQuery}
                 placeholder="Search keys"
+                actions={newButton}
                 quick={{
                   label: "Show",
                   value: list.filters.show,
                   onChange: (v) => list.setFilter("show", v),
                   options: [
-                    { value: "active", label: "Active", count: counts.active },
-                    { value: "inactive", label: "Revoked or expired", count: counts.inactive },
+                    { value: "active", label: "Active", count: counts.active, tone: "online", hint: "Can authenticate" },
+                    { value: "inactive", label: "Revoked or expired", count: counts.inactive, tone: "unknown", shape: "square", hint: "Can't authenticate any more" },
                     { value: "all", label: "All", count: counts.all },
                   ],
                 }}
