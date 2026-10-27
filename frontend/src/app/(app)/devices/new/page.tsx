@@ -109,7 +109,8 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
     <>
       <PageHeader
         breadcrumbs={[{ href: "/devices", label: "Devices" }]}
-        title="Add device"
+        // The typed name becomes the title, as on New template (DESIGN.md §4).
+        title={name.trim() || "Add device"}
         description="Name it and pick its template. Next come its credential and Install."
       />
       <form onSubmit={(e) => void handleSubmit(e)} className={`${PAGE_WITH_BAR} @container max-w-[760px] gap-6`}>

@@ -165,7 +165,9 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
   description, a meta row, and actions on the right. The primary action is rightmost.
   **Nothing is said twice:** the breadcrumb lists the **parents only** (the H1 right below names
   the current page); the overline carries **status and meta only**, never the record kind (the
-  breadcrumb says it); the description never restates the overline.
+  breadcrumb says it); the description never restates the overline. **Creating** a named record
+  (a device template, a device), the H1 is the name as it's typed, and "New device template" /
+  "Add device" while the box is empty.
 - **Content column**: max 1120 px on every page (the 1520 px wide view is gone; nothing used it once
   the rule editor joined the standard layout). Every editor, wizard
   and settings page, the rule editor included, holds to a **760 px column** inside the 1120 px page,
