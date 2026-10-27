@@ -2,7 +2,9 @@ import { test, expect } from "./fixtures";
 
 test("preview: dry run reports missing data, and a tried value shows it would fire", async ({ page, ruleUnderTest }) => {
   await page.goto(`/rules/${ruleUnderTest.id}`);
-  const preview = page.getByRole("complementary", { name: "Preview" });
+  // The preview opens from its button, in a sheet (DESIGN.md §9.2).
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  const preview = page.getByRole("dialog", { name: "Preview" });
 
   // The fixture device never published this metric: unknown data never fires.
   await preview.getByRole("button", { name: "Dry run with live readings" }).click();
@@ -20,7 +22,8 @@ test("new rule: a recipe opens the workbench with its checks passing", async ({ 
   // Creating is a wizard (DESIGN.md §9.1): steps, and the first question.
   await expect(page.getByRole("list", { name: "Steps" })).toContainText("Review");
   await expect(page.getByRole("heading", { name: "What starts it?" })).toBeVisible();
-  const preview = page.getByRole("complementary", { name: "Preview" });
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  const preview = page.getByRole("dialog", { name: "Preview" });
   await expect(preview.getByText("Fires on each event, not on readings.")).toBeVisible();
   await expect(preview.getByText("Actions complete")).toBeVisible();
   await expect(preview.getByText(/^: (needs fixing|warning)$/)).toHaveCount(0);
