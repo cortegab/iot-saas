@@ -8,16 +8,16 @@
  *
  * DESIGN.md §9.2 (demo H): Name and Status, then the editable sentence, then
  * tabs When · If · Then · Behaviour (· Activity on a saved rule), kept in
- * `?tab=`. Form / Ladder switches inside If and Then. The preview sits beside
- * the editor when the content is at least 1160px wide, and behind a Preview
- * button otherwise. One sticky save bar.
+ * `?tab=`. Form / Ladder switches inside If and Then. The editor holds the
+ * 760px column; the preview opens from its Preview button in a sheet, at every
+ * width. One save bar.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Activity, AlertCircle, Check, ChevronLeft, ChevronRight, PanelRightClose, PanelRightOpen } from "lucide-react";
+import { Activity, AlertCircle, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { Button, IconButton } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Badge";
 import { SwitchField } from "@/components/ui/Switch";
 import { Field } from "@/components/ui/Field";
@@ -47,8 +47,6 @@ type EditorMode = "form" | "ladder";
 type RuleTab = "when" | "if" | "then" | "behaviour" | "activity" | "review";
 
 const MODE_KEY = "rule-editor-mode";
-/** The preview side panel's open / closed choice, per browser. */
-const PANEL_KEY = "rule-preview-panel";
 const TAB_LABEL: Record<RuleTab, string> = {
   when: "When",
   if: "If",
@@ -114,24 +112,6 @@ export function RuleEditor({
   const [mode, setMode] = useState<EditorMode>("form");
   const [selection, setSelection] = useState<EditorSelection>({ kind: "when" });
   const [previewOpen, setPreviewOpen] = useState(false);
-  // The side panel (wide screens): open unless this browser closed it.
-  const [panelOpen, setPanelOpen] = useState(true);
-  useEffect(() => {
-    try {
-      if (localStorage.getItem(PANEL_KEY) === "closed") setPanelOpen(false);
-    } catch {
-      // Storage unavailable: stay open.
-    }
-  }, []);
-  function togglePanel(open: boolean) {
-    setPanelOpen(open);
-    try {
-      if (open) localStorage.removeItem(PANEL_KEY);
-      else localStorage.setItem(PANEL_KEY, "closed");
-    } catch {
-      // A per-browser convenience only.
-    }
-  }
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
@@ -331,8 +311,8 @@ export function RuleEditor({
   );
 
   const preview = <RulePreview draft={draft} catalog={catalog} ruleId={existing?.id} />;
-  // The ladder is a diagram: on If and Then it takes the preview panel's room
-  // too (the preview moves behind its button), so a wide rung stays legible.
+  // The ladder is a diagram: on If and Then it may use the page's full width
+  // (past the 760px column), so a wide rung stays legible.
   const canvasWide = mode === "ladder" && (tab === "if" || tab === "then");
   const tabIssues = (t: RuleTab | RuleSection) => issues.filter((i) => i.section === t);
   const modeSwitch = (
@@ -385,10 +365,10 @@ export function RuleEditor({
   return (
     <>
       <form onSubmit={handleSubmit} className="@container flex flex-1 flex-col gap-4">
-        {/* DESIGN.md §9.2: the 760px editor column every editor has, and the
-            preview as a collapsible side panel when there is room for it. */}
-        <div className="grid items-start gap-x-6 gap-y-4 @min-[1024px]:grid-cols-[minmax(0,760px)_minmax(0,1fr)] @min-[1024px]:grid-rows-[auto_1fr]">
-          <div className="flex min-w-0 max-w-[760px] flex-col gap-4 @min-[1024px]:col-start-1">
+        {/* DESIGN.md §9.2: the 760px editor column every editor has; the
+            preview is behind its button at every width. */}
+        <div className="flex flex-col gap-4">
+          <div className="flex min-w-0 max-w-[760px] flex-col gap-4">
             {wizard && (
               <Stepper
                 current={stepIndex}
@@ -424,7 +404,7 @@ export function RuleEditor({
                 />
               )}
               {tab !== "review" && (
-                <Button type="button" variant="secondary" size="sm" className={cn("mb-1.5", !canvasWide && "@min-[1024px]:hidden")} onClick={() => setPreviewOpen(true)}>
+                <Button type="button" variant="secondary" size="sm" className="mb-1.5" onClick={() => setPreviewOpen(true)}>
                   <Activity aria-hidden size={14} />
                   Preview
                 </Button>
@@ -432,7 +412,7 @@ export function RuleEditor({
             </div>
           </div>
 
-          <div className={cn("flex min-w-0 flex-col gap-4 @min-[1024px]:col-start-1", canvasWide ? "@min-[1024px]:col-span-2" : "max-w-[760px]")}>
+          <div className={cn("flex min-w-0 flex-col gap-4", !canvasWide && "max-w-[760px]")}>
             {panel("when", <WhenSection draft={draft} catalog={catalog} update={setDraft} />)}
             {panel(
               "if",
@@ -455,38 +435,12 @@ export function RuleEditor({
                 "review",
                 <>
                   <div className="grid items-start gap-x-4 gap-y-3 @min-[640px]:grid-cols-2">{nameFields}</div>
-                  {/* "See what it would have done": inline when there's no side panel. */}
-                  <div className="flex flex-col gap-3 @min-[1024px]:hidden">{preview}</div>
+                  {/* "See what it would have done", before creating it. */}
+                  <div className="flex flex-col gap-3">{preview}</div>
                 </>,
               )}
           </div>
 
-          {canvasWide ? null : panelOpen ? (
-            <aside
-              aria-label="Preview"
-              className="hidden min-w-0 flex-col gap-3 @min-[1024px]:col-start-2 @min-[1024px]:row-span-2 @min-[1024px]:row-start-1 @min-[1024px]:sticky @min-[1024px]:top-4 @min-[1024px]:flex @min-[1024px]:max-h-[calc(100vh-112px)] @min-[1024px]:overflow-y-auto"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-ink">Preview</h2>
-                <IconButton aria-label="Hide preview" aria-expanded aria-controls="rule-preview-panel" onClick={() => togglePanel(false)}>
-                  <PanelRightClose aria-hidden size={16} />
-                </IconButton>
-              </div>
-              <div id="rule-preview-panel" className="flex flex-col gap-3">
-                {preview}
-              </div>
-            </aside>
-          ) : (
-            <button
-              type="button"
-              aria-expanded={false}
-              onClick={() => togglePanel(true)}
-              className="hidden items-center gap-2 justify-self-end rounded-lg @min-[1024px]:col-start-2 @min-[1024px]:row-span-2 @min-[1024px]:row-start-1 border border-border bg-surface px-1.5 py-3 text-[13px] font-medium text-ink-muted shadow-card hover:text-ink @min-[1024px]:sticky @min-[1024px]:top-4 @min-[1024px]:flex @min-[1024px]:flex-col"
-            >
-              <PanelRightOpen aria-hidden size={16} />
-              <span className="[writing-mode:vertical-rl]">Preview</span>
-            </button>
-          )}
         </div>
 
         {/* One save bar (DESIGN.md §7): always while creating; while editing,

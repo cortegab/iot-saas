@@ -59,27 +59,20 @@ test("a saved rule: tabs in the URL, a condition edited in its sheet, Activity h
   await expect(tabs.getByRole("tab", { name: /^If/ })).toHaveAttribute("aria-selected", "true");
 });
 
-test("the preview is a collapsible panel beside the 760px editor, and behind a button when there's no room", async ({ page, ruleUnderTest }) => {
-  await page.setViewportSize({ width: 1600, height: 900 });
-  await page.goto(`/rules/${ruleUnderTest.id}`);
-  const panel = page.getByRole("complementary", { name: "Preview" });
-  await expect(panel).toBeVisible();
-  // The same column as every editor (DESIGN.md §4).
-  expect((await page.getByRole("tablist", { name: "Rule sections" }).boundingBox())!.width).toBeLessThanOrEqual(760);
-
-  // Collapsed, it's a slim tab; the choice survives a reload; the tab reopens it.
-  await page.getByRole("button", { name: "Hide preview" }).click();
-  await expect(panel).toHaveCount(0);
-  await page.reload();
-  await expect(page.getByRole("complementary", { name: "Preview" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Preview", exact: true }).click();
-  await expect(page.getByRole("complementary", { name: "Preview" })).toBeVisible();
-
-  // 1000px with the rail leaves ~856px of content: no room for the panel.
-  await page.setViewportSize({ width: 1000, height: 800 });
-  await expect(page.getByRole("complementary", { name: "Preview" })).toBeHidden();
-  await page.getByRole("button", { name: "Preview", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Preview" })).toBeVisible();
+test("the preview is behind its button at every width, beside the 760px editor", async ({ page, ruleUnderTest }) => {
+  for (const width of [1600, 400]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/rules/${ruleUnderTest.id}`);
+    // The same column as every editor (DESIGN.md §4), and no side panel.
+    expect((await page.getByRole("tablist", { name: "Rule sections" }).boundingBox())!.width).toBeLessThanOrEqual(760);
+    await expect(page.getByRole("complementary", { name: "Preview" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Preview" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole("heading", { name: "Last 24 hours" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  }
 });
 
 test("walking a recipe to Review creates nothing until Create rule", async ({ page }) => {
