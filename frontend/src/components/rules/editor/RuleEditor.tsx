@@ -387,7 +387,7 @@ export function RuleEditor({
       <form onSubmit={handleSubmit} className="@container flex flex-1 flex-col gap-4">
         {/* DESIGN.md §9.2: the 760px editor column every editor has, and the
             preview as a collapsible side panel when there is room for it. */}
-        <div className="grid items-start gap-x-6 gap-y-4 @min-[1024px]:grid-cols-[minmax(0,760px)_minmax(0,1fr)]">
+        <div className="grid items-start gap-x-6 gap-y-4 @min-[1024px]:grid-cols-[minmax(0,760px)_minmax(0,1fr)] @min-[1024px]:grid-rows-[auto_1fr]">
           <div className="flex min-w-0 max-w-[760px] flex-col gap-4 @min-[1024px]:col-start-1">
             {wizard && (
               <Stepper
