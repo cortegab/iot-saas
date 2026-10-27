@@ -502,7 +502,9 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
   column when there is room: a "Preview" header with a collapse button; collapsed, it becomes a
   slim vertical **Preview** tab and the column doesn't move. Open by default; the choice is
   remembered in this browser. Without room for it, a **Preview** button opens the same cards in a
-  sheet (bottom sheet on phones). The new-rule Review step shows them inline.
+  sheet (bottom sheet on phones). The new-rule Review step shows them inline. The **Ladder** canvas
+  (If / Then in Ladder view) is a diagram and takes the panel's room too; the preview goes behind
+  its button there, so a wide rung keeps scaling instead of turning vertical.
 - One **save bar** (§7: only while editing; always while creating): Discard · Save rule, "N to fix",
   Ctrl+S. Safety warnings show on the Behaviour tab's amber "!" and in the Checks card.
 - **Validation:**
