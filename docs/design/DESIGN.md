@@ -201,7 +201,7 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | **ProgressBar** | NEW | Only for a running job with real steps (the device Install). 6 px `--color-border` track, `--color-accent` fill, fully rounded. Determinate when the share done is known (with the % in words beside it); otherwise a sliding segment, static under reduced motion. Stage text sits above it, in words, never just a bar. `role="progressbar"`. |
 | EmptyState / ErrorState / LoadingSkeleton | existing | Every list and panel has all three. Empty explains why and offers the primary action. Error and empty never render together. |
 | Table | existing | See §6. |
-| **KPI strip** | NEW | 3–4 figures in one bordered strip, each a filter. Only on the alerts inbox (critical / warning / unread); list pages use the toolbar's status filter instead (§6). |
+| **KPI strip** | retired | No page uses it: every list, the alerts inbox included, filters by state from the toolbar's status filter (§6). |
 | **Mini strip / sparkline** | NEW | 48-cell 24 h strip (true / unknown-hatched / fired) for rules. Sparkline for readings. Uses `--color-chart`, with accent for fire marks. |
 | Readout / Metric | existing | Live values in Geist, tabular-nums, unit in muted. Stale values dim. A metric is named by its template **name** everywhere (readouts, chart pickers, legends, widget titles), with its wire key only when undeclared. Every surface formats a value the same way (`formatReading`): an on/off metric reads **On / Off** (capitalised, no unit), a number uses the template's decimals. |
 | **Trend chart** | existing | One component for the device page and the dashboard widget. A number is a line with a faint `--color-chart` gradient under it (about 18% at the top, fading to nothing at the bottom of the plot), with dashed rule thresholds. No reading markers on any metric: the line is the reading. An **on/off metric** is a **step line** on an **Off / On** axis with a light wash under On, and has no threshold line. Once aggregated it stays on Off / On: a minute or hour shows On if the metric was On at any point in it. The state is carried forward only from a bucket that held one state, otherwise the line breaks until the next reading. Never ramps, never a "% of readings". Gauges take numbers only. Ranges **1m · 10m · 1h · 6h · 24h · 7d**, opening on 10m. The time axis always spans the whole window ending at now and **slides forward live**, so gaps show as empty space; a drag-zoom pauses the slide and a double-click resumes it. A window with no readings keeps the empty frame with a muted "No readings in the last {range}", so the next reading appears in place. |
@@ -223,7 +223,10 @@ gets restyled to the tokens. **NEW** means it has to be created.
      that needs someone (offline, latched, can't evaluate) shows its count in red when it isn't
      zero, and what each state means is its hover title. Every list with states has one
      (Templates Enabled / Disabled, Zones In use / Empty, Members Active / Invited, API keys
-     Active / Revoked or expired); Dashboards has none.
+     Active / Revoked or expired, Notifications All / Unread / Critical / Warning, the last two
+     counting unread alerts); Dashboards has none. A list with a closely related feed may add it
+     as a last state that swaps the table for that feed (Rules → **Failed deliveries**); there are
+     no tabs above a list.
 3. **Active-filter chips** with a "Clear all" action; the result count is in the table footer.
 4. **Table**:
    - Sortable columns (the header shows the sort direction).
@@ -255,8 +258,11 @@ gets restyled to the tokens. **NEW** means it has to be created.
   chips stay in the toolbar.
 
 **Rules list:** the status filter is All · Armed · Fired (24 h) · Latched · Can't evaluate ·
-Disabled (a state that's on also shows as a chip, like any filter). The toolbar adds
-Device and Trigger filters and a **List / Ladder** view switch. Ladder shows each rule as a card with
+Disabled · **Failed deliveries** (a state that's on also shows as a chip, like any filter). The toolbar adds
+Device and Trigger filters and a **List / Ladder** view switch. Failed deliveries counts deliveries,
+not rules, in red when any: choosing it shows the delivery feed (When · Rule · Action · Error ·
+Retry) and hides the rule-only search, filters and view switch. `/rules/failed-actions` redirects
+to `/rules?state=failed`. Ladder shows each rule as a card with
 its read-only rung; a card opens the rule.
 
 ---
@@ -415,10 +421,12 @@ edits a whole record, and there is no "Expand" toggle.
   with its neighbour's in reading order, so the desktop layout stays intact apart from that swap.
 - **Notifications** (the tab bar calls it **Alerts**): one Line row per alert, with severity icon,
   title, detail, device and rule links and the time. Repeats of the same alert from the same source
-  group into one row (**×4**, "since 09:12, last 2 min ago"). Filters: severity, device, rule.
+  group into one row (**×4**, "since 09:12, last 2 min ago"). The status filter (§6) is All ·
+  Unread · Critical · Warning, counted per row of repeats (Critical and Warning: unread ones);
+  **Mark all as read** is the toolbar action. Filters: severity, device, rule.
   A row opens a sheet with the details. With the alarm lifecycle (§13) it becomes an alarm inbox:
-  tabs **Active · Acknowledged · Cleared · All** with counts, KPIs for active critical and warning
-  alarms, **Acknowledge…** with an optional note (one or many, with Undo), "Acknowledged by *name*
+  states **Active · Acknowledged · Cleared · All** with counts, active critical and warning
+  alarms in red, **Acknowledge…** with an optional note (one or many, with Undo), "Acknowledged by *name*
   2 min ago: *note*" for everyone, a timeline per alarm, and the bell and the Alerts tab counting
   active alarms only. Until then they count unread.
 - **Members:** a role is changed on the member's own page (`/members/{id}`), with a confirmation that states the new permissions; invites are their own rows (changelog 2026-09-30, 2026-10-02).
@@ -587,7 +595,7 @@ path (CLAUDE.md §9.1).
 - Each row shows a 24 h mini strip and "fired N× in 24 h" (or "quiet in 24 h"; schedule rules show
   their schedule).
 - A **"shares fan1"** warning tag appears when another enabled rule drives the same actuator.
-- KPI filters and the List / Ladder view: §6.
+- The status filter (with Failed deliveries) and the List / Ladder view: §6.
 
 ### 9.10 Ladder (expert)
 
@@ -677,7 +685,7 @@ path (CLAUDE.md §9.1).
   | window ≥ 1440 | Full sidebar (§4). |
   | window ≤ 640 | Top bar + bottom tab bar; sheets open from the bottom where §5 says so. |
   | content ≥ 1080 | The rule preview sits beside the editor (§9.2). |
-  | content ≤ 860 | P3 columns fold; KPI strips wrap. |
+  | content ≤ 860 | P3 columns fold. |
   | content ≤ 720 | P2 columns fold; 3–4 column grids become 2. |
   | content ≤ 640 | Wizard steps become "Step n of N"; dashboard edit becomes a list. |
   | content ≤ 600 | Tables become cards; the sentence tightens; the ladder goes vertical if it doesn't fit. |
@@ -829,3 +837,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-23 | §8 notifications, after review (too much empty space): rows follow demo H's alarm row — a bare 17 px severity icon, one column with the bold title (×N), the detail in muted 12.5 px and a small meta line (time, then device / rule / template links), and on the right the state and its action: an **Unread** pill and **Mark read** / **Mark unread**, then ⋯ (Dismiss). Unread rows carry the 3 px accent bar on their left edge instead of a tinted background; the chevron goes (the whole row opens the sheet); the list has no shadow. On phones the right group wraps under the text. The footer counts against all alerts. |
 | 2026-10-24 | §6 pagination, after review: every list that can grow pages at 25 / 50 / 100 with the one footer (`TableFooter`; below 25 rows it shows only the count). **History is paged by the API** (limit / offset, total in `X-Total-Count`), so all of it can be browsed, not only the latest 50–100: the command timeline (its Result and Actuator filters now apply on the server), a rule's Recent firings and Versions, and Failed deliveries (`components/list/useServerPager.ts`; page state per list, not in the URL, so two lists on one page don't clash; realtime refreshes every loaded page). The device Rules tab and the rules Ladder view page in the browser (`usePager`, and the list's own URL paging). **Notifications** load the latest 100 and **Show older** adds 100 at a time, up to 500, so grouping repeats, the filters and read / unread keep working over everything shown. Lists bounded by design never page: a dashboard's widgets, a template's metrics and actuators, a device's readings and health, rule conditions and actions, the Add part picker, the command palette. |
 | 2026-10-26 | §5, §6 list pages, from the user's sketch and demo K option B (`redesign/demo-k-list-header.html`): the description sits **beside the title**; the **primary action** moves to the end of the toolbar's first row (the header keeps it only while there's no toolbar: loading, error, first use); the **KPI strip leaves list pages** for a **status filter with counts** on the toolbar's second row, with dots, a red count for states that need someone, and hover titles for what each state means. On phones it becomes a select. Every list with states gets one (Dashboards has none). The KPI strip stays only on the alerts inbox. Table starts about 100 px higher on Devices at 1440. |
+| 2026-10-26 | §6, §8, after #167: **Notifications** take the same toolbar: the description beside the title, **Mark all as read** at the end of row 1, and the KPI strip becomes the status filter All · Unread · Critical · Warning (Critical and Warning count unread alerts, in red). **Rules lose their tabs:** Failed deliveries is the last state of the status filter, counting deliveries; choosing it shows the delivery feed in place of the table. `/rules/failed-actions` redirects there. The KPI strip is retired. |

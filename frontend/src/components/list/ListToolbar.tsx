@@ -37,12 +37,15 @@ export function ListToolbar({
   activeFilters = 0,
   view,
   actions,
+  searchable = true,
   children,
 }: {
   /** A view switch (List / Ladder); stays in the toolbar on phones. */
   view?: ReactNode;
   /** The page's primary action ("Add device"), last in the first row. */
   actions?: ReactNode;
+  /** False hides the search, for a state whose rows can't be searched. */
+  searchable?: boolean;
   /** How many filters are on, for the phone's Filters button. */
   activeFilters?: number;
   query: string;
@@ -77,18 +80,20 @@ export function ListToolbar({
   return (
     <div className="flex flex-col gap-2.5">
       <div className="flex flex-wrap items-center gap-2.5">
-        <div className="relative min-w-0 flex-[1_1_220px] sm:max-w-[320px]">
-          <Search aria-hidden size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
-          <Input
-            type="search"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={placeholder}
-            aria-label={placeholder}
-            autoComplete="off"
-            className="pl-8"
-          />
-        </div>
+        {searchable && (
+          <div className="relative min-w-0 flex-[1_1_220px] sm:max-w-[320px]">
+            <Search aria-hidden size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
+            <Input
+              type="search"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={placeholder}
+              aria-label={placeholder}
+              autoComplete="off"
+              className="pl-8"
+            />
+          </div>
+        )}
         {children &&
           (phone ? (
             <>

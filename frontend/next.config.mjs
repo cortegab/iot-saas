@@ -19,6 +19,8 @@ const nextConfig = {
       { source: "/settings/users", destination: "/members", permanent: false },
       { source: "/settings/roles", destination: "/members", permanent: false },
       { source: "/settings/tokens", destination: "/keys", permanent: false },
+      // Failed deliveries became a state of the Rules list (DESIGN.md §6).
+      { source: "/rules/failed-actions", destination: "/rules?state=failed", permanent: false },
     ];
   },
 };

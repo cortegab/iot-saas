@@ -22,14 +22,16 @@ import { LadderOverview } from "@/components/rules/ladder/LadderOverview";
 import { RulePeek } from "@/components/rules/RulePeek";
 import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { usePeek } from "@/components/list/usePeek";
-import { RulesTabs } from "@/components/rules/RulesTabs";
+import { FailedActionsList } from "@/components/rules/FailedActionsList";
 import { useRuleActions } from "@/components/rules/useRuleActions";
+import { useServerPager } from "@/components/list/useServerPager";
 import { ApiRequestError } from "@/lib/api-client";
 import { RULE_STATE, actionsText, ruleStateKey, sharedActuators, triggerKindText, triggerText, type RuleStateKey } from "@/lib/rule-text";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
+type FailedActionResponse = components["schemas"]["FailedActionResponse"];
 
 /** The Trigger filter (DESIGN.md §6 rules list). */
 const TRIGGERS = [
@@ -64,6 +66,10 @@ export default function RulesPage() {
   const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>("/rules", { refreshInterval: 30_000 });
 
   const list = useListState({ state: "all", device: "all", trigger: "all", view: "list" }, { key: "name", dir: "asc" });
+  // Failed deliveries is the status filter's last state (DESIGN.md §6): its
+  // count is the feed's X-Total-Count, the same first page FailedActionsList asks for.
+  const { total: failedTotal } = useServerPager<FailedActionResponse>("/rules/failed-actions");
+  const showFailed = list.filters.state === "failed";
 
   const shared = useMemo(() => sharedActuators(rules ?? []), [rules]);
   // The mini strips; rule_execution frames revalidate rules, this follows.
@@ -174,7 +180,7 @@ export default function RulesPage() {
 
   const chips: FilterChip[] = [];
   if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
-  if (list.filters.state !== "all") {
+  if (list.filters.state !== "all" && !showFailed) {
     const label = list.filters.state === "stale" ? "Can't evaluate" : list.filters.state === "fired" ? "Fired in 24 h" : RULE_STATE[list.filters.state as RuleStateKey]?.label;
     chips.push({ id: "state", label: `State: ${label}`, onRemove: () => list.setFilter("state", "all") });
   }
@@ -205,7 +211,6 @@ export default function RulesPage() {
         description="Every reading is checked against these the moment it arrives."
         actions={!error && rules && total > 0 ? undefined : newAction}
       />
-      <RulesTabs active="rules" />
 
       {error ? (
         <ErrorState
@@ -229,6 +234,7 @@ export default function RulesPage() {
             query={list.q}
             onQuery={list.setQuery}
             placeholder="Search rules"
+            searchable={!showFailed}
             activeFilters={[list.filters.device, list.filters.trigger].filter((v) => v !== "all").length}
             actions={newAction}
             quick={{
@@ -242,10 +248,12 @@ export default function RulesPage() {
                 { value: "latched", label: "Latched", count: counts.latched, tone: "pending", shape: "square", hint: "Need a reset", alert: true },
                 { value: "stale", label: "Can't evaluate", count: counts.stale, tone: "unknown", shape: "hollow", hint: "An input has no data", alert: true },
                 { value: "disabled", label: "Disabled", count: counts.disabled, tone: "unknown", shape: "square", hint: "Not evaluated" },
+                // Deliveries, not rules: the feed replaces the table.
+                { value: "failed", label: "Failed deliveries", count: failedTotal, tone: "offline", hint: "Webhooks, emails and commands that didn't arrive", alert: true },
               ],
             }}
             view={
-              <SegmentedControl
+              showFailed ? undefined : <SegmentedControl
                 ariaLabel="Rules view"
                 value={list.filters.view === "ladder" ? "ladder" : "list"}
                 onChange={(v) => list.setFilter("view", v)}
@@ -256,6 +264,8 @@ export default function RulesPage() {
               />
             }
           >
+            {!showFailed && (
+            <>
             <Select
               aria-label="Filter by device"
               value={list.filters.device}
@@ -282,11 +292,15 @@ export default function RulesPage() {
                 </option>
               ))}
             </Select>
+            </>
+            )}
           </ListToolbar>
 
           <FilterChips chips={chips} onClearAll={list.clearAll} />
 
-          {filtered.length === 0 ? (
+          {showFailed ? (
+            <FailedActionsList />
+          ) : filtered.length === 0 ? (
             <NoResults noun="rules" hidden={total} onClear={list.clearAll} />
           ) : list.filters.view === "ladder" ? (
             <div className="flex flex-col gap-2">
