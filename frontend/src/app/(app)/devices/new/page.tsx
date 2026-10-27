@@ -17,7 +17,6 @@ import { Select } from "@/components/ui/Select";
 import { TemplateEditor } from "@/components/catalog/TemplateEditor";
 import { templateGivesFacts } from "@/components/catalog/template-facts";
 import { ApiRequestError } from "@/lib/api-client";
-import { handOffCredential } from "@/lib/credential-handoff";
 import type { RunsOn } from "@/lib/template-draft";
 import type { components } from "@/types/api";
 
@@ -95,7 +94,8 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
         ...(zoneId ? { zone_id: zoneId } : {}),
       });
       void revalidate("/devices");
-      handOffCredential(result.device, result.credential);
+      // Connect starts by creating its credential (DESIGN.md §8): the one
+      // made here is never shown.
       router.push(`/devices/${result.device.id}/connect`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");

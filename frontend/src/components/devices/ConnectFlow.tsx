@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect } from "react";
 import { Stepper } from "@/components/ui/Stepper";
 import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import { Badge } from "@/components/ui/Badge";
@@ -15,7 +14,6 @@ import { OptionsStep } from "@/components/devices/connect/OptionsStep";
 import { PhoneStep } from "@/components/devices/connect/PhoneStep";
 import { useConnectFlow, type ConnectFlow as Flow } from "@/components/devices/connect/useConnectFlow";
 import { ApiRequestError } from "@/lib/api-client";
-import { forgetCredential } from "@/lib/credential-handoff";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
 
 /** Connect a device (DESIGN.md §8, demo G): credential → options → flash →
@@ -52,7 +50,6 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
         }
       />
 
-      <ForgetWhenLive deviceId={deviceId} live={allLive} />
       {/* A wizard (DESIGN.md §5, demo H): the steps across the top, each
           step's content on the page, Back / Continue in the bottom bar. */}
       <section className={`${PAGE_WITH_BAR} @container min-w-0 max-w-[760px] gap-4`}>
@@ -70,15 +67,6 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
       </p>
     </>
   );
-}
-
-/** Once the device is live, its credential has done its job here: forget it
- * (lib/credential-handoff keeps it for the flow's length only). */
-function ForgetWhenLive({ deviceId, live }: { deviceId: string; live: boolean }) {
-  useEffect(() => {
-    if (live) forgetCredential(deviceId);
-  }, [deviceId, live]);
-  return null;
 }
 
 /** The wizard's steps (ui/Stepper). Wi-Fi is a step only when it's set up

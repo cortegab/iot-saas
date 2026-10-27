@@ -31,7 +31,6 @@ import { useRecordEditor } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
-import { handOffCredential } from "@/lib/credential-handoff";
 import { findDriver, useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import { resolveModel } from "@/lib/hardware/board-pins";
 import { blankHardware } from "@/lib/hardware/hardware-draft";
@@ -236,7 +235,6 @@ export function TemplateEditor({
             });
             void revalidate("/devices");
             void revalidate("/catalog");
-            handOffCredential(result.device, result.credential);
             router.push(`/devices/${result.device.id}/connect`);
           } else if (isNew) {
             const created = await api.post<CatalogEntryResponse>("/catalog", { name: body.name, ...parts });
