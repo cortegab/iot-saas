@@ -5,6 +5,7 @@ import Link from "next/link";
 import { BookOpen, Cpu, Plug, Plus, ToggleRight, Usb } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
+import { FactList } from "@/components/ui/FactList";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { ItemSheet } from "@/components/ui/ItemSheet";
@@ -53,6 +54,7 @@ export function HardwareSection({
   targetError,
   onKeepReading,
   guideHref,
+  showYield = true,
 }: {
   hardware: HardwareDraft | null;
   rows: { metrics: KeyedRow[]; actuators: KeyedRow[] };
@@ -71,6 +73,9 @@ export function HardwareSection({
   onKeepReading?: (bindingUid: string, channel: string, keep: boolean) => void;
   /** A saved template's wiring guide page; without it the guide shows here, folded. */
   guideHref?: string;
+  /** "What you'll see" (the metrics and actuators it yields). A device's
+   * Settings already lists them under Template, so it hides this. */
+  showYield?: boolean;
 }) {
   // What the last board change moved, for the author to rewire.
   const [moved, setMoved] = useState<{ board: string; pins: MovedPin[]; unsupported: string[] } | null>(null);
@@ -309,17 +314,19 @@ export function HardwareSection({
         )}
       </section>
 
-      <section aria-labelledby="hw-see" className="flex flex-col gap-2">
-        <h3 id="hw-see" className="text-sm font-semibold text-ink">
-          What you&apos;ll see
-        </h3>
-        <dl className="grid grid-cols-[minmax(0,120px)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[13.5px]">
-          <dt className="text-ink-muted">Metrics</dt>
-          <dd className="m-0 text-ink">{metricNames.length ? metricNames.join(", ") : <span className="text-ink-muted">None yet</span>}</dd>
-          <dt className="text-ink-muted">Actuators</dt>
-          <dd className="m-0 text-ink">{actuatorNames.length ? actuatorNames.join(", ") : <span className="text-ink-muted">None</span>}</dd>
-        </dl>
-      </section>
+      {showYield && (
+        <section aria-labelledby="hw-see" className="flex flex-col gap-2">
+          <h3 id="hw-see" className="text-sm font-semibold text-ink">
+            What you&apos;ll see
+          </h3>
+          <FactList
+            facts={[
+              ["Metrics", metricNames.length ? metricNames.join(", ") : <span key="m" className="text-ink-muted">None yet</span>],
+              ["Actuators", actuatorNames.length ? actuatorNames.join(", ") : <span key="a" className="text-ink-muted">None</span>],
+            ]}
+          />
+        </section>
+      )}
 
       {/* The guide lives on its own page for a saved template; a device's own
           wiring, or a template not saved yet, shows it here, folded. */}

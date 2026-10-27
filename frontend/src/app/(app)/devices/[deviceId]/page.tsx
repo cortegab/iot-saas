@@ -317,12 +317,11 @@ export default function DeviceDetailPage() {
 
       <TabPanel id="settings" active={tab} className="flex-1">
         {/* The one place a device is edited (DESIGN.md §7): plain stacked
-            sections, the Delete section last. */}
+            sections; Delete is in the header's ⋯ menu. */}
         <DeviceEditor
           deviceId={deviceId}
           embedded
           onRotate={() => void actions.rotate(device)}
-          onDelete={() => void actions.remove([device], () => router.push("/devices"))}
         />
       </TabPanel>
       {actions.dialog}

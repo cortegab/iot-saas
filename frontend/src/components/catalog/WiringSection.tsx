@@ -11,6 +11,8 @@ import type { HardwareDraft, KeyedRow } from "@/lib/hardware/hardware-draft";
  * catalog, then whatever the host adds below (`children`). */
 export function WiringSection({
   lead,
+  header,
+  showYield,
   hardware,
   rows,
   readOnly,
@@ -23,6 +25,10 @@ export function WiringSection({
   children,
 }: {
   lead: ReactNode;
+  /** Above the wiring: a device's Inherited line (the template's or its own). */
+  header?: ReactNode;
+  /** See HardwareSection. */
+  showYield?: boolean;
   /** The wiring to show; null = none yet (offers to start one), undefined =
    * no editor at all (the host explains why in `children`). */
   hardware: HardwareDraft | null | undefined;
@@ -41,6 +47,7 @@ export function WiringSection({
   const { data, error, isLoading } = useDriverCatalog();
   return (
     <EditorSection id="hardware" title="Wiring" lead={lead}>
+      {header}
       {hardware !== undefined && (
         <HardwareSection
           hardware={hardware}
@@ -53,6 +60,7 @@ export function WiringSection({
           targetError={targetError}
           onKeepReading={onKeepReading}
           guideHref={guideHref}
+          showYield={showYield}
         />
       )}
       {children}
