@@ -10,10 +10,10 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
+import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-export type ToastTone = "success" | "error" | "info";
+export type ToastTone = "success" | "warning" | "error" | "info";
 
 export interface ToastOptions {
   title: string;
@@ -41,6 +41,7 @@ export function useToast(): (t: ToastOptions) => void {
 
 const ICON: Record<ToastTone, { Icon: typeof Info; className: string }> = {
   success: { Icon: CheckCircle2, className: "text-status-online" },
+  warning: { Icon: AlertTriangle, className: "text-status-pending" },
   error: { Icon: AlertCircle, className: "text-status-error" },
   info: { Icon: Info, className: "text-accent" },
 };

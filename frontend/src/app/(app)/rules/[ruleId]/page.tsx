@@ -5,6 +5,7 @@ import { useState } from "react";
 import { mutate as revalidate } from "swr";
 import { Play } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useChangeToast } from "@/hooks/useChangeToast";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
@@ -12,6 +13,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { StateChip } from "@/components/ui/StateChip";
 import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import { MiniStrip } from "@/components/ui/MiniStrip";
 import { Callout } from "@/components/ui/Callout";
@@ -76,6 +78,18 @@ export default function EditRulePage() {
   const ruleActivity = activity?.find((a) => a.rule_id === params.ruleId);
   const lastFired = ruleActivity?.last_fired_at;
   const actions = useRuleActions();
+  // DESIGN.md §5: a state that changes while the page is open gets a toast;
+  // the header's chip and callouts carry it from then on.
+  useChangeToast(rule?.id, rule ? unhealthySummary(rule) : undefined, (before, now) =>
+    now && !before
+      ? { tone: "warning", title: "Can't evaluate now", detail: `${now}. Missing data never fires or clears it.` }
+      : !now && before
+        ? { tone: "success", title: "Evaluating again", detail: "Its inputs are fresh." }
+        : null,
+  );
+  useChangeToast(rule?.id, rule?.latched, (before, now) =>
+    now && !before ? { tone: "warning", title: "Latched", detail: "It fired and won't fire again until someone resets it." } : null,
+  );
 
   if (isLoading) return <LoadingSkeleton rows={4} rowClassName="h-12" />;
   if (error) {
@@ -113,6 +127,11 @@ export default function EditRulePage() {
           <span className="flex flex-wrap items-center gap-x-1.5">
             <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
             {rule.trigger.type === "schedule" ? (lastFired ? `fired ${timeAgo(lastFired)}` : "never fired") : fired ? `fired ${fired}× in 24 h` : "quiet in 24 h"}
+            {unhealthy && (
+              <StateChip label="Can't evaluate" className="ml-1">
+                <b className="font-medium">{unhealthy}.</b> Missing data never fires or clears it.
+              </StateChip>
+            )}
           </span>
         }
         title={rule.name}
@@ -145,11 +164,6 @@ export default function EditRulePage() {
         </Callout>
       )}
 
-      {unhealthy && (
-        <Callout className="max-w-[760px]">
-          <b className="font-medium">Can&rsquo;t evaluate now.</b> {unhealthy}. Missing data never fires or clears it.
-        </Callout>
-      )}
 
         {restored && (
           <Callout tone="info" className="mb-3 max-w-[760px]">
