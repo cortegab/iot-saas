@@ -77,13 +77,18 @@ test("notifications: repeats group into one row with ×2, and filters narrow by 
     await expect(page.getByText("Severity: Critical")).toBeVisible();
     await expect(rows).toHaveCount(0);
 
-    // The severity row (demo H): Unread shows only what's unread.
+    // The status filter (DESIGN.md §6): Unread shows only what's unread,
+    // Critical the unread critical ones, All clears both.
     await page.getByRole("button", { name: "Clear all" }).click();
-    const kpis = page.getByRole("group", { name: "Unread alerts" });
-    await kpis.getByRole("button", { name: /^Unread/ }).click();
+    const states = page.getByRole("group", { name: "Filter by state" });
+    await states.getByRole("button", { name: /^Unread/ }).click();
     await expect(page).toHaveURL(/show=unread/);
-    await kpis.getByRole("button", { name: /^Unread/ }).click();
+    await states.getByRole("button", { name: /^Critical/ }).click();
+    await expect(page).toHaveURL(/severity=critical/);
+    await expect(states.getByRole("button", { name: /^Critical/ })).toHaveAttribute("aria-pressed", "true");
+    await states.getByRole("button", { name: /^All/ }).click();
     await expect(page).not.toHaveURL(/show=unread/);
+    await expect(page).not.toHaveURL(/severity=/);
   } finally {
     await request.delete(`${API_URL}/catalog/${entry.id}`, { headers });
     const feed = (await (await request.get(`${API_URL}/notifications`, { headers })).json()) as { id: string; message: string }[];
