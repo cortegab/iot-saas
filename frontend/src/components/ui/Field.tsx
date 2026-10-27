@@ -48,7 +48,9 @@ export function Field({ label, optional, hint, error, warning, action, inline, c
   return (
     // content-start / self-start: a Field never stretches to its row's tallest
     // neighbour, so a hint under one field can't move or grow the next control.
-    <div className={cn("relative grid min-w-0 content-start gap-[5px] self-start", inline && "grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3", className)}>
+    // w-full: in a flex-col parent self-start acts on the horizontal axis and
+    // would shrink the Field to its content, so the width is set explicitly.
+    <div className={cn("relative grid w-full min-w-0 content-start gap-[5px] self-start", inline && "grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3", className)}>
       <label className={cn("grid min-w-0 content-start gap-[5px]", inline && "col-span-2 grid-cols-subgrid items-center")}>
         <span className={cn("text-xs font-medium text-ink-muted", inline && "text-[13px] text-ink")}>
           {label}
