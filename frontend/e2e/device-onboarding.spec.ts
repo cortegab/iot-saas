@@ -142,12 +142,14 @@ test("a new device just like an existing template offers that template, and uses
   }
 });
 
-test("add device starts as two cards; From a template says what the template gives you", async ({ page }) => {
+test("add device starts as two cards; From a template says what the template gives", async ({ page }) => {
   await page.goto("/devices/new");
   const start = page.getByRole("radiogroup", { name: "How to start" });
   await expect(start.getByRole("radio", { name: /^From a template/ })).toBeChecked();
   await expect(page.getByLabel("Device name")).toBeVisible();
-  await expect(page.getByText("It gives you")).toBeVisible();
+  // What the template gives, as facts (DESIGN.md §5 FactList, §11 wording).
+  await expect(page.getByRole("term").filter({ hasText: /^Metrics$/ })).toBeVisible();
+  await expect(page.getByRole("term").filter({ hasText: /^Actuators$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create device" })).toBeDisabled();
 
   // Something new: the wizard, with the same cards above its first question.

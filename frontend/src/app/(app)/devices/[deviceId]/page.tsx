@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus, Wrench, Zap } from "lucide-react";
@@ -13,6 +13,7 @@ import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { FactList } from "@/components/ui/FactList";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Readout } from "@/components/ui/Readout";
@@ -340,21 +341,15 @@ function uptime(s: number): string {
 /** The device's own report (demo H Health): signal, power, firmware, uptime
  * and the id it uses in MQTT topics. */
 function Health({ device }: { device: DeviceResponse }) {
-  const rows: [string, ReactNode][] = [
-    ["Signal", device.rssi != null ? `${device.rssi} dBm` : "—"],
-    ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : device.last_status_at ? "Mains" : "—"],
-    ["Firmware", device.fw_version ?? "—"],
-    ["Uptime", device.uptime_s != null ? uptime(device.uptime_s) : "—"],
-    ["MQTT id", <span key="id" className="font-mono">{device.slug}</span>],
-  ];
   return (
-    <dl className="grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-[13.5px]">
-      {rows.map(([k, v]) => (
-        <div key={k} className="contents">
-          <dt className="text-ink-muted">{k}</dt>
-          <dd className="m-0 min-w-0 break-words text-ink">{v}</dd>
-        </div>
-      ))}
-    </dl>
+    <FactList
+      facts={[
+        ["Signal", device.rssi != null ? `${device.rssi} dBm` : "—"],
+        ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : device.last_status_at ? "Mains" : "—"],
+        ["Firmware", device.fw_version ?? "—"],
+        ["Uptime", device.uptime_s != null ? uptime(device.uptime_s) : "—"],
+        ["MQTT id", <span key="id" className="font-mono">{device.slug}</span>],
+      ]}
+    />
   );
 }

@@ -11,6 +11,7 @@ import { Callout } from "@/components/ui/Callout";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { FactList } from "@/components/ui/FactList";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -21,6 +22,7 @@ import { EditorFrame, EditorSection } from "@/components/editor/EditorFrame";
 import { useRecordEditor, type Validation } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { WiringSection } from "@/components/catalog/WiringSection";
+import { templateGivesFacts } from "@/components/catalog/template-facts";
 import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
 import { useDriverCatalog, type DriverSpec } from "@/lib/hardware/driver-catalog";
@@ -82,8 +84,6 @@ function validate(d: DeviceDraft, rows: Rows, catalog: HardwareCatalog | undefin
 const wiringBody = (w: HardwareDraft | null, rows: Rows, drivers: DriverSpec[] | undefined) => JSON.stringify(hardwareToRequest(w, rows, drivers));
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
-const KV = "grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-[13.5px] text-ink max-sm:grid-cols-1 max-sm:gap-y-1 max-sm:[&_dd]:mb-2";
 
 /** Edit a device's name, zone and rule evaluation (DESIGN.md §7/§8). It
  * lives in the device page's Settings tab (`embedded`: the page has the
@@ -298,26 +298,21 @@ export function DeviceEditor({
 
         <EditorSection id="template" title="Template" lead="A device keeps the template it was added with.">
           {template ? (
-            <dl className={KV}>
-              <dt className="text-ink-muted">Template</dt>
-              <dd className="m-0">
-                <Link href={`/templates/${template.id}`} className="text-accent hover:underline">
-                  {template.name}
-                </Link>
-                <span className="text-ink-muted"> · {template.runs_on === "generic_firmware" ? "Our firmware" : "Custom firmware"}</span>
-              </dd>
-              <dt className="text-ink-muted">Wiring</dt>
-              <dd className="m-0">{d.wiring ? "Its own (overrides the template's)" : template.hardware ? "The template's" : "None: it runs a sketch"}</dd>
-              <dt className="text-ink-muted">Gives it</dt>
-              <dd className="m-0">
-                {[
-                  template.metrics.length ? `Metrics: ${template.metrics.map((m) => m.name).join(", ")}` : null,
-                  template.actuators.length ? `Actuators: ${template.actuators.map((a) => a.name).join(", ")}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || "No metrics or actuators"}
-              </dd>
-            </dl>
+            <FactList
+              facts={[
+                [
+                  "Template",
+                  <>
+                    <Link href={`/templates/${template.id}`} className="text-accent hover:underline">
+                      {template.name}
+                    </Link>
+                    <span className="text-ink-muted"> · {template.runs_on === "generic_firmware" ? "Our firmware" : "Custom firmware"}</span>
+                  </>,
+                ],
+                ["Wiring", d.wiring ? "Its own (overrides the template's)" : template.hardware ? "The template's" : "None: it runs a sketch"],
+                ...templateGivesFacts(template),
+              ]}
+            />
           ) : (
             <LoadingSkeleton rows={2} rowClassName="h-5" />
           )}
@@ -325,7 +320,6 @@ export function DeviceEditor({
 
         {template && d.wiring && (
           <WiringSection
-           
             lead="This device is wired its own way. Template edits to the wiring don't reach it; its metrics and actuators still come from the template."
             hardware={d.wiring}
             rows={rows}
@@ -352,7 +346,6 @@ export function DeviceEditor({
 
         {template && !d.wiring && (
           <WiringSection
-           
             lead="How this board is wired, for installing from the browser. It follows the template unless this one is built differently: another board, a moved pin, a different sensor."
             hardware={templateWiring ?? undefined}
             rows={rows}
@@ -390,33 +383,39 @@ export function DeviceEditor({
 
         {embedded && (
           <EditorSection id="connection" title="Connection">
-            <dl className={KV}>
-              <dt className="text-ink-muted">MQTT username</dt>
-              <dd className="m-0 flex min-w-0 flex-wrap items-center gap-x-2">
-                <span className="break-all font-mono text-[13px] text-ink">{device.id}</span>
-                <Button variant="link" className="text-[13px]" onClick={() => void copyUsername()}>
-                  Copy
-                </Button>
-              </dd>
-              <dt className="text-ink-muted">Password</dt>
-              <dd className="m-0 flex flex-wrap items-center gap-x-2">
-                <span>Shown once when created, stored hashed.</span>
-                {!readOnly && onRotate && (
-                  <Button variant="link" className="text-[13px]" onClick={onRotate}>
-                    Rotate credential…
-                  </Button>
-                )}
-              </dd>
-              <dt className="text-ink-muted">Topics</dt>
-              <dd className="m-0 min-w-0">
-                <details className="group">
-                  <summary className="cursor-pointer text-accent hover:underline">Show its MQTT topics</summary>
-                  <div className="mt-2 flex flex-col gap-2">
-                    <DeviceTopics device={device} template={template} />
-                  </div>
-                </details>
-              </dd>
-            </dl>
+            <FactList
+              facts={[
+                [
+                  "MQTT username",
+                  <span key="username" className="flex min-w-0 flex-wrap items-center gap-x-2">
+                    <span className="break-all font-mono text-[13px]">{device.id}</span>
+                    <Button variant="link" className="text-[13px]" onClick={() => void copyUsername()}>
+                      Copy
+                    </Button>
+                  </span>,
+                ],
+                [
+                  "Password",
+                  <span key="password" className="flex flex-wrap items-center gap-x-2">
+                    <span>Shown once when created, stored hashed.</span>
+                    {!readOnly && onRotate && (
+                      <Button variant="link" className="text-[13px]" onClick={onRotate}>
+                        Rotate credential…
+                      </Button>
+                    )}
+                  </span>,
+                ],
+                [
+                  "Topics",
+                  <details key="topics" className="group">
+                    <summary className="cursor-pointer text-accent hover:underline">Show its MQTT topics</summary>
+                    <div className="mt-2 flex flex-col gap-2">
+                      <DeviceTopics device={device} template={template} />
+                    </div>
+                  </details>,
+                ],
+              ]}
+            />
           </EditorSection>
         )}
 
