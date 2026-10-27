@@ -124,11 +124,7 @@ export function KeyEditor({
           mode={mode}
           noun="key"
           title={key.name}
-          eyebrow={
-            <>
-              API key <Badge tone={KEY_STATUS_TONE[st]} label={KEY_STATUS_LABEL[st]} />
-            </>
-          }
+          eyebrow={<Badge tone={KEY_STATUS_TONE[st]} label={KEY_STATUS_LABEL[st]} />}
           consequence="Keys can't be edited. To change a key's role or expiry, create a new one and revoke this one."
           sections={[{ id: "key", label: "Key" }]}
           status={editor}

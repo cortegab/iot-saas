@@ -162,8 +162,8 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
             undefined
           ) : (
             <>
-              Member{member!.joined_at && <span>· joined {formatWhen(member!.joined_at)}</span>}
-              {isMe && <span>· you</span>}
+              {member!.joined_at && <span>Joined {formatWhen(member!.joined_at)}</span>}
+              {isMe && <span>{member!.joined_at ? "· you" : "You"}</span>}
             </>
           )
         }

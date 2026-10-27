@@ -32,11 +32,17 @@ export interface EditorGroupDef {
 interface EditorNav {
   /** Whether a section is in the tab or step on show. */
   visible: (sectionId: string) => boolean;
+  /** Whether a section is alone in its tab or step (its heading would only
+   * repeat the tab label or the step's question). */
+  alone: (sectionId: string) => boolean;
   /** Show a tab or step (Review's "Change" links). */
   goTo: (groupId: string) => void;
 }
 
 const EditorNavContext = createContext<EditorNav | null>(null);
+
+/** A page editor with one section and no tabs or steps: the title says it all. */
+const SoleSectionContext = createContext(false);
 
 /** The tab / step controls of the enclosing editor, or null for a rail. */
 export function useEditorNav(): EditorNav | null {
@@ -49,6 +55,10 @@ function shownInvalid(root: HTMLElement | null): HTMLElement[] {
     (el) => el.getClientRects().length > 0,
   );
 }
+
+/** A hairline above every shown section that follows another shown one. */
+const SECTION_RULES =
+  "[&_section[data-editor-section]:not([hidden])~section[data-editor-section]:not([hidden])]:border-t [&_section[data-editor-section]:not([hidden])~section[data-editor-section]:not([hidden])]:border-border-soft [&_section[data-editor-section]:not([hidden])~section[data-editor-section]:not([hidden])]:pt-7";
 
 const nextFrame = (fn: () => void) => window.requestAnimationFrame(() => window.requestAnimationFrame(fn));
 
@@ -118,21 +128,24 @@ export function EditorSection({
   title,
   lead,
   actions,
-  card = false,
   tone,
   children,
 }: {
   id: string;
-  title: ReactNode;
+  /** Omitted, or hidden when the section is alone on its page, tab or step. */
+  title?: ReactNode;
   lead?: ReactNode;
   actions?: ReactNode;
-  /** A bordered card (stacked settings, e.g. a device's Settings tab). */
-  card?: boolean;
-  /** "danger": the red-outlined Danger zone, always last. */
+  /** "danger": the red heading of a danger section, always last (DESIGN.md
+   * §7: only on a page with no record menu, e.g. Leave workspace). */
   tone?: "danger";
   children: ReactNode;
 }) {
   const nav = useEditorNav();
+  const sole = useContext(SoleSectionContext);
+  // DESIGN.md §7: a heading never repeats the page title, the tab label or the
+  // step's question, so a section alone on its page, tab or step has none.
+  const heading = title != null && !sole && !nav?.alone(id) ? title : null;
   return (
     <section
       id={`ps-${id}`}
@@ -140,17 +153,15 @@ export function EditorSection({
       // Kept mounted while another tab or step shows, so its fields still
       // validate and keep their state.
       hidden={nav ? !nav.visible(id) : undefined}
-      className={cn(
-        "flex scroll-mt-6 flex-col gap-3",
-        card && "rounded-xl border border-border bg-surface p-5 shadow-card",
-        tone === "danger" && "border-status-error/45",
-      )}
+      className="flex scroll-mt-6 flex-col gap-3"
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className={cn("text-[15px] font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{title}</h3>
-        {actions}
-      </div>
-      {lead && <p className="-mt-1.5 max-w-[64ch] text-[13.5px] text-ink-muted">{lead}</p>}
+      {(heading != null || actions) && (
+        <div className="flex items-baseline justify-between gap-3">
+          {heading != null && <h3 className={cn("text-[15px] font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{heading}</h3>}
+          {actions}
+        </div>
+      )}
+      {lead && <p className={cn("max-w-[64ch] text-[13.5px] text-ink-muted", heading != null && "-mt-1.5")}>{lead}</p>}
       {children}
     </section>
   );
@@ -228,9 +239,13 @@ export function EditorFrame({
   const navValue = useMemo<EditorNav | null>(
     () =>
       grouped && activeGroup
-        ? { visible: (id) => activeGroup.sections.includes(id), goTo }
+        ? {
+            visible: (id) => activeGroup.sections.includes(id),
+            alone: (id) => groups?.find((g) => g.sections.includes(id))?.sections.length === 1,
+            goTo,
+          }
         : null,
-    [grouped, activeGroup, goTo],
+    [grouped, activeGroup, goTo, groups],
   );
 
   // A new step moves focus to its question. Only on a real change of step:
@@ -556,12 +571,14 @@ export function EditorFrame({
       className={cn(
         // @container: editor bodies lay out by their own width (dock vs page).
         "@container flex flex-col",
+        // DESIGN.md §4/§7: one 760px column; sections divided by hairlines.
+        mode === "page" && SECTION_RULES,
         headless
-          ? "max-w-[760px] gap-4 pb-4"
+          ? "max-w-[760px] gap-7 pb-4"
           : grouped
             ? "max-w-[760px] gap-7 py-5"
             : mode === "page"
-              ? "max-w-[980px] gap-7 py-6 [grid-area:body] wb:pt-2"
+              ? "max-w-[760px] gap-7 py-6 [grid-area:body] wb:pt-2"
               : "min-h-0 flex-1 gap-7 overflow-auto px-5 pb-8 pt-5",
       )}
     >
@@ -641,8 +658,10 @@ export function EditorFrame({
     </div>
   );
 
-  if (mode === "page") {
-    return (
+  const sole = !grouped && sections.length === 1;
+
+  const frame =
+    mode === "page" ? (
       <EditorNavContext.Provider value={navValue}>
         <div
           ref={rootRef}
@@ -662,25 +681,24 @@ export function EditorFrame({
           {foot}
         </div>
       </EditorNavContext.Provider>
+    ) : (
+      <div
+        ref={rootRef}
+        role={mode === "dock" ? "region" : undefined}
+        aria-label={mode === "dock" ? `${title} editor` : undefined}
+        className={cn(
+          "flex min-w-0 flex-col bg-surface [container-type:inline-size]",
+          mode === "dock"
+            ? "sticky top-4 h-[calc(100vh-32px)] overflow-hidden rounded-2xl border border-border shadow-pop motion-safe:animate-[panein_.18s_ease-out]"
+            : "h-full",
+        )}
+      >
+        {head}
+        {jump}
+        {body}
+        {foot}
+      </div>
     );
-  }
 
-  return (
-    <div
-      ref={rootRef}
-      role={mode === "dock" ? "region" : undefined}
-      aria-label={mode === "dock" ? `${title} editor` : undefined}
-      className={cn(
-        "flex min-w-0 flex-col bg-surface [container-type:inline-size]",
-        mode === "dock"
-          ? "sticky top-4 h-[calc(100vh-32px)] overflow-hidden rounded-2xl border border-border shadow-pop motion-safe:animate-[panein_.18s_ease-out]"
-          : "h-full",
-      )}
-    >
-      {head}
-      {jump}
-      {body}
-      {foot}
-    </div>
-  );
+  return <SoleSectionContext.Provider value={sole}>{frame}</SoleSectionContext.Provider>;
 }

@@ -221,7 +221,6 @@ export function DeviceEditor({
     ? "Saving applies right away. Renaming keeps its MQTT id, so the device doesn't need a new install."
     : `Saving stops rule evaluation for this device and refuses its connections. ${ruleCount ? `${plural(ruleCount, "rule")} stop evaluating it. ` : ""}Its history is kept.`;
   // Plain stacked sections, no boxes (demo H device Settings).
-  const card = false;
 
   return (
     <>
@@ -247,10 +246,10 @@ export function DeviceEditor({
         onSave={onSave}
         onDiscard={editor.discard}
       >
-        <div className="flex max-w-[760px] flex-col gap-7 [&>section+section]:border-t [&>section+section]:border-border-soft [&>section+section]:pt-7">
+        <div className="flex flex-col gap-7">
         {embedded && <p className="max-w-[70ch] text-[14px] text-ink-muted">{consequence}</p>}
 
-        <EditorSection id="general" title="General" card={card}>
+        <EditorSection id="general" title="General">
           <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Name" error={editor.errorFor("identity.name")} hint="Shown in lists, dashboards and alerts.">
             <Input
@@ -284,7 +283,7 @@ export function DeviceEditor({
           </div>
         </EditorSection>
 
-        <EditorSection id="status" title="Rule evaluation" card={card} lead={ruleCount ? `${plural(ruleCount, "rule")} use${ruleCount === 1 ? "s" : ""} this device.` : "No rules use this device yet."}>
+        <EditorSection id="status" title="Rule evaluation" lead={ruleCount ? `${plural(ruleCount, "rule")} use${ruleCount === 1 ? "s" : ""} this device.` : "No rules use this device yet."}>
           <SwitchField
             label="Status"
             checked={d.enabled}
@@ -297,7 +296,7 @@ export function DeviceEditor({
           />
         </EditorSection>
 
-        <EditorSection id="template" title="Template" card={card} lead="A device keeps the template it was added with.">
+        <EditorSection id="template" title="Template" lead="A device keeps the template it was added with.">
           {template ? (
             <dl className={KV}>
               <dt className="text-ink-muted">Template</dt>
@@ -326,7 +325,7 @@ export function DeviceEditor({
 
         {template && d.wiring && (
           <WiringSection
-            card={card}
+           
             lead="This device is wired its own way. Template edits to the wiring don't reach it; its metrics and actuators still come from the template."
             hardware={d.wiring}
             rows={rows}
@@ -353,7 +352,7 @@ export function DeviceEditor({
 
         {template && !d.wiring && (
           <WiringSection
-            card={card}
+           
             lead="How this board is wired, for installing from the browser. It follows the template unless this one is built differently: another board, a moved pin, a different sensor."
             hardware={templateWiring ?? undefined}
             rows={rows}
@@ -390,7 +389,7 @@ export function DeviceEditor({
         )}
 
         {embedded && (
-          <EditorSection id="connection" title="Connection" card={card}>
+          <EditorSection id="connection" title="Connection">
             <dl className={KV}>
               <dt className="text-ink-muted">MQTT username</dt>
               <dd className="m-0 flex min-w-0 flex-wrap items-center gap-x-2">
@@ -422,7 +421,7 @@ export function DeviceEditor({
         )}
 
         {embedded && !readOnly && onDelete && (
-          <EditorSection id="danger" title="Delete" card={card} tone="danger">
+          <EditorSection id="danger" title="Delete" tone="danger">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="min-w-0 flex-1 text-[13px] text-ink-muted">
                 Deletes its credential and history. {ruleCount ? `${plural(ruleCount, "rule")} and any widgets that use it stop working.` : "Widgets that use it stop working."}
