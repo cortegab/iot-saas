@@ -53,6 +53,29 @@ export function CopyField({
   );
 }
 
+/** A secondary "Copy" button beside a read-only field (the connect flow's
+ * credential): says Copied for a moment once it worked. */
+export function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={copied ? `${label} copied` : `Copy ${label}`}
+      onClick={() =>
+        void copyText(value).then((ok) => {
+          if (!ok) return;
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1500);
+        })
+      }
+      className={buttonClassName({ variant: "secondary" })}
+    >
+      {copied ? <Check aria-hidden size={14} className="text-status-online" /> : <Copy aria-hidden size={14} />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 export interface SecretField {
   label: string;
   value: string;
