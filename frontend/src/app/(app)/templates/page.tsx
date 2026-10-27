@@ -195,10 +195,13 @@ export default function DeviceTemplatesPage() {
 
   return (
     <>
+      {/* DESIGN.md §6: the primary action lives in the toolbar; the header
+          holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
+        inline
         title="Device templates"
         description="What a kind of device publishes and what it can switch. Devices are added from these."
-        actions={newAction}
+        actions={!error && entries && total > 0 ? undefined : newAction}
       />
 
       {error ? (
@@ -239,14 +242,15 @@ export default function DeviceTemplatesPage() {
             query={list.q}
             onQuery={list.setQuery}
             placeholder="Search templates"
+            actions={newAction}
             quick={{
               label: "Status",
               value: list.filters.status,
               onChange: (v) => list.setFilter("status", v),
               options: [
                 { value: "all", label: "All", count: counts.all },
-                { value: "active", label: "Enabled", count: counts.active },
-                { value: "disabled", label: "Disabled", count: counts.disabled },
+                { value: "active", label: "Enabled", count: counts.active, tone: "online", hint: "Can be picked for new devices" },
+                { value: "disabled", label: "Disabled", count: counts.disabled, tone: "unknown", shape: "square", hint: "Hidden from Add device" },
               ],
             }}
           />

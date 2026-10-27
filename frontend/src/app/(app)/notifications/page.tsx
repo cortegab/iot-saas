@@ -13,7 +13,6 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ItemSheet } from "@/components/ui/ItemSheet";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
-import { KpiStrip } from "@/components/ui/KpiStrip";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
@@ -148,6 +147,17 @@ export default function NotificationsPage() {
     if (g.unread) void readAll(g);
   }
 
+  // The status filter (DESIGN.md §6): Critical / Warning are unread alerts of
+  // that severity, so they sit on the show + severity filters already in the URL.
+  const fromState = list.filters.severity === "critical" || list.filters.severity === "warning";
+  const state = list.filters.show !== "unread" ? "all" : fromState ? list.filters.severity : "unread";
+  const setState = (v: string) =>
+    list.setFilters(
+      v === "critical" || v === "warning"
+        ? { show: "unread", severity: v }
+        : { show: v, severity: fromState && state !== "all" ? "all" : list.filters.severity },
+    );
+
   const chips: FilterChip[] = [];
   if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
   if (list.filters.severity !== "all")
@@ -158,17 +168,22 @@ export default function NotificationsPage() {
     chips.push({ id: "rule", label: `Rule: ${ruleName.get(list.filters.rule) ?? "unknown"}`, onRemove: () => list.setFilter("rule", "all") });
 
 
+  const markAllButton = (
+    <Button variant="secondary" disabled={unreadCount === 0} onClick={() => void markAllRead().then(() => toast({ title: "All notifications marked as read" }))}>
+      <CheckCheck aria-hidden size={15} />
+      Mark all as read
+    </Button>
+  );
+
   return (
     <>
+      {/* DESIGN.md §6: the action lives in the toolbar; the header holds it
+          only while there's no toolbar (loading, error, nothing yet). */}
       <PageHeader
+        inline
         title="Notifications"
         description="Alarms that need someone, and what happened. Open one for its details and links."
-        actions={
-          <Button variant="secondary" disabled={unreadCount === 0} onClick={() => void markAllRead().then(() => toast({ title: "All notifications marked as read" }))}>
-            <CheckCheck aria-hidden size={15} />
-            Mark all as read
-          </Button>
-        }
+        actions={!error && !isLoading && notifications.length > 0 ? undefined : markAllButton}
       />
 
       {error ? (
@@ -183,33 +198,23 @@ export default function NotificationsPage() {
         <EmptyState icon={<Bell aria-hidden size={26} />} title="Nothing needs attention" description="No alerts. New ones appear here, with a count in the sidebar." />
       ) : (
         <>
-          {/* demo H: what's waiting, by severity. Unread stands in for "not
-              acknowledged" until alarms have a lifecycle (DESIGN.md §13). */}
-          <KpiStrip
-            ariaLabel="Unread alerts"
-            active={list.filters.show !== "unread" ? null : list.filters.severity !== "all" ? list.filters.severity : "unread"}
-            onSelect={(id) => {
-              const on = list.filters.show === "unread" && (id === "unread" ? list.filters.severity === "all" : list.filters.severity === id);
-              list.setFilters({ show: on ? "all" : "unread", severity: on || id === "unread" ? "all" : id });
-            }}
-            items={[
-              { id: "critical", label: "Critical, unread", value: kpis.critical, tone: "offline" },
-              { id: "warning", label: "Warnings, unread", value: kpis.warning, tone: "pending" },
-              { id: "unread", label: "Unread", value: kpis.unread, tone: "accent" },
-            ]}
-          />
+          {/* demo H's severity figures, as the status filter. Unread stands in
+              for "not acknowledged" until alarms have a lifecycle (DESIGN.md §13). */}
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
             placeholder="Search notifications"
             activeFilters={[list.filters.severity, list.filters.device, list.filters.rule].filter((v) => v !== "all").length}
+            actions={markAllButton}
             quick={{
-              label: "Show",
-              value: list.filters.show,
-              onChange: (v) => list.setFilter("show", v),
+              label: "Filter by state",
+              value: state,
+              onChange: setState,
               options: [
-                { value: "all", label: "All", count: notifications.length },
-                { value: "unread", label: "Unread", count: unreadCount },
+                { value: "all", label: "All", count: kpis.all },
+                { value: "unread", label: "Unread", count: kpis.unread, tone: "accent", hint: "Not read yet" },
+                { value: "critical", label: "Critical", count: kpis.critical, tone: "offline", hint: "Critical, not read yet", alert: true },
+                { value: "warning", label: "Warning", count: kpis.warning, tone: "pending", hint: "Warnings, not read yet", alert: true },
               ],
             }}
           >

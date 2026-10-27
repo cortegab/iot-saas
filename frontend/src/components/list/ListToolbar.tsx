@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ListFilter, Search, X } from "lucide-react";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { Badge, type DotShape, type StatusTone } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/lib/cn";
 
@@ -12,11 +14,21 @@ export interface QuickFilterOption {
   value: string;
   label: string;
   count?: number;
+  /** Status dot before the label (status is never colour alone: the label says it). */
+  tone?: StatusTone;
+  shape?: DotShape;
+  /** What the state means ("waiting for first message"); the hover title. */
+  hint?: string;
+  /** A state that needs someone (offline, latched): its count turns red when not zero. */
+  alert?: boolean;
 }
 
-/** DESIGN.md §6 toolbar: search, filter controls, then (below) the active
- * filter chips. The search input debounces into the URL. On phones the
- * filter controls move into a **Filters** bottom sheet. */
+/** DESIGN.md §6 toolbar. Row 1: search, filter menus, the view switch and the
+ * page's primary action at the end. Row 2: the status filter with a count
+ * per state (it replaces the KPI strip on list pages). The search input
+ * debounces into the URL. On phones the filter menus move into a **Filters**
+ * bottom sheet and the status filter becomes a select; the primary action
+ * stays in the toolbar. */
 export function ListToolbar({
   query,
   onQuery,
@@ -24,18 +36,24 @@ export function ListToolbar({
   quick,
   activeFilters = 0,
   view,
+  actions,
+  searchable = true,
   children,
 }: {
   /** A view switch (List / Ladder); stays in the toolbar on phones. */
   view?: ReactNode;
+  /** The page's primary action ("Add device"), last in the first row. */
+  actions?: ReactNode;
+  /** False hides the search, for a state whose rows can't be searched. */
+  searchable?: boolean;
   /** How many filters are on, for the phone's Filters button. */
   activeFilters?: number;
   query: string;
   onQuery: (q: string) => void;
   placeholder: string;
-  /** Segmented quick filter with counts (All / Enabled / Disabled …). */
+  /** Status filter with counts (All / Online / Offline …), on its own row. */
   quick?: { label: string; value: string; options: QuickFilterOption[]; onChange: (v: string) => void };
-  /** Extra filter menus (selects), right-aligned. */
+  /** Filter menus (selects), after the search. */
   children?: ReactNode;
 }) {
   const [text, setText] = useState(query);
@@ -60,66 +78,83 @@ export function ListToolbar({
   }, [text, onQuery]);
 
   return (
-    <div className="flex flex-wrap items-center gap-2.5">
-      <div className="relative min-w-0 flex-[1_1_220px] sm:max-w-[320px]">
-        <Search aria-hidden size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
-        <Input
-          type="search"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          autoComplete="off"
-          className="pl-8"
-        />
+    <div className="flex flex-col gap-2.5">
+      <div className="flex flex-wrap items-center gap-2.5">
+        {searchable && (
+          <div className="relative min-w-0 flex-[1_1_220px] sm:max-w-[320px]">
+            <Search aria-hidden size={15} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
+            <Input
+              type="search"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={placeholder}
+              aria-label={placeholder}
+              autoComplete="off"
+              className="pl-8"
+            />
+          </div>
+        )}
+        {children &&
+          (phone ? (
+            <>
+              <Button variant="secondary" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
+                <ListFilter aria-hidden size={14} />
+                Filters
+                {activeFilters > 0 && <span className="text-xs tabular-nums text-accent-strong">{activeFilters}</span>}
+              </Button>
+              <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} label="Filters" side="bottom">
+                <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-3">
+                  <h2 className="text-base font-semibold text-ink">Filters</h2>
+                  <div className="flex flex-col gap-3 [&>*]:w-full">{children}</div>
+                  <Button onClick={() => setSheetOpen(false)}>Done</Button>
+                </div>
+              </Sheet>
+            </>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">{children}</div>
+          ))}
+        {view}
+        {actions && <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
-      {quick && (
-        <div role="group" aria-label={quick.label} className="inline-flex flex-wrap gap-0.5 rounded-md border border-border bg-surface-raised p-0.5">
-          {quick.options.map((o) => {
-            const on = quick.value === o.value;
-            return (
-              <button
-                key={o.value}
-                type="button"
-                aria-pressed={on}
-                onClick={() => quick.onChange(o.value)}
-                className={cn(
-                  "inline-flex min-h-[30px] items-center gap-1.5 rounded-[6px] px-3 text-[13px] transition-colors duration-150",
-                  on ? "bg-surface font-medium text-ink shadow-[0_1px_2px_rgba(0,0,0,.18)]" : "text-ink-muted hover:text-ink",
-                )}
-              >
-                {o.label}
-                {o.count != null && (
-                  <span className={cn("text-xs tabular-nums", on ? "text-accent-strong" : "text-ink-muted")}>{o.count}</span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {children &&
+      {quick &&
         (phone ? (
-          <>
-            <Button variant="secondary" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
-              <ListFilter aria-hidden size={14} />
-              Filters
-              {activeFilters > 0 && <span className="text-xs tabular-nums text-accent-strong">{activeFilters}</span>}
-            </Button>
-            <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} label="Filters" side="bottom">
-              <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-3">
-                <h2 className="text-base font-semibold text-ink">Filters</h2>
-                <div className="flex flex-col gap-3 [&>*]:w-full">{children}</div>
-                <Button onClick={() => setSheetOpen(false)}>Done</Button>
-              </div>
-            </Sheet>
-          </>
+          <Select aria-label={quick.label} value={quick.value} onChange={(e) => quick.onChange(e.target.value)}>
+            {quick.options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.count != null ? `${o.label} (${o.count})` : o.label}
+              </option>
+            ))}
+          </Select>
         ) : (
-          <div className="flex flex-wrap items-center gap-2 sm:ml-auto">{children}</div>
+          <div role="group" aria-label={quick.label} className="inline-flex flex-wrap gap-0.5 self-start rounded-md border border-border bg-surface-raised p-0.5">
+            {quick.options.map((o) => {
+              const on = quick.value === o.value;
+              return (
+                <button
+                  key={o.value}
+                  type="button"
+                  aria-pressed={on}
+                  title={o.hint}
+                  onClick={() => quick.onChange(o.value)}
+                  className={cn(
+                    "inline-flex min-h-[30px] items-center gap-[7px] rounded-[6px] px-3 text-[13.5px] transition-colors duration-150",
+                    on ? "bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,.18)]" : "text-ink-muted hover:text-ink",
+                  )}
+                >
+                  {o.tone && <Badge tone={o.tone} shape={o.shape} label={o.label} variant="indicator" />}
+                  {o.label}
+                  {o.count != null && (
+                    <span className={cn("font-semibold tabular-nums", o.alert && o.count > 0 ? "text-status-offline" : "text-ink")}>{o.count}</span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         ))}
-      {view}
     </div>
   );
 }
+
 
 export interface FilterChip {
   id: string;

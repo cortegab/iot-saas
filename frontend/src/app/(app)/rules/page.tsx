@@ -8,7 +8,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { KpiStrip } from "@/components/ui/KpiStrip";
 import { MiniStrip, type StripCell } from "@/components/ui/MiniStrip";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -23,14 +22,16 @@ import { LadderOverview } from "@/components/rules/ladder/LadderOverview";
 import { RulePeek } from "@/components/rules/RulePeek";
 import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { usePeek } from "@/components/list/usePeek";
-import { RulesTabs } from "@/components/rules/RulesTabs";
+import { FailedActionsList } from "@/components/rules/FailedActionsList";
 import { useRuleActions } from "@/components/rules/useRuleActions";
+import { useServerPager } from "@/components/list/useServerPager";
 import { ApiRequestError } from "@/lib/api-client";
 import { RULE_STATE, actionsText, ruleStateKey, sharedActuators, triggerKindText, triggerText, type RuleStateKey } from "@/lib/rule-text";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
+type FailedActionResponse = components["schemas"]["FailedActionResponse"];
 
 /** The Trigger filter (DESIGN.md §6 rules list). */
 const TRIGGERS = [
@@ -65,6 +66,10 @@ export default function RulesPage() {
   const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>("/rules", { refreshInterval: 30_000 });
 
   const list = useListState({ state: "all", device: "all", trigger: "all", view: "list" }, { key: "name", dir: "asc" });
+  // Failed deliveries is the status filter's last state (DESIGN.md §6): its
+  // count is the feed's X-Total-Count, the same first page FailedActionsList asks for.
+  const { total: failedTotal } = useServerPager<FailedActionResponse>("/rules/failed-actions");
+  const showFailed = list.filters.state === "failed";
 
   const shared = useMemo(() => sharedActuators(rules ?? []), [rules]);
   // The mini strips; rule_execution frames revalidate rules, this follows.
@@ -175,7 +180,7 @@ export default function RulesPage() {
 
   const chips: FilterChip[] = [];
   if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
-  if (list.filters.state !== "all") {
+  if (list.filters.state !== "all" && !showFailed) {
     const label = list.filters.state === "stale" ? "Can't evaluate" : list.filters.state === "fired" ? "Fired in 24 h" : RULE_STATE[list.filters.state as RuleStateKey]?.label;
     chips.push({ id: "state", label: `State: ${label}`, onRemove: () => list.setFilter("state", "all") });
   }
@@ -198,12 +203,14 @@ export default function RulesPage() {
 
   return (
     <>
+      {/* DESIGN.md §6: the primary action lives in the toolbar; the header
+          holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
+        inline
         title="Rules"
         description="Every reading is checked against these the moment it arrives."
-        actions={newAction}
+        actions={!error && rules && total > 0 ? undefined : newAction}
       />
-      <RulesTabs active="rules" />
 
       {error ? (
         <ErrorState
@@ -223,26 +230,30 @@ export default function RulesPage() {
         />
       ) : (
         <>
-          <KpiStrip
-            ariaLabel="Filter by state"
-            active={list.filters.state === "all" ? null : list.filters.state}
-            onSelect={(id) => list.setFilter("state", list.filters.state === id ? "all" : id)}
-            items={[
-              { id: "armed", label: "Armed", value: counts.armed, sub: "waiting for their condition", tone: "online" },
-              { id: "fired", label: "Fired", value: counts.fired, sub: "in the last 24 h", tone: "accent" },
-              { id: "latched", label: "Latched", value: counts.latched, sub: "need a reset", tone: "pending", shape: "square" },
-              { id: "stale", label: "Can't evaluate", value: counts.stale, sub: "an input has no data", tone: "unknown", shape: "hollow" },
-              { id: "disabled", label: "Disabled", value: counts.disabled, sub: "not evaluated", tone: "unknown", shape: "square" },
-            ]}
-          />
-
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
             placeholder="Search rules"
+            searchable={!showFailed}
             activeFilters={[list.filters.device, list.filters.trigger].filter((v) => v !== "all").length}
+            actions={newAction}
+            quick={{
+              label: "Filter by state",
+              value: list.filters.state,
+              onChange: (v) => list.setFilter("state", v),
+              options: [
+                { value: "all", label: "All", count: total },
+                { value: "armed", label: "Armed", count: counts.armed, tone: "online", hint: "Waiting for their condition" },
+                { value: "fired", label: "Fired", count: counts.fired, tone: "accent", hint: "Fired in the last 24 h" },
+                { value: "latched", label: "Latched", count: counts.latched, tone: "pending", shape: "square", hint: "Need a reset", alert: true },
+                { value: "stale", label: "Can't evaluate", count: counts.stale, tone: "unknown", shape: "hollow", hint: "An input has no data", alert: true },
+                { value: "disabled", label: "Disabled", count: counts.disabled, tone: "unknown", shape: "square", hint: "Not evaluated" },
+                // Deliveries, not rules: the feed replaces the table.
+                { value: "failed", label: "Failed deliveries", count: failedTotal, tone: "offline", hint: "Webhooks, emails and commands that didn't arrive", alert: true },
+              ],
+            }}
             view={
-              <SegmentedControl
+              showFailed ? undefined : <SegmentedControl
                 ariaLabel="Rules view"
                 value={list.filters.view === "ladder" ? "ladder" : "list"}
                 onChange={(v) => list.setFilter("view", v)}
@@ -253,6 +264,8 @@ export default function RulesPage() {
               />
             }
           >
+            {!showFailed && (
+            <>
             <Select
               aria-label="Filter by device"
               value={list.filters.device}
@@ -279,11 +292,15 @@ export default function RulesPage() {
                 </option>
               ))}
             </Select>
+            </>
+            )}
           </ListToolbar>
 
           <FilterChips chips={chips} onClearAll={list.clearAll} />
 
-          {filtered.length === 0 ? (
+          {showFailed ? (
+            <FailedActionsList />
+          ) : filtered.length === 0 ? (
             <NoResults noun="rules" hidden={total} onClear={list.clearAll} />
           ) : list.filters.view === "ladder" ? (
             <div className="flex flex-col gap-2">

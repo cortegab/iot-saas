@@ -37,16 +37,17 @@ test("devices on a phone: cards, a Filters sheet, and no sideways scroll", async
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("rules: KPIs filter, the Trigger filter makes a chip, and Ladder shows cards", async ({ page, ruleUnderTest }) => {
+test("rules: the state filter, the Trigger filter makes a chip, and Ladder shows cards", async ({ page, ruleUnderTest }) => {
   await page.goto("/rules");
-  const kpis = page.getByRole("group", { name: "Filter by state" });
+  const kpis = page.getByRole("group", { name: "Filter by state" }); // the toolbar status filter (DESIGN.md §6)
   for (const name of ["Armed", "Fired", "Latched", "Can't evaluate", "Disabled"]) {
     await expect(kpis.getByRole("button", { name: new RegExp(`^${name}`) })).toBeVisible();
   }
   await kpis.getByRole("button", { name: /^Fired/ }).click();
   await expect(page).toHaveURL(/state=fired/);
   await expect(page.getByText("State: Fired in 24 h")).toBeVisible();
-  await kpis.getByRole("button", { name: /^Fired/ }).click();
+  await kpis.getByRole("button", { name: /^All/ }).click();
+  await expect(page).not.toHaveURL(/state=/);
 
   await page.getByRole("searchbox", { name: "Search rules" }).fill(ruleUnderTest.name);
   // The search is debounced into the URL; let it land before the next filter.
@@ -60,4 +61,26 @@ test("rules: KPIs filter, the Trigger filter makes a chip, and Ladder shows card
 
   await page.getByRole("radio", { name: "Ladder" }).click();
   await expect(page.getByRole("link", { name: `Edit ${ruleUnderTest.name}` })).toBeVisible();
+});
+
+test("rules: Failed deliveries is a state that swaps in the delivery feed, and the old URL lands on it", async ({ page, ruleUnderTest }) => {
+  await page.goto("/rules");
+  await expect(page.getByRole("link", { name: ruleUnderTest.name })).toBeVisible();
+  // No tabs above the list any more (DESIGN.md §6).
+  await expect(page.getByRole("tablist", { name: "Rule views" })).toHaveCount(0);
+  const states = page.getByRole("group", { name: "Filter by state" });
+  await states.getByRole("button", { name: /^Failed deliveries/ }).click();
+  await expect(page).toHaveURL(/state=failed/);
+  // The feed, or its empty state; the rule-only controls step aside.
+  await expect(page.getByRole("table", { name: "Failed deliveries" }).or(page.getByText("Nothing failed"))).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "Search rules" })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Filter by trigger" })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: "Ladder" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "New rule" })).toBeVisible();
+  await states.getByRole("button", { name: /^All/ }).click();
+  await expect(page.getByRole("link", { name: ruleUnderTest.name })).toBeVisible();
+
+  await page.goto("/rules/failed-actions");
+  await expect(page).toHaveURL(/\/rules\?state=failed/);
+  await expect(states.getByRole("button", { name: /^Failed deliveries/ })).toHaveAttribute("aria-pressed", "true");
 });
