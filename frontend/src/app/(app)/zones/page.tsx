@@ -106,7 +106,9 @@ export default function ZonesPage() {
 
   return (
     <>
-      <PageHeader title="Zones" description="Places your devices live in." actions={newButton} />
+      {/* DESIGN.md §6: the primary action lives in the toolbar; the header
+          holds it only while there's no toolbar (loading, error, first use). */}
+      <PageHeader inline title="Zones" description="Places your devices live in." actions={!error && zones && total > 0 ? undefined : newButton} />
       {error ? (
         <ErrorState title="Couldn't load zones" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
       ) : isLoading || !zones ? (
@@ -142,6 +144,7 @@ export default function ZonesPage() {
                 query={list.q}
                 onQuery={list.setQuery}
                 placeholder="Search zones"
+                actions={newButton}
                 quick={{
                   label: "Show",
                   value: list.filters.show,

@@ -8,7 +8,6 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { KpiStrip } from "@/components/ui/KpiStrip";
 import { MiniStrip, type StripCell } from "@/components/ui/MiniStrip";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -198,10 +197,13 @@ export default function RulesPage() {
 
   return (
     <>
+      {/* DESIGN.md §6: the primary action lives in the toolbar; the header
+          holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
+        inline
         title="Rules"
         description="Every reading is checked against these the moment it arrives."
-        actions={newAction}
+        actions={!error && rules && total > 0 ? undefined : newAction}
       />
       <RulesTabs active="rules" />
 
@@ -223,24 +225,25 @@ export default function RulesPage() {
         />
       ) : (
         <>
-          <KpiStrip
-            ariaLabel="Filter by state"
-            active={list.filters.state === "all" ? null : list.filters.state}
-            onSelect={(id) => list.setFilter("state", list.filters.state === id ? "all" : id)}
-            items={[
-              { id: "armed", label: "Armed", value: counts.armed, sub: "waiting for their condition", tone: "online" },
-              { id: "fired", label: "Fired", value: counts.fired, sub: "in the last 24 h", tone: "accent" },
-              { id: "latched", label: "Latched", value: counts.latched, sub: "need a reset", tone: "pending", shape: "square" },
-              { id: "stale", label: "Can't evaluate", value: counts.stale, sub: "an input has no data", tone: "unknown", shape: "hollow" },
-              { id: "disabled", label: "Disabled", value: counts.disabled, sub: "not evaluated", tone: "unknown", shape: "square" },
-            ]}
-          />
-
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
             placeholder="Search rules"
             activeFilters={[list.filters.device, list.filters.trigger].filter((v) => v !== "all").length}
+            actions={newAction}
+            quick={{
+              label: "Filter by state",
+              value: list.filters.state,
+              onChange: (v) => list.setFilter("state", v),
+              options: [
+                { value: "all", label: "All", count: total },
+                { value: "armed", label: "Armed", count: counts.armed, tone: "online", hint: "Waiting for their condition" },
+                { value: "fired", label: "Fired", count: counts.fired, tone: "accent", hint: "Fired in the last 24 h" },
+                { value: "latched", label: "Latched", count: counts.latched, tone: "pending", shape: "square", hint: "Need a reset", alert: true },
+                { value: "stale", label: "Can't evaluate", count: counts.stale, tone: "unknown", shape: "hollow", hint: "An input has no data", alert: true },
+                { value: "disabled", label: "Disabled", count: counts.disabled, tone: "unknown", shape: "square", hint: "Not evaluated" },
+              ],
+            }}
             view={
               <SegmentedControl
                 ariaLabel="Rules view"

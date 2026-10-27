@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { cn } from "@/lib/cn";
 
 export interface Crumb {
   label: ReactNode;
@@ -28,6 +29,9 @@ export interface PageHeaderProps {
   actions?: ReactNode;
   /** Render the title in the mono face (device names). */
   monoTitle?: boolean;
+  /** List pages (DESIGN.md §6): the description sits beside the title, on
+   * its baseline, and wraps under it when there's no room. */
+  inline?: boolean;
 }
 
 /** A breadcrumb trail on its own (for pages whose H1 lives elsewhere, e.g. a
@@ -67,6 +71,7 @@ export function PageHeader({
   back,
   actions,
   monoTitle,
+  inline,
 }: PageHeaderProps) {
   const crumbs = breadcrumbs ?? (back ? [{ label: back.label, href: back.href }] : undefined);
   const desc = description ?? subtitle;
@@ -74,7 +79,7 @@ export function PageHeader({
     <header className="flex flex-col gap-2">
       {crumbs && crumbs.length > 0 && <Breadcrumbs crumbs={crumbs} />}
       <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
+        <div className={inline ? "flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1" : "min-w-0"}>
           {(eyebrow || status) && (
             <div className="mb-1 flex flex-wrap items-center gap-2 text-[13px] text-ink-muted">
               {eyebrow}
@@ -88,7 +93,7 @@ export function PageHeader({
           >
             {title}
           </h1>
-          {desc && <p className="mt-1.5 max-w-[64ch] text-ink-muted">{desc}</p>}
+          {desc && <p className={cn("max-w-[64ch] text-ink-muted", !inline && "mt-1.5")}>{desc}</p>}
           {meta && (
             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] text-ink-muted [&_b]:font-medium [&_b]:text-ink">
               {meta}

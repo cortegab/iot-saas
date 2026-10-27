@@ -29,3 +29,17 @@ test("controls in one row line up, whatever hint sits under them", async ({ page
   expect(Math.abs(name.y - zone.y)).toBeLessThanOrEqual(1);
   expect(Math.abs(name.height - zone.height)).toBeLessThanOrEqual(1);
 });
+
+test("list pages: the primary action sits in the toolbar row, and the status filter replaces the KPI strip", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/devices");
+  const search = page.getByRole("searchbox", { name: "Search name or template" });
+  const add = page.getByRole("link", { name: "Add device" });
+  await expect(add).toHaveCount(1);
+  const s = (await search.boundingBox())!;
+  const a = (await add.boundingBox())!;
+  expect(Math.abs(s.y + s.height / 2 - (a.y + a.height / 2))).toBeLessThanOrEqual(4);
+  const status = page.getByRole("group", { name: "Filter by status" });
+  await expect(status.getByRole("button", { name: /^All \d+$/ })).toHaveAttribute("aria-pressed", "true");
+  await expect(status.getByRole("button", { name: /^Offline \d+$/ })).toBeVisible();
+});
