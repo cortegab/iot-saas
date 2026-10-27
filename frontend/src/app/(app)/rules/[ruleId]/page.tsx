@@ -18,7 +18,6 @@ import { Callout } from "@/components/ui/Callout";
 import { RuleExecutionHistory } from "@/components/rules/RuleExecutionHistory";
 import { RuleEditor } from "@/components/rules/editor/RuleEditor";
 import { useRuleActions } from "@/components/rules/useRuleActions";
-import { useWideContent } from "@/components/shell/shell-context";
 import { RuleVersions } from "@/components/rules/RuleVersions";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { ApiRequestError } from "@/lib/api-client";
@@ -64,7 +63,6 @@ export default function EditRulePage() {
   const params = useParams<{ ruleId: string }>();
   const router = useRouter();
   const isAdmin = useIsAdmin();
-  useWideContent();
   const {
     data: rule,
     error,
@@ -113,7 +111,7 @@ export default function EditRulePage() {
         breadcrumbs={[{ label: "Rules", href: "/rules" }]}
         eyebrow={
           <span className="flex flex-wrap items-center gap-x-1.5">
-            Rule · <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
+            <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
             {rule.trigger.type === "schedule" ? (lastFired ? `fired ${timeAgo(lastFired)}` : "never fired") : fired ? `fired ${fired}× in 24 h` : "quiet in 24 h"}
           </span>
         }
@@ -133,7 +131,7 @@ export default function EditRulePage() {
       {actions.dialog}
 
       {rule.latched && (
-        <Callout tone="warning">
+        <Callout tone="warning" className="max-w-[760px]">
           <span className="flex flex-wrap items-center justify-between gap-3">
             <span>
               <b className="font-medium">Latched.</b> It fired and won&rsquo;t fire again until someone resets it.
@@ -148,13 +146,13 @@ export default function EditRulePage() {
       )}
 
       {unhealthy && (
-        <Callout>
+        <Callout className="max-w-[760px]">
           <b className="font-medium">Can&rsquo;t evaluate now.</b> {unhealthy}. Missing data never fires or clears it.
         </Callout>
       )}
 
         {restored && (
-          <Callout tone="info" className="mb-3">
+          <Callout tone="info" className="mb-3 max-w-[760px]">
             <span className="flex flex-wrap items-center justify-between gap-3">
               <span>
                 Version {restored.version} is loaded. Save to make it current, or discard it.

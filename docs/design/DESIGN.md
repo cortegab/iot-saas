@@ -166,7 +166,8 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
   **Nothing is said twice:** the breadcrumb lists the **parents only** (the H1 right below names
   the current page); the overline carries **status and meta only**, never the record kind (the
   breadcrumb says it); the description never restates the overline.
-- **Content column**: max 1120 px, and 1520 px for wide views (dashboards). Every editor, wizard
+- **Content column**: max 1120 px on every page (the 1520 px wide view is gone; nothing used it once
+  the rule editor joined the standard layout). Every editor, wizard
   and settings page, the rule editor included, holds to a **760 px column** inside the 1120 px page,
   so every editor shares one left edge. Supporting content (the rule preview) is a collapsible
   side panel in the space beside the column, never a reason to widen the page. A list never
