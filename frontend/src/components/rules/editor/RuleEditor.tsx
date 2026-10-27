@@ -14,7 +14,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Activity, AlertCircle, AlertTriangle, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { Activity, AlertCircle, Check, ChevronLeft, ChevronRight } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +27,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Stepper } from "@/components/ui/Stepper";
 import { Tabs } from "@/components/ui/Tabs";
 import { ApiRequestError } from "@/lib/api-client";
+import { cn } from "@/lib/cn";
 import { contacts, draftFromRule, draftToRequest, emptyDraft, validateDraft, type RuleDraft } from "@/lib/rule-draft";
 import { MAX_NAME, sectionIssues, type RuleSection } from "@/lib/rule-preview";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -151,7 +152,6 @@ export function RuleEditor({
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(baseline), [draft, baseline]);
   const issues = useMemo(() => sectionIssues(draft), [draft]);
   const blocking = issues.filter((i) => i.blocking);
-  const warnings = issues.length - blocking.length;
   const { confirmLeave, dialog: guardDialog } = useUnsavedGuard(dirty, existing?.name ?? "this rule");
 
   // A new rule's schedule defaults to the workspace time zone, which may
@@ -441,11 +441,14 @@ export function RuleEditor({
           </aside>
         </div>
 
-        {/* One sticky save bar (DESIGN.md §7); Activity has nothing to save. */}
+        {/* One save bar (DESIGN.md §7): always while creating; while editing,
+            only once there is a change, a save or a problem. Activity has
+            nothing to save. Unmounted, not hidden: toasts rise above any
+            [data-savebar] in the page. */}
+        {tab !== "activity" && (wizard || isNew || dirty || submitting || blocking.length > 0 || error) && (
         <div
-          hidden={tab === "activity"}
           data-savebar
-          className={SAVE_BAR}
+          className={cn(SAVE_BAR, !wizard && !isNew && "motion-safe:animate-[toastin_.15s_ease-out]")}
         >
           <div className="flex min-w-[150px] flex-1 flex-wrap items-center gap-2.5 text-[13px] text-ink-muted">
             <span aria-live="polite" className="inline-flex items-center gap-1.5">
@@ -473,16 +476,6 @@ export function RuleEditor({
               >
                 <AlertCircle aria-hidden size={13} />
                 {blocking.length} to fix
-              </button>
-            )}
-            {warnings > 0 && (
-              <button
-                type="button"
-                onClick={() => goTo(issues.find((i) => !i.blocking)!.section)}
-                className="inline-flex h-7 items-center gap-[5px] rounded-full bg-status-pending-surface px-2.5 text-[12.5px] font-semibold text-status-pending"
-              >
-                <AlertTriangle aria-hidden size={13} />
-                {warnings} safety warning{warnings === 1 ? "" : "s"}
               </button>
             )}
             {error && (
@@ -531,6 +524,7 @@ export function RuleEditor({
             </div>
           )}
         </div>
+        )}
       </form>
       <ItemSheet open={previewOpen} onClose={() => setPreviewOpen(false)} title="Preview" sub="What this draft would do. Nothing is sent.">
         <div className="flex flex-col gap-3">{preview}</div>

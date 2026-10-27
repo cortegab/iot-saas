@@ -370,14 +370,18 @@ export function EditorFrame({
     return () => document.removeEventListener("keydown", onKey);
   }, [save]);
 
+  // DESIGN.md §7: creating always shows the bar (it holds Create / Next);
+  // editing shows it only while there is an edit, a save or a problem.
+  const showFoot = !readOnly && (steps || status.isNew || status.dirty || status.saving || issues > 0);
+
   // A full-page save bar sits at the viewport bottom; lift toasts above it.
   useEffect(() => {
-    if (mode !== "page" || readOnly) return;
+    if (mode !== "page" || !showFoot) return;
     document.documentElement.dataset.savebar = "1";
     return () => {
       delete document.documentElement.dataset.savebar;
     };
-  }, [mode, readOnly]);
+  }, [mode, showFoot]);
 
   // Esc closes a docked editor while focus is inside it (the Sheet handles the drawer).
   useEffect(() => {
@@ -594,18 +598,14 @@ export function EditorFrame({
     </div>
   );
 
-  // Inside a host page the bar only appears when there is something to save.
-  const showFoot = !readOnly && (!headless || status.dirty || status.saving || issues > 0);
   const foot = showFoot && (
     <div
       data-savebar={mode === "page" || undefined}
       className={cn(
         "flex shrink-0 flex-wrap items-center gap-2.5 border-t border-border",
-        // Inside a host page (a Settings tab): a floating bar within the column.
-        headless
-          ? "sticky bottom-[calc(12px+var(--tabbar-h))] z-[6] mt-auto max-w-[760px] rounded-xl border bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-[10px] motion-safe:animate-[toastin_.15s_ease-out]"
-          : mode === "page"
-          ? `${SAVE_BAR} [grid-area:foot]`
+        mode === "page"
+          ? // An edit's bar slides up when the first change is made.
+            cn(SAVE_BAR, "[grid-area:foot]", !steps && !status.isNew && "motion-safe:animate-[toastin_.15s_ease-out]")
           : "bg-surface px-5 py-3",
       )}
     >
