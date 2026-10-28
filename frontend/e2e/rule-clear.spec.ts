@@ -28,7 +28,8 @@ test("a clear notification is configured in the form, summarised, and persisted"
   // The rule is live: confirm.
   await page.getByRole("alertdialog").getByRole("button", { name: "Save rule" }).click();
   // The editor stays on the rule after saving (DESIGN.md §7).
-  await expect(page.getByText("All changes saved")).toBeVisible();
+  // Saved: an edit's save bar goes away once nothing is left to save.
+  await expect(page.locator("body [data-savebar]")).toHaveCount(0);
   expect(new URL(page.url()).pathname).toBe(`/rules/${ruleUnderTest.id}`);
 
   await page.reload();

@@ -19,7 +19,8 @@ test("rule versions: a rename shows up, and restoring v1 saves as v3", async ({ 
   await page.getByRole("button", { name: /^Save/ }).first().click();
   // The rule is live: confirm.
   await page.getByRole("alertdialog").getByRole("button", { name: "Save rule" }).click();
-  await expect(page.getByText("All changes saved")).toBeVisible();
+  // Saved: an edit's save bar goes away once nothing is left to save.
+  await expect(page.locator("body [data-savebar]")).toHaveCount(0);
 
   const list = await (await request.get(`${API_URL}/rules/${ruleUnderTest.id}/versions`, { headers })).json();
   expect(list[0].version).toBe(3);

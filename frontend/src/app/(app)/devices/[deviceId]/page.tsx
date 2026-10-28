@@ -184,7 +184,7 @@ export default function DeviceDetailPage() {
   ];
 
   // Fills the window (main's bottom padding traded for its own) so the Settings
-  // tab's floating save bar lands at the bottom, as every save bar does.
+  // tab's save bar, once there's a change, lands at the bottom like every bar.
   return (
     <div className="-mb-[110px] flex flex-1 flex-col gap-4 pb-6">
       <PageHeader
