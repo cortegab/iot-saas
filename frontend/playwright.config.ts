@@ -7,6 +7,8 @@ loadEnv({ path: ".env.test" });
 
 export default defineConfig({
   testDir: "./e2e",
+  // Removes the suite's "E2E …" records from the dev workspace afterwards.
+  globalTeardown: "./e2e/clean-e2e-data.mjs",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

@@ -485,7 +485,10 @@ pnpm test:e2e
 ```
 
 Specs live in `frontend/e2e/`. The suite creates and deletes its own fixture rule via the API
-(`frontend/e2e/fixtures.ts`) rather than depending on whatever rules happen to already exist. Local
+(`frontend/e2e/fixtures.ts`) rather than depending on whatever rules happen to already exist.
+Records a spec creates are named `E2E …`; after every run `globalTeardown`
+(`frontend/e2e/clean-e2e-data.mjs`) deletes them (API keys can only be revoked) and dismisses the
+notifications they caused. `pnpm test:e2e:clean` does the same by hand. Local
 only — the repo has no test CI (§7 covers backend `pytest`; this is the frontend equivalent).
 
 ---
