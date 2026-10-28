@@ -112,15 +112,15 @@ font in a component.** If you need a value that has no token, add the token here
 | Token | Value |
 |---|---|
 | Radius (Tailwind scale) | `rounded-md` 8 px (controls) · `rounded-xl` 12 px (cards, tables, panels) · `rounded-2xl` 16 px (large surfaces, dialogs). `rounded-sm` 6 px and `rounded-lg` 10 px are for small inner parts only. |
-| `--h-control` | 36 px: every button, input, select and segmented control (`h-control` utility). Minimum touch target is 36 px. |
+| `--h-control` | 36 px: every button, input, select and segmented control (`h-control` utility). **Two control heights only:** 36 px by default and 30 px for size `sm` (in-row actions, secondary toolbar actions, toolbar segmented filters). Nothing clickable is 24, 26 or 40 px. A view's primary action is always the 36 px accent button, inside a tab too. Minimum touch target is 36 px (44 px on touch, §12). |
 | `--pad-cell` | 12 px table cell padding (`p-cell` utility) |
-| `--fs-base` / `--fs-sm` / `--fs-xs` | 14.5 / 14 / 12.5 px |
+| Type scale | **Five steps, through tokens only** (no hand-set `text-[..px]`): `--text-micro` 12 px (tags, counts, micro labels) · `--text-meta` 13 px (meta, hints, table secondary lines) · `--text-sm` 14 px (body, controls) · `--text-section` 16 px (section headings, card titles) · `--text-title` 28 px (page titles). Public pages keep their own display sizes. |
 | `--shadow-card` | `0 1px 2px rgba(30,30,60,.05)` light; `none` dark |
 | `--shadow-pop` | `0 24px 48px -16px rgba(30,30,60,.22), 0 2px 6px rgba(30,30,60,.08)` light; `0 24px 48px -16px rgba(0,0,0,.7), 0 2px 6px rgba(0,0,0,.4)` dark |
 | Fonts | **Geist** (display, sans, readouts) and **Geist Mono** (keys, topics, payloads, times in chips), loaded via `next/font`. Replaces Chivo / IBM Plex. |
 
-- Page titles are 28–30 px, weight 600, letter-spacing −0.015em.
-- Section headings are 15–16 px, weight 600.
+- Page titles are 28 px, weight 600, letter-spacing −0.015em (the sign-in card too).
+- Section headings are 16 px, weight 600.
 - Numbers use `tabular-nums`.
 
 ### Status vocabulary
@@ -130,6 +130,8 @@ font in a component.** If you need a value that has no token, add the token here
 | Device | Online (online) · Offline (offline) · Never connected (pending) · Disabled (unknown) |
 | Rule | Armed (online) · Fired (accent) · Latched (pending, square dot) · Disabled (unknown) |
 | Data freshness | Live · Stale (unknown, `.is-stale` 60 % opacity) · No data |
+
+**One badge.** In tables, lists and previews a status is a **dot + word** with no fill (`Badge variant="dot"`), in its tone. A tinted fill is only for a state that needs attention in a page header (a state chip). Counts that need someone ("6 offline") are a dot + word in the error tone, never bare red text. **Roles** (Owner · Admin · Viewer) are one neutral style for every role. Separators ("·") join only values that exist.
 
 ---
 
@@ -161,8 +163,11 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
   - The **footer**: user avatar and name, a live-connection indicator ("Live updates on"), and the
     theme toggle.
 - The logo links to Dashboards, which is the first nav item.
-- **Page header**: breadcrumbs, an overline and status pill where relevant, an H1, a one-line
-  description, a meta row, and actions on the right. The primary action is rightmost.
+- **Page header** (one component, `PageHeader`, for lists, record pages and editors): breadcrumbs,
+  an overline, an H1, a one-line description, and actions on the right. The overline starts with
+  the **status**, then meta; the line under the title is the description only. Actions align to
+  the **H1 row** (top-aligned), the primary rightmost and ⋯ last. On phones the actions are one
+  row directly under the title, primary first, ⋯ last. A title is plain text (no monospace part).
   **Nothing is said twice:** the breadcrumb lists the **parents only** (the H1 right below names
   the current page); the overline carries **status and meta only**, never the record kind (the
   breadcrumb says it); the description never restates the overline. **Creating** a named record
@@ -190,21 +195,21 @@ gets restyled to the tokens. **NEW** means it has to be created.
 
 | Component | Status | Directives |
 |---|---|---|
-| Button | existing | Variants: `primary` · `secondary` · `ghost` · `danger` (filled, NEW variant) · size `sm`. One primary per view. Labels are verbs ("Save rule", "Add device"). |
+| Button | existing | Variants: `primary` · `secondary` · `ghost` · `danger` (filled) · size `sm`. One primary per view. Labels are verbs ("Save rule", "Add device"). **Destructive:** on a page, the entry point is a `secondary` button with red text and an ellipsis ("Rotate credential…", "Leave workspace…"); the filled `danger` button lives only in the confirmation dialog. |
 | Field | existing | Label above, control, one message line below. That line holds the hint, or the error/warning replacing it (`aria-describedby`). Errors show on blur or submit; **safety errors show while typing**. Optional fields say "optional" in the label. The hint says what the field affects; a link to manage the related records ends the hint ("Where it's installed. Manage zones"), never on its own line. Short related fields pair two across (one across on phones); long or complex controls take the full column. **Inline** (`inline`): label on the left, control and message on the right; only for a list of like fields that map one thing to another (a driver's readings). |
 | Input / Select / Textarea | existing | 36 px, `--color-input` fill, mono for keys/topics. Affix (suffix unit such as `s`, `°C`) inside the control. |
 | Combobox | existing | For long lists with search (units, devices). |
-| SegmentedControl | existing | Mutually exclusive modes (Form / Ladder, schedule repeat mode). `role="radiogroup"` or pressed buttons. |
+| SegmentedControl | existing | Mutually exclusive modes (Form / Ladder, schedule repeat mode). `role="radiogroup"` or pressed buttons. 36 px in forms (`md`), 30 px in toolbars and rows (`sm`). |
 | **ChoiceCards** | NEW | Radio cards for a choice whose options each need a line of explanation (Add device's start, Runs on). Two across, one across from 560 px down; a radiogroup with arrow keys. Not wrapped in a Field label, which would name the first card. |
 | **Switch** | NEW | Every on/off **setting that is saved with a record** (`SwitchField`): a label naming the setting above, the switch beside a **state word**, and a hint below that changes with it. State words: **Enabled / Disabled** for a record's own status (label "Status": rule, device, template), **On / Off** for an option inside a record (e.g. "Turn it back when the condition clears", "Send a notification when it clears"). A **checkbox** is only for picking items in a list (bulk select) or for a one-time choice that belongs to a single submit and isn't stored as a setting ("I've stored it", "Keep me signed in on this device"). List row menus use the verbs **Enable / Disable**. |
-| Tabs | existing | Underline style. **Never show a horizontal scrollbar**: overflowing tabs wrap or collapse into a menu. Editor tabs carry the section's red problem count or amber "!", live in the URL (`?tab=`), and move with the arrow keys. |
+| Tabs | existing | Underline style, the control height (36 px). **Never wrap**: when the tabs don't fit (phones), they stay on one row that scrolls sideways with an edge fade and no visible scrollbar, and the active tab scrolls into view. Editor tabs carry the section's red problem count or amber "!", live in the URL (`?tab=`), and move with the arrow keys. |
 | Badge / Tag | existing | Pills with a status dot. `tag--warn` (pending surface) for conflicts ("shares fan1"). `tag--sm` for qualifiers ("expert"). |
 | Callout | existing | `info` (accent-muted), `warning` (pending surface), `error` (error surface). Dismissible for tips only. **A record's lasting state is not a callout** unless it holds the action that resolves it (Latched + Reset latch, a restored version + Discard, Waiting for its first message + Connect): otherwise it is a **state chip** in the header's meta row (amber, with the detail in a popover on click or focus), and never repeats what the header already says ("Offline · last message …"). |
 | **Toast** | NEW | Bottom-right, stacked. Title plus a detail line; save toasts carry the **change summary** ("2 changes: Schedule: … → …"). Toasts are for **events**: something the person did, or a record's state **changing while its page is open** ("ESP32-I1 went offline", "Can't evaluate: input1 is stale"). Never for a state that was already true on load, and never as the only place a lasting state is shown. |
 | ConfirmDialog | existing | For destructive actions and guards. Title states the action; the body states the consequence with real numbers; the danger button repeats the verb. |
 | **FactList** | NEW | Read-only facts of a record as a definition list: a muted label column (140 px) and the value, stacking on phones. A value links to its source ("ESP32 Inputs · Our firmware") and may carry inline link actions (**Copy**, **Rotate credential…**, a disclosure). Never a disabled input, a grey box or a loose sentence for a fact. |
 | **Inherited** | NEW | A value that follows another record's unless overridden (a device's wiring from its template, a rule email's recipients from the workspace): says what it follows and from where, shows that value read-only, and offers **Use a different …**; once overridden, the field plus **Use the {source}'s …**. |
-| **Sheet / Drawer** | existing | The record peek and the item sheet (§7), 560 px, full height, from the right. **Bottom** placement on phones (≤ 640 px) for the More menu, sentence editors and short pickers: rounded top, a grab handle, up to 85% of the height. Scrim + focus trap + Esc; focus returns to the trigger. |
+| **Sheet / Drawer** | existing | The record peek and the item sheet (§7), 560 px, full height, from the right. **Bottom** placement on phones (≤ 640 px) for the More menu, sentence editors and short pickers: rounded top, a grab handle, up to 85% of the height. Scrim + focus trap + Esc; focus returns to the trigger. On phones (≤ 640 px) the **record peek** is a full-height bottom sheet: its ‹ › ⋯ × controls take their own row above the title. |
 | **Wizard** | NEW | Creating a record (§7). Numbered steps (done ✓ / current / red when a step has a problem); on phones "Step n of N · Name" over a thin progress bar instead. Each step opens with a question as its heading ("What starts it?"), which takes focus, and a one-line lead. The save bar holds **Back** and **Next: {step}**; the last step is **Review**, a definition list with a **Change** link per row, and the primary button names the result ("Create rule"). Next is refused while the step has blocking problems: they are marked and the first takes focus. |
 | **Line row** | NEW | One child item as one line (a part, metric, actuator, condition, action, alarm): icon, a bold name with a muted second line, tags, and a chevron. A red count or amber "!" marks its problems. Clicking or Enter opens its item sheet. Rows stack in a bordered **Lines** group. |
 | **CopyField / SecretReveal** | NEW | One component for every one-time secret (device token, API key). It replaces the four copies in the devices and tokens pages. Shown once, with a copy button and a "won't be shown again" warning. |
@@ -285,7 +290,7 @@ sheet.**
 
 | Presentation | When |
 |---|---|
-| **Peek**: a drawer over the list, at every width | **Looking only.** Key facts, status, the next step (Edit / Open) and a ⋯ menu. No fields, no save bar. `?peek=<id>`. The drawer blocks the list, so browsing happens inside it: ‹ › with "n of N", and ↑/↓ while focus is in the drawer. Closing returns focus to the row last shown. |
+| **Peek**: a drawer over the list, at every width | **Looking only.** Key facts, status, the next step and a ⋯ menu. The overline carries status and meta, never the record kind. The main button is always **Open {noun}** (Open device, Open rule, Open template…). The facts fill the drawer with what a look needs: a device's latest readings and health, a rule's sentence and recent firings, a template's devices. No fields, no save bar. `?peek=<id>`. The drawer blocks the list, so browsing happens inside it: ‹ › with "n of N", and ↑/↓ while focus is in the drawer. Closing returns focus to the row last shown. |
 | **Full page, creating** | A **Wizard** (§5) at `/x/new`: a few steps, each asking one question, ending in Review. Records with one short section (a zone, a key, a dashboard name) skip the steps and use one form. |
 | **Full page, editing** | `/x/{id}` (a device: its page's Settings tab). Short **tabs** of sections (`?tab=`), with the title, consequence line and save bar shared across them. Deep-linkable. |
 | **Item sheet** | One **child item** of the record being edited (a part, a metric, an actuator, a condition, an action, a widget): its Line row opens it in a side sheet (a bottom sheet on phones). The sheet edits the page's draft live. It has **Done**, never a save of its own; the page's save bar saves, and the unsaved-changes guard covers it. A newly added item opens its sheet straight away. |
@@ -306,8 +311,12 @@ edits a whole record, and there is no "Expand" toggle.
 - A **save bar** at the bottom of the window, full width. **Editing:** it appears (slides up) only
   while there is an edit, a save in progress or a problem to fix, with "Unsaved changes",
   **Discard** and **Save**; Save and Discard hide it again, and the save toast confirms. **Creating**
-  (a form or a wizard): always shown, since it holds **Create** / **Back** / **Next**. Save focuses
-  the first error when invalid.
+  (a form or a wizard): always shown, since it holds **Create** / **Back** / **Next**, and offers
+  **Cancel** (always enabled, back to where you came from), never a greyed-out Discard. Save
+  focuses the first error when invalid. One bar on every page (`SAVE_BAR`), the same width and
+  height everywhere. At content ≤ 480 px the status line takes its own row and the buttons share
+  the full width. On phones the **tab bar hides while the save bar shows** (Cancel / Discard is
+  the way out; the unsaved-changes guard still covers navigation).
 - An **unsaved-changes guard** on close, navigate and reload.
 - **Post-save toast** with the change summary. The editor stays on the record after saving; it
   doesn't redirect somewhere else.
@@ -445,6 +454,8 @@ edits a whole record, and there is no "Expand" toggle.
   group into one row (**×4**, "since 09:12, last 2 min ago"). The status filter (§6) is All ·
   Unread · Critical · Warning, counted per row of repeats (Critical and Warning: unread ones);
   **Mark all as read** is the toolbar action. Filters: severity, device, rule.
+  **Unread** is the 3 px accent bar and a bold title, nothing more: no Unread pill and no row
+  button. Mark read / unread and Dismiss are in the row ⋯ menu; opening an alert marks it read.
   A row opens a sheet with the details. With the alarm lifecycle (§13) it becomes an alarm inbox:
   states **Active · Acknowledged · Cleared · All** with counts, active critical and warning
   alarms in red, **Acknowledge…** with an optional note (one or many, with Undo), "Acknowledged by *name*
@@ -706,7 +717,8 @@ path (CLAUDE.md §9.1).
   - `aria-describedby` from every control to its message line
   - `aria-invalid` on errors
 - **Hit targets:** at least 36 px; on touch (`pointer: coarse`) buttons and inputs are 44 px and
-  segmented buttons 40 px.
+  segmented buttons 40 px. Smaller visuals (row checkboxes, inline links, the pager) get a 44 px
+  hit area without growing.
 - **Widths.** Designed and tested at **1440 · 1366 · 1280 · 1150 · 820 · 390** px. The shell follows
   the window; everything inside follows the **content column's** width (container queries), so a
   pinned-open sidebar or a sheet never breaks the layout under it.
@@ -716,6 +728,7 @@ path (CLAUDE.md §9.1).
   | window ≥ 1440 | Full sidebar (§4). |
   | window ≤ 640 | Top bar + bottom tab bar; sheets open from the bottom where §5 says so. |
   | content ≥ 1080 | The rule preview sits beside the editor (§9.2). |
+  | content ≤ 900 | List toolbar filter menus collapse into one **Filters** button, so the primary action stays in row 1. |
   | content ≤ 860 | P3 columns fold. |
   | content ≤ 720 | P2 columns fold; 3–4 column grids become 2. |
   | content ≤ 640 | Wizard steps become "Step n of N"; dashboard edit becomes a list. |
@@ -723,7 +736,8 @@ path (CLAUDE.md §9.1).
   | content ≤ 480 | Form grids become one column; save-bar buttons fill the width. |
 - **Phone:**
   - At 390 px nothing scrolls horizontally, the ladder included.
-  - Demo controls or floating buttons never cover content, and the tab bar respects the safe area.
+  - Demo controls, floating buttons and decorative animation never cover content (the sign-in
+    animation sits below its text), and the tab bar respects the safe area.
 - **Motion:** honour `prefers-reduced-motion`. Keep transitions under 200 ms and only on
   colour/opacity/transform.
 - **Contrast:** meet WCAG AA in both themes.
@@ -872,3 +886,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-27 | §4, §5, §6, §7, §9.2, §11 **one editor pattern**, from a review of the device Settings tab (the best-composed editor) against every other new / edit / settings page. **Column:** every editor, wizard and settings page is 760 px inside the 1120 px page, the rule editor included (it leaves the 1520 px wide view); the rule **preview is only behind its Preview button** (a sheet), at every width. **No title said twice:** breadcrumbs list parents only, the overline carries status and meta only (no record kind), a section heading never repeats the record kind, tab or step question, and a single-section page has none. **Sections** are hairline-divided with a one-line lead, no cards. **Fields:** the "Manage X" link ends the hint; short related fields pair. New **FactList** (read-only facts) and **Inherited** (a value that follows another record's) components. **Save bar**, superseding 2026-10-23: when editing it appears only while there is an edit, a save or a problem; when creating it is always shown. **Delete** is in the record menu only, superseding 2026-10-02's device "Danger zone"; a danger section remains only on pages with no record menu (Leave workspace). **Pager:** numbered pages `‹ 1 2 [3] … 9 ›` (`‹ 3 / 9 ›` on phones). **Lasting states** (can't evaluate, offline) are header state chips, not callouts or toasts; a toast marks a state *changing* while the page is open; a callout stays only when it holds the action. **Wording:** a template gives a device **Metrics** and **Actuators**. |
 | 2026-10-27 | §8 Connect, after review: the Credential step **always starts with Create credential / Rotate credential…** — Add device no longer hands its credential over, and the credential is held in the page only (a reload or leaving drops it; leaving or reloading before it's stored asks). Once made, **Store its credential** (demo H): Username and Password as read-only fields with Copy, "It won't be shown again", I've stored it, Continue in the bottom bar. Supersedes the 2026-10-01 handoff and the "survives a reload" rule. |
 | 2026-10-27 | §9.1 New rule, after review: **Name first, then the recipe; no device select** (a rule can involve several devices). Every recipe is always offered, device-free, its devices picked in the When / If / Then steps; "Name the rule first." when a recipe is picked without one. From a device page the recipes it can run come first, filled with it. The disabled "can't run" cards go. |
+| 2026-10-28 | §3, §4, §5, §7, §8, §12 **interface audit** (iodriven Interface Audit, 28 findings at 1440 → 390 px and dark). **Controls:** two heights only, 36 px and 30 px `sm`; a primary is always the 36 px accent button. **Type:** five steps 12 · 13 · 14 · 16 · 28 px through tokens, superseding 14.5 / 14 / 12.5. **Status:** one dot + word badge in tables and previews; roles one style. **Header:** one `PageHeader` for every page, status first in the overline, actions on the H1 row, one action row under the title on phones. **Destructive:** on-page entry points are secondary + red text + “…”; filled red only in dialogs. **Tabs** scroll sideways on phones, superseding “wrap or collapse into a menu”. **Peek:** no record kind, **Open {noun}**, a full-height bottom sheet on phones. **Save bar:** Cancel on create pages, one width, full-width buttons ≤ 480, and the phone tab bar hides while it shows. **Notifications:** unread is the accent bar and a bold title, superseding 2026-10-23's Unread pill and Mark read button. **Toolbar:** filters collapse ≤ 900 px. |
