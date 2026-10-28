@@ -61,15 +61,16 @@ function Dot({ tone, shape = "solid", className }: { tone: StatusTone; shape?: D
 export interface BadgeProps {
   tone: StatusTone;
   label: string;
-  /** `pill` (default) — tinted chip with a dot (DESIGN.md §5). `dot` — dot +
-   * coloured label, no fill. `text` — coloured label only. `indicator` — bare
+  /** `dot` (default) — dot + coloured label, no fill: the one status badge
+   * in tables, lists, previews and headers (DESIGN.md §3). `pill` — tinted chip
+   * with a dot, for marketing illustrations only. `text` — coloured label only. `indicator` — bare
    * dot for a presence marker beside content that names itself. */
   variant?: BadgeVariant;
   shape?: DotShape;
   className?: string;
 }
 
-export function Badge({ tone, label, variant = "pill", shape = "solid", className }: BadgeProps) {
+export function Badge({ tone, label, variant = "dot", shape = "solid", className }: BadgeProps) {
   const cfg = TONE_CLASSES[tone];
 
   if (variant === "indicator") {

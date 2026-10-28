@@ -17,7 +17,7 @@ export interface PageHeaderProps {
   subtitle?: ReactNode;
   /** Small line above the title (record kind, e.g. "Device"). */
   eyebrow?: ReactNode;
-  /** Status pill beside the eyebrow. */
+  /** The record's status, first in the overline (DESIGN.md §4). */
   status?: ReactNode;
   /** Facts row under the description (zone, template, last seen…). */
   meta?: ReactNode;
@@ -61,8 +61,8 @@ export function Breadcrumbs({ crumbs: all }: { crumbs: Crumb[] }) {
   );
 }
 
-/** DESIGN.md §4 page header: breadcrumbs, an overline and status pill where
- * relevant, an H1, a one-line description, a meta row, and actions on the
+/** DESIGN.md §4 page header: breadcrumbs, an overline (status first, then
+ * meta), an H1, a one-line description, a meta row, and actions on the
  * right. */
 export function PageHeader({
   title,
@@ -86,8 +86,8 @@ export function PageHeader({
         <div className={inline ? "flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1" : "min-w-0"}>
           {(eyebrow || status) && (
             <div className="mb-1 flex flex-wrap items-center gap-2 text-[13px] text-ink-muted">
-              {eyebrow}
               {status}
+              {eyebrow}
             </div>
           )}
           <h1

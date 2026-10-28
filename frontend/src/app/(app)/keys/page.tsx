@@ -178,9 +178,9 @@ export default function KeysPage() {
                   value: list.filters.show,
                   onChange: (v) => list.setFilter("show", v),
                   options: [
+                    { value: "all", label: "All", count: counts.all },
                     { value: "active", label: "Active", count: counts.active, tone: "online", hint: "Can authenticate" },
                     { value: "inactive", label: "Revoked or expired", count: counts.inactive, tone: "unknown", shape: "square", hint: "Can't authenticate any more" },
-                    { value: "all", label: "All", count: counts.all },
                   ],
                 }}
               />
