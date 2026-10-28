@@ -73,7 +73,7 @@ export default function ResetPasswordPage() {
             {error}
           </p>
         )}
-        <Button type="submit" disabled={busy} className="h-11 w-full text-[15px]">
+        <Button type="submit" disabled={busy} className="w-full">
           {busy ? "Saving…" : "Change password"}
         </Button>
       </form>
