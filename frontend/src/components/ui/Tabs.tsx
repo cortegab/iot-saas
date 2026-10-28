@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 export interface TabItem {
@@ -20,8 +20,9 @@ export interface TabItem {
 
 /** Controlled underline tab strip (DESIGN.md §5 Tabs). The caller owns the
  * active tab (often mirrored into a query param) and renders the panels. Tabs
- * wrap onto a second line rather than ever showing a horizontal scrollbar.
- * Arrow keys, Home and End move between tabs and select them. */
+ * never wrap: when they don't fit (phones) the row scrolls sideways with no
+ * visible scrollbar, fades at the edge that has more, and keeps the active tab
+ * in view. Arrow keys, Home and End move between tabs and select them. */
 export function Tabs({
   tabs,
   active,
@@ -38,6 +39,36 @@ export function Tabs({
   const listRef = useRef<HTMLDivElement>(null);
   const enabled = tabs.filter((t) => !t.disabled);
   const current = enabled.some((t) => t.id === active) ? active : enabled[0]?.id;
+  const [more, setMore] = useState({ left: false, right: false });
+
+  const measure = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const left = el.scrollLeft > 1;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setMore((m) => (m.left === left && m.right === right ? m : { left, right }));
+  }, []);
+
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+
+  // Keep the active tab in view (scrolling the strip only, never the page).
+  useEffect(() => {
+    const el = listRef.current;
+    const tab = current ? el?.querySelector<HTMLElement>(`#tab-${CSS.escape(current)}`) : null;
+    if (!el || !tab) return;
+    const pad = 24;
+    if (tab.offsetLeft - pad < el.scrollLeft) el.scrollLeft = tab.offsetLeft - pad;
+    else if (tab.offsetLeft + tab.offsetWidth + pad > el.scrollLeft + el.clientWidth) el.scrollLeft = tab.offsetLeft + tab.offsetWidth + pad - el.clientWidth;
+  }, [current]);
+
+  const fade = `linear-gradient(to right, ${more.left ? "transparent, #000 28px" : "#000"}, ${more.right ? "#000 calc(100% - 28px), transparent" : "#000"})`;
 
   function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     const i = enabled.findIndex((t) => t.id === current);
@@ -54,12 +85,15 @@ export function Tabs({
   }
 
   return (
+    <div className={cn("border-b border-border", className)}>
     <div
       ref={listRef}
       role="tablist"
       aria-label={ariaLabel}
       onKeyDown={onKeyDown}
-      className={cn("flex flex-wrap gap-x-1 border-b border-border", className)}
+      onScroll={measure}
+      style={more.left || more.right ? { maskImage: fade, WebkitMaskImage: fade } : undefined}
+      className="-mb-px flex gap-x-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {tabs.map((tab) => {
         const selected = !tab.disabled && tab.id === current;
@@ -77,8 +111,8 @@ export function Tabs({
             id={`tab-${tab.id}`}
             onClick={() => onChange(tab.id)}
             className={cn(
-              "relative inline-flex h-control items-center gap-1.5 whitespace-nowrap px-3 text-sm transition-colors duration-150",
-              "after:absolute after:inset-x-1.5 after:-bottom-px after:h-0.5 after:rounded-full",
+              "relative inline-flex h-control shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm transition-colors duration-150",
+              "after:absolute after:inset-x-1.5 after:bottom-0 after:h-0.5 after:rounded-full",
               selected && "font-medium text-ink after:bg-accent",
               !selected && !tab.disabled && "text-ink-muted hover:text-ink",
               tab.disabled && "cursor-not-allowed text-ink-muted/50",
@@ -101,6 +135,7 @@ export function Tabs({
           </button>
         );
       })}
+    </div>
     </div>
   );
 }

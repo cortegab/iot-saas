@@ -39,7 +39,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
         eyebrow={`${template.name} · ${template.runs_on === "generic_firmware" ? "Our firmware" : "Custom firmware"}`}
         title={
           <>
-            Connect <span className="font-mono font-medium tracking-[-0.01em]">{device.name}</span>
+            Connect {device.name}
           </>
         }
         status={<Badge tone={st.tone} shape={st.shape} label={st.label} />}
