@@ -58,6 +58,34 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
   const actuators = useMemo(() => [...(labels?.keys() ?? [])].sort(), [labels]);
 
   const name = (a: string) => labels?.get(a) ?? a;
+
+  // A run of commands to the same actuator from the same sender with the same
+  // result, one after another, reads as one row with ×N (a device that didn't
+  // answer would otherwise fill the page with near-copies). ×N expands it.
+  const runs = useMemo(() => {
+    const out: { items: CommandResponse[]; status: CommandStatus }[] = [];
+    for (const c of rows) {
+      const status = commandStatus(c);
+      const prev = out[out.length - 1];
+      if (prev && prev.status === status && prev.items[0].actuator === c.actuator && prev.items[0].rule_id === c.rule_id) prev.items.push(c);
+      else out.push({ items: [c], status });
+    }
+    return out;
+  }, [rows]);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setOpen((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  type Shown = { items: CommandResponse[]; status: CommandStatus; collapsed: boolean; runId?: string };
+  const shown = runs.flatMap((r): Shown[] => {
+    const runId = r.items.length > 1 ? r.items[0].id : undefined;
+    if (runId && !open.has(runId)) return [{ items: r.items, status: r.status, collapsed: true, runId }];
+    return r.items.map((c, i) => ({ items: [c], status: r.status, collapsed: false, runId: i === 0 ? runId : undefined }));
+  });
   const heading = <h2 className="text-[15px] font-semibold text-ink">Command timeline</h2>;
 
   if (isLoading && rows.length === 0) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
@@ -108,17 +136,34 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
         <p className="text-sm text-ink-muted">No commands match.</p>
       ) : (
         <ol aria-label="Commands" className="flex flex-col border-l-2 border-border pl-4">
-          {rows.map((c) => {
-            const status = commandStatus(c);
+          {shown.map(({ items, status, collapsed, runId }) => {
+            const c = items[0];
+            const last = items[items.length - 1];
+            const count = items.length;
+            // Values in the run, newest first, without repeats ("On / Off").
+            const values = [...new Set(items.map((x) => formatValue(x.value)))].join(" / ");
             const rule = c.rule_id ? ruleName.get(c.rule_id) : null;
             return (
               <li
                 key={c.id}
                 className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 border-b border-border-soft py-2 text-sm before:absolute before:-left-[23px] before:top-3.5 before:h-2.5 before:w-2.5 before:rounded-full before:border-2 before:border-accent before:bg-surface last:border-b-0 @min-[600px]:grid-cols-[180px_minmax(0,1fr)_auto]"
               >
-                <span className="text-[12.5px] tabular-nums text-ink-muted">{time(c.published_at)}</span>
+                <span className="text-[12.5px] tabular-nums text-ink-muted">
+                  {/* Newest first: a run spans from its oldest to its newest. */}
+                  {count > 1 ? `${time(last.published_at)} – ${time(c.published_at)}` : time(c.published_at)}
+                </span>
                 <span className="col-span-full min-w-0 @min-[600px]:col-span-1 @min-[600px]:order-none">
-                  <span className="text-ink">{name(c.actuator)}</span> → <b className="font-medium text-ink">{formatValue(c.value)}</b>
+                  <span className="text-ink">{name(c.actuator)}</span> → <b className="font-medium text-ink">{count > 1 ? values : formatValue(c.value)}</b>
+                  {runId && (
+                    <button
+                      type="button"
+                      aria-expanded={!collapsed}
+                      onClick={() => toggle(runId)}
+                      className="hit ml-1.5 rounded bg-surface-raised px-[5px] align-[1px] text-[10.5px] font-medium text-ink hover:text-accent"
+                    >
+                      {collapsed ? `×${count}` : "Collapse"}
+                    </button>
+                  )}
                   <span className="text-ink-muted">
                     {" · "}
                     {c.rule_id ? (

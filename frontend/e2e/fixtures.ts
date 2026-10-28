@@ -1,4 +1,4 @@
-import { test as base, expect, type APIRequestContext } from "@playwright/test";
+import { type Locator, test as base, expect, type APIRequestContext } from "@playwright/test";
 
 export const API_URL = process.env.E2E_API_URL ?? "http://localhost:8000";
 
@@ -118,3 +118,9 @@ export const test = base.extend<{ ruleUnderTest: RuleFixture }>({
 });
 
 export { expect } from "@playwright/test";
+
+/** The timeline folds runs of like commands into one ×N row; open them all to count rows. */
+export async function expandCommandRuns(timeline: Locator) {
+  const folded = timeline.getByRole("button", { expanded: false });
+  for (let i = 0; i < 50 && (await folded.count()) > 0; i++) await folded.first().click();
+}

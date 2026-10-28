@@ -22,12 +22,16 @@ test("notifications: a template change shows up, dismiss with Undo, mark unread"
     await expect(row).toBeVisible();
     await expect(row.getByText("Changed 1 metric. Used by 0 devices.")).toBeVisible();
 
-    // Read ⇄ unread with the row's own button (demo H: the state and its action on the right).
-    const toggle = row.getByRole("button", { name: /^Mark (read|unread)$/ });
+    // Read ⇄ unread from the row's ⋯ menu (DESIGN.md §8: unread is the accent bar and a bold title).
+    const menu = row.getByRole("button", { name: `Actions for ${name} updated` });
+    await menu.click();
+    const toggle = page.getByRole("menuitem", { name: /^Mark as (read|unread)$/ });
     const firstLabel = (await toggle.innerText()).trim();
     await toggle.click();
-    await expect(row.getByRole("button", { name: firstLabel === "Mark read" ? "Mark unread" : "Mark read" })).toBeVisible();
-    await expect(row.getByText("Unread", { exact: true })).toHaveCount(firstLabel === "Mark read" ? 0 : 1);
+    await menu.click();
+    await expect(page.getByRole("menuitem", { name: firstLabel === "Mark as read" ? "Mark as unread" : "Mark as read" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(row.getByText(/, Unread:/)).toHaveCount(firstLabel === "Mark as read" ? 0 : 1);
 
     // The row opens a sheet with the details and the link (DESIGN.md §8).
     await row.getByRole("button", { name: /^(Info|Warning|Critical)/ }).click();
