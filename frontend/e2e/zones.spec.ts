@@ -66,7 +66,7 @@ test("lists peek: a drawer you can browse with ‹ › and ↓, Esc returns to t
     const peekA = drawer.getByRole("region", { name: `E2E peek ${stamp} a details` });
     await expect(peekA).toBeVisible();
     await expect(peekA.getByRole("textbox")).toHaveCount(0);
-    await expect(peekA.getByRole("link", { name: /Edit zone|View zone/ })).toBeVisible();
+    await expect(peekA.getByRole("link", { name: "Open zone" })).toBeVisible();
     await expect(drawer.getByText("1 of 2")).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`peek=${made[0]}`));
 
@@ -84,7 +84,7 @@ test("lists peek: a drawer you can browse with ‹ › and ↓, Esc returns to t
     await expect(drawer).toHaveCount(0);
     await expect(page.locator(`tr[data-row-key="${made[1]}"]`)).toBeFocused();
     await page.keyboard.press("Enter");
-    await drawer.getByRole("link", { name: /Edit zone|View zone/ }).click();
+    await drawer.getByRole("link", { name: "Open zone" }).click();
     await expect(page).toHaveURL(`/zones/${made[1]}`);
 
     // A docked-editor-era link lands on the record's page.

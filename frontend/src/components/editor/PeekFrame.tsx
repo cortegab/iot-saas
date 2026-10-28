@@ -1,8 +1,9 @@
 "use client";
 
 import { useContext, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { IconButton } from "@/components/ui/Button";
+import Link from "next/link";
+import { ChevronLeft, ChevronRight, SquareArrowOutUpRight, X } from "lucide-react";
+import { buttonClassName, IconButton } from "@/components/ui/Button";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { FactList } from "@/components/ui/FactList";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -11,9 +12,11 @@ import { PeekNavContext } from "@/components/list/peek-nav";
 /**
  * A record's read-only peek (DESIGN.md §7), shown in a drawer over its list
  * (ListWithPeek): looking happens here, changing happens on the record's
- * page. Eyebrow + title, a line of description, key facts, the one or two
- * next steps (Edit / Open), ‹ › to the neighbouring rows with "n of N", a ⋯
- * menu and close. No fields and no save bar.
+ * page. Eyebrow (status and meta, never the record kind) + title, a line of
+ * description, key facts, the next step (always "Open {noun}"), ‹ › to the
+ * neighbouring rows with "n of N", a ⋯ menu and close. No fields and no save
+ * bar. In a narrow drawer (phones) the controls take their own row above the
+ * title, so the title keeps the full width.
  */
 export function PeekFrame({
   noun,
@@ -33,7 +36,7 @@ export function PeekFrame({
   description?: ReactNode;
   /** Label → value pairs, shown as a definition list. Empty values are skipped. */
   facts?: [string, ReactNode][];
-  /** The next steps: an "Edit …" link and/or "Open". */
+  /** The next step: `<PeekOpen>` ("Open device"), plus at most one secondary. */
   primary?: ReactNode;
   menu?: DropdownMenuItem[][];
   onClose: () => void;
@@ -43,17 +46,17 @@ export function PeekFrame({
   const shown = (facts ?? []).filter(([, v]) => v != null && v !== false && v !== "");
 
   return (
-    <div role="region" aria-label={`${title} details`} className="flex h-full min-h-0 min-w-0 flex-col bg-surface">
-      <div className="flex shrink-0 items-start gap-2.5 border-b border-border px-5 pb-4 pt-4">
+    <div role="region" aria-label={`${title} details`} className="@container flex h-full min-h-0 min-w-0 flex-col bg-surface">
+      <div className="flex shrink-0 flex-col-reverse gap-2 border-b border-border px-5 pb-4 pt-3 @[30rem]:flex-row @[30rem]:items-start @[30rem]:gap-2.5 @[30rem]:pt-4">
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
           {eyebrow && <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">{eyebrow}</div>}
           <h2 className="break-words text-[19px] font-semibold leading-[1.3] tracking-[-0.015em] text-ink">{title}</h2>
           {description && <p className="mt-0.5 text-[13px] text-ink-muted">{description}</p>}
           {primary && <div className="mt-3 flex flex-wrap items-center gap-2">{primary}</div>}
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className="-mx-1.5 flex shrink-0 items-center justify-end gap-0.5 @[30rem]:mx-0">
           {nav && nav.index >= 0 && nav.total > 1 && (
-            <div className="mr-1 flex items-center">
+            <div className="mr-auto flex items-center @[30rem]:mr-1">
               <IconButton aria-label={`Previous ${noun}`} disabled={!nav.prev} onClick={() => nav.prev?.()}>
                 <ChevronLeft size={17} />
               </IconButton>
@@ -76,6 +79,15 @@ export function PeekFrame({
         {children}
       </div>
     </div>
+  );
+}
+
+/** The peek's next step: "Open {noun}" to the record's page (DESIGN.md §7). */
+export function PeekOpen({ href, noun }: { href: string; noun: string }) {
+  return (
+    <Link href={href} className={buttonClassName({ size: "sm" })}>
+      <SquareArrowOutUpRight aria-hidden size={14} /> Open {noun}
+    </Link>
   );
 }
 
