@@ -271,7 +271,19 @@ export default function DeviceDetailPage() {
           {latest && (metrics.length > 0 || hasReadings) ? (
             <Readouts device={device} metrics={metrics} latest={latest} thresholds={thresholdsByMetric} />
           ) : !latestLoading && template && metrics.length === 0 ? (
-            <p className="text-sm text-ink-muted">This template has no metrics.</p>
+            <p className="text-sm text-ink-muted">
+              {actuators.length > 0 ? (
+                <>
+                  It has nothing to read: it&apos;s switched from the{" "}
+                  <button type="button" onClick={() => setTab("controls")} className="text-accent hover:underline">
+                    Controls tab
+                  </button>
+                  .
+                </>
+              ) : (
+                "Its template has no metrics."
+              )}
+            </p>
           ) : null}
 
           {(metrics.length > 0 || hasReadings) && (
@@ -285,10 +297,11 @@ export default function DeviceDetailPage() {
             </Card>
           )}
 
-          <Card>
-            <h2 className="mb-3 text-[15px] font-semibold text-ink">Health</h2>
+          {/* A plain section with its facts (DESIGN.md §5, §7), not a card of dashes. */}
+          <section className="flex flex-col gap-3">
+            <h2 className="text-[15px] font-semibold text-ink">Health</h2>
             <Health device={device} />
-          </Card>
+          </section>
         </div>
       </TabPanel>
 
@@ -346,13 +359,16 @@ function uptime(s: number): string {
 /** The device's own report (demo H Health): signal, power, firmware, uptime
  * and the id it uses in MQTT topics. */
 function Health({ device }: { device: DeviceResponse }) {
+  // Only what the device has reported; one line when it hasn't reported yet.
+  const reported = device.last_status_at != null || device.rssi != null || device.fw_version != null || device.uptime_s != null;
   return (
     <FactList
       facts={[
-        ["Signal", device.rssi != null ? `${device.rssi} dBm` : "—"],
-        ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : device.last_status_at ? "Mains" : "—"],
-        ["Firmware", device.fw_version ?? "—"],
-        ["Uptime", device.uptime_s != null ? uptime(device.uptime_s) : "—"],
+        !reported && ["Report", <span key="r" className="text-ink-muted">Not reported yet</span>],
+        device.rssi != null && ["Signal", `${device.rssi} dBm`],
+        reported && ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : "Mains"],
+        device.fw_version != null && ["Firmware", device.fw_version],
+        device.uptime_s != null && ["Uptime", uptime(device.uptime_s)],
         ["MQTT id", <span key="id" className="font-mono">{device.slug}</span>],
       ]}
     />

@@ -6,7 +6,7 @@ import { mutate as revalidate } from "swr";
 import { AlertTriangle, Bell, Check, CheckCheck, Info, Mail, X, Zap } from "lucide-react";
 import { NOTIFICATIONS_KEY, useNotifications } from "@/hooks/useNotifications";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { Badge, Tag } from "@/components/ui/Badge";
+import { Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -272,7 +272,7 @@ export default function NotificationsPage() {
                         if (!(e.target as HTMLElement).closest("a, button")) openSheet(g);
                       }}
                       className={cn(
-                        "flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-2 border-t border-border-soft px-3.5 py-2.5 first:border-t-0 hover:bg-row-hover",
+                        "flex cursor-pointer items-start gap-x-3 gap-y-2 border-t border-border-soft px-3.5 py-2.5 first:border-t-0 hover:bg-row-hover",
                         // Unread: the demo's active bar on the left edge.
                         g.unread && "shadow-[inset_3px_0_0_var(--color-accent)]",
                       )}
@@ -281,8 +281,9 @@ export default function NotificationsPage() {
                         <SevIcon aria-hidden size={17} className={cn("mt-0.5 shrink-0", sev.tone)} />
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
                           <button type="button" onClick={() => openSheet(g)} aria-haspopup="dialog" className="min-w-0 text-left text-ink">
-                            <span className="sr-only">{sev.label}: </span>
-                            <strong className="font-medium">{n.message}</strong>
+                            <span className="sr-only">{sev.label}{g.unread ? ", Unread" : ""}: </span>
+                            {/* Unread is the accent bar and a bold title (DESIGN.md §8). */}
+                            <strong className={g.unread ? "font-semibold" : "font-normal"}>{n.message}</strong>
                             {repeats > 1 && (
                               <Tag size="sm" className="ml-2">
                                 ×{repeats}
@@ -296,15 +297,17 @@ export default function NotificationsPage() {
                           </span>
                         </div>
                       </div>
-                      <div className="ml-auto flex shrink-0 items-center gap-2.5 max-[600px]:w-full max-[600px]:pl-[29px]">
-                        {g.unread && <Badge tone="accent" label="Unread" />}
-                        <Button size="sm" variant="secondary" onClick={() => void (g.unread ? readAll(g) : unreadAll(g))}>
-                          {g.unread ? <Check aria-hidden size={14} /> : <Bell aria-hidden size={14} />}
-                          {g.unread ? "Mark read" : "Mark unread"}
-                        </Button>
+                      <div className="ml-auto shrink-0">
                         <DropdownMenu
                           label={`Actions for ${n.message}`}
-                          groups={[[{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }]]}
+                          groups={[
+                            [
+                              g.unread
+                                ? { label: "Mark as read", icon: <Check size={15} />, onClick: () => void readAll(g) }
+                                : { label: "Mark as unread", icon: <Bell size={15} />, onClick: () => void unreadAll(g) },
+                            ],
+                            [{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }],
+                          ]}
                         />
                       </div>
                     </li>

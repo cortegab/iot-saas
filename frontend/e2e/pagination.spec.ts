@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { API_URL, login, test } from "./fixtures";
+import { API_URL, login, test, expandCommandRuns } from "./fixtures";
 
 // DESIGN.md §6: every list that can grow pages at 25 / 50 / 100; history is
 // paged by the API (X-Total-Count), so all of it can be browsed, not just the
@@ -28,6 +28,8 @@ test("the command timeline pages past the old 100-row cap, filters on the server
 
     await page.goto(`/devices/${deviceId}?tab=controls`);
     const timeline = page.getByRole("list", { name: "Commands" });
+    await expect(timeline.getByRole("listitem").first()).toBeVisible();
+    await expandCommandRuns(timeline);
     await expect(timeline.getByRole("listitem")).toHaveCount(25);
     // A numbered pager (DESIGN.md §6): every page is a button, the current one marked.
     const pager = page.getByRole("navigation", { name: "Pagination" });
@@ -41,6 +43,7 @@ test("the command timeline pages past the old 100-row cap, filters on the server
     await pager.getByRole("button", { name: "Page 5" }).click();
     await expect(pager.getByRole("button", { name: "Page 5" })).toHaveAttribute("aria-current", "page");
     await expect(pager.getByRole("button", { name: "Next page" })).toBeDisabled();
+    await expandCommandRuns(timeline);
     await expect(timeline.getByRole("listitem")).toHaveCount(20);
 
     // A filter is applied by the API and goes back to page 1. Nothing was
