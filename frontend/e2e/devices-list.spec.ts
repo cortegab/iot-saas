@@ -37,7 +37,7 @@ test("a device peeks from the list and is edited in its Settings tab", async ({ 
   for (const heading of ["General", "Rule evaluation", "Template", "Wiring", "Connection", "Delete"]) {
     await expect(page.getByRole("heading", { level: 3, name: heading, exact: true })).toBeVisible();
   }
-  await expect(page.getByText("Gives it")).toBeVisible();
+  await expect(page.locator("#ps-template").getByRole("term").filter({ hasText: /^Metrics$/ })).toBeVisible();
   await page.getByText("Show its MQTT topics").click();
   await expect(page.getByText("Health (retained, last will)")).toBeVisible();
   await expect(page.getByRole("button", { name: "Rotate credential…" })).toBeVisible();

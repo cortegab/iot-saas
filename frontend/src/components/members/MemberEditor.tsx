@@ -11,6 +11,7 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { FactList } from "@/components/ui/FactList";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -224,10 +225,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
               />
             </Field>
           ) : (
-            <div className="flex flex-col gap-1">
-              <span className="text-[13px] font-medium text-ink">Email</span>
-              <p className="font-mono text-[13.5px] text-ink">{member!.email}</p>
-            </div>
+            <FactList facts={[["Email", <span key="email" className="font-mono">{member!.email}</span>]]} />
           )}
           <fieldset className="flex flex-col gap-2" aria-describedby="member-role-msg">
             <legend className="mb-1.5 text-[13px] font-medium text-ink">Role</legend>

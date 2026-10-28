@@ -4,6 +4,7 @@ import { useContext, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { IconButton } from "@/components/ui/Button";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
+import { FactList } from "@/components/ui/FactList";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PeekNavContext } from "@/components/list/peek-nav";
 
@@ -71,16 +72,7 @@ export function PeekFrame({
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-auto px-5 pb-6 pt-4">
-        {shown.length > 0 && (
-          <dl className="grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-[13.5px]">
-            {shown.map(([label, value]) => (
-              <div key={label} className="contents">
-                <dt className="text-ink-muted">{label}</dt>
-                <dd className="m-0 min-w-0 break-words text-ink">{value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+        <FactList facts={shown} />
         {children}
       </div>
     </div>

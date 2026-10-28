@@ -9,15 +9,16 @@ import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { ChoiceCards } from "@/components/ui/ChoiceCards";
+import { FactList } from "@/components/ui/FactList";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Breadcrumbs, PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { TemplateEditor } from "@/components/catalog/TemplateEditor";
+import { templateGivesFacts } from "@/components/catalog/template-facts";
 import { ApiRequestError } from "@/lib/api-client";
 import { handOffCredential } from "@/lib/credential-handoff";
 import type { RunsOn } from "@/lib/template-draft";
-import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
@@ -128,7 +129,17 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
             </Select>
           </Field>
         </div>
-        <Field label="Template" hint={<Link href="/templates" className="text-accent hover:underline">Manage templates</Link>}>
+        <Field
+          label="Template"
+          hint={
+            <>
+              It sets what the device measures and switches.{" "}
+              <Link href="/templates" className="text-accent hover:underline">
+                Manage templates
+              </Link>
+            </>
+          }
+        >
           <Select required value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
             {!templates && <option value="">Loading…</option>}
             {(["generic_firmware", "own_code"] as const).map((r) =>
@@ -144,19 +155,7 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
             )}
           </Select>
         </Field>
-        {template && (
-          <div className="flex flex-col gap-2 rounded-xl bg-surface-raised px-4 py-3.5 text-sm">
-            <span className="text-[13px] font-medium text-ink-muted">It gives you</span>
-            <p className="text-ink">
-              <b className="font-medium">Readings: </b>
-              {template.metrics.length ? template.metrics.map((m) => m.name || wireId(m)).join(", ") : "none"}
-            </p>
-            <p className="text-ink">
-              <b className="font-medium">Switches: </b>
-              {template.actuators.length ? template.actuators.map((a) => a.name || wireId(a)).join(", ") : "none"}
-            </p>
-          </div>
-        )}
+        {template && <FactList facts={templateGivesFacts(template)} />}
         {error && (
           <p role="alert" className="text-sm text-status-error">
             {error}

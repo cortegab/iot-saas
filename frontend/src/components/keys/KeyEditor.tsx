@@ -9,6 +9,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { FactList } from "@/components/ui/FactList";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -35,15 +36,6 @@ interface KeyDraft {
 }
 
 const BLANK: KeyDraft = { name: "", role: "viewer", expiry: "90" };
-
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="grid grid-cols-[110px_minmax(0,1fr)] items-baseline gap-3 border-b border-border py-2 last:border-b-0">
-      <dt className="text-[13px] text-ink-muted">{label}</dt>
-      <dd className="min-w-0 text-sm text-ink">{children}</dd>
-    </div>
-  );
-}
 
 /** API keys (DESIGN.md §8), on their own pages: create (/keys/new: name,
  * role, expiry), then read-only (/keys/{id}) — keys can't be edited; to
@@ -125,7 +117,7 @@ export function KeyEditor({
           noun="key"
           title={key.name}
           eyebrow={<Badge tone={KEY_STATUS_TONE[st]} label={KEY_STATUS_LABEL[st]} />}
-          consequence="Keys can't be edited. To change a key's role or expiry, create a new one and revoke this one."
+          consequence="Keys can't be edited. To change a key's scope or expiry, create a new one and revoke this one."
           sections={[{ id: "key", label: "Key" }]}
           status={editor}
           readOnly
@@ -143,19 +135,17 @@ export function KeyEditor({
           ]}
         >
           <EditorSection id="key" title="Key">
-            <dl className="flex flex-col">
-              <Fact label="Prefix">
-                <CopyField value={`${key.key_prefix}…`} label="key prefix" />
-              </Fact>
-              <Fact label="Role">{role ? ROLE_LABEL[role] : key.role}</Fact>
-              <Fact label="Created">{formatWhen(key.created_at)}</Fact>
-              <Fact label="Last used">{key.last_used_at ? timeAgo(key.last_used_at) : "Never"}</Fact>
-              <Fact label="Expires">{key.expires_at ? formatDate(key.expires_at) : "Never"}</Fact>
-              {key.revoked_at && <Fact label="Revoked">{formatWhen(key.revoked_at)}</Fact>}
-              <Fact label="Header">
-                <code className="break-all font-mono text-[12.5px]">Authorization: Bearer {key.key_prefix}…</code>
-              </Fact>
-            </dl>
+            <FactList
+              facts={[
+                ["Prefix", <CopyField key="prefix" value={`${key.key_prefix}…`} label="key prefix" />],
+                ["Scope", role ? ROLE_LABEL[role] : key.role],
+                ["Created", formatWhen(key.created_at)],
+                ["Last used", key.last_used_at ? timeAgo(key.last_used_at) : "Never"],
+                ["Expires", key.expires_at ? formatDate(key.expires_at) : "Never"],
+                key.revoked_at ? ["Revoked", formatWhen(key.revoked_at)] : null,
+                ["Header", <code key="header" className="break-all font-mono text-[12.5px]">Authorization: Bearer {key.key_prefix}…</code>],
+              ]}
+            />
             <p className="text-[13px] text-ink-muted">
               The key names its workspace, so <code className="font-mono">X-Tenant-Id</code> is optional. It works on devices, telemetry,
               rules, templates, zones and notifications, never on members, keys or personal dashboards.
