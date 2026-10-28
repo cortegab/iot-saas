@@ -49,7 +49,7 @@ export function MemberPeek({
           }
           description="They join when they open the link in their email."
           facts={[
-            ["Role", <Tag key="r" tone={invite.role === "owner" ? "accent" : "neutral"}>{roleLabel(invite.role)}</Tag>],
+            ["Role", <Tag key="r">{roleLabel(invite.role)}</Tag>],
             ["Sent", timeAgo(invite.created_at)],
             ["Link expires", formatDate(invite.expires_at)],
           ]}
@@ -83,7 +83,7 @@ export function MemberPeek({
         description={role ? ROLE_HELP[role] : undefined}
         facts={[
           ["Email", <span key="e" className="font-mono text-[13px]">{member.email}</span>],
-          ["Role", <Tag key="r" tone={member.role === "owner" ? "accent" : "neutral"}>{roleLabel(member.role)}</Tag>],
+          ["Role", <Tag key="r">{roleLabel(member.role)}</Tag>],
           ["Joined", member.joined_at ? formatDate(member.joined_at) : null],
         ]}
         primary={<PeekOpen href={`/members/${member.user_id}`} noun="member" />}

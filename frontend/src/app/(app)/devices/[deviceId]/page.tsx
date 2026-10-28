@@ -201,6 +201,7 @@ export default function DeviceDetailPage() {
     <div className="-mb-[110px] flex flex-1 flex-col gap-4 pb-6">
       <PageHeader
         breadcrumbs={[{ href: "/devices", label: "Devices" }]}
+        status={<Badge tone={st.tone} shape={st.shape} label={st.label} />}
         eyebrow={
           <span>
             {template ? (
@@ -218,15 +219,11 @@ export default function DeviceDetailPage() {
             ) : (
               "No zone"
             )}
+            {" · last message "}
+            {device.last_seen_at ? timeAgo(device.last_seen_at) : "never"}
           </span>
         }
         title={device.name}
-        description={
-          <span className="flex flex-wrap items-center gap-x-1.5">
-            <Badge tone={st.tone} shape={st.shape} variant="dot" label={st.label} />
-            <span>· last message {device.last_seen_at ? timeAgo(device.last_seen_at) : "never"}</span>
-          </span>
-        }
         actions={
           <>
             {canWrite &&
