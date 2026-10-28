@@ -51,6 +51,19 @@ class TenantUpdateRequest(BaseModel):
         return zone
 
 
+class NavCountsResponse(BaseModel):
+    """The sidebar's counts in one request, instead of every list (DESIGN.md §4).
+    Members and API keys are null for roles that can't manage them."""
+
+    devices: int
+    rules: int
+    templates: int
+    dashboards: int
+    zones: int
+    members: int | None
+    api_keys: int | None
+
+
 class TenantResponse(BaseModel):
     id: uuid.UUID
     name: str

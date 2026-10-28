@@ -11,13 +11,18 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api_keys import service as api_keys_service
 from app.auth import service as auth_service
 from app.auth.deps import get_current_user
 from app.auth.models import User
 from app.auth.schemas import MembershipSummary
+from app.catalog import service as catalog_service
 from app.config import settings
+from app.dashboards import service as dashboards_service
 from app.db import get_session, set_user_context
+from app.devices import service as devices_service
 from app.notifications.email import EmailMessage, send_after_commit
+from app.rules import service as rules_service
 from app.tenants import service
 from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import Invitation, Tenant, TenantRole
@@ -27,10 +32,12 @@ from app.tenants.schemas import (
     InvitationCreateRequest,
     InvitationResponse,
     MemberResponse,
+    NavCountsResponse,
     TenantCreateRequest,
     TenantResponse,
     TenantUpdateRequest,
 )
+from app.zones import service as zones_service
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
 
@@ -80,6 +87,29 @@ async def get_current_tenant(
 ) -> TenantResponse:
     tenant = await service.get_tenant(session, ctx.tenant_id)
     return _tenant_response(tenant)
+
+
+@router.get("/current/counts", response_model=NavCountsResponse)
+async def get_nav_counts(
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> NavCountsResponse:
+    """The sidebar's counts in one request, without loading the lists."""
+    admin = ctx.role in (TenantRole.ADMIN, TenantRole.OWNER)
+    assert ctx.user_id is not None  # people_only
+    return NavCountsResponse(
+        devices=await devices_service.count_devices(session, ctx.tenant_id),
+        rules=await rules_service.count_rules(session, ctx.tenant_id),
+        templates=await catalog_service.count_catalog_entries(session, ctx.tenant_id),
+        dashboards=await dashboards_service.count_my_dashboards(
+            session, ctx.tenant_id, ctx.user_id
+        ),
+        zones=await zones_service.count_zones(session, ctx.tenant_id),
+        members=await service.count_members(session, ctx.tenant_id) if admin else None,
+        api_keys=await api_keys_service.count_active_api_keys(session, ctx.tenant_id)
+        if admin
+        else None,
+    )
 
 
 @router.patch("/current", response_model=TenantResponse)

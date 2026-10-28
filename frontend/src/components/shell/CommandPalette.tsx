@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { useFocusTrap } from "@/components/ui/Sheet";
 import { NAV_GROUPS } from "@/components/shell/nav-config";
-import { useShellData } from "@/components/shell/useShellData";
+import { usePaletteData } from "@/components/shell/useShellData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTheme } from "@/hooks/useTheme";
 import type { Action } from "@/lib/permissions";
@@ -46,7 +46,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const router = useRouter();
   const { can } = usePermissions();
   const { theme, setPreference } = useTheme();
-  const data = useShellData();
+  const data = usePaletteData();
   const [query, setQuery] = useState("");
   const [sel, setSel] = useState(0);
   const ref = useRef<HTMLDivElement>(null);

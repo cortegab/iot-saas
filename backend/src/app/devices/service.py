@@ -118,6 +118,16 @@ async def list_devices(session: AsyncSession, tenant_id: uuid.UUID) -> list[Devi
     return list(result.scalars().all())
 
 
+async def count_devices(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    """How many devices the tenant has (the sidebar count), without loading them."""
+    return (
+        await session.scalar(
+            select(func.count()).select_from(Device).where(Device.tenant_id == tenant_id)
+        )
+        or 0
+    )
+
+
 async def count_devices_by_catalog_entry(
     session: AsyncSession, tenant_id: uuid.UUID
 ) -> dict[uuid.UUID, int]:

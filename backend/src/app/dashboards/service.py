@@ -8,7 +8,7 @@ import uuid
 from collections import Counter
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dashboards.models import Dashboard
@@ -36,6 +36,19 @@ async def list_my_dashboards(
         .order_by(Dashboard.created_at)
     )
     return list(result.scalars().all())
+
+
+async def count_my_dashboards(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> int:
+    return (
+        await session.scalar(
+            select(func.count())
+            .select_from(Dashboard)
+            .where(Dashboard.tenant_id == tenant_id, Dashboard.user_id == user_id)
+        )
+        or 0
+    )
 
 
 async def get_dashboard(

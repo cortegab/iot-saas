@@ -24,7 +24,7 @@ import { useTheme } from "@/hooks/useTheme";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { NAV_GROUPS, activeHref } from "@/components/shell/nav-config";
 import { useShell } from "@/components/shell/shell-context";
-import { useShellData } from "@/components/shell/useShellData";
+import { useNavCounts } from "@/components/shell/useShellData";
 import { CreateWorkspaceDialog } from "@/components/shell/CreateWorkspaceDialog";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import type { RealtimeStatus } from "@/lib/realtime";
@@ -159,7 +159,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
   const active = activeHref(pathname);
   const { can } = usePermissions();
   const { openPalette } = useShell();
-  const { counts, unreadCount } = useShellData();
+  const { counts, unreadCount } = useNavCounts();
   const tips = useRailTips(compact);
 
   const pin = onTogglePin && (
