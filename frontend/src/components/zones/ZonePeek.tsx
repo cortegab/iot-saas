@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Cpu, Link2, Pencil } from "lucide-react";
+import { Cpu, Link2 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
-import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekOpen, PeekPlaceholder } from "@/components/editor/PeekFrame";
+import { PeekDeviceList } from "@/components/devices/PeekDeviceList";
 import { useDeleteZone } from "./useDeleteZone";
 import type { components } from "@/types/api";
 
@@ -52,21 +52,18 @@ export function ZonePeek({ zone, offline, onClose }: { zone: ZoneResponse | unde
       <PeekFrame
         noun="zone"
         title={zone.name}
-        eyebrow={<>Zone {status}</>}
+        eyebrow={status}
         description={zone.notes || undefined}
         facts={[
           ["Devices", zone.device_count ? <Link href={`/devices?zone=${zone.id}`} className="text-accent hover:underline">{plural(zone.device_count, "device")}</Link> : "None yet"],
           ["Offline", zone.device_count ? (offline ? plural(offline, "device") : "None") : null],
         ]}
-        primary={
-          <Link href={`/zones/${zone.id}`} className={buttonClassName({ size: "sm" })}>
-            <Pencil aria-hidden size={14} />
-            {canWrite ? "Edit zone" : "View zone"}
-          </Link>
-        }
+        primary={<PeekOpen href={`/zones/${zone.id}`} noun="zone" />}
         menu={menu}
         onClose={onClose}
-      />
+      >
+        <PeekDeviceList match={(d) => d.zone_id === zone.id} allHref={`/devices?zone=${zone.id}`} />
+      </PeekFrame>
       {dialog}
     </>
   );

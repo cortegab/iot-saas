@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, Copy, Cpu, Link2, Pencil, Power, Trash2 } from "lucide-react";
+import { BookOpen, Copy, Cpu, Link2, Power, Trash2 } from "lucide-react";
 import { resolveModel } from "@/lib/hardware/board-pins";
 import { findDriver, useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
-import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder, PeekSection } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekOpen, PeekPlaceholder, PeekSection } from "@/components/editor/PeekFrame";
+import { PeekDeviceList } from "@/components/devices/PeekDeviceList";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 
@@ -71,7 +71,6 @@ export function TemplatePeek({
       title={entry.name}
       eyebrow={
         <>
-          Device template{" "}
           {entry.status === "active" ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />}
           {entry.is_legacy && <Tag size="sm">Legacy</Tag>}
         </>
@@ -92,11 +91,7 @@ export function TemplatePeek({
         ],
         ["Updated", timeAgo(entry.updated_at)],
       ]}
-      primary={
-        <Link href={`/templates/${entry.id}`} className={buttonClassName({ size: "sm" })}>
-          <Pencil aria-hidden size={14} /> {canWrite ? "Edit" : "View"}
-        </Link>
-      }
+      primary={<PeekOpen href={`/templates/${entry.id}`} noun="template" />}
       menu={menu}
       onClose={onClose}
     >
@@ -110,6 +105,7 @@ export function TemplatePeek({
           <dd className="m-0 text-ink">{entry.actuators.length ? entry.actuators.map((a) => a.name).join(", ") : <span className="text-ink-muted">None</span>}</dd>
         </dl>
       </PeekSection>
+      <PeekDeviceList match={(d) => d.catalog_entry_id === entry.id} allHref={`/devices?template=${entry.id}`} />
     </PeekFrame>
   );
 }

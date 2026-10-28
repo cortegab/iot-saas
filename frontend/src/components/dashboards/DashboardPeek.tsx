@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { Copy, LayoutGrid, Link2, SquareArrowOutUpRight, Trash2 } from "lucide-react";
+import { Copy, LayoutGrid, Link2, Trash2 } from "lucide-react";
 import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekOpen, PeekPlaceholder } from "@/components/editor/PeekFrame";
 import { widgetSummary } from "@/lib/dashboard-summary";
 import { formatWhen, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
@@ -46,7 +46,7 @@ export function DashboardPeek({
     <PeekFrame
       noun="dashboard"
       title={dashboard.name}
-      eyebrow="Dashboard · only you see it"
+      eyebrow="Only you see it"
       description={widgetSummary(dashboard.layout)}
       facts={[
         ["Widgets", String(dashboard.layout.length)],
@@ -55,9 +55,7 @@ export function DashboardPeek({
       ]}
       primary={
         <>
-          <Link href={`/dashboards/${dashboard.id}`} className={buttonClassName({ size: "sm" })}>
-            <SquareArrowOutUpRight aria-hidden size={14} /> Open
-          </Link>
+          <PeekOpen href={`/dashboards/${dashboard.id}`} noun="dashboard" />
           <Link href={`/dashboards/${dashboard.id}?edit=1`} className={buttonClassName({ variant: "secondary", size: "sm" })}>
             <LayoutGrid aria-hidden size={14} /> {dashboard.layout.length ? "Edit layout" : "Add widgets"}
           </Link>

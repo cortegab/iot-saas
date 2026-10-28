@@ -1,13 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { SquareArrowOutUpRight } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { buttonClassName } from "@/components/ui/Button";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
-import { PeekFrame, PeekPlaceholder, PeekSection } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekOpen, PeekPlaceholder, PeekSection } from "@/components/editor/PeekFrame";
 import { cn } from "@/lib/cn";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { timeAgo } from "@/lib/time-ago";
@@ -18,6 +16,7 @@ type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
+type CommandResponse = components["schemas"]["CommandResponse"];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
@@ -41,6 +40,9 @@ export function DevicePeek({
   menu: (d: DeviceResponse) => DropdownMenuItem[][];
 }) {
   const { data: latest } = useApiSWR<TelemetryLatestResponse[]>(device ? `/devices/${device.id}/latest` : null);
+  const actuators = template?.actuators ?? [];
+  // Newest first: the first command per actuator is what it was last told.
+  const { data: commands } = useApiSWR<CommandResponse[]>(device && actuators.length ? `/devices/${device.id}/commands?limit=50` : null);
   if (!device) return <PeekPlaceholder noun="device" missing onClose={onClose} />;
 
   const stale = device.connection_state !== "online";
@@ -56,9 +58,7 @@ export function DevicePeek({
       noun="device"
       title={device.name}
       eyebrow={
-        <>
-          Device <DeviceStatusPill device={device} />
-        </>
+        <DeviceStatusPill device={device} />
       }
       description={`Last message ${device.last_seen_at ? timeAgo(device.last_seen_at) : "never"}`}
       facts={[
@@ -79,11 +79,7 @@ export function DevicePeek({
         ["Signal", device.rssi != null ? `${device.rssi} dBm` : null],
         ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : null],
       ]}
-      primary={
-        <Link href={`/devices/${device.id}`} className={buttonClassName({ size: "sm" })}>
-          <SquareArrowOutUpRight aria-hidden size={14} /> Open device
-        </Link>
-      }
+      primary={<PeekOpen href={`/devices/${device.id}`} noun="device" />}
       menu={menu(device)}
       onClose={onClose}
     >
@@ -111,6 +107,31 @@ export function DevicePeek({
               })}
             </ul>
           )}
+        </PeekSection>
+      )}
+      {actuators.length > 0 && (
+        <PeekSection title="Controls">
+          <ul aria-label="Controls" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+            {actuators.map((a) => {
+              const last = commands?.find((c) => c.actuator === wireId(a));
+              return (
+                <li key={wireId(a)} className="flex min-h-11 items-center justify-between gap-3 border-t border-border-soft px-3.5 py-2 text-sm first:border-t-0">
+                  <b className="truncate font-medium text-ink">{a.name}</b>
+                  {last ? (
+                    <span className="whitespace-nowrap tabular-nums text-ink" title={timeAgo(last.issued_at)}>
+                      {typeof last.value === "boolean" ? (last.value ? "On" : "Off") : String(last.value)}
+                      <span className="ml-1.5 text-[12.5px] text-ink-muted">{timeAgo(last.issued_at)}</span>
+                    </span>
+                  ) : (
+                    <span className="text-ink-muted">{commands ? "Not commanded yet" : "…"}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <Link href={`/devices/${device.id}?tab=controls`} className="w-fit text-sm text-accent hover:underline">
+            Open controls
+          </Link>
         </PeekSection>
       )}
     </PeekFrame>
