@@ -139,7 +139,7 @@ test("rotating the credential makes a new QR", async ({ page, context, throwaway
   expect(after.pop).not.toBe(before.pop);
 });
 
-test("adding a device hands its credential straight to the connect flow", async ({ page, request }) => {
+test("connect always starts by creating the credential, held in the page only", async ({ page, request }) => {
   const name = `E2E add ${Date.now()}`;
   await page.goto("/devices/new");
   await page.getByLabel("Device name").fill(name);
@@ -147,15 +147,12 @@ test("adding a device hands its credential straight to the connect flow", async 
   await expect(page).toHaveURL(/\/devices\/[0-9a-f-]+\/connect$/);
   const deviceId = page.url().split("/devices/")[1].split("/")[0];
   try {
-    // No rotate step: the credential from creation is already here.
+    // DESIGN.md §8: nothing is carried over from Add device; Create comes first.
     const username = page.getByLabel("Username", { exact: true });
+    await expect(username).toHaveCount(0);
+    await page.getByRole("button", { name: "Create credential" }).click();
     await expect(username).toHaveValue(deviceId);
-    await expect(page.getByRole("button", { name: "Create credential" })).toHaveCount(0);
-
-    // DESIGN.md §8: it survives a reload (this tab's sessionStorage only)…
-    await page.reload();
-    await expect(username).toHaveValue(deviceId);
-    expect(await page.evaluate(() => Object.keys(localStorage).filter((k) => k.includes("credential")))).toEqual([]);
+    expect(await page.evaluate(() => [...Object.keys(localStorage), ...Object.keys(sessionStorage)].filter((k) => k.includes("credential")))).toEqual([]);
 
     // On a phone: "Step n of N", and nothing scrolls sideways.
     await page.setViewportSize({ width: 390, height: 844 });
@@ -163,17 +160,18 @@ test("adding a device hands its credential straight to the connect flow", async 
     expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)).toBeLessThanOrEqual(0);
     await page.setViewportSize({ width: 1280, height: 720 });
 
-    // …and leaving before storing it asks first.
+    // Leaving before storing it asks first…
     await page.getByRole("button", { name: "I'll do this later" }).click();
     const ask = page.getByRole("alertdialog");
     await expect(ask).toContainText("Leave before storing the password?");
     await ask.getByRole("button", { name: "Stay" }).click();
     await expect(page).toHaveURL(/\/connect$/);
-    await page.getByRole("button", { name: "I'll do this later" }).click();
-    await page.getByRole("alertdialog").getByRole("button", { name: "Leave" }).click();
-    await expect(page).toHaveURL(new RegExp(`/devices/${deviceId}$`));
-    // Left: it's forgotten.
-    expect(await page.evaluate((id) => sessionStorage.getItem(`iot:credential:${id}`), deviceId)).toBeNull();
+
+    // …and once stored, a reload drops it: the next visit creates again.
+    await page.getByLabel("I've stored it").check();
+    await page.reload();
+    await expect(username).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Create credential" })).toBeVisible();
   } finally {
     await request.delete(`${API_URL}/devices/${deviceId}`, { headers: await apiHeaders(request) });
   }

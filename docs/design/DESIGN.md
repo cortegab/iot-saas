@@ -394,17 +394,18 @@ edits a whole record, and there is no "Expand" toggle.
     and how to set up its Wi-Fi again.
 - **Devices**
   - Zone is set and changed **only in the device's own settings**.
-  - The one-time credential uses SecretReveal.
+  - The one-time credential is shown as read-only fields with Copy (Connect's Store its credential).
   - The connect / firmware-sketch flow is part of the device page, and is a step-by-step wizard
     (Credential · Options · Install · Wi-Fi from your phone · Live check), with a side list of the
     steps on wide screens and "Step n of N" on phones.
-  - The one-time credential **survives a reload**: it is kept in `sessionStorage` (this tab only,
-    never `localStorage`, never sent anywhere) for the length of the connect flow, because Install,
-    the phone QR and the sketch all need it after **I've stored it**. It is forgotten when the flow
-    is left or the device is live, and closing the tab drops it. It is kept with the device's
-    `credential_rotated_at`, so a credential rotated elsewhere since is dropped, never shown as
-    current. Leaving before it is stored asks first ("Leave before storing the password? It's
-    shown only once…"); a reload doesn't ask, since nothing is lost.
+  - **Connect always starts by creating or rotating the credential** (user decision 2026-10-27):
+    the Credential step shows **Create credential** (never connected) or **Rotate credential…**
+    (with its confirm), and only then **Store its credential**: Username and Password as read-only
+    fields with Copy, "It won't be shown again", **I've stored it**, Continue in the bottom bar.
+    Add device doesn't carry its credential over. The credential is held **in the page only**
+    (never stored in the browser): a reload or leaving drops it, and the next visit creates or
+    rotates again. Leaving or reloading before it is stored asks first ("Leave before storing the
+    password? It's shown only once…").
   - **Controls** (device Controls tab and the actuator widget) show what was **requested** and what
     happened: *Waiting for the device… {n} s* (counting down the command's TTL), then
     **Acknowledged**, or **No response within {ttl} s** with **Retry**. A command sent to an offline
@@ -779,7 +780,7 @@ Steps 1–8 are built. **Demo H** follows, frontend first, one PR each:
 2. **Building blocks** (§5): Wizard, Line row, item sheet, Tabs with problem badges.
 3. **Lists** (§6): column folding, cards, the filter sheet; the Rules list KPI filters and Ladder view.
 4. **Templates and Add device** (§8): wizard to create, tabs to edit, item sheets.
-5. **Connect** (§8): the connect wizard and the credential that survives a reload.
+5. **Connect** (§8): the connect wizard, which always starts by creating or rotating the credential.
 6. **Rule editing** (§9.2–9.3): tabs, condition and action rows, preview beside or in a sheet.
 7. **New rule wizard** (§9.1).
 8. **Ladder** (§9.10).
@@ -865,3 +866,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-26 | §5, §6 list pages, from the user's sketch and demo K option B (`redesign/demo-k-list-header.html`): the description sits **beside the title**; the **primary action** moves to the end of the toolbar's first row (the header keeps it only while there's no toolbar: loading, error, first use); the **KPI strip leaves list pages** for a **status filter with counts** on the toolbar's second row, with dots, a red count for states that need someone, and hover titles for what each state means. On phones it becomes a select. Every list with states gets one (Dashboards has none). The KPI strip stays only on the alerts inbox. Table starts about 100 px higher on Devices at 1440. |
 | 2026-10-26 | §6, §8, after #167: **Notifications** take the same toolbar: the description beside the title, **Mark all as read** at the end of row 1, and the KPI strip becomes the status filter All · Unread · Critical · Warning (Critical and Warning count unread alerts, in red). **Rules lose their tabs:** Failed deliveries is the last state of the status filter, counting deliveries; choosing it shows the delivery feed in place of the table. `/rules/failed-actions` redirects there. The KPI strip is retired. |
 | 2026-10-27 | §4, §5, §6, §7, §9.2, §11 **one editor pattern**, from a review of the device Settings tab (the best-composed editor) against every other new / edit / settings page. **Column:** every editor, wizard and settings page is 760 px inside the 1120 px page, the rule editor included (it leaves the 1520 px wide view); the rule **preview is only behind its Preview button** (a sheet), at every width. **No title said twice:** breadcrumbs list parents only, the overline carries status and meta only (no record kind), a section heading never repeats the record kind, tab or step question, and a single-section page has none. **Sections** are hairline-divided with a one-line lead, no cards. **Fields:** the "Manage X" link ends the hint; short related fields pair. New **FactList** (read-only facts) and **Inherited** (a value that follows another record's) components. **Save bar**, superseding 2026-10-23: when editing it appears only while there is an edit, a save or a problem; when creating it is always shown. **Delete** is in the record menu only, superseding 2026-10-02's device "Danger zone"; a danger section remains only on pages with no record menu (Leave workspace). **Pager:** numbered pages `‹ 1 2 [3] … 9 ›` (`‹ 3 / 9 ›` on phones). **Lasting states** (can't evaluate, offline) are header state chips, not callouts or toasts; a toast marks a state *changing* while the page is open; a callout stays only when it holds the action. **Wording:** a template gives a device **Metrics** and **Actuators**. |
+| 2026-10-27 | §8 Connect, after review: the Credential step **always starts with Create credential / Rotate credential…** — Add device no longer hands its credential over, and the credential is held in the page only (a reload or leaving drops it; leaving or reloading before it's stored asks). Once made, **Store its credential** (demo H): Username and Password as read-only fields with Copy, "It won't be shown again", I've stored it, Continue in the bottom bar. Supersedes the 2026-10-01 handoff and the "survives a reload" rule. |
