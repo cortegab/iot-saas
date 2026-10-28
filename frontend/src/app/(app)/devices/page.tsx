@@ -301,9 +301,9 @@ export default function DevicesPage() {
                 <Power aria-hidden size={14} />
                 Enable
               </Button>
-              <Button variant="danger" size="sm" onClick={() => void remove(selectedRows)}>
+              <Button variant="secondary-danger" size="sm" onClick={() => void remove(selectedRows)}>
                 <Trash2 aria-hidden size={14} />
-                Delete
+                Delete…
               </Button>
             </BulkBar>
           )}

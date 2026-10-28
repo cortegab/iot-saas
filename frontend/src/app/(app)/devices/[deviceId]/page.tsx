@@ -314,8 +314,8 @@ export default function DeviceDetailPage() {
         <div className="flex flex-col gap-3">
           {can("rules.write") && (rules?.length ?? 0) > 0 && (
             <div className="flex justify-end">
-              <Link href={`/rules/new?device=${deviceId}`} className={buttonClassName({ variant: "secondary", size: "sm" })}>
-                <Plus aria-hidden size={14} />
+              <Link href={`/rules/new?device=${deviceId}`} className={buttonClassName()}>
+                <Plus aria-hidden size={15} />
                 New rule
               </Link>
             </div>

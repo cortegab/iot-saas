@@ -33,7 +33,7 @@ export function Stepper({
         type="button"
         disabled={!canPick(i)}
         onClick={() => onPick(i)}
-        className="flex items-center gap-2 rounded-md hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
+        className="flex min-h-[30px] items-center gap-2 rounded-md hover:text-ink disabled:cursor-not-allowed disabled:opacity-60"
       >
         {body}
       </button>

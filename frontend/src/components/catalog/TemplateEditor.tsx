@@ -473,7 +473,7 @@ export function TemplateEditor({
         onDiscard={editor.discard}
         headerActions={
           !isNew && !readOnly ? (
-            <Button variant="secondary" size="sm" className="max-md:hidden" onClick={() => router.push(`/templates/new?duplicate=${entryId}`)}>
+            <Button variant="secondary" className="max-md:hidden" onClick={() => router.push(`/templates/new?duplicate=${entryId}`)}>
               <Copy aria-hidden size={14} />
               Duplicate
             </Button>

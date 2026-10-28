@@ -362,3 +362,32 @@ body {
     transform: translateX(250%);
   }
 }
+
+/* DESIGN.md §12 touch targets. On a coarse pointer every `h-control` (buttons,
+   inputs, selects, tabs) grows to 44 px; segmented controls grow with
+   `pointer-coarse:` utilities in their components. Smaller visuals marked
+   `.hit` (row checkboxes, icon and pager buttons, `sm` buttons, inline links,
+   switches) keep their look and get a 44 px hit area from an invisible
+   ::before. In the components layer, so a utility such as `absolute` still
+   wins over the `relative` here. */
+@media (pointer: coarse) {
+  :root {
+    --spacing-control: 2.75rem;
+  }
+}
+@layer components {
+  @media (pointer: coarse) {
+    .hit {
+      position: relative;
+    }
+    .hit::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+  }
+}

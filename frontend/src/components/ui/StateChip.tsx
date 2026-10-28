@@ -40,7 +40,7 @@ export function StateChip({ label, children, className }: { label: string; child
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex h-6 items-center gap-1 rounded-full bg-status-pending-surface px-2 text-[12.5px] font-medium text-status-pending hover:brightness-95"
+        className="hit inline-flex h-6 items-center gap-1 rounded-full bg-status-pending-surface px-2 text-[12.5px] font-medium text-status-pending hover:brightness-95"
       >
         <AlertTriangle aria-hidden size={12} />
         {label}

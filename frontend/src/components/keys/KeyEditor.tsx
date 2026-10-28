@@ -152,9 +152,9 @@ export function KeyEditor({
             </p>
             {st === "active" && can("keys.manage") ? (
               <div>
-                <Button variant="danger" onClick={() => void revoke(key)}>
+                <Button variant="secondary-danger" onClick={() => void revoke(key)}>
                   <Ban aria-hidden size={14} />
-                  Revoke key
+                  Revoke key…
                 </Button>
               </div>
             ) : st !== "active" ? (
