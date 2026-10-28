@@ -163,7 +163,7 @@ export function FlashSpike() {
         </Callout>
       )}
       {log.length > 0 && (
-        <pre className="max-h-[320px] overflow-auto rounded-md border border-border bg-canvas p-3 font-mono text-[12px] leading-[1.5] text-ink-muted">
+        <pre className="max-h-[320px] overflow-auto rounded-md border border-border bg-canvas p-3 font-mono text-xs leading-[1.5] text-ink-muted">
           {log.join("\n")}
         </pre>
       )}

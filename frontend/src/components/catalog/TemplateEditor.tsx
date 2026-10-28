@@ -408,7 +408,7 @@ export function TemplateEditor({
                   value: d.hardware ? (
                     <>
                       {resolveModel(catalog?.models, d.hardware.board)?.label ?? d.hardware.board}
-                      <span className="block text-[13px] text-ink-muted">
+                      <span className="block text-meta text-ink-muted">
                         {[...d.hardware.inputs, ...d.hardware.outputs].map((b) => findDriver(drivers ?? [], b.driver)?.label ?? b.driver).join("; ") || "No parts"}
                       </span>
                     </>

@@ -189,8 +189,8 @@ export default function EditRulePage() {
           {rule.trigger.type !== "schedule" && ruleActivity && (
             <section className="flex flex-col gap-2">
               <div className="flex flex-wrap items-baseline gap-2">
-                <h2 className="text-base font-semibold text-ink">Last 24 hours</h2>
-                <span className="text-[13px] text-ink-muted">{fired ? `fired ${fired}×` : "quiet"}</span>
+                <h2 className="text-section font-semibold text-ink">Last 24 hours</h2>
+                <span className="text-meta text-ink-muted">{fired ? `fired ${fired}×` : "quiet"}</span>
               </div>
               <MiniStrip
                 variant="replay"
@@ -201,13 +201,13 @@ export default function EditRulePage() {
             </section>
           )}
           <section className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold text-ink">Recent firings</h2>
+            <h2 className="text-section font-semibold text-ink">Recent firings</h2>
             <RuleExecutionHistory ruleId={params.ruleId} />
           </section>
           <section className="flex flex-col gap-3">
             <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className="text-base font-semibold text-ink">Versions</h2>
-              <span className="text-[13px] text-ink-muted">Restore loads one into the editor; nothing changes until you save.</span>
+              <h2 className="text-section font-semibold text-ink">Versions</h2>
+              <span className="text-meta text-ink-muted">Restore loads one into the editor; nothing changes until you save.</span>
             </div>
             <RuleVersions
               ruleId={params.ruleId}

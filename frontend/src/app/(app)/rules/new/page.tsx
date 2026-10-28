@@ -109,7 +109,7 @@ export default function NewRulePage() {
                       <Icon aria-hidden size={18} className="shrink-0 text-accent" />
                       <strong className="text-sm font-semibold text-ink">{r.title}</strong>
                     </span>
-                    <span className="text-[13px] text-ink-muted">{r.description}</span>
+                    <span className="text-meta text-ink-muted">{r.description}</span>
                     {r.tags.length > 0 && (
                       <span className="mt-auto flex flex-wrap gap-1.5 pt-1">
                         {r.tags.map((t) => (
@@ -133,7 +133,7 @@ export default function NewRulePage() {
                   <Plus aria-hidden size={18} className="shrink-0 text-ink-muted" />
                   <strong className="text-sm font-semibold text-ink">Start blank</strong>
                 </span>
-                <span className="text-[13px] text-ink-muted">When, If, Then, step by step.</span>
+                <span className="text-meta text-ink-muted">When, If, Then, step by step.</span>
               </button>
             </li>
           </ul>

@@ -34,8 +34,8 @@ export function ItemSheet({
     <Sheet open={open} onClose={onClose} label={title} side={phone ? "bottom" : "right"} widthClassName="w-[min(560px,100vw)]">
       <div className="flex shrink-0 items-start gap-2 border-b border-border-soft py-3.5 pl-5 pr-3">
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[17px] font-semibold text-ink">{title}</h2>
-          {sub && <p className="text-[13px] text-ink-muted">{sub}</p>}
+          <h2 className="truncate text-section font-semibold text-ink">{title}</h2>
+          {sub && <p className="text-meta text-ink-muted">{sub}</p>}
         </div>
         <IconButton aria-label="Close" onClick={onClose}>
           <X size={18} />

@@ -52,7 +52,7 @@ export function Stepper({
               key={s.id}
               aria-current={isNow ? "step" : undefined}
               className={cn(
-                "flex items-center gap-2 text-[13.5px]",
+                "flex items-center gap-2 text-meta",
                 isNow ? "font-medium text-ink" : "text-ink-muted",
                 i < steps.length - 1 && "after:ml-1.5 after:mr-1 after:h-px after:w-8 after:bg-border",
               )}
@@ -85,7 +85,7 @@ export function Stepper({
         })}
       </ol>
       <div className="mb-2 hidden @max-[640px]:block">
-        <p className="mb-1.5 text-[13px] text-ink-muted">
+        <p className="mb-1.5 text-meta text-ink-muted">
           Step{" "}
           <b className="text-ink">
             {current + 1} of {steps.length}

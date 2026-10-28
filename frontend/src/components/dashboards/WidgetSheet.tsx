@@ -201,7 +201,7 @@ export function WidgetSheet({
         <>
           <Button
             variant="link-danger"
-            className="mr-auto text-[13px]"
+            className="mr-auto text-meta"
             onClick={() => {
               onRemove(widget.id);
               onClose();
@@ -232,7 +232,7 @@ export function WidgetSheet({
         <SourceFields w={widget} src={src} onChange={set} />
         <SizeField w={widget.w} onChange={(w) => set({ ...widget, w })} />
         {problem && (
-          <p role="alert" className="text-[12.5px] text-status-error">
+          <p role="alert" className="text-xs text-status-error">
             {problem}
           </p>
         )}
@@ -335,7 +335,7 @@ export function AddWidgetSheet({
     >
       {body}
       {step > 0 && problem && (
-        <p role="alert" className="mt-3 text-[12.5px] text-status-error">
+        <p role="alert" className="mt-3 text-xs text-status-error">
           {problem}
         </p>
       )}

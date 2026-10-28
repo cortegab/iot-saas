@@ -19,11 +19,11 @@ export function AuthCard({
   return (
     <div className="flex w-full flex-col gap-3.5 rounded-2xl border border-border bg-surface px-5 py-6 shadow-pop sm:p-8">
       <div>
-        <h1 className="text-[28px] font-semibold tracking-[-0.015em] text-ink">{title}</h1>
+        <h1 className="text-title font-semibold tracking-[-0.015em] text-ink">{title}</h1>
         {description && <p className="mt-1 text-sm text-ink-muted">{description}</p>}
       </div>
       {children}
-      {footer && <div className="border-t border-border pt-3 text-center text-[13.5px] text-ink-muted">{footer}</div>}
+      {footer && <div className="border-t border-border pt-3 text-center text-meta text-ink-muted">{footer}</div>}
     </div>
   );
 }
@@ -53,11 +53,11 @@ export function AuthScreen({ children }: { children: ReactNode }) {
           iodriven
         </Link>
         <div className="relative z-[2] mb-auto mt-6 max-w-[31rem] lg:mt-[8vh]">
-          <p className="mb-3.5 font-mono text-[12px] uppercase tracking-[0.14em] text-night-sky">Telemetry · Rules · Control</p>
+          <p className="mb-3.5 font-mono text-xs uppercase tracking-[0.14em] text-night-sky">Telemetry · Rules · Control</p>
           <h2 className="text-[27px] font-semibold leading-[1.06] tracking-[-0.035em] text-white lg:text-[clamp(30px,3.3vw,46px)]">
             From sensor to switch in under two seconds.
           </h2>
-          <p className="mt-4 max-w-[44ch] text-[15.5px] leading-[1.6] text-night-muted">
+          <p className="mt-4 max-w-[44ch] text-section leading-[1.6] text-night-muted">
             Every reading is checked against your rules the moment it arrives, before it&rsquo;s even stored. Actuators get their command while the data is still
             fresh.
           </p>
@@ -90,7 +90,7 @@ export function AuthScreen({ children }: { children: ReactNode }) {
             ["Devices per host", "500–1,000"],
           ].map(([dt, dd]) => (
             <div key={dt}>
-              <dt className="text-[11.5px] text-night-dim">{dt}</dt>
+              <dt className="text-xs text-night-dim">{dt}</dt>
               <dd className="mt-[3px] font-mono text-[21px] text-white tabular-nums">{dd}</dd>
             </div>
           ))}
@@ -98,7 +98,7 @@ export function AuthScreen({ children }: { children: ReactNode }) {
       </section>
       <main className="auth-wash flex flex-col items-center justify-center gap-7 bg-canvas px-4 py-7 lg:px-6 lg:py-10">
         <div className="w-full max-w-[410px]">{children}</div>
-        <p className="flex flex-wrap justify-center gap-4 text-[12.5px] text-ink-muted">
+        <p className="flex flex-wrap justify-center gap-4 text-xs text-ink-muted">
           <Link href="/" className="hover:text-ink">
             iodriven.tech
           </Link>

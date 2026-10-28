@@ -19,7 +19,7 @@ export function CredentialStep({ flow }: { flow: ConnectFlow }) {
     <>
       {!credential ? (
         <>
-          <h2 className="text-lg font-semibold text-ink">Credential</h2>
+          <h2 className="text-section font-semibold text-ink">Credential</h2>
           <Callout tone="warning">
             <strong>Getting firmware {neverConnected ? "creates" : "rotates"} this device&apos;s credential.</strong> Credentials are stored
             hashed, so the only way to put one in a sketch is to make a new one.{" "}
@@ -59,8 +59,8 @@ function StoreCredential({ flow, credential }: { flow: ConnectFlow; credential: 
   return (
     <>
       <div className="flex flex-col gap-1">
-        <h2 className="text-lg font-semibold text-ink">Store its credential</h2>
-        <p className="text-[13.5px] text-ink-muted">The device signs in to the broker with these. The password is shown once and stored hashed.</p>
+        <h2 className="text-section font-semibold text-ink">Store its credential</h2>
+        <p className="text-meta text-ink-muted">The device signs in to the broker with these. The password is shown once and stored hashed.</p>
       </div>
       {fields.map((f) => (
         <div key={f.label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2">

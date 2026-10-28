@@ -86,7 +86,7 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
     if (runId && !open.has(runId)) return [{ items: r.items, status: r.status, collapsed: true, runId }];
     return r.items.map((c, i) => ({ items: [c], status: r.status, collapsed: false, runId: i === 0 ? runId : undefined }));
   });
-  const heading = <h2 className="text-[15px] font-semibold text-ink">Command timeline</h2>;
+  const heading = <h2 className="text-section font-semibold text-ink">Command timeline</h2>;
 
   if (isLoading && rows.length === 0) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
   if (error) {
@@ -148,7 +148,7 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
                 key={c.id}
                 className="relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5 border-b border-border-soft py-2 text-sm before:absolute before:-left-[23px] before:top-3.5 before:h-2.5 before:w-2.5 before:rounded-full before:border-2 before:border-accent before:bg-surface last:border-b-0 @min-[600px]:grid-cols-[180px_minmax(0,1fr)_auto]"
               >
-                <span className="text-[12.5px] tabular-nums text-ink-muted">
+                <span className="text-xs tabular-nums text-ink-muted">
                   {/* Newest first: a run spans from its oldest to its newest. */}
                   {count > 1 ? `${time(last.published_at)} – ${time(c.published_at)}` : time(c.published_at)}
                 </span>
@@ -159,7 +159,7 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
                       type="button"
                       aria-expanded={!collapsed}
                       onClick={() => toggle(runId)}
-                      className="hit ml-1.5 rounded bg-surface-raised px-[5px] align-[1px] text-[10.5px] font-medium text-ink hover:text-accent"
+                      className="hit ml-1.5 rounded bg-surface-raised px-[5px] align-[1px] text-xs font-medium text-ink hover:text-accent"
                     >
                       {collapsed ? `×${count}` : "Collapse"}
                     </button>

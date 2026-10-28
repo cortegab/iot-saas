@@ -39,7 +39,7 @@ export function Breadcrumbs({ crumbs: all }: { crumbs: Crumb[] }) {
   const crumbs = all.filter((c) => c.href);
   if (crumbs.length === 0) return null;
   return (
-    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-[13px] text-ink-muted">
+    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-meta text-ink-muted">
       {crumbs.map((crumb, i) => (
         <span key={i} className="flex items-center gap-1.5">
           {i > 0 && <ChevronRight aria-hidden size={13} className="opacity-60" />}
@@ -77,7 +77,7 @@ export function HeaderBlock({
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-[3px]">
-      {overline && <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink-muted">{overline}</div>}
+      {overline && <div className="flex flex-wrap items-center gap-2 text-meta text-ink-muted">{overline}</div>}
       <div className="flex items-start justify-between gap-x-4 gap-y-2.5 max-md:flex-col max-md:items-stretch">
         <div className="min-w-0 flex-1">{heading}</div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
@@ -105,7 +105,7 @@ export function PageHeader({
   const crumbs = breadcrumbs ?? (back ? [{ label: back.label, href: back.href }] : undefined);
   const desc = description ?? subtitle;
   const h1 = (
-    <h1 className="flex flex-wrap items-center gap-3 text-[24px] font-semibold leading-[1.2] tracking-[-0.015em] text-ink md:text-[28px]">{title}</h1>
+    <h1 className="flex flex-wrap items-center gap-3 text-title font-semibold leading-[1.2] tracking-[-0.015em] text-ink">{title}</h1>
   );
   return (
     <header className="flex flex-col gap-2">
@@ -126,7 +126,7 @@ export function PageHeader({
       >
         {desc && !inline && <p className="mt-1 max-w-[64ch] text-ink-muted">{desc}</p>}
         {meta && (
-          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] text-ink-muted [&_b]:font-medium [&_b]:text-ink">
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-meta text-ink-muted [&_b]:font-medium [&_b]:text-ink">
             {meta}
           </div>
         )}

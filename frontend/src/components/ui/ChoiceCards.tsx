@@ -70,7 +70,7 @@ export function ChoiceCards<T extends string>({
               />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <b className="text-sm font-semibold text-ink">{o.title}</b>
-                <span className="text-[12.5px] text-ink-muted">{o.description}</span>
+                <span className="text-xs text-ink-muted">{o.description}</span>
               </span>
               {o.illustration}
             </button>

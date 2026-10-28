@@ -214,11 +214,11 @@ export function HardwareSection({
         </Field>
       </div>
       {detected && (
-        <p className="-mt-3 text-[13px] text-ink-muted">
+        <p className="-mt-3 text-meta text-ink-muted">
           {detected.chip
             ? `Detected an ${detected.name}. Boards with the same chip look alike, so pick your model.`
             : `This board is an ${detected.name}, which firmware ${fw.version} doesn't support yet.`}{" "}
-          <Button variant="link" className="text-[13px]" onClick={() => setDetected(null)}>
+          <Button variant="link" className="text-meta" onClick={() => setDetected(null)}>
             Show all boards
           </Button>
         </p>
@@ -244,7 +244,7 @@ export function HardwareSection({
       {h.i2c && (
         <div className="flex flex-col gap-2">
           <h3 className="text-sm font-semibold text-ink">I2C bus</h3>
-          <p className="text-[13px] text-ink-muted">Every I2C part shares these two pins; each needs its own address.</p>
+          <p className="text-meta text-ink-muted">Every I2C part shares these two pins; each needs its own address.</p>
           <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">
             {(["sda", "scl"] as const).map((line) => (
               <Field key={line} label={line.toUpperCase()} error={field(`hardware.i2c.${line}`).error}>
@@ -267,14 +267,14 @@ export function HardwareSection({
           <h3 id="hw-parts" className="text-sm font-semibold text-ink">
             Parts
           </h3>
-          {parts.length > 0 && <span className="rounded-full bg-surface-raised px-1.5 text-[12px] tabular-nums text-ink-muted">{parts.length}</span>}
+          {parts.length > 0 && <span className="rounded-full bg-surface-raised px-1.5 text-xs tabular-nums text-ink-muted">{parts.length}</span>}
           {guideHref && guide.pins.length > 0 && (
-            <Link href={guideHref} className="ml-auto inline-flex items-center gap-1 text-[13px] text-accent hover:underline">
+            <Link href={guideHref} className="ml-auto inline-flex items-center gap-1 text-meta text-accent hover:underline">
               <BookOpen aria-hidden size={13} /> Wiring guide
             </Link>
           )}
         </div>
-        <p className="text-[13px] text-ink-muted">Each part brings its metrics or actuators. Open one to set its pins and name its readings.</p>
+        <p className="text-meta text-ink-muted">Each part brings its metrics or actuators. Open one to set its pins and name its readings.</p>
         {parts.length === 0 ? (
           <div className="flex flex-col items-center gap-1 rounded-xl border border-border bg-surface px-4 py-6 text-center text-sm">
             <b className="font-semibold text-ink">No parts yet</b>
@@ -340,7 +340,7 @@ export function HardwareSection({
       )}
 
       {!readOnly && (
-        <Button variant="link-danger" className="self-start text-[12.5px]" onClick={() => onChange(null)}>
+        <Button variant="link-danger" className="self-start text-xs" onClick={() => onChange(null)}>
           Remove wiring
         </Button>
       )}
@@ -352,7 +352,7 @@ export function HardwareSection({
             if (list.length === 0) return null;
             return (
               <div key={k} className="flex flex-col gap-2">
-                <h3 className="text-[12.5px] font-medium text-ink-muted">{k === "input" ? "Sensors and inputs" : "Outputs"}</h3>
+                <h3 className="text-xs font-medium text-ink-muted">{k === "input" ? "Sensors and inputs" : "Outputs"}</h3>
                 <Lines label={k === "input" ? "Sensors and inputs" : "Outputs"}>
                   {list.map((d) => (
                     <LineRow
@@ -385,7 +385,7 @@ export function GuideTable({ guide }: { guide: WiringGuide }) {
         rows={guide.pins}
         rowKey={(r) => `${r.pin}-${r.role}-${r.to}`}
       />
-      <ul className="flex flex-col gap-1.5 text-[13px] text-ink-muted">
+      <ul className="flex flex-col gap-1.5 text-meta text-ink-muted">
         {guide.board?.lines.map((line) => (
           <li key={line}>
             <b className="font-medium text-ink">{guide.board!.label}:</b> {line}
@@ -535,7 +535,7 @@ function BindingCard({
             {!readOnly && (
               <Button
                 variant="link-danger"
-                className="mr-auto text-[13px]"
+                className="mr-auto text-meta"
                 onClick={() => {
                   onRemove();
                   onClose();
@@ -549,7 +549,7 @@ function BindingCard({
         }
       >
       <div className="flex flex-col gap-4">
-        {spec?.description && <p className="text-[13px] text-ink-muted">{spec.description}</p>}
+        {spec?.description && <p className="text-meta text-ink-muted">{spec.description}</p>}
         <div className="grid gap-3.5 @[640px]:grid-cols-2">
           <Field label="Driver" error={field(p + "driver").error}>
             <Select value={binding.driver} disabled={readOnly} onChange={(e) => pickDriver(e.target.value)}>
@@ -566,7 +566,7 @@ function BindingCard({
         {(pins.length > 0 || i2c) && (
           <Block title="Connection">
             {i2c && (
-              <p className="text-[13px] text-ink-muted">
+              <p className="text-meta text-ink-muted">
                 On the I2C bus
                 {hardware.i2c && ` (SDA ${pinName(model, hardware.i2c.sda)}, SCL ${pinName(model, hardware.i2c.scl)})`}: no pins of its own.
               </p>
@@ -623,7 +623,7 @@ function BindingCard({
                   <Field key={ch.key} inline label={ch.label} error={error ?? keyProblem} warning={warning}>
                     <div className="flex flex-col gap-1.5">
                       {choosing && (
-                        <label className="flex items-center gap-2 text-[13px] text-ink">
+                        <label className="flex items-center gap-2 text-meta text-ink">
                           <input
                             type="checkbox"
                             aria-label={`Keep ${ch.label}`}
@@ -669,7 +669,7 @@ function BindingCard({
               {/* Only where it explains an empty picker: this card has a free
                   channel and nothing is left to give it. */}
               {!readOnly && targets.length > 0 && channels.some((ch) => !binding.channels[ch.key]) && targets.every((t) => taken.has(t.uid)) && (
-                <p className="text-[13px] text-ink-muted">
+                <p className="text-meta text-ink-muted">
                   {kind === "inputs"
                     ? "Every metric is already fed. Add a metric above to map more."
                     : "Every actuator is already driven. Add an actuator above to wire more."}

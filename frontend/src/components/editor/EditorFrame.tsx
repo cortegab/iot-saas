@@ -160,11 +160,11 @@ export function EditorSection({
     >
       {(heading != null || actions) && (
         <div className="flex items-baseline justify-between gap-3">
-          {heading != null && <h3 className={cn("text-[15px] font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{heading}</h3>}
+          {heading != null && <h3 className={cn("text-section font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{heading}</h3>}
           {actions}
         </div>
       )}
-      {lead && <p className={cn("max-w-[64ch] text-[13.5px] text-ink-muted", heading != null && "-mt-1.5")}>{lead}</p>}
+      {lead && <p className={cn("max-w-[64ch] text-meta text-ink-muted", heading != null && "-mt-1.5")}>{lead}</p>}
       {children}
     </section>
   );
@@ -436,7 +436,7 @@ export function EditorFrame({
 
   const question = steps && activeGroup?.question && (
     <div className="flex flex-col gap-1">
-      <h2 ref={questionRef} tabIndex={-1} className="text-xl font-semibold tracking-[-0.01em] text-ink outline-none">
+      <h2 ref={questionRef} tabIndex={-1} className="text-section font-semibold tracking-[-0.01em] text-ink outline-none">
         {activeGroup.question}
       </h2>
       {activeGroup.lead && <p className="text-ink-muted">{activeGroup.lead}</p>}
@@ -455,7 +455,7 @@ export function EditorFrame({
       <HeaderBlock
         overline={eyebrow}
         heading={
-          <h1 tabIndex={-1} className="break-words text-[24px] font-semibold leading-[1.2] tracking-[-0.015em] text-ink outline-none md:text-[28px]">
+          <h1 tabIndex={-1} className="break-words text-title font-semibold leading-[1.2] tracking-[-0.015em] text-ink outline-none">
             {title}
           </h1>
         }
@@ -469,18 +469,18 @@ export function EditorFrame({
           )
         }
       >
-        {consequence && <p className="mt-1 max-w-[70ch] text-[14.5px] text-ink-muted">{consequence}</p>}
+        {consequence && <p className="mt-1 max-w-[70ch] text-sm text-ink-muted">{consequence}</p>}
       </HeaderBlock>
     </div>
   ) : (
     <div className="flex shrink-0 items-start gap-2.5 border-b border-border px-5 pb-3 pt-4 max-md:flex-col max-md:items-stretch">
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        {eyebrow && <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">{eyebrow}</div>}
+        {eyebrow && <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">{eyebrow}</div>}
         {/* A drawer's title is a section heading; a full page's is its H1 (above). */}
-        <TitleTag tabIndex={-1} className="break-words text-[19px] font-semibold leading-[1.3] tracking-[-0.015em] text-ink outline-none">
+        <TitleTag tabIndex={-1} className="break-words text-section font-semibold leading-[1.3] tracking-[-0.015em] text-ink outline-none">
           {title}
         </TitleTag>
-        {consequence && <p className="mt-1 max-w-[70ch] text-[12.5px] text-ink-muted">{consequence}</p>}
+        {consequence && <p className="mt-1 max-w-[70ch] text-xs text-ink-muted">{consequence}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1 max-md:order-first max-md:justify-end">
         {headerActions}
@@ -510,14 +510,14 @@ export function EditorFrame({
             aria-current={on || undefined}
             onClick={() => jumpTo(s.id)}
             className={cn(
-              "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-[11px] text-[13px]",
+              "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-[11px] text-meta",
               on ? "bg-accent-muted font-medium text-accent-strong" : "text-ink-muted hover:bg-surface-raised hover:text-ink",
             )}
           >
             {s.label}
             {s.count != null && <span className="text-xs text-ink-muted">{s.count}</span>}
             {e > 0 && (
-              <span aria-label={`${e} to fix`} className="grid h-[17px] min-w-[17px] place-items-center rounded-full bg-status-error px-[5px] text-[10.5px] font-bold text-on-accent">
+              <span aria-label={`${e} to fix`} className="grid h-[17px] min-w-[17px] place-items-center rounded-full bg-status-error px-[5px] text-xs font-bold text-on-accent">
                 {e}
               </span>
             )}
@@ -566,10 +566,10 @@ export function EditorFrame({
                     {s.label}
                     {s.count != null && <span className="ml-1 text-xs font-normal text-ink-muted">{s.count}</span>}
                   </strong>
-                  {s.description && <small className="text-[12.5px] text-ink-muted">{s.description}</small>}
+                  {s.description && <small className="text-xs text-ink-muted">{s.description}</small>}
                 </span>
                 {shown > 0 && (
-                  <span aria-label={`${shown} to fix`} className="mt-px grid h-[18px] min-w-[18px] place-items-center rounded-full bg-status-error px-[5px] text-[11px] font-bold text-on-accent">
+                  <span aria-label={`${shown} to fix`} className="mt-px grid h-[18px] min-w-[18px] place-items-center rounded-full bg-status-error px-[5px] text-xs font-bold text-on-accent">
                     {shown}
                   </span>
                 )}
@@ -602,7 +602,7 @@ export function EditorFrame({
       {steps && stepIndex === 0 && intro}
       {question}
       {readOnly && readOnlyNote !== false && (
-        <p className="flex items-center gap-2 rounded-md bg-accent-muted px-3.5 py-2.5 text-[13.5px] text-accent-strong">
+        <p className="flex items-center gap-2 rounded-md bg-accent-muted px-3.5 py-2.5 text-meta text-accent-strong">
           <Eye aria-hidden size={15} />
           {readOnlyNote ?? "View only. Ask an admin to make changes."}
         </p>
@@ -624,7 +624,7 @@ export function EditorFrame({
           : "bg-surface px-5 py-3",
       )}
     >
-      <div className="flex min-w-[150px] flex-1 items-center gap-2.5 text-[13px] text-ink-muted">
+      <div className="flex min-w-[150px] flex-1 items-center gap-2.5 text-meta text-ink-muted">
         <span aria-live="polite" className="inline-flex items-center">
           {stateText}
         </span>
@@ -632,7 +632,7 @@ export function EditorFrame({
           <button
             type="button"
             onClick={focusNextError}
-            className="inline-flex h-7 items-center gap-[5px] rounded-full bg-status-error-surface px-2.5 text-[12.5px] font-semibold text-status-error"
+            className="inline-flex h-7 items-center gap-[5px] rounded-full bg-status-error-surface px-2.5 text-xs font-semibold text-status-error"
           >
             <AlertCircle aria-hidden size={13} />
             {issues} to fix

@@ -107,7 +107,7 @@ export function ListToolbar({
               </Button>
               <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} label="Filters" side="bottom">
                 <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-3">
-                  <h2 className="text-base font-semibold text-ink">Filters</h2>
+                  <h2 className="text-section font-semibold text-ink">Filters</h2>
                   <div className="flex flex-col gap-3 [&>*]:w-full">{children}</div>
                   <Button onClick={() => setSheetOpen(false)}>Done</Button>
                 </div>
@@ -140,7 +140,7 @@ export function ListToolbar({
                   title={o.hint}
                   onClick={() => quick.onChange(o.value)}
                   className={cn(
-                    "inline-flex min-h-[30px] pointer-coarse:min-h-[38px] items-center gap-[7px] rounded-[6px] px-3 text-[13.5px] transition-colors duration-150",
+                    "inline-flex min-h-[30px] pointer-coarse:min-h-[38px] items-center gap-[7px] rounded-[6px] px-3 text-meta transition-colors duration-150",
                     on ? "bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,.18)]" : "text-ink-muted hover:text-ink",
                   )}
                 >

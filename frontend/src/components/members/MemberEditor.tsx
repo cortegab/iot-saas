@@ -196,7 +196,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
                 />
               </Field>
               <div className="flex flex-col gap-[5px]">
-                <span className="text-[13px] font-medium text-ink">Role</span>
+                <span className="text-meta font-medium text-ink">Role</span>
                 <SegmentedControl
                   ariaLabel="Role"
                   size="md"
@@ -207,7 +207,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
                   }}
                   options={ROLES.filter((r) => r !== "owner" || iAmOwner).map((r) => ({ value: r, label: ROLE_LABEL[r] }))}
                 />
-                <span className={cn("text-[12.5px]", roleError ? "text-status-error" : "text-ink-muted")}>{roleError ?? INVITE_HINT[d.role]}</span>
+                <span className={cn("text-xs", roleError ? "text-status-error" : "text-ink-muted")}>{roleError ?? INVITE_HINT[d.role]}</span>
               </div>
             </div>
           </EditorSection>
@@ -228,7 +228,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
             <FactList facts={[["Email", <span key="email" className="font-mono">{member!.email}</span>]]} />
           )}
           <fieldset className="flex flex-col gap-2" aria-describedby="member-role-msg">
-            <legend className="mb-1.5 text-[13px] font-medium text-ink">Role</legend>
+            <legend className="mb-1.5 text-meta font-medium text-ink">Role</legend>
             {ROLES.map((r) => {
               const locked = r === "owner" && !iAmOwner && member?.role !== "owner";
               const on = d.role === r;
@@ -258,7 +258,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
                       {ROLE_LABEL[r]}
                       {locked && <Lock aria-hidden size={13} className="text-ink-muted" />}
                     </strong>
-                    <small className="text-[12.5px] text-ink-muted">
+                    <small className="text-xs text-ink-muted">
                       {ROLE_HELP[r]}
                       {locked && " Only an owner can grant it."}
                     </small>
@@ -268,7 +268,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
             })}
             <p
               id="member-role-msg"
-              className={cn("min-h-[18px] text-[12.5px]", roleError ? "text-status-error" : "text-status-pending")}
+              className={cn("min-h-[18px] text-xs", roleError ? "text-status-error" : "text-status-pending")}
             >
               {roleError ?? roleWarning ?? ""}
             </p>

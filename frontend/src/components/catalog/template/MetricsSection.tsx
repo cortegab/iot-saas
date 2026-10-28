@@ -34,9 +34,9 @@ const describe = (m: MetricDraft) =>
 export function SegField({ label, hint, className, children }: { label: string; hint?: string; className?: string; children: ReactNode }) {
   return (
     <div className={cn("flex flex-col gap-[5px]", className)}>
-      <span className="text-[13px] font-medium text-ink">{label}</span>
+      <span className="text-meta font-medium text-ink">{label}</span>
       {children}
-      {hint && <span className="text-[12px] text-ink-muted">{hint}</span>}
+      {hint && <span className="text-xs text-ink-muted">{hint}</span>}
     </div>
   );
 }

@@ -12,7 +12,7 @@ export function FirmwareStep({ flow }: { flow: ConnectFlow }) {
   const { install, phone } = flow;
   return (
     <>
-      <h2 className="text-lg font-semibold text-ink">{install ? "Install" : "Flash"}</h2>
+      <h2 className="text-section font-semibold text-ink">{install ? "Install" : "Flash"}</h2>
       {install ? <InstallBlock flow={flow} install={install} /> : <SketchBlock flow={flow} />}
       {!phone && <SerialMonitor flow={flow} />}
       <StepNav
@@ -43,7 +43,7 @@ function InstallBlock({ flow, install }: { flow: ConnectFlow; install: InstallPa
         }}
       />
       <details className="overflow-hidden rounded-lg border border-border">
-        <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-[13px] text-ink">Advanced: download the sketch instead</summary>
+        <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">Advanced: download the sketch instead</summary>
         <div className="flex flex-col gap-4 p-4">
           <p className="text-xs text-ink-muted">
             For custom code. The sketch uses its own default pins, not the wiring above, and publishes numbers only once you add your sensor
@@ -94,10 +94,10 @@ function SketchBlock({ flow }: { flow: ConnectFlow }) {
         </Button>
       </div>
       <details className="overflow-hidden rounded-lg border border-border">
-        <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-[13px] text-ink">
+        <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">
           Preview the sketch <span className="text-ink-muted">· {sketchFor(null).split("\n").length} lines, password masked</span>
         </summary>
-        <pre aria-label="Generated sketch" className="max-h-[520px] overflow-auto bg-canvas p-3 font-mono text-[12px] leading-[1.55] text-ink">
+        <pre aria-label="Generated sketch" className="max-h-[520px] overflow-auto bg-canvas p-3 font-mono text-xs leading-[1.55] text-ink">
           <code>{sketchFor(credential ? { username: credential.username, password: "••••••••" } : null)}</code>
         </pre>
       </details>

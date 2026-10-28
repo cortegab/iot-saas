@@ -60,11 +60,11 @@ export function RuleList({ deviceId }: { deviceId: string }) {
             <Link href={`/rules/${r.id}`} className="flex min-h-12 min-w-0 items-center gap-3 px-3.5 py-2.5 text-sm transition-colors hover:bg-row-hover">
               <span className="flex min-w-0 flex-1 flex-col">
                 <b className="truncate font-medium text-ink">{r.name}</b>
-                <span className="truncate text-[12.5px] text-ink-muted">
+                <span className="truncate text-xs text-ink-muted">
                   When {triggerText(r)}: {actionsText(r.actions)}
                 </span>
               </span>
-              <span className="flex shrink-0 items-center gap-2.5 text-[12.5px] text-ink-muted">
+              <span className="flex shrink-0 items-center gap-2.5 text-xs text-ink-muted">
                 {r.enabled && !r.health.evaluatable && <Tag tone="warn">Can&apos;t evaluate</Tag>}
                 <Badge tone={s.tone} shape={s.shape} label={s.label} />
                 <ChevronRight aria-hidden size={15} />

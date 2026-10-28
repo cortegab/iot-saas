@@ -145,7 +145,7 @@ export function DashboardGrid({
           <div key={widget.id} className={cn("group relative", editing && "rounded-xl outline-dashed outline-1 outline-offset-2 outline-accent/50 [&_.widget-title]:pr-12")}>
             {broken ? (
               <WidgetCard title={WIDGET_LABEL[widget.type]}>
-                <p className="flex gap-2.5 rounded-md bg-status-error-surface p-3 text-[13.5px] text-ink">
+                <p className="flex gap-2.5 rounded-md bg-status-error-surface p-3 text-meta text-ink">
                   <AlertTriangle aria-hidden size={16} className="mt-0.5 shrink-0 text-status-error" />
                   {broken}
                 </p>

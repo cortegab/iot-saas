@@ -110,7 +110,7 @@ export function ProvisioningQr({
         </Tag>
       </div>
       <div className="flex min-w-[220px] flex-1 flex-col gap-3">
-        <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-[13px]">
+        <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-meta">
           <dt className="text-ink-muted">Shown in the app</dt>
           <dd className="m-0 font-mono text-ink">{name}</dd>
           {security === 2 && (
@@ -133,7 +133,7 @@ export function ProvisioningQr({
             <Copy aria-hidden size={14} /> Copy payload
           </Button>
         </div>
-        <p className="text-[12.5px] text-ink-muted">
+        <p className="text-xs text-ink-muted">
           The QR holds this device&apos;s password, so keep a printed label like a key. It works until the credential is rotated; rotating makes a new sketch
           and a new QR.
         </p>

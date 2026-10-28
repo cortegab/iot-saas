@@ -22,7 +22,7 @@ export function OptionGroup({
 }) {
   return (
     <fieldset className="flex flex-col gap-1.5">
-      <legend className="mb-1 text-[13px] font-medium text-ink">{label}</legend>
+      <legend className="mb-1 text-meta font-medium text-ink">{label}</legend>
       {options.map(([v, title, sub]) => (
         <label
           key={v}
@@ -61,7 +61,7 @@ export function StepNav({
 }) {
   return (
     <div data-savebar className={SAVE_BAR}>
-      <span className="mr-auto min-w-[150px] text-[13px] text-ink-muted">{state}</span>
+      <span className="mr-auto min-w-[150px] text-meta text-ink-muted">{state}</span>
       {onBack && (
         <Button variant="ghost" onClick={onBack}>
           <ChevronLeft aria-hidden size={14} />
@@ -92,7 +92,7 @@ export function SerialMonitor({ flow }: { flow: ConnectFlow }) {
         <span>What the Serial Monitor shows when it works</span>
         <span className="font-mono">115200</span>
       </div>
-      <pre className="overflow-auto bg-canvas p-3 font-mono text-[12px] leading-[1.55] text-ink">{lines.join("\n")}</pre>
+      <pre className="overflow-auto bg-canvas p-3 font-mono text-xs leading-[1.55] text-ink">{lines.join("\n")}</pre>
     </div>
   );
 }

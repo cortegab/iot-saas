@@ -44,8 +44,8 @@ export function CardHeader({
   return (
     <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
-        <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
-        {description && <p className="mt-0.5 text-[13.5px] text-ink-muted">{description}</p>}
+        <h2 className="text-section font-semibold text-ink">{title}</h2>
+        {description && <p className="mt-0.5 text-meta text-ink-muted">{description}</p>}
       </div>
       {actions && <div className="flex shrink-0 flex-wrap gap-2">{actions}</div>}
     </div>

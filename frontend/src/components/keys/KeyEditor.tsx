@@ -143,10 +143,10 @@ export function KeyEditor({
                 ["Last used", key.last_used_at ? timeAgo(key.last_used_at) : "Never"],
                 ["Expires", key.expires_at ? formatDate(key.expires_at) : "Never"],
                 key.revoked_at ? ["Revoked", formatWhen(key.revoked_at)] : null,
-                ["Header", <code key="header" className="break-all font-mono text-[12.5px]">Authorization: Bearer {key.key_prefix}…</code>],
+                ["Header", <code key="header" className="break-all font-mono text-xs">Authorization: Bearer {key.key_prefix}…</code>],
               ]}
             />
-            <p className="text-[13px] text-ink-muted">
+            <p className="text-meta text-ink-muted">
               The key names its workspace, so <code className="font-mono">X-Tenant-Id</code> is optional. It works on devices, telemetry,
               rules, templates, zones and notifications, never on members, keys or personal dashboards.
             </p>
@@ -158,7 +158,7 @@ export function KeyEditor({
                 </Button>
               </div>
             ) : st !== "active" ? (
-              <p className="text-[13px] text-ink-muted">{st === "revoked" ? "Revoked" : "Expired"} keys stay listed for audit.</p>
+              <p className="text-meta text-ink-muted">{st === "revoked" ? "Revoked" : "Expired"} keys stay listed for audit.</p>
             ) : null}
           </EditorSection>
         </EditorFrame>
@@ -198,7 +198,7 @@ export function KeyEditor({
           </div>
           {/* demo H: Viewer | Admin; keys can never be Owner. */}
           <div className="flex flex-col gap-[5px]">
-            <span className="text-[13px] font-medium text-ink">Scope</span>
+            <span className="text-meta font-medium text-ink">Scope</span>
             <SegmentedControl
               ariaLabel="Scope"
               size="md"
@@ -209,7 +209,7 @@ export function KeyEditor({
                 { value: "admin", label: "Admin" },
               ]}
             />
-            <span className={d.role === "admin" ? "text-[12.5px] text-status-pending" : "text-[12.5px] text-ink-muted"}>
+            <span className={d.role === "admin" ? "text-xs text-status-pending" : "text-xs text-ink-muted"}>
               {d.role === "admin" ? "Can change devices and rules. Give it only to systems you trust." : "Read-only."}
             </span>
           </div>

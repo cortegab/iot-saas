@@ -288,7 +288,7 @@ export default function DeviceDetailPage() {
 
           {(metrics.length > 0 || hasReadings) && (
             <Card>
-              <h2 className="mb-3 text-[15px] font-semibold text-ink">Trend</h2>
+              <h2 className="mb-3 text-section font-semibold text-ink">Trend</h2>
               {!hasReadings && neverConnected ? (
                 <p className="py-10 text-center text-sm text-ink-muted">The chart starts the moment a reading arrives.</p>
               ) : (
@@ -299,7 +299,7 @@ export default function DeviceDetailPage() {
 
           {/* A plain section with its facts (DESIGN.md §5, §7), not a card of dashes. */}
           <section className="flex flex-col gap-3">
-            <h2 className="text-[15px] font-semibold text-ink">Health</h2>
+            <h2 className="text-section font-semibold text-ink">Health</h2>
             <Health device={device} />
           </section>
         </div>

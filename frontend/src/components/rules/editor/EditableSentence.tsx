@@ -101,7 +101,7 @@ function ApplyCancel({ onApply, close }: { onApply: () => void; close: () => voi
 function OpenFull({ onOpenFull, close }: { onOpenFull: () => void; close: () => void }) {
   return (
     <>
-      <p className="text-[13px] text-ink-muted">This part has more options than fit here.</p>
+      <p className="text-meta text-ink-muted">This part has more options than fit here.</p>
       <Button
         size="sm"
         variant="secondary"
@@ -218,7 +218,7 @@ export function EditableSentence({
     );
 
   return (
-    <p className="text-[15px] leading-[2] text-ink" aria-label="Rule sentence">
+    <p className="text-section leading-[2] text-ink" aria-label="Rule sentence">
       <span>When </span>
       {when ?? <span className="text-ink-muted">…</span>}
       {w.type === "metric" && (
@@ -253,7 +253,7 @@ function ContactEditor({ c, close, onApply }: { c: ContactDraft; close: () => vo
         </Select>
         <Input aria-label="Value" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />
       </div>
-      {!ok && <p className="text-[12.5px] text-status-error">Enter a number.</p>}
+      {!ok && <p className="text-xs text-status-error">Enter a number.</p>}
       <ApplyCancel close={close} onApply={() => ok && onApply({ ...c, operator: op, value: Number(value) })} />
     </>
   );
@@ -283,11 +283,11 @@ function DurationEditor({ seconds, close, onApply }: { seconds: number; close: (
   const ok = Number.isInteger(n) && n >= 0;
   return (
     <>
-      <label className="flex flex-col gap-1 text-[13px] text-ink-muted">
+      <label className="flex flex-col gap-1 text-meta text-ink-muted">
         Hold time (seconds)
         <Input inputMode="numeric" value={v} onChange={(e) => setV(e.target.value)} />
       </label>
-      {ok && n < 5 && <p className="text-[12.5px] text-status-pending">Under 5 s, a single noisy reading can fire it.</p>}
+      {ok && n < 5 && <p className="text-xs text-status-pending">Under 5 s, a single noisy reading can fire it.</p>}
       <ApplyCancel close={close} onApply={() => ok && onApply(n)} />
     </>
   );

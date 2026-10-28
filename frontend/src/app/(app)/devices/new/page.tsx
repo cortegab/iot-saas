@@ -163,7 +163,7 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
           </p>
         )}
         <div data-savebar className={SAVE_BAR}>
-          <span className="mr-auto text-[13px] text-ink-muted">Not created yet</span>
+          <span className="mr-auto text-meta text-ink-muted">Not created yet</span>
           <Link href="/devices" className={buttonClassName({ variant: "ghost" })}>
             Cancel
           </Link>

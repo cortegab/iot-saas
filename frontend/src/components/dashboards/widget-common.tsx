@@ -41,11 +41,11 @@ export function useWidgetDevice(deviceId: string, metric?: string | null) {
  * number as current. */
 export function WidgetFoot({ stale, time }: { stale: boolean; time?: string | null }) {
   return stale ? (
-    <span className="inline-flex items-center gap-1 text-[11.5px] text-status-pending">
+    <span className="inline-flex items-center gap-1 text-xs text-status-pending">
       <AlertTriangle aria-hidden size={12} />
       Stale · last value{time ? ` ${timeAgo(time)}` : ""}
     </span>
   ) : (
-    <span className="text-[11.5px] text-ink-muted">{time ? timeAgo(time) : "live"}</span>
+    <span className="text-xs text-ink-muted">{time ? timeAgo(time) : "live"}</span>
   );
 }

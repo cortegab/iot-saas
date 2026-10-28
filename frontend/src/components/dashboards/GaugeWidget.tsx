@@ -56,16 +56,16 @@ export function GaugeWidget({
             {/* The unit beside the value (demo H); the scale is the caption below. */}
             <text x="60" y="58" textAnchor="middle" className={cn("fill-ink text-[20px] font-semibold tabular-nums", stale && "opacity-55")}>
               {shown}
-              {reading && meta?.unit && <tspan className="fill-ink-muted text-[11px] font-normal">{` ${meta.unit}`}</tspan>}
+              {reading && meta?.unit && <tspan className="fill-ink-muted text-xs font-normal">{` ${meta.unit}`}</tspan>}
             </text>
           </svg>
         )}
         {!reading ? (
-          <span className="text-[11.5px] text-ink-muted">No data</span>
+          <span className="text-xs text-ink-muted">No data</span>
         ) : stale ? (
           <WidgetFoot stale time={reading.time} />
         ) : (
-          <span className="text-[11.5px] tabular-nums text-ink-muted">
+          <span className="text-xs tabular-nums text-ink-muted">
             {lo}–{hi}
             {meta?.unit ? ` ${meta.unit}` : ""}
           </span>

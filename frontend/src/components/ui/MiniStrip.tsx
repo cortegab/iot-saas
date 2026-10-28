@@ -49,7 +49,7 @@ export function MiniStrip({
         ))}
       </div>
       {!isMini && axis && (
-        <div className="flex justify-between font-mono text-[11px] text-ink-muted">
+        <div className="flex justify-between font-mono text-xs text-ink-muted">
           {axis.map((a) => (
             <span key={a}>{a}</span>
           ))}

@@ -283,7 +283,7 @@ export function NameCell({
         <span
           className={cn(
             "truncate font-medium text-ink group-hover:text-accent",
-            mono && "font-mono text-[13.5px]",
+            mono && "font-mono text-meta",
           )}
         >
           {name}

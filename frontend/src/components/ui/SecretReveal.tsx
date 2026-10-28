@@ -34,7 +34,7 @@ export function CopyField({
         className,
       )}
     >
-      <code className="min-w-0 flex-1 select-all break-all font-mono text-[12.5px] text-ink">{value}</code>
+      <code className="min-w-0 flex-1 select-all break-all font-mono text-xs text-ink">{value}</code>
       <button
         type="button"
         aria-label={copied ? "Copied" : `Copy ${label ?? "value"}`}
@@ -143,7 +143,7 @@ export function SecretReveal({
         {fields.map((f) => (
           <div key={f.label} className="flex min-w-0 flex-wrap items-baseline gap-x-2">
             <dt className="w-24 shrink-0 text-xs text-ink-muted">{f.label}</dt>
-            <dd className="min-w-0 flex-1 select-all break-all font-mono text-[12.5px] text-ink">
+            <dd className="min-w-0 flex-1 select-all break-all font-mono text-xs text-ink">
               {f.secret && !shown ? "•".repeat(Math.min(f.value.length, 32)) : f.value}
             </dd>
           </div>

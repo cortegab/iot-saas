@@ -21,7 +21,7 @@ export function WidgetCard({
   return (
     <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-surface shadow-card">
       <div className="widget-title flex shrink-0 items-baseline px-3.5 pb-1 pt-3">
-        <b className="truncate text-[13.5px] font-semibold text-ink">
+        <b className="truncate text-meta font-semibold text-ink">
           {title}
           {title && device && " · "}
           <DeviceLink device={device} />

@@ -136,7 +136,7 @@ export default function InvitePage() {
           </p>
           <Link
             href={`/login?next=${encodeURIComponent(`/invite/${token}`)}`}
-            className="grid h-11 place-items-center rounded-md bg-accent text-[15px] font-medium text-on-accent hover:bg-accent-strong"
+            className="grid h-11 place-items-center rounded-md bg-accent text-section font-medium text-on-accent hover:bg-accent-strong"
           >
             Sign in to accept
           </Link>

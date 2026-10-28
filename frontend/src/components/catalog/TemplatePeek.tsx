@@ -96,7 +96,7 @@ export function TemplatePeek({
       onClose={onClose}
     >
       <PeekSection title="What you'll see">
-        <dl className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-4 gap-y-2 text-[13.5px]">
+        <dl className="grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-x-4 gap-y-2 text-meta">
           <dt className="text-ink-muted">Metrics</dt>
           <dd className="m-0 text-ink">
             {entry.metrics.length ? entry.metrics.map((m) => `${m.name}${m.unit && m.data_type !== "bool" ? ` ${m.unit}` : m.data_type === "bool" ? " On/Off" : ""}`).join(", ") : <span className="text-ink-muted">None</span>}

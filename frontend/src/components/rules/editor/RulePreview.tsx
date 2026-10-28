@@ -26,7 +26,7 @@ const NOISY = 12;
 function PreviewCard({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
   return (
     <section className={cn("flex flex-col gap-2.5 rounded-xl border border-border bg-surface p-4 shadow-card", className)}>
-      <h3 className="text-[13px] font-semibold text-ink">{title}</h3>
+      <h3 className="text-meta font-semibold text-ink">{title}</h3>
       {children}
     </section>
   );
@@ -186,23 +186,23 @@ export function RulePreview({
     <div className={cn(layout === "grid" ? "grid gap-3 md:grid-cols-2 xl:grid-cols-3" : "flex flex-col gap-3")} aria-label="Preview">
       <PreviewCard title="Last 24 hours">
         {!reading ? (
-          <p className="text-[13px] text-ink-muted">{draft.when.type === "schedule" ? "Fires on its schedule." : "Fires on each event, not on readings."}</p>
+          <p className="text-meta text-ink-muted">{draft.when.type === "schedule" ? "Fires on its schedule." : "Fires on each event, not on readings."}</p>
         ) : !body ? (
-          <p className="text-[13px] text-ink-muted">Finish the conditions and actions to replay the last 24 hours.</p>
+          <p className="text-meta text-ink-muted">Finish the conditions and actions to replay the last 24 hours.</p>
         ) : !replay ? (
-          <p className="text-[13px] text-ink-muted">Replaying…</p>
+          <p className="text-meta text-ink-muted">Replaying…</p>
         ) : replay.error ? (
-          <p className="text-[13px] text-status-error">{replay.error}</p>
+          <p className="text-meta text-status-error">{replay.error}</p>
         ) : (
           <>
             <MiniStrip variant="replay" cells={replayCells} axis={["24 h ago", "12 h ago", "now"]} label={`Would have fired ${fired.length} times in 24 h`} />
-            <p className="text-[13px] text-ink">
+            <p className="text-meta text-ink">
               {fired.length === 0
                 ? "Wouldn't have fired in the last 24 hours."
                 : `Would have fired ${fired.length}× at ${fired.slice(0, 3).map(hhmm).join(", ")}${fired.length > 3 ? "…" : ""}`}
             </p>
             {fired.length > NOISY && (
-              <p className="flex gap-1.5 text-[12.5px] text-status-pending">
+              <p className="flex gap-1.5 text-xs text-status-pending">
                 <AlertTriangle aria-hidden size={13} className="mt-0.5 shrink-0" />
                 Noisy: it would fire more than {NOISY} times a day. Raise the threshold, hold longer, or widen the interval.
               </p>
@@ -213,16 +213,16 @@ export function RulePreview({
 
       <PreviewCard title="Would send">
         {sends.length === 0 ? (
-          <p className="text-[13px] text-ink-muted">No actions yet.</p>
+          <p className="text-meta text-ink-muted">No actions yet.</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {sends.map((s, i) => (
               <li key={i} className="flex flex-col gap-0.5">
-                <span className="text-[11.5px] text-ink-muted">
+                <span className="text-xs text-ink-muted">
                   {s.kind === "command" ? "Command" : s.kind === "clear" ? "When it clears" : s.kind === "email" ? "Email to" : s.kind === "webhook" ? "Webhook" : "Notification"}
                 </span>
-                <code className="break-all font-mono text-[12px] text-ink">{s.target}</code>
-                {s.payload && <code className="break-all font-mono text-[12px] text-ink-muted">{s.payload}</code>}
+                <code className="break-all font-mono text-xs text-ink">{s.target}</code>
+                {s.payload && <code className="break-all font-mono text-xs text-ink-muted">{s.payload}</code>}
               </li>
             ))}
           </ul>
@@ -232,10 +232,10 @@ export function RulePreview({
             <Play aria-hidden size={13} />
             {dry.busy ? "Checking…" : "Dry run with live readings"}
           </Button>
-          <p className="text-[11.5px] text-ink-muted">Reports what would happen now. Sends nothing.</p>
-          {dry.error && <p className="text-[12.5px] text-status-error">{dry.error}</p>}
+          <p className="text-xs text-ink-muted">Reports what would happen now. Sends nothing.</p>
+          {dry.error && <p className="text-xs text-status-error">{dry.error}</p>}
           {dry.result && (
-            <p role="status" className={cn("text-[13px]", dry.result.would_fire ? "text-status-pending" : "text-ink")}>
+            <p role="status" className={cn("text-meta", dry.result.would_fire ? "text-status-pending" : "text-ink")}>
               {dry.result.unavailable_signals.length > 0
                 ? `Can't tell now: ${dry.result.unavailable_signals.map((s) => `${s.metric} on ${s.device_name ?? "a device"} is ${s.state}`).join("; ")}. Unknown data never fires.`
                 : dry.result.would_fire
@@ -249,7 +249,7 @@ export function RulePreview({
       <PreviewCard title="Checks">
         <ul className="flex flex-col gap-1.5">
           {checks.map((c) => (
-            <li key={c.id} className="flex gap-2 text-[13px]">
+            <li key={c.id} className="flex gap-2 text-meta">
               {/* Red ✕ only for what blocks saving; a safety check that isn't
                   met is a warning — the amber "!" the section rail uses. */}
               {c.ok ? (
@@ -264,7 +264,7 @@ export function RulePreview({
                   {c.label}
                   <span className="sr-only">{c.ok ? ": passes" : c.blocking ? ": needs fixing" : ": warning"}</span>
                 </span>
-                {c.detail && <span className="text-[12px] text-ink-muted">{c.detail}</span>}
+                {c.detail && <span className="text-xs text-ink-muted">{c.detail}</span>}
               </span>
             </li>
           ))}
@@ -276,11 +276,11 @@ export function RulePreview({
         <PreviewCard title="Other rules on these actuators">
           <ul className="flex flex-col gap-1.5">
             {others.map((o, i) => (
-              <li key={i} className="flex flex-col text-[13px]">
+              <li key={i} className="flex flex-col text-meta">
                 <Link href={`/rules/${o.rule.id}`} className="font-medium text-ink hover:text-accent hover:underline">
                   {o.rule.name}
                 </Link>
-                <span className={cn("text-[12px]", o.conflict ? "text-status-pending" : "text-ink-muted")}>
+                <span className={cn("text-xs", o.conflict ? "text-status-pending" : "text-ink-muted")}>
                   {o.conflict ? `Also sets ${o.actuator} to a different value. The last command wins.` : `Also drives ${o.actuator}, the same way.`}
                 </span>
               </li>
@@ -291,18 +291,18 @@ export function RulePreview({
 
       {signals.length > 0 && (
         <details className="group rounded-xl border border-border bg-surface p-4 shadow-card">
-          <summary className="cursor-pointer text-[13px] font-semibold text-ink">Try other values</summary>
+          <summary className="cursor-pointer text-meta font-semibold text-ink">Try other values</summary>
           <div className="mt-3 flex flex-col gap-2">
             {signals.map((s) => {
               const k = `${s.device_id}/${s.metric}`;
               return (
-                <label key={k} className="flex flex-col gap-1 text-[12.5px] text-ink-muted">
+                <label key={k} className="flex flex-col gap-1 text-xs text-ink-muted">
                   {s.label}
                   <Input inputMode="decimal" value={tryValues[k] ?? ""} placeholder="live value" onChange={(e) => setTryValues((v) => ({ ...v, [k]: e.target.value }))} />
                 </label>
               );
             })}
-            <p role="status" className="text-[13px] text-ink">
+            <p role="status" className="text-meta text-ink">
               {tryResult ? (tryResult.would_fire ? "With these values it would fire." : "With these values it wouldn't fire.") : "Type a value to see the outcome."}
             </p>
           </div>
