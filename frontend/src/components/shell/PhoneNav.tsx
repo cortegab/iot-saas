@@ -85,7 +85,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
     <>
       <nav
         aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-[50] grid grid-cols-5 border-t border-border bg-surface pb-[env(safe-area-inset-bottom,0px)] rail:hidden"
+        className="fixed inset-x-0 bottom-0 z-[50] grid grid-cols-5 border-t border-border bg-surface pb-[env(safe-area-inset-bottom,0px)] rail:hidden [:root:has(.app-shell_[data-savebar])_&]:hidden"
       >
         {TAB_ITEMS.map((item) => {
           const Icon = item.icon;

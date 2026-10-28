@@ -1,6 +1,6 @@
 "use client";
 
-import { PAGE_WITH_BAR, SAVE_BAR } from "@/components/editor/save-bar";
+import { EDITOR_COLUMN, PAGE_WITH_BAR, SAVE_BAR } from "@/components/editor/save-bar";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -113,7 +113,7 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
         title={name.trim() || "Add device"}
         description="Name it and pick its template. Next come its credential and Install."
       />
-      <form onSubmit={(e) => void handleSubmit(e)} className={`${PAGE_WITH_BAR} @container max-w-[760px] gap-6`}>
+      <form onSubmit={(e) => void handleSubmit(e)} className={`${PAGE_WITH_BAR} ${EDITOR_COLUMN} @container gap-6`}>
         {cards}
         <div className="grid gap-3.5 @min-[560px]:grid-cols-2">
           <Field label="Device name" hint="Shown in lists and alerts. Its MQTT id is made from it and never changes.">

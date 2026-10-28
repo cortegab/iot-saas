@@ -1,7 +1,7 @@
 "use client";
 
 import { Stepper } from "@/components/ui/Stepper";
-import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
+import { EDITOR_COLUMN, PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -52,7 +52,7 @@ export function ConnectFlow({ deviceId }: { deviceId: string }) {
 
       {/* A wizard (DESIGN.md §5, demo H): the steps across the top, each
           step's content on the page, Back / Continue in the bottom bar. */}
-      <section className={`${PAGE_WITH_BAR} @container min-w-0 max-w-[760px] gap-4`}>
+      <section className={`${PAGE_WITH_BAR} ${EDITOR_COLUMN} @container min-w-0 gap-4`}>
         <StepperFor flow={flow} />
         {step === 1 && <CredentialStep flow={flow} />}
         {step === 2 && <OptionsStep flow={flow} />}
