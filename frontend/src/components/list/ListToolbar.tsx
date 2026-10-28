@@ -26,9 +26,9 @@ export interface QuickFilterOption {
 /** DESIGN.md §6 toolbar. Row 1: search, filter menus, the view switch and the
  * page's primary action at the end. Row 2: the status filter with a count
  * per state (it replaces the KPI strip on list pages). The search input
- * debounces into the URL. On phones the filter menus move into a **Filters**
- * bottom sheet and the status filter becomes a select; the primary action
- * stays in the toolbar. */
+ * debounces into the URL. Below 960 px the filter menus move into a **Filters**
+ * bottom sheet, so the primary action stays in row 1; on phones the status
+ * filter also becomes a select. */
 export function ListToolbar({
   query,
   onQuery,
@@ -59,6 +59,9 @@ export function ListToolbar({
   const [text, setText] = useState(query);
   const sent = useRef(query);
   const phone = useMediaQuery("(max-width: 640px)");
+  // Below ~960 px the filter menus would push the primary action onto its own
+  // row (DESIGN.md §12), so they fold into one Filters button there too.
+  const compact = useMediaQuery("(max-width: 960px)");
   const [sheetOpen, setSheetOpen] = useState(false);
   // Follow external changes only (chip removed, "Clear filters") — not the
   // echo of our own debounced write, which would clobber newer keystrokes.
@@ -95,7 +98,7 @@ export function ListToolbar({
           </div>
         )}
         {children &&
-          (phone ? (
+          (compact ? (
             <>
               <Button variant="secondary" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
                 <ListFilter aria-hidden size={14} />

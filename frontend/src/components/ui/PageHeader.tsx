@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { cn } from "@/lib/cn";
 
 export interface Crumb {
   label: ReactNode;
@@ -15,7 +14,7 @@ export interface PageHeaderProps {
   description?: ReactNode;
   /** @deprecated use `description`. */
   subtitle?: ReactNode;
-  /** Small line above the title (record kind, e.g. "Device"). */
+  /** The overline after the status: meta, never the record kind. */
   eyebrow?: ReactNode;
   /** The record's status, first in the overline (DESIGN.md §4). */
   status?: ReactNode;
@@ -27,8 +26,6 @@ export interface PageHeaderProps {
   back?: { href: string; label: string };
   /** Page actions; the primary action goes last (rightmost). */
   actions?: ReactNode;
-  /** Render the title in the mono face (device names). */
-  monoTitle?: boolean;
   /** List pages (DESIGN.md §6): the description sits beside the title, on
    * its baseline, and wraps under it when there's no room. */
   inline?: boolean;
@@ -61,9 +58,38 @@ export function Breadcrumbs({ crumbs: all }: { crumbs: Crumb[] }) {
   );
 }
 
-/** DESIGN.md §4 page header: breadcrumbs, an overline (status first, then
- * meta), an H1, a one-line description, a meta row, and actions on the
- * right. */
+/** The one header anatomy (DESIGN.md §4), shared by PageHeader and the
+ * full-page editors: the overline (status first, then meta), then the title
+ * row with the actions on its right, top-aligned with the title (primary
+ * rightmost, ⋯ last), then whatever goes under the title. On phones the
+ * actions are one row directly under the title. */
+export function HeaderBlock({
+  overline,
+  heading,
+  actions,
+  children,
+}: {
+  overline?: ReactNode;
+  /** The title element itself (an `h1`, or the title and description inline). */
+  heading: ReactNode;
+  actions?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-[3px]">
+      {overline && <div className="flex flex-wrap items-center gap-2 text-[13px] text-ink-muted">{overline}</div>}
+      <div className="flex items-start justify-between gap-x-4 gap-y-2.5 max-md:flex-col max-md:items-stretch">
+        <div className="min-w-0 flex-1">{heading}</div>
+        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/** DESIGN.md §4 page header: breadcrumbs, then the HeaderBlock — overline
+ * (status first, then meta), the H1 with the actions on its row, a one-line
+ * description and a meta row. */
 export function PageHeader({
   title,
   description,
@@ -74,38 +100,37 @@ export function PageHeader({
   breadcrumbs,
   back,
   actions,
-  monoTitle,
   inline,
 }: PageHeaderProps) {
   const crumbs = breadcrumbs ?? (back ? [{ label: back.label, href: back.href }] : undefined);
   const desc = description ?? subtitle;
+  const h1 = (
+    <h1 className="flex flex-wrap items-center gap-3 text-[24px] font-semibold leading-[1.2] tracking-[-0.015em] text-ink md:text-[28px]">{title}</h1>
+  );
   return (
     <header className="flex flex-col gap-2">
       {crumbs && crumbs.length > 0 && <Breadcrumbs crumbs={crumbs} />}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className={inline ? "flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1" : "min-w-0"}>
-          {(eyebrow || status) && (
-            <div className="mb-1 flex flex-wrap items-center gap-2 text-[13px] text-ink-muted">
-              {status}
-              {eyebrow}
+      <HeaderBlock
+        overline={(status || eyebrow) && <>{status}{eyebrow}</>}
+        heading={
+          inline ? (
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
+              {h1}
+              {desc && <p className="max-w-[64ch] text-ink-muted">{desc}</p>}
             </div>
-          )}
-          <h1
-            className={`flex flex-wrap items-center gap-3 text-[24px] font-semibold leading-[1.2] tracking-[-0.015em] text-ink md:text-[28px] ${
-              monoTitle ? "font-mono font-medium tracking-[-0.01em]" : ""
-            }`}
-          >
-            {title}
-          </h1>
-          {desc && <p className={cn("max-w-[64ch] text-ink-muted", !inline && "mt-1.5")}>{desc}</p>}
-          {meta && (
-            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] text-ink-muted [&_b]:font-medium [&_b]:text-ink">
-              {meta}
-            </div>
-          )}
-        </div>
-        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
-      </div>
+          ) : (
+            h1
+          )
+        }
+        actions={actions}
+      >
+        {desc && !inline && <p className="mt-1 max-w-[64ch] text-ink-muted">{desc}</p>}
+        {meta && (
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13.5px] text-ink-muted [&_b]:font-medium [&_b]:text-ink">
+            {meta}
+          </div>
+        )}
+      </HeaderBlock>
     </header>
   );
 }

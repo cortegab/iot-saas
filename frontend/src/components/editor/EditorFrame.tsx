@@ -5,6 +5,7 @@ import { AlertCircle, Check, ChevronLeft, ChevronRight, Eye, X } from "lucide-re
 import { Button, IconButton } from "@/components/ui/Button";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { Stepper } from "@/components/ui/Stepper";
+import { HeaderBlock } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
@@ -440,39 +441,48 @@ export function EditorFrame({
   );
 
   const TitleTag = mode === "page" ? "h1" : "h2";
-  const head = headless ? null : (
-    <div
-      className={cn(
-        "flex shrink-0 items-start gap-2.5 max-md:flex-col max-md:items-stretch",
-        mode === "page" ? "pb-3.5 [grid-area:head]" : "border-b border-border px-5 pb-3 pt-4",
-      )}
-    >
+  const closeButton = onClose && (
+    <IconButton aria-label={`Close ${noun} editor`} onClick={onClose}>
+      <X size={18} />
+    </IconButton>
+  );
+  const head = headless ? null : mode === "page" ? (
+    // A full page shares the page header's anatomy (DESIGN.md §4).
+    <div className="shrink-0 pb-3.5 [grid-area:head]">
+      <HeaderBlock
+        overline={eyebrow}
+        heading={
+          <h1 tabIndex={-1} className="break-words text-[24px] font-semibold leading-[1.2] tracking-[-0.015em] text-ink outline-none md:text-[28px]">
+            {title}
+          </h1>
+        }
+        actions={
+          (headerActions || (menu && menu.length > 0) || closeButton) && (
+            <>
+              {headerActions}
+              {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
+              {closeButton}
+            </>
+          )
+        }
+      >
+        {consequence && <p className="mt-1 max-w-[70ch] text-[14.5px] text-ink-muted">{consequence}</p>}
+      </HeaderBlock>
+    </div>
+  ) : (
+    <div className="flex shrink-0 items-start gap-2.5 border-b border-border px-5 pb-3 pt-4 max-md:flex-col max-md:items-stretch">
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
         {eyebrow && <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">{eyebrow}</div>}
-        {/* A full page's title is its H1 (demo H); a drawer's is a section heading. */}
-        <TitleTag
-          tabIndex={-1}
-          className={cn(
-            "break-words font-semibold text-ink outline-none",
-            mode === "page" ? "text-[24px] leading-[1.2] tracking-[-0.015em] md:text-[28px]" : "text-[19px] leading-[1.3] tracking-[-0.015em]",
-          )}
-        >
+        {/* A drawer's title is a section heading; a full page's is its H1 (above). */}
+        <TitleTag tabIndex={-1} className="break-words text-[19px] font-semibold leading-[1.3] tracking-[-0.015em] text-ink outline-none">
           {title}
         </TitleTag>
-        {consequence && (
-          <p className={cn("mt-1 max-w-[70ch] text-ink-muted", mode === "page" ? "text-[14.5px]" : "text-[12.5px]")}>
-            {consequence}
-          </p>
-        )}
+        {consequence && <p className="mt-1 max-w-[70ch] text-[12.5px] text-ink-muted">{consequence}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1 max-md:order-first max-md:justify-end">
         {headerActions}
         {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
-        {onClose && (
-          <IconButton aria-label={`Close ${noun} editor`} onClick={onClose}>
-            <X size={18} />
-          </IconButton>
-        )}
+        {closeButton}
       </div>
     </div>
   );
