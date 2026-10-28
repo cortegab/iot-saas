@@ -11,13 +11,32 @@ type RuleResponse = components["schemas"]["RuleResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type DashboardResponse = components["schemas"]["DashboardResponse"];
 type MemberResponse = components["schemas"]["MemberResponse"];
-type ApiKeyResponse = components["schemas"]["ApiKeyResponse"];
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-/** The lists the shell needs for nav counts and ⌘K search. Same SWR keys the
- * list pages use, so they share one cache. Admin-only lists are only fetched
- * for roles that may read them. */
-export function useShellData() {
+type NavCountsResponse = components["schemas"]["NavCountsResponse"];
+
+/** The nav's counts and unread alerts — one request (GET /tenants/current/counts),
+ * not every list, so a full page load doesn't fetch all devices, rules and
+ * templates just to show their number. Any write revalidates it (useApi). */
+export function useNavCounts() {
+  const { data } = useApiSWR<NavCountsResponse>("/tenants/current/counts");
+  const { unreadCount } = useNotifications();
+  const counts: Partial<Record<NavCountSource, number>> = {
+    devices: data?.devices,
+    rules: data?.rules,
+    templates: data?.templates,
+    dashboards: data?.dashboards,
+    zones: data?.zones,
+    members: data?.members ?? undefined,
+    keys: data?.api_keys ?? undefined,
+  };
+  return { counts, unreadCount };
+}
+
+/** The lists ⌘K searches. Only the open palette calls it, so they load when
+ * it's opened; same SWR keys as the list pages, so they share one cache.
+ * Admin-only lists are only fetched for roles that may read them. */
+export function usePaletteData() {
   const { can } = usePermissions();
   const devices = useApiSWR<DeviceResponse[]>("/devices");
   const rules = useApiSWR<RuleResponse[]>("/rules");
@@ -25,18 +44,6 @@ export function useShellData() {
   const dashboards = useApiSWR<DashboardResponse[]>("/dashboards");
   const zones = useApiSWR<ZoneResponse[]>("/zones");
   const members = useApiSWR<MemberResponse[]>(can("members.manage") ? "/tenants/members" : null);
-  const keys = useApiSWR<ApiKeyResponse[]>(can("keys.manage") ? "/api-keys" : null);
-  const { unreadCount } = useNotifications();
-
-  const counts: Partial<Record<NavCountSource, number>> = {
-    devices: devices.data?.length,
-    rules: rules.data?.length,
-    templates: templates.data?.length,
-    dashboards: dashboards.data?.length,
-    zones: zones.data?.length,
-    members: members.data?.length,
-    keys: keys.data?.filter((k) => !k.revoked_at).length,
-  };
 
   return {
     devices: devices.data ?? [],
@@ -45,7 +52,5 @@ export function useShellData() {
     dashboards: dashboards.data ?? [],
     zones: zones.data ?? [],
     members: members.data ?? [],
-    counts,
-    unreadCount,
   };
 }

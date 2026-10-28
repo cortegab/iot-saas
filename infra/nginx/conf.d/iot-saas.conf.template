@@ -32,7 +32,6 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${DOMAIN_API}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_API}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_session_cache shared:SSL:10m;
 
     return 301 https://${DOMAIN_APP}$request_uri;
 }
@@ -46,7 +45,6 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${DOMAIN_API}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_API}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_session_cache shared:SSL:10m;
 
     # Generic device firmware releases (firmware/release.py), downloaded by
     # the browser flasher on a device's Connect page. Same origin as the app,
@@ -85,7 +83,6 @@ server {
     ssl_certificate     /etc/letsencrypt/live/${DOMAIN_API}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_API}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_session_cache shared:SSL:10m;
 
     location / {
         proxy_pass http://api:8000;

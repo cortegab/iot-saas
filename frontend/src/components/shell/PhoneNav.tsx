@@ -19,7 +19,7 @@ import {
 import { CreateWorkspaceDialog } from "@/components/shell/CreateWorkspaceDialog";
 import { MORE_ITEMS, TAB_ITEMS, activeHref } from "@/components/shell/nav-config";
 import { useShell } from "@/components/shell/shell-context";
-import { useShellData } from "@/components/shell/useShellData";
+import { useNavCounts } from "@/components/shell/useShellData";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import type { RealtimeStatus } from "@/lib/realtime";
 import { cn } from "@/lib/cn";
@@ -71,7 +71,7 @@ export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
 export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
   const pathname = usePathname();
   const active = activeHref(pathname);
-  const { unreadCount } = useShellData();
+  const { unreadCount } = useNavCounts();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = active != null && MORE_ITEMS.some((i) => i.href === active);
 

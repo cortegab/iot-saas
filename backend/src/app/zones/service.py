@@ -46,6 +46,15 @@ async def list_zones(session: AsyncSession, tenant_id: uuid.UUID) -> list[Zone]:
     return list(result.scalars().all())
 
 
+async def count_zones(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    return (
+        await session.scalar(
+            select(func.count()).select_from(Zone).where(Zone.tenant_id == tenant_id)
+        )
+        or 0
+    )
+
+
 async def get_zone(session: AsyncSession, tenant_id: uuid.UUID, zone_id: uuid.UUID) -> Zone:
     result = await session.execute(
         select(Zone).where(Zone.tenant_id == tenant_id, Zone.id == zone_id)

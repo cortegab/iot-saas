@@ -150,6 +150,11 @@ services:
     volumes:
       - ../frontend:/app
       - frontend-node-modules:/app/node_modules
+      # The dev build cache on a Docker volume, not the bind mount: the bind
+      # mount is slow for its many small writes (Next warns "Slow filesystem
+      # detected"), and the container's root-owned files no longer land in
+      # the host's frontend/.next.
+      - frontend-next:/app/.next
     depends_on:
       - api
 
@@ -185,5 +190,6 @@ volumes:
   redis-data:
   emqx-data:
   frontend-node-modules:
+  frontend-next:
   pgadmin-data:
   redisinsight-data:
