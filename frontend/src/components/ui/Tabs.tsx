@@ -77,7 +77,7 @@ export function Tabs({
             id={`tab-${tab.id}`}
             onClick={() => onChange(tab.id)}
             className={cn(
-              "relative inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-2.5 text-sm transition-colors duration-150",
+              "relative inline-flex h-control items-center gap-1.5 whitespace-nowrap px-3 text-sm transition-colors duration-150",
               "after:absolute after:inset-x-1.5 after:-bottom-px after:h-0.5 after:rounded-full",
               selected && "font-medium text-ink after:bg-accent",
               !selected && !tab.disabled && "text-ink-muted hover:text-ink",

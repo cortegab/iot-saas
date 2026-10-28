@@ -198,13 +198,16 @@ export function DataTable<T>({
               >
                 {selection && (
                   <td className="w-9 pl-3 align-middle @max-[600px]:absolute @max-[600px]:left-3.5 @max-[600px]:top-[13px] @max-[600px]:w-auto @max-[600px]:p-0">
-                    <input
-                      type="checkbox"
-                      aria-label={`Select ${selection.rowLabel(row)}`}
-                      checked={selected}
-                      onChange={() => toggleOne(key)}
-                      className="h-[15px] w-[15px] accent-[var(--color-accent)] @max-[600px]:h-5 @max-[600px]:w-5"
-                    />
+                    {/* The label carries the 44 px touch area (.hit); the box keeps its size. */}
+                    <label className="hit inline-flex align-middle">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${selection.rowLabel(row)}`}
+                        checked={selected}
+                        onChange={() => toggleOne(key)}
+                        className="h-[15px] w-[15px] accent-[var(--color-accent)] @max-[600px]:h-5 @max-[600px]:w-5"
+                      />
+                    </label>
                   </td>
                 )}
                 {columns.map((col, i) => (

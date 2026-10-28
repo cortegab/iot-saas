@@ -269,7 +269,7 @@ export default function WorkspaceSettingsPage() {
                 ? "An owner can leave once another owner exists. Your personal dashboards here are deleted."
                 : "You lose access. Your personal dashboards here are deleted."}
             </p>
-            <Button variant="secondary" className="text-status-error" onClick={() => void leave()}>
+            <Button variant="secondary-danger" onClick={() => void leave()}>
               <LogOut aria-hidden size={14} />
               Leave workspace…
             </Button>

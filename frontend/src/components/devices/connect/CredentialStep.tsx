@@ -27,9 +27,9 @@ export function CredentialStep({ flow }: { flow: ConnectFlow }) {
           </Callout>
           {can("devices.write") ? (
             <div>
-              <Button variant={neverConnected ? "primary" : "danger"} disabled={rotating} onClick={() => void flow.rotate()}>
+              <Button variant={neverConnected ? "primary" : "secondary-danger"} disabled={rotating} onClick={() => void flow.rotate()}>
                 <KeyRound aria-hidden size={15} />
-                {rotating ? "Working…" : neverConnected ? "Create credential" : "Rotate credential and continue"}
+                {rotating ? "Working…" : neverConnected ? "Create credential" : "Rotate credential…"}
               </Button>
             </div>
           ) : (

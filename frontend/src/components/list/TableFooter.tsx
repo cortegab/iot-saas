@@ -73,7 +73,7 @@ export function TableFooter({
                   aria-current={item === page ? "page" : undefined}
                   onClick={() => onPage(item)}
                   className={cn(
-                    "h-[30px] min-w-[30px] rounded-md px-1.5 tabular-nums transition-colors duration-150 max-sm:hidden",
+                    "hit h-[30px] min-w-[30px] rounded-md px-1.5 tabular-nums transition-colors duration-150 max-sm:hidden",
                     item === page ? "bg-accent-muted font-semibold text-accent-strong" : "hover:bg-surface-raised hover:text-ink",
                   )}
                 >

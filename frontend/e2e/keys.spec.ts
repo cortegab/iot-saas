@@ -27,7 +27,7 @@ test("api keys: create, authenticate with it, then revoke", async ({ page, reque
   // Acknowledging the secret opens the key's page.
   await expect(page).toHaveURL(/\/keys\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name })).toBeVisible();
-  await page.getByRole("button", { name: "Revoke key" }).click();
+  await page.getByRole("button", { name: "Revoke key…" }).click();
   await page.getByRole("button", { name: "Revoke key" }).last().click();
   await expect(page.getByText("Key revoked", { exact: true })).toBeVisible();
 

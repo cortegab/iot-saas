@@ -137,7 +137,7 @@ export function ListToolbar({
                   title={o.hint}
                   onClick={() => quick.onChange(o.value)}
                   className={cn(
-                    "inline-flex min-h-[30px] items-center gap-[7px] rounded-[6px] px-3 text-[13.5px] transition-colors duration-150",
+                    "inline-flex min-h-[30px] pointer-coarse:min-h-[38px] items-center gap-[7px] rounded-[6px] px-3 text-[13.5px] transition-colors duration-150",
                     on ? "bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,.18)]" : "text-ink-muted hover:text-ink",
                   )}
                 >
