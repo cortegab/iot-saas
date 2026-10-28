@@ -1,12 +1,10 @@
 import { expect } from "@playwright/test";
 import { test } from "./fixtures";
 
-test("the trend chart offers a 1m range, opens on 10m and keeps its frame when empty", async ({ page }) => {
-  await page.goto("/devices");
-  const row = page.getByRole("table", { name: "Devices" }).locator("tbody tr").first();
-  await row.locator("td").nth(-2).click();
-  await page.getByRole("link", { name: "Open device" }).click();
-  await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}/);
+test("the trend chart offers a 1m range, opens on 10m and keeps its frame when empty", async ({ page, ruleUnderTest }) => {
+  // The fixture's own device: its template has a metric, so the chart shows
+  // whatever else happens to be first in the shared dev workspace's list.
+  await page.goto(`/devices/${ruleUnderTest.deviceId}`);
 
   const ranges = page.getByRole("group", { name: "Time range" }).first();
   await expect(ranges.getByRole("button")).toHaveText(["1m", "10m", "1h", "6h", "24h", "7d"]);
