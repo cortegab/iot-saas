@@ -453,7 +453,7 @@ export function TemplateEditor({
       <EditorFrame
         mode={mode}
         noun={d.device ? "device" : "device template"}
-        title={d.device ? "Add device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
+        title={d.device ? d.device.name.trim() || "Add device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
         eyebrow={
           d.device || isNew ? undefined : <>
             {d.enabled ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />}
