@@ -10,7 +10,6 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { RuleEditor } from "@/components/rules/editor/RuleEditor";
 import { useRuleCatalog } from "@/components/rules/editor/useRuleCatalog";
-import { useWideContent } from "@/components/shell/shell-context";
 import { upsertRuleInCache } from "@/lib/rule-cache";
 import type { RuleDraft } from "@/lib/rule-draft";
 import { recipesFor, unavailableRecipes, type Recipe } from "@/lib/rule-recipes";
@@ -26,7 +25,6 @@ const ICON: Record<Recipe["icon"], typeof Fan> = { fan: Fan, door: DoorOpen, dro
  * device can do, or Start blank; then the workbench. `?device=<id>` (from a
  * device page) preselects the device and returns there after saving. */
 export default function NewRulePage() {
-  useWideContent();
   const router = useRouter();
   const params = useSearchParams();
   const seededDevice = params.get("device") ?? undefined;

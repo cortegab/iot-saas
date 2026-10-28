@@ -59,17 +59,20 @@ test("a saved rule: tabs in the URL, a condition edited in its sheet, Activity h
   await expect(tabs.getByRole("tab", { name: /^If/ })).toHaveAttribute("aria-selected", "true");
 });
 
-test("the preview sits beside the editor when there's room, and behind a button otherwise", async ({ page, ruleUnderTest }) => {
-  await page.setViewportSize({ width: 1600, height: 900 });
-  await page.goto(`/rules/${ruleUnderTest.id}`);
-  await expect(page.getByRole("complementary", { name: "Preview" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Preview" })).toBeHidden();
-
-  // 1150px with the rail leaves ~1006px of content: below 1080.
-  await page.setViewportSize({ width: 1150, height: 800 });
-  await expect(page.getByRole("complementary", { name: "Preview" })).toBeHidden();
-  await page.getByRole("button", { name: "Preview" }).click();
-  await expect(page.getByRole("dialog", { name: "Preview" })).toBeVisible();
+test("the preview is behind its button at every width, beside the 760px editor", async ({ page, ruleUnderTest }) => {
+  for (const width of [1600, 400]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/rules/${ruleUnderTest.id}`);
+    // The same column as every editor (DESIGN.md §4), and no side panel.
+    expect((await page.getByRole("tablist", { name: "Rule sections" }).boundingBox())!.width).toBeLessThanOrEqual(760);
+    await expect(page.getByRole("complementary", { name: "Preview" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Preview" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole("heading", { name: "Last 24 hours" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  }
 });
 
 test("walking a recipe to Review creates nothing until Create rule", async ({ page }) => {
