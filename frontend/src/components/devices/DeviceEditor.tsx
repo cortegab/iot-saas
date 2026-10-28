@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo } from "react";
 import Link from "next/link";
-import { Cpu, RotateCcw, Trash2, Upload } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -12,6 +11,7 @@ import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FactList } from "@/components/ui/FactList";
+import { Inherited } from "@/components/ui/Inherited";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -57,7 +57,7 @@ interface DeviceDraft {
 const DIFF: DiffField<DeviceDraft>[] = [
   { label: "Name", get: (d) => d.name.trim() },
   { label: "Zone", get: (d) => d.zoneId },
-  { label: "Rule evaluation", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
+  { label: "Status", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
   {
     label: "Wiring",
     get: (d) => (d.wiring ? `own: ${d.wiring.inputs.length} in · ${d.wiring.outputs.length} out (${d.wiring.board})` : "the template's"),
@@ -92,13 +92,11 @@ export function DeviceEditor({
   deviceId,
   embedded = false,
   onRotate,
-  onDelete,
 }: {
   deviceId: string;
   embedded?: boolean;
   /** The record actions (useDeviceActions), so they confirm as the ⋯ menu does. */
   onRotate?: () => void;
-  onDelete?: () => void;
 }) {
   const api = useApi();
   const toast = useToast();
@@ -136,6 +134,7 @@ export function DeviceEditor({
     () => (rules ?? []).filter((r) => r.devices.some((d) => d.device_id === deviceId)).length,
     [rules, deviceId],
   );
+  const rulesLine = ruleCount ? `${plural(ruleCount, "rule")} use${ruleCount === 1 ? "s" : ""} it.` : "No rules use it yet.";
 
   async function copyUsername() {
     try {
@@ -237,7 +236,6 @@ export function DeviceEditor({
         consequence={consequence}
         sections={[
           { id: "general", label: "General", description: "Name and zone" },
-          { id: "status", label: "Rule evaluation", description: "Whether rules evaluate it" },
           { id: "hardware", label: "Wiring", description: d.wiring ? "This device's own" : "The template's" },
         ]}
         sectionOf={(p) => (p.startsWith("identity") ? "general" : p.split(".")[0])}
@@ -281,9 +279,6 @@ export function DeviceEditor({
             </Select>
           </Field>
           </div>
-        </EditorSection>
-
-        <EditorSection id="status" title="Rule evaluation" lead={ruleCount ? `${plural(ruleCount, "rule")} use${ruleCount === 1 ? "s" : ""} this device.` : "No rules use this device yet."}>
           <SwitchField
             label="Status"
             checked={d.enabled}
@@ -291,8 +286,8 @@ export function DeviceEditor({
             onChange={(enabled) => editor.set({ ...d, enabled })}
             onLabel="Enabled"
             offLabel="Disabled"
-            onHint="Rules evaluate its readings and it can connect."
-            offHint="Rules ignore it and its connections are refused. Telemetry history is kept."
+            onHint={`Rules evaluate its readings and it can connect. ${rulesLine}`}
+            offHint={`Rules ignore it and its connections are refused. Telemetry history is kept. ${rulesLine}`}
           />
         </EditorSection>
 
@@ -309,7 +304,6 @@ export function DeviceEditor({
                     <span className="text-ink-muted"> · {template.runs_on === "generic_firmware" ? "Our firmware" : "Custom firmware"}</span>
                   </>,
                 ],
-                ["Wiring", d.wiring ? "Its own (overrides the template's)" : template.hardware ? "The template's" : "None: it runs a sketch"],
                 ...templateGivesFacts(template),
               ]}
             />
@@ -318,40 +312,52 @@ export function DeviceEditor({
           )}
         </EditorSection>
 
-        {template && d.wiring && (
+        {template && (
           <WiringSection
-            lead="This device is wired its own way. Template edits to the wiring don't reach it; its metrics and actuators still come from the template."
-            hardware={d.wiring}
+            lead="How this board is wired, for installing from the browser."
+            showYield={false}
+            header={
+              <Inherited
+                from="the template"
+                what="wiring"
+                overridden={!!d.wiring}
+                readOnly={readOnly}
+                overrideLabel="Wire this device differently"
+                resetLabel="Use the template's wiring"
+                // A fresh copy: its own row ids, apart from the read-only view's.
+                onOverride={() => editor.set({ ...d, wiring: hardwareToDraft(template.hardware, rows) ?? blankHardware(catalog?.models[0]?.id) })}
+                onReset={() => editor.set({ ...d, wiring: null })}
+                disabled={!d.wiring && !catalog && !template.hardware}
+                note={
+                  d.wiring
+                    ? "Template wiring edits don't reach it; its metrics and actuators still come from the template."
+                    : "Wire it differently when it's built differently: another board, a moved pin, a different sensor."
+                }
+                actions={
+                  d.wiring ? (
+                    device.hardware &&
+                    !editor.dirty && (
+                      <Button variant="secondary" size="sm" onClick={() => void saveWiringToTemplate()}>
+                        Save to {template.name}…
+                      </Button>
+                    )
+                  ) : (
+                    template.hardware && (
+                      <Link href={`/templates/${template.id}#hardware`} className={buttonClassName({ variant: "secondary", size: "sm" })}>
+                        Edit the template&apos;s wiring
+                      </Link>
+                    )
+                  )
+                }
+              />
+            }
+            hardware={d.wiring ?? templateWiring ?? undefined}
             rows={rows}
-            readOnly={readOnly}
+            readOnly={readOnly || !d.wiring}
             onChange={(wiring) => editor.set({ ...d, wiring })}
-            field={(path) => ({ error: editor.errorFor(path), warning: editor.warningFor(path), onBlur: () => editor.touch(path) })}
+            field={d.wiring ? (path) => ({ error: editor.errorFor(path), warning: editor.warningFor(path), onBlur: () => editor.touch(path) }) : undefined}
           >
-            {!readOnly && (
-              <div className="flex flex-wrap items-center gap-2">
-                <Button variant="secondary" onClick={() => editor.set({ ...d, wiring: null })}>
-                  <RotateCcw aria-hidden size={14} />
-                  Use the template&apos;s wiring
-                </Button>
-                {device.hardware && !editor.dirty && (
-                  <Button variant="secondary" onClick={() => void saveWiringToTemplate()}>
-                    <Upload aria-hidden size={14} />
-                    Save to {template.name}…
-                  </Button>
-                )}
-              </div>
-            )}
-          </WiringSection>
-        )}
-
-        {template && !d.wiring && (
-          <WiringSection
-            lead="How this board is wired, for installing from the browser. It follows the template unless this one is built differently: another board, a moved pin, a different sensor."
-            hardware={templateWiring ?? undefined}
-            rows={rows}
-            readOnly
-          >
-            {!templateWiring && (
+            {!d.wiring && !templateWiring && (
               <Callout>
                 {template.name} has no wiring, so this device gets a sketch to edit and upload. Wire this device alone, or{" "}
                 <Link href={`/templates/${template.id}#hardware`} className="text-accent hover:underline">
@@ -359,24 +365,6 @@ export function DeviceEditor({
                 </Link>{" "}
                 for every device of it.
               </Callout>
-            )}
-            {!readOnly && (
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  variant="secondary"
-                  disabled={!catalog && !template.hardware}
-                  // A fresh copy: its own row ids, apart from the read-only view's.
-                  onClick={() => editor.set({ ...d, wiring: hardwareToDraft(template.hardware, rows) ?? blankHardware(catalog?.models[0]?.id) })}
-                >
-                  <Cpu aria-hidden size={14} />
-                  Wire this device differently
-                </Button>
-                {template.hardware && (
-                  <Link href={`/templates/${template.id}#hardware`} className={buttonClassName({ variant: "secondary" })}>
-                    Edit the template&apos;s wiring
-                  </Link>
-                )}
-              </div>
             )}
           </WiringSection>
         )}
@@ -419,19 +407,6 @@ export function DeviceEditor({
           </EditorSection>
         )}
 
-        {embedded && !readOnly && onDelete && (
-          <EditorSection id="danger" title="Delete" tone="danger">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="min-w-0 flex-1 text-[13px] text-ink-muted">
-                Deletes its credential and history. {ruleCount ? `${plural(ruleCount, "rule")} and any widgets that use it stop working.` : "Widgets that use it stop working."}
-              </p>
-              <Button variant="secondary" className="text-status-error" onClick={onDelete}>
-                <Trash2 aria-hidden size={14} />
-                Delete device…
-              </Button>
-            </div>
-          </EditorSection>
-        )}
         </div>
       </EditorFrame>
       {confirmDialog}
