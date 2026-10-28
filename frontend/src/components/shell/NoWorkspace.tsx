@@ -22,7 +22,7 @@ export function NoWorkspace() {
           </button>
         }
       >
-        <Button onClick={() => setOpen(true)} className="h-11 w-full text-[15px]">
+        <Button onClick={() => setOpen(true)} className="w-full">
           Create a workspace
         </Button>
       </AuthCard>

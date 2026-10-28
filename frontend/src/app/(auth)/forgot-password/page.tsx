@@ -57,7 +57,7 @@ export default function ForgotPasswordPage() {
         <Field label="Email" error={error}>
           <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
-        <Button type="submit" disabled={busy} className="h-11 w-full text-[15px]">
+        <Button type="submit" disabled={busy} className="w-full">
           {busy ? "Sending…" : "Send reset link"}
         </Button>
       </form>

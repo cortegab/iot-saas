@@ -135,7 +135,7 @@ export default function LoginPage() {
           <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} className="mt-[3px] accent-[var(--color-accent)]" />
           Keep me signed in on this device
         </label>
-        <Button type="submit" disabled={submitting} className="h-11 w-full text-[15px]">
+        <Button type="submit" disabled={submitting} className="w-full">
           {submitting ? "Signing in…" : "Sign in"}
         </Button>
       </form>
