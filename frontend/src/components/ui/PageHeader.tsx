@@ -36,7 +36,11 @@ export interface PageHeaderProps {
 
 /** A breadcrumb trail on its own (for pages whose H1 lives elsewhere, e.g. a
  * full-page editor). */
-export function Breadcrumbs({ crumbs }: { crumbs: Crumb[] }) {
+/** Parents only (DESIGN.md §4): the H1 right below names the current page, so
+ * a trailing crumb without a link isn't shown. */
+export function Breadcrumbs({ crumbs: all }: { crumbs: Crumb[] }) {
+  const crumbs = all.filter((c) => c.href);
+  if (crumbs.length === 0) return null;
   return (
     <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-[13px] text-ink-muted">
       {crumbs.map((crumb, i) => (

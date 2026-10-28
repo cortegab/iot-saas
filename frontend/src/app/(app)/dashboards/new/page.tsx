@@ -8,7 +8,7 @@ import { DashboardEditor } from "@/components/dashboards/DashboardEditor";
 export default function NewDashboardPage() {
   return (
     <>
-      <Breadcrumbs crumbs={[{ label: "Dashboards", href: "/dashboards" }, { label: "New" }]} />
+      <Breadcrumbs crumbs={[{ label: "Dashboards", href: "/dashboards" }]} />
       <DashboardEditor />
     </>
   );

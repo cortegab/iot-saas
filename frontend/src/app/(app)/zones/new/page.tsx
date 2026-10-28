@@ -7,7 +7,7 @@ import { ZoneEditor } from "@/components/zones/ZoneEditor";
 export default function NewZonePage() {
   return (
     <>
-      <Breadcrumbs crumbs={[{ label: "Zones", href: "/zones" }, { label: "New" }]} />
+      <Breadcrumbs crumbs={[{ label: "Zones", href: "/zones" }]} />
       <ZoneEditor zoneId={null} />
     </>
   );

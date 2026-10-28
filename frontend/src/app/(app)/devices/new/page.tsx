@@ -56,7 +56,7 @@ export default function NewDevicePage() {
   if (start === "same") return <FromTemplate cards={cards} />;
   return (
     <>
-      <Breadcrumbs crumbs={[{ href: "/devices", label: "Devices" }, { label: "Add device" }]} />
+      <Breadcrumbs crumbs={[{ href: "/devices", label: "Devices" }]} />
       <TemplateEditor key={runsOn} entryId={null} onboard runsOn={runsOn} mode="page" intro={cards} />
     </>
   );
@@ -107,7 +107,7 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ href: "/devices", label: "Devices" }, { label: "Add device" }]}
+        breadcrumbs={[{ href: "/devices", label: "Devices" }]}
         title="Add device"
         description="Name it and pick its template. Next come its credential and Install."
       />

@@ -455,10 +455,9 @@ export function TemplateEditor({
         noun={d.device ? "device" : "device template"}
         title={d.device ? "Add device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
         eyebrow={
-          d.device ? undefined : <>
-            {"Device template"}
-            {!isNew && (d.enabled ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />)}
-            {!isNew && <span>· {plural(devices, "device")}</span>}
+          d.device || isNew ? undefined : <>
+            {d.enabled ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />}
+            <span>· {plural(devices, "device")}</span>
           </>
         }
         // Adding something new says what the wizard does (demo H); a new template

@@ -127,8 +127,7 @@ export function ZoneEditor({
         mode={mode}
         noun="zone"
         title={d.name.trim() || (isNew ? "New zone" : zone!.name)}
-        eyebrow={<>Zone{!isNew && <span>· {plural(devices, "device")}</span>}</>}
-        consequence={isNew ? "Devices are added to a zone from their own settings." : `${plural(devices, "device")} in it. Devices are moved from their own settings.`}
+        consequence="Devices join a zone from their own settings."
         sections={[{ id: "zone", label: "Zone" }]}
         status={editor}
         readOnly={readOnly}
@@ -160,11 +159,12 @@ export function ZoneEditor({
           </Field>
           {!isNew && (
             <p className="text-[13px] text-ink-muted">
-              Devices join a zone from their own settings.{" "}
-              {devices > 0 && (
+              {devices > 0 ? (
                 <Link href={`/devices?zone=${zoneId}`} className="text-accent hover:underline">
                   View its {plural(devices, "device")}
                 </Link>
+              ) : (
+                "No devices in it yet."
               )}
             </p>
           )}

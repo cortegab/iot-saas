@@ -167,7 +167,7 @@ export default function WorkspaceSettingsPage() {
         onDiscard={editor.discard}
       >
         {/* Plain stacked sections divided by hairlines (demo H). */}
-        <div className="flex max-w-[760px] flex-col gap-7 [&>section+section]:border-t [&>section+section]:border-border-soft [&>section+section]:pt-7">
+        <div className="flex flex-col gap-7">
         <EditorSection id="workspace" title="Workspace" lead="Only an owner can rename the workspace.">
           <div className="grid gap-3.5 @xl:grid-cols-2">
             <Field
