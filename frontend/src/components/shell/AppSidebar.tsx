@@ -67,7 +67,7 @@ export function LiveIndicator({ realtime, className }: { realtime: RealtimeStatu
   const live = LIVE_LABEL[realtime];
   return (
     <span
-      className={cn("inline-flex items-center gap-[5px] text-[11.5px] text-ink-muted", className)}
+      className={cn("inline-flex items-center gap-[5px] text-xs text-ink-muted", className)}
       title="This browser's connection to the platform"
     >
       <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", live.dot)} />
@@ -81,7 +81,7 @@ export function AlertCount({ count, className }: { count: number; className?: st
   return (
     <span
       className={cn(
-        "rounded-full bg-status-offline px-1.5 text-[11px] font-semibold leading-[18px] text-on-accent",
+        "rounded-full bg-status-offline px-1.5 text-xs font-semibold leading-[18px] text-on-accent",
         className,
       )}
     >
@@ -193,14 +193,14 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
           "flex shrink-0 items-center rounded-md text-ink-muted transition-colors",
           compact
             ? "h-10 w-10 justify-center hover:bg-surface-raised hover:text-ink"
-            : "h-9 gap-2 border border-border bg-surface pl-2.5 pr-2 text-[13.5px] shadow-card hover:border-accent hover:text-ink",
+            : "h-9 gap-2 border border-border bg-surface pl-2.5 pr-2 text-meta shadow-card hover:border-accent hover:text-ink",
         )}
       >
         <Search aria-hidden size={15} />
         {!compact && (
           <>
             <span className="flex-1 truncate text-left">Search or run…</span>
-            <kbd className="rounded border border-b-2 border-border bg-surface-raised px-[5px] font-mono text-[11px] text-ink-muted">
+            <kbd className="rounded border border-b-2 border-border bg-surface-raised px-[5px] font-mono text-xs text-ink-muted">
               ⌘K
             </kbd>
           </>
@@ -251,7 +251,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
                       ? unreadCount > 0 && (
                           <AlertCount
                             count={unreadCount}
-                            className={compact ? "absolute -right-0.5 -top-0.5 min-w-4 px-1 text-[10px] leading-4" : undefined}
+                            className={compact ? "absolute -right-0.5 -top-0.5 min-w-4 px-1 text-xs leading-4" : undefined}
                           />
                         )
                       : !compact &&
@@ -339,7 +339,7 @@ export function WorkspaceMenu({ onCreate, onSwitched }: { onCreate: () => void; 
   const { memberships, currentTenantId, setCurrentTenantId } = useAuth();
   return (
     <div role="menu" aria-label="Workspaces" className="flex flex-col">
-      <p className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+      <p className="px-2.5 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-ink-muted">
         Workspaces
       </p>
       {memberships.map((m) => {
@@ -396,7 +396,7 @@ function UserMenu({
   const live = LIVE_LABEL[realtime];
   const displayName = user?.name?.trim() || user?.email || "…";
   const avatar = (
-    <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent-muted text-[11.5px] font-semibold text-accent-strong">
+    <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent-muted text-xs font-semibold text-accent-strong">
       {user ? initialsFor(user.name, user.email) : "…"}
       {compact && (
         <span aria-hidden className={cn("absolute -bottom-px -right-px h-[9px] w-[9px] rounded-full border-2 border-sidebar", live.dot)} />
@@ -421,7 +421,7 @@ function UserMenu({
             <>
               {avatar}
               <span className="flex min-w-0 flex-col leading-tight">
-                <strong className="truncate text-[13px] font-medium text-ink">{displayName}</strong>
+                <strong className="truncate text-meta font-medium text-ink">{displayName}</strong>
                 <LiveIndicator realtime={realtime} />
               </span>
             </>

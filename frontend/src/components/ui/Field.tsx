@@ -52,7 +52,7 @@ export function Field({ label, optional, hint, error, warning, action, inline, c
     // would shrink the Field to its content, so the width is set explicitly.
     <div className={cn("relative grid w-full min-w-0 content-start gap-[5px] self-start", inline && "grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-x-3", className)}>
       <label className={cn("grid min-w-0 content-start gap-[5px]", inline && "col-span-2 grid-cols-subgrid items-center")}>
-        <span className={cn("text-xs font-medium text-ink-muted", inline && "text-[13px] text-ink")}>
+        <span className={cn("text-xs font-medium text-ink-muted", inline && "text-meta text-ink")}>
           {label}
           {optional && <span className="font-normal opacity-75"> · optional</span>}
         </span>

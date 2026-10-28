@@ -173,7 +173,7 @@ export function RowSheet({
           {!readOnly && (
             <Button
               variant="link-danger"
-              className="mr-auto text-[13px]"
+              className="mr-auto text-meta"
               onClick={() => {
                 onRemove();
                 onClose();
@@ -187,7 +187,7 @@ export function RowSheet({
       }
     >
       {unwired && (
-        <p className="mb-4 flex items-center gap-2 text-[13px] text-ink-muted">
+        <p className="mb-4 flex items-center gap-2 text-meta text-ink-muted">
           <NotWiredTag /> No part feeds this. Your firmware must publish it.
         </p>
       )}

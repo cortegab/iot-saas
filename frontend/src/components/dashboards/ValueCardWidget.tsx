@@ -27,7 +27,7 @@ export function ValueCardWidget({ deviceId, metric }: { deviceId: string; metric
         ) : (
           <Readout value={value} unit={reading && !isBool ? (meta?.unit ?? undefined) : undefined} size="lg" stale={stale && !!reading} framed={false} />
         )}
-        {reading ? <WidgetFoot stale={stale} time={reading.time} /> : <span className="text-[11.5px] text-ink-muted">No data</span>}
+        {reading ? <WidgetFoot stale={stale} time={reading.time} /> : <span className="text-xs text-ink-muted">No data</span>}
       </div>
     </WidgetCard>
   );

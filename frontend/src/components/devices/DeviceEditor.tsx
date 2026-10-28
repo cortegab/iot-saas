@@ -245,7 +245,7 @@ export function DeviceEditor({
         onDiscard={editor.discard}
       >
         <div className="flex flex-col gap-7">
-        {embedded && <p className="max-w-[70ch] text-[14px] text-ink-muted">{consequence}</p>}
+        {embedded && <p className="max-w-[70ch] text-sm text-ink-muted">{consequence}</p>}
 
         <EditorSection id="general" title="General">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -376,8 +376,8 @@ export function DeviceEditor({
                 [
                   "MQTT username",
                   <span key="username" className="flex min-w-0 flex-wrap items-center gap-x-2">
-                    <span className="break-all font-mono text-[13px]">{device.id}</span>
-                    <Button variant="link" className="text-[13px]" onClick={() => void copyUsername()}>
+                    <span className="break-all font-mono text-meta">{device.id}</span>
+                    <Button variant="link" className="text-meta" onClick={() => void copyUsername()}>
                       Copy
                     </Button>
                   </span>,
@@ -387,7 +387,7 @@ export function DeviceEditor({
                   <span key="password" className="flex flex-wrap items-center gap-x-2">
                     <span>Shown once when created, stored hashed.</span>
                     {!readOnly && onRotate && (
-                      <Button variant="link" className="text-[13px]" onClick={onRotate}>
+                      <Button variant="link" className="text-meta" onClick={onRotate}>
                         Rotate credential…
                       </Button>
                     )}

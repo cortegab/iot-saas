@@ -44,7 +44,7 @@ export function Inherited({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <p className="flex min-w-0 flex-1 basis-[260px] items-start gap-2 text-[13.5px] text-ink">
+        <p className="flex min-w-0 flex-1 basis-[260px] items-start gap-2 text-meta text-ink">
           <Icon aria-hidden size={15} className="mt-0.5 shrink-0 text-ink-muted" />
           <span>
             {overridden ? (

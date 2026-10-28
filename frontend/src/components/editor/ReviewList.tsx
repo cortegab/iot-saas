@@ -21,13 +21,13 @@ export function ReviewList({ rows }: { rows: ReviewRow[] }) {
           key={r.label}
           className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-1 border-t border-border-soft py-3.5 first:border-t-0 @min-[521px]:grid-cols-[140px_minmax(0,1fr)_auto]"
         >
-          <dt className="col-span-full text-[13px] text-ink-muted @min-[521px]:col-span-1">{r.label}</dt>
+          <dt className="col-span-full text-meta text-ink-muted @min-[521px]:col-span-1">{r.label}</dt>
           <dd className="min-w-0 text-sm text-ink">{r.value}</dd>
           {r.step && nav ? (
             <button
               type="button"
               onClick={() => nav.goTo(r.step!)}
-              className="text-[13px] font-medium text-accent hover:underline"
+              className="text-meta font-medium text-accent hover:underline"
             >
               Change<span className="sr-only"> {r.label.toLowerCase()}</span>
             </button>

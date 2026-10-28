@@ -14,8 +14,8 @@ export function Section({
   return (
     <section className="flex flex-col gap-3">
       <div>
-        <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{title}</h2>
-        {description && <p className="mt-0.5 max-w-[64ch] text-[13.5px] text-ink-muted">{description}</p>}
+        <h2 className="text-section font-semibold tracking-[-0.01em] text-ink">{title}</h2>
+        {description && <p className="mt-0.5 max-w-[64ch] text-meta text-ink-muted">{description}</p>}
       </div>
       {children}
     </section>

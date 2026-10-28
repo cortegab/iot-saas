@@ -97,7 +97,7 @@ export function DevicePeek({
                     {r ? (
                       <span className={cn("whitespace-nowrap tabular-nums", stale ? "text-ink-muted" : "text-ink")} title={timeAgo(r.time)}>
                         {formatReading(r.value, meta)}
-                        {meta?.unit && !isBoolMetric(meta) && <span className="ml-1 text-[12.5px] text-ink-muted">{meta.unit}</span>}
+                        {meta?.unit && !isBoolMetric(meta) && <span className="ml-1 text-xs text-ink-muted">{meta.unit}</span>}
                       </span>
                     ) : (
                       <span className="text-ink-muted">No data</span>
@@ -120,7 +120,7 @@ export function DevicePeek({
                   {last ? (
                     <span className="whitespace-nowrap tabular-nums text-ink" title={timeAgo(last.issued_at)}>
                       {typeof last.value === "boolean" ? (last.value ? "On" : "Off") : String(last.value)}
-                      <span className="ml-1.5 text-[12.5px] text-ink-muted">{timeAgo(last.issued_at)}</span>
+                      <span className="ml-1.5 text-xs text-ink-muted">{timeAgo(last.issued_at)}</span>
                     </span>
                   ) : (
                     <span className="text-ink-muted">{commands ? "Not commanded yet" : "…"}</span>

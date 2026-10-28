@@ -42,7 +42,7 @@ export function KeyPeek({ apiKey, onClose }: { apiKey: ApiKey | undefined; onClo
           </>
         }
         facts={[
-          ["Prefix", <code key="p" className="font-mono text-[13px]">{apiKey.key_prefix}…</code>],
+          ["Prefix", <code key="p" className="font-mono text-meta">{apiKey.key_prefix}…</code>],
           ["Role", role ? ROLE_LABEL[role] : apiKey.role],
           ["Last used", apiKey.last_used_at ? timeAgo(apiKey.last_used_at) : "Never"],
           ["Expires", apiKey.expires_at ? formatDate(apiKey.expires_at) : "Never"],

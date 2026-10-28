@@ -107,7 +107,7 @@ export function Readout({
               />
             )}
           </span>
-          <span className="flex justify-between gap-1.5 text-[11px] text-ink-muted tabular-nums">
+          <span className="flex justify-between gap-1.5 text-xs text-ink-muted tabular-nums">
             <span>{min.toLocaleString()}</span>
             {threshold != null && <span className="text-ink">rule at {threshold.toLocaleString()}</span>}
             <span>{max.toLocaleString()}</span>
@@ -117,12 +117,12 @@ export function Readout({
 
       {stamp &&
         (stale ? (
-          <span className="inline-flex items-center gap-1 text-[11px] text-status-pending">
+          <span className="inline-flex items-center gap-1 text-xs text-status-pending">
             <AlertTriangle aria-hidden size={12} />
             {stamp}
           </span>
         ) : (
-          <span className="text-[11px] text-ink-muted">{stamp}</span>
+          <span className="text-xs text-ink-muted">{stamp}</span>
         ))}
     </div>
   );

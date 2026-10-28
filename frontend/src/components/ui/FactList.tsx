@@ -15,7 +15,7 @@ export function FactList({ facts, className }: { facts: (Fact | false | null | u
   return (
     <dl
       className={cn(
-        "grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2.5 text-[13.5px] text-ink max-sm:grid-cols-1 max-sm:gap-y-1 max-sm:[&_dd]:mb-2",
+        "grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] items-baseline gap-x-4 gap-y-2.5 text-meta text-ink max-sm:grid-cols-1 max-sm:gap-y-1 max-sm:[&_dd]:mb-2",
         className,
       )}
     >

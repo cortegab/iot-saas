@@ -82,7 +82,7 @@ export function MemberPeek({
         eyebrow={isMe ? "You" : undefined}
         description={role ? ROLE_HELP[role] : undefined}
         facts={[
-          ["Email", <span key="e" className="font-mono text-[13px]">{member.email}</span>],
+          ["Email", <span key="e" className="font-mono text-meta">{member.email}</span>],
           ["Role", <Tag key="r">{roleLabel(member.role)}</Tag>],
           ["Joined", member.joined_at ? formatDate(member.joined_at) : null],
         ]}

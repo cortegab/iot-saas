@@ -492,11 +492,11 @@ export function VerticalRung({
   const item = (key: string, sym: string, title: string, sub: string | null, label: string, sel: LadderSelection, selected: boolean, timer = false) => {
     const body = (
       <>
-        <span aria-hidden className="min-w-[30px] font-mono text-[13px] font-bold text-ink">
+        <span aria-hidden className="min-w-[30px] font-mono text-meta font-bold text-ink">
           {sym}
         </span>
         <span className="flex min-w-0 flex-1 flex-col">
-          <b className="break-words text-[13.5px] font-medium text-ink">{title}</b>
+          <b className="break-words text-meta font-medium text-ink">{title}</b>
           {sub && <small className="text-xs text-ink-muted">{sub}</small>}
         </span>
       </>
@@ -516,7 +516,7 @@ export function VerticalRung({
       </div>
     );
   };
-  const caption = (text: string) => <p className="mt-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-ink-muted">{text}</p>;
+  const caption = (text: string) => <p className="mt-1.5 font-mono text-xs font-semibold uppercase tracking-[0.04em] text-ink-muted">{text}</p>;
 
   const node = (n: DraftNode): ReactNode => {
     if (n.kind === "contact") {
@@ -526,7 +526,7 @@ export function VerticalRung({
     }
     return (
       <div key={n.id} className={cn("flex flex-col gap-1", n.op === "OR" && "border-l-2 border-dashed border-accent pl-3")}>
-        <span className="font-mono text-[11px] font-bold tracking-[0.05em] text-accent-strong">{n.op === "AND" ? "ALL OF" : "ANY OF"}</span>
+        <span className="font-mono text-xs font-bold tracking-[0.05em] text-accent-strong">{n.op === "AND" ? "ALL OF" : "ANY OF"}</span>
         <div className="flex flex-col gap-1">{n.children.map((c) => node(c))}</div>
       </div>
     );
@@ -543,7 +543,7 @@ export function VerticalRung({
         </>
       )}
       {interactive && onAddSeriesAtEnd && (
-        <button type="button" data-rung-el="" onClick={onAddSeriesAtEnd} className="flex min-h-9 items-center gap-2 rounded-lg border border-dashed border-accent px-2.5 text-[13px] text-accent">
+        <button type="button" data-rung-el="" onClick={onAddSeriesAtEnd} className="flex min-h-9 items-center gap-2 rounded-lg border border-dashed border-accent px-2.5 text-meta text-accent">
           + Add a condition in series at the end
         </button>
       )}
@@ -555,7 +555,7 @@ export function VerticalRung({
         return item(a.id, `(${glyph || " "})`, l.title, l.detail, `Action ${l.title} — ${l.detail}`, { kind: "action", id: a.id }, selection?.kind === "action" && selection.id === a.id);
       })}
       {interactive && (
-        <button type="button" data-rung-el="" aria-label="Add an action" onClick={() => onSelect?.({ kind: "add-action" })} className="flex min-h-9 items-center gap-2 rounded-lg border border-dashed border-accent px-2.5 text-[13px] text-accent">
+        <button type="button" data-rung-el="" aria-label="Add an action" onClick={() => onSelect?.({ kind: "add-action" })} className="flex min-h-9 items-center gap-2 rounded-lg border border-dashed border-accent px-2.5 text-meta text-accent">
           + Add an action
         </button>
       )}

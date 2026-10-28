@@ -205,7 +205,7 @@ export function DropdownMenu({
                         )}
                         {item.label}
                         {item.hint && (
-                          <small className={cn("-mt-0.5 basis-full text-[11px] text-ink-muted", item.icon && "pl-6")}>
+                          <small className={cn("-mt-0.5 basis-full text-xs text-ink-muted", item.icon && "pl-6")}>
                             {item.hint}
                           </small>
                         )}

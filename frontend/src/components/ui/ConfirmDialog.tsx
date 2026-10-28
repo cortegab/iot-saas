@@ -77,7 +77,7 @@ export function ConfirmDialog({
         className="relative flex max-h-[calc(100vh-32px)] w-full max-w-[460px] flex-col gap-3 overflow-auto rounded-2xl border border-border bg-pop p-5 shadow-pop"
       >
         {title && (
-          <h2 id={titleId} className="text-[17px] font-semibold text-ink">
+          <h2 id={titleId} className="text-section font-semibold text-ink">
             {title}
           </h2>
         )}

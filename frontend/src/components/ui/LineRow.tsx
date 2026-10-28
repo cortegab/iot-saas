@@ -64,9 +64,9 @@ export const LineRow = forwardRef<HTMLButtonElement, LineRowProps>(function Line
       )}
       <span className="flex min-w-0 flex-1 flex-col">
         <b className="truncate font-medium text-ink">{title}</b>
-        {sub && <span className="truncate text-[12.5px] text-ink-muted">{sub}</span>}
+        {sub && <span className="truncate text-xs text-ink-muted">{sub}</span>}
       </span>
-      <span className="flex shrink-0 items-center gap-2.5 text-[12.5px] text-ink-muted">
+      <span className="flex shrink-0 items-center gap-2.5 text-xs text-ink-muted">
         {end}
         <IssueMarks issues={issues} warn={warn} />
         <ChevronRight aria-hidden size={15} />

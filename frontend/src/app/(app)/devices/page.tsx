@@ -112,7 +112,7 @@ export default function DevicesPage() {
             </Link>
           }
           // demo H: the name in the UI face, its MQTT id under it in mono.
-          sub={<span className="font-mono text-[11.5px]">{d.slug}</span>}
+          sub={<span className="font-mono text-xs">{d.slug}</span>}
         />
       ),
     },

@@ -78,12 +78,12 @@ export function Badge({ tone, label, variant = "dot", shape = "solid", className
   }
 
   if (variant === "text") {
-    return <span className={cn("text-[12.5px] font-medium", cfg.text, className)}>{label}</span>;
+    return <span className={cn("text-xs font-medium", cfg.text, className)}>{label}</span>;
   }
 
   if (variant === "dot") {
     return (
-      <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-[12.5px] font-medium", className)}>
+      <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-medium", className)}>
         <Dot tone={tone} shape={shape} />
         <span className={cfg.text}>{label}</span>
       </span>
@@ -126,9 +126,9 @@ export function Tag({
     <span
       className={cn(
         "inline-flex items-center gap-1 whitespace-nowrap font-medium",
-        size === "sm" ? "rounded px-[5px] text-[10.5px]" : "rounded-[6px] px-2 py-px text-xs",
+        size === "sm" ? "rounded px-[5px] text-xs" : "rounded-[6px] px-2 py-px text-xs",
         // Key chips (metric/actuator keys) keep a hairline border and mono face.
-        mono && "rounded border border-border px-1.5 font-mono text-[11.5px] font-normal",
+        mono && "rounded border border-border px-1.5 font-mono text-xs font-normal",
         tone === "neutral" && "bg-surface-raised text-ink",
         tone === "warn" && "bg-status-pending-surface text-status-pending",
         tone === "accent" && "bg-accent-muted text-accent-strong",

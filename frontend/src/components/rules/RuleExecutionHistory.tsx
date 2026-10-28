@@ -49,7 +49,7 @@ export function RuleExecutionHistory({ ruleId }: { ruleId: string }) {
     <ul aria-label="Recent firings" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
       {data.map((e) => (
         <li key={e.id} className="flex flex-wrap items-start gap-x-4 gap-y-1 border-t border-border-soft px-3.5 py-2.5 text-sm first:border-t-0">
-          <span className="min-w-[104px] whitespace-nowrap text-[12.5px] tabular-nums text-ink-muted">{formatWhen(e.fired_at)}</span>
+          <span className="min-w-[104px] whitespace-nowrap text-xs tabular-nums text-ink-muted">{formatWhen(e.fired_at)}</span>
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="flex flex-wrap items-center gap-1.5">
               <b className="font-medium text-ink">{e.summary}</b>
@@ -57,7 +57,7 @@ export function RuleExecutionHistory({ ruleId }: { ruleId: string }) {
               {SOURCE_TAG[e.trigger_source] && <Tag size="sm">{SOURCE_TAG[e.trigger_source]}</Tag>}
             </span>
             {e.actions.map((a) => (
-              <span key={a.id} className="flex items-center gap-1.5 text-[12.5px] text-ink-muted">
+              <span key={a.id} className="flex items-center gap-1.5 text-xs text-ink-muted">
                 {a.status === "success" ? (
                   <Check aria-label="Done" size={13} className="shrink-0 text-status-online" />
                 ) : (

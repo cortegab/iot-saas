@@ -60,7 +60,7 @@ export function RulePeek({
         }
         description={
           <>
-            When <code className="font-mono text-[12.5px] text-ink">{triggerText(r)}</code>, {actionsText(r.actions)}.
+            When <code className="font-mono text-xs text-ink">{triggerText(r)}</code>, {actionsText(r.actions)}.
           </>
         }
         facts={[
@@ -70,7 +70,7 @@ export function RulePeek({
             devices.length ? (
               <span className="flex flex-col gap-0.5">
                 {devices.map(([id, name]) => (
-                  <Link key={id} href={`/devices/${id}`} className="font-mono text-[13px] text-accent hover:underline">
+                  <Link key={id} href={`/devices/${id}`} className="font-mono text-meta text-accent hover:underline">
                     {name}
                   </Link>
                 ))}
@@ -99,7 +99,7 @@ export function RulePeek({
         {r.trigger.type !== "schedule" && activity && (
           <PeekSection title="Last 24 hours">
             <MiniStrip cells={cells} label={`Fired ${activity.fired} time${activity.fired === 1 ? "" : "s"} in 24 h`} />
-            <p className="text-[12.5px] text-ink-muted">{activity.fired ? `Fired ${activity.fired}× in 24 h.` : "Quiet in 24 h."}</p>
+            <p className="text-xs text-ink-muted">{activity.fired ? `Fired ${activity.fired}× in 24 h.` : "Quiet in 24 h."}</p>
           </PeekSection>
         )}
         {firings && firings.length > 0 && (
@@ -115,7 +115,7 @@ export function RulePeek({
                       <Check aria-label="Done" size={14} className="shrink-0 text-status-online" />
                     )}
                     <span className="min-w-0 flex-1 truncate text-ink">{e.summary}</span>
-                    <span className="whitespace-nowrap text-[12.5px] tabular-nums text-ink-muted">{formatWhen(e.fired_at)}</span>
+                    <span className="whitespace-nowrap text-xs tabular-nums text-ink-muted">{formatWhen(e.fired_at)}</span>
                   </li>
                 );
               })}

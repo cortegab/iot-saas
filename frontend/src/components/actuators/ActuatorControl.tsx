@@ -126,13 +126,13 @@ function ActuatorRow({
     <div className="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-soft px-3.5 py-3 text-sm first:border-t-0">
       <div className="flex min-w-0 flex-1 basis-[240px] flex-col gap-0.5">
         <b className="font-medium text-ink">{actuatorLabel}</b>
-        <span className="text-[12.5px] text-ink-muted">
+        <span className="text-xs text-ink-muted">
           Requested{" "}
           {requested == null ? <span>unknown</span> : <b className="font-medium text-ink">{formatValue(requested)}</b>}
         </span>
         {/* What happened, then who sent it (DESIGN.md §8). "Device reports"
             waits for reported state (§13, deferred). */}
-        <span aria-live="polite" className="flex flex-wrap items-center gap-x-1.5 text-[12.5px] text-ink-muted">
+        <span aria-live="polite" className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-muted">
           {sending != null ? (
             <span className="text-status-pending">Sending…</span>
           ) : latest && status ? (
@@ -145,7 +145,7 @@ function ActuatorRow({
                 <>
                   <span className="text-status-offline">No response within {latest.ttl_seconds} s.</span>
                   {isAdmin && !deviceDisabled && (
-                    <Button variant="link" className="text-[12.5px]" disabled={busy} onClick={() => void send(latest.value as Value, true)}>
+                    <Button variant="link" className="text-xs" disabled={busy} onClick={() => void send(latest.value as Value, true)}>
                       Retry
                     </Button>
                   )}
@@ -172,7 +172,7 @@ function ActuatorRow({
             <span>Nothing sent yet</span>
           )}
         </span>
-        {error && <span className="text-[12.5px] text-status-error">{error}</span>}
+        {error && <span className="text-xs text-status-error">{error}</span>}
       </div>
       {isAdmin && (
         <SegmentedControl

@@ -290,8 +290,8 @@ export default function NotificationsPage() {
                               </Tag>
                             )}
                           </button>
-                          {n.detail && <span className="text-[12.5px] text-ink-muted">{n.detail}</span>}
-                          <span className="text-[12.5px] text-ink-muted">
+                          {n.detail && <span className="text-xs text-ink-muted">{n.detail}</span>}
+                          <span className="text-xs text-ink-muted">
                             {repeats > 1 ? `since ${clock(g.first.created_at)}, last ${timeAgo(n.created_at)}` : timeAgo(n.created_at)}
                             <SourceLinks n={n} deviceName={deviceName} ruleName={ruleName} templateName={templateName} />
                           </span>
@@ -327,7 +327,7 @@ export default function NotificationsPage() {
               {/* Older than what's loaded: one request grows (useNotifications). */}
               {totalRows > notifications.length && (
                 <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-                  <span className="text-[12.5px] text-ink-muted">
+                  <span className="text-xs text-ink-muted">
                     The latest {notifications.length} of {totalRows} notifications
                   </span>
                   {limit < MAX_LOADED ? (
@@ -335,7 +335,7 @@ export default function NotificationsPage() {
                       Show older
                     </Button>
                   ) : (
-                    <span className="text-[12.5px] text-ink-muted">Dismiss old ones to see further back.</span>
+                    <span className="text-xs text-ink-muted">Dismiss old ones to see further back.</span>
                   )}
                 </div>
               )}
@@ -352,7 +352,7 @@ export default function NotificationsPage() {
         footer={
           open ? (
             <>
-              <Button variant="link-danger" className="mr-auto text-[13px]" onClick={() => void onDismiss(open)}>
+              <Button variant="link-danger" className="mr-auto text-meta" onClick={() => void onDismiss(open)}>
                 Dismiss
               </Button>
               <Button variant="ghost" onClick={() => void unreadAll(open)}>
@@ -398,8 +398,8 @@ export default function NotificationsPage() {
             </dl>
             {open.items.length > 1 && (
               <div className="flex flex-col gap-2">
-                <h3 className="text-[13px] font-medium text-ink-muted">Each time</h3>
-                <ol className="flex flex-col gap-1.5 border-l-2 border-border pl-3.5 text-[13px]">
+                <h3 className="text-meta font-medium text-ink-muted">Each time</h3>
+                <ol className="flex flex-col gap-1.5 border-l-2 border-border pl-3.5 text-meta">
                   {open.items.map((n) => (
                     <li key={n.id} className="tabular-nums text-ink">
                       {clock(n.created_at)}

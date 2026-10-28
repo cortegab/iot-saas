@@ -18,7 +18,7 @@ export function OptionsStep({ flow }: { flow: ConnectFlow }) {
   const { install, phone, ssid, hostProblem, blocked } = flow;
   return (
     <>
-      <h2 className="text-lg font-semibold text-ink">Options</h2>
+      <h2 className="text-section font-semibold text-ink">Options</h2>
       {install ? <InstallLead flow={flow} install={install} /> : <SketchLead flow={flow} />}
       <div className="grid gap-5 xl:grid-cols-2">
         <div className="flex flex-col gap-4">
@@ -99,7 +99,7 @@ function WiringCard({ flow, install }: { flow: ConnectFlow; install: InstallPath
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="text-[13px] font-medium text-ink">
+        <span className="text-meta font-medium text-ink">
           Wiring {device.hardware && <Tag size="sm">This device&apos;s own</Tag>}
         </span>
         <span className="flex gap-3 text-xs">
@@ -169,7 +169,7 @@ function WifiOptions({ flow }: { flow: ConnectFlow }) {
       {!flow.phone && (
         <div className="grid grid-cols-2 gap-2">
           {!flow.phoneSetup && (
-            <p className="col-span-2 text-[12.5px] text-ink-muted">Saved on the board with its config. Anyone holding the board can read it.</p>
+            <p className="col-span-2 text-xs text-ink-muted">Saved on the board with its config. Anyone holding the board can read it.</p>
           )}
           <Field label="Network (2.4 GHz)">
             <Input value={flow.ssid} autoComplete="off" onChange={(e) => flow.setSsid(e.target.value)} />
@@ -199,7 +199,7 @@ function BrokerOptions({ flow }: { flow: ConnectFlow }) {
         ]}
       />
       {!flow.tls && (
-        <p className="flex gap-1.5 text-[12.5px] text-status-pending">
+        <p className="flex gap-1.5 text-xs text-status-pending">
           <AlertTriangle aria-hidden size={13} className="mt-0.5 shrink-0" />
           Without TLS the credential crosses the network in the clear. Use it only against a local development broker.
         </p>
@@ -211,7 +211,7 @@ function BrokerOptions({ flow }: { flow: ConnectFlow }) {
 function InstallSummary({ flow, install }: { flow: ConnectFlow; install: InstallPath }) {
   const { phone, security, name, ssid, tls, host, checkedMetrics, boolActuators } = flow;
   return (
-    <div className="rounded-lg bg-canvas px-3.5 py-3 text-[13px]">
+    <div className="rounded-lg bg-canvas px-3.5 py-3 text-meta">
       <p className="mb-1 font-medium text-ink">The board gets</p>
       <ul className="list-disc pl-5 text-ink-muted">
         <li>
@@ -238,7 +238,7 @@ function SketchPinsAndSummary({ flow }: { flow: ConnectFlow }) {
     <>
       {Object.keys(pins).length > 0 && (
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-[13px] font-medium text-ink">Pins</legend>
+          <legend className="mb-1 text-meta font-medium text-ink">Pins</legend>
           {[...metrics.filter((m) => m.data_type === "bool").map((m) => [`m:${wireId(m)}`, m.name, "input"] as const), ...boolActuators.map((a) => [`a:${wireId(a)}`, a.name, "output"] as const)].map(([k, label, dir]) => (
             <div key={k} className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-2">
               <span className="min-w-0 text-sm text-ink">
@@ -256,12 +256,12 @@ function SketchPinsAndSummary({ flow }: { flow: ConnectFlow }) {
                   </option>
                 ))}
               </Select>
-              {clashes[k] && <p className="col-span-2 text-[12.5px] text-status-error">{clashes[k]}</p>}
+              {clashes[k] && <p className="col-span-2 text-xs text-status-error">{clashes[k]}</p>}
             </div>
           ))}
         </fieldset>
       )}
-      <div className="rounded-lg bg-canvas px-3.5 py-3 text-[13px]">
+      <div className="rounded-lg bg-canvas px-3.5 py-3 text-meta">
         <p className="mb-1 font-medium text-ink">The sketch includes</p>
         <ul className="list-disc pl-5 text-ink-muted">
           <li>

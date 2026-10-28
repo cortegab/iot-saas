@@ -336,7 +336,7 @@ export function RuleEditor({
           },
         ]}
       />
-      {mode === "ladder" && <span className="text-[13px] text-ink-muted">Click any element to change it.</span>}
+      {mode === "ladder" && <span className="text-meta text-ink-muted">Click any element to change it.</span>}
     </div>
   );
   // DESIGN.md §9.10: the trigger opens When and a timer Behaviour; the rest open their sheet.
@@ -385,7 +385,7 @@ export function RuleEditor({
             <div className="flex items-end gap-2">
               {wizard ? (
                 <div className="flex min-w-0 flex-1 flex-col gap-1 pt-2">
-                  <h2 ref={questionRef} tabIndex={-1} className="text-xl font-semibold tracking-[-0.01em] text-ink outline-none">
+                  <h2 ref={questionRef} tabIndex={-1} className="text-section font-semibold tracking-[-0.01em] text-ink outline-none">
                     {QUESTION[tab]?.[0]}
                   </h2>
                   <p className="text-ink-muted">{QUESTION[tab]?.[1]}</p>
@@ -452,7 +452,7 @@ export function RuleEditor({
           data-savebar
           className={cn(SAVE_BAR, !wizard && !isNew && "motion-safe:animate-[toastin_.15s_ease-out]")}
         >
-          <div className="flex min-w-[150px] flex-1 flex-wrap items-center gap-2.5 text-[13px] text-ink-muted">
+          <div className="flex min-w-[150px] flex-1 flex-wrap items-center gap-2.5 text-meta text-ink-muted">
             <span aria-live="polite" className="inline-flex items-center gap-1.5">
               {submitting ? (
                 "Saving…"
@@ -474,7 +474,7 @@ export function RuleEditor({
               <button
                 type="button"
                 onClick={() => goTo(blocking[0].section)}
-                className="inline-flex h-7 items-center gap-[5px] rounded-full bg-status-error-surface px-2.5 text-[12.5px] font-semibold text-status-error"
+                className="inline-flex h-7 items-center gap-[5px] rounded-full bg-status-error-surface px-2.5 text-xs font-semibold text-status-error"
               >
                 <AlertCircle aria-hidden size={13} />
                 {blocking.length} to fix

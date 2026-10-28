@@ -270,7 +270,7 @@ export default function DashboardDetailPage() {
       />
 
       {editing && (
-        <p role="status" className="flex items-center gap-2 rounded-md border border-accent/40 bg-accent-muted px-3.5 py-2.5 text-[13.5px] text-ink">
+        <p role="status" className="flex items-center gap-2 rounded-md border border-accent/40 bg-accent-muted px-3.5 py-2.5 text-meta text-ink">
           <LayoutGrid aria-hidden size={15} className="shrink-0 text-accent" />
           <span>
             <strong>Editing layout.</strong>{" "}

@@ -49,9 +49,9 @@ export function PeekFrame({
     <div role="region" aria-label={`${title} details`} className="@container flex h-full min-h-0 min-w-0 flex-col bg-surface">
       <div className="flex shrink-0 flex-col-reverse gap-2 border-b border-border px-5 pb-4 pt-3 @[30rem]:flex-row @[30rem]:items-start @[30rem]:gap-2.5 @[30rem]:pt-4">
         <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-          {eyebrow && <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">{eyebrow}</div>}
-          <h2 className="break-words text-[19px] font-semibold leading-[1.3] tracking-[-0.015em] text-ink">{title}</h2>
-          {description && <p className="mt-0.5 text-[13px] text-ink-muted">{description}</p>}
+          {eyebrow && <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">{eyebrow}</div>}
+          <h2 className="break-words text-section font-semibold leading-[1.3] tracking-[-0.015em] text-ink">{title}</h2>
+          {description && <p className="mt-0.5 text-meta text-ink-muted">{description}</p>}
           {primary && <div className="mt-3 flex flex-wrap items-center gap-2">{primary}</div>}
         </div>
         <div className="-mx-1.5 flex shrink-0 items-center justify-end gap-0.5 @[30rem]:mx-0">
@@ -60,7 +60,7 @@ export function PeekFrame({
               <IconButton aria-label={`Previous ${noun}`} disabled={!nav.prev} onClick={() => nav.prev?.()}>
                 <ChevronLeft size={17} />
               </IconButton>
-              <span aria-live="polite" className="min-w-[44px] text-center text-[12.5px] tabular-nums text-ink-muted">
+              <span aria-live="polite" className="min-w-[44px] text-center text-xs tabular-nums text-ink-muted">
                 {nav.index + 1} of {nav.total}
               </span>
               <IconButton aria-label={`Next ${noun}`} disabled={!nav.next} onClick={() => nav.next?.()}>
@@ -95,7 +95,7 @@ export function PeekOpen({ href, noun }: { href: string; noun: string }) {
 export function PeekSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-2">
-      <h3 className="text-[12.5px] font-semibold uppercase tracking-[0.05em] text-ink-muted">{title}</h3>
+      <h3 className="text-xs font-semibold uppercase tracking-[0.05em] text-ink-muted">{title}</h3>
       {children}
     </section>
   );

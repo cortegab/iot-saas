@@ -146,13 +146,13 @@ export function IssueMarks({ issues = 0, warn = false }: { issues?: number; warn
   return (
     <>
       {issues > 0 && (
-        <span className="grid h-[17px] min-w-[17px] place-items-center rounded-full bg-status-error px-[5px] text-[10.5px] font-bold text-on-accent">
+        <span className="grid h-[17px] min-w-[17px] place-items-center rounded-full bg-status-error px-[5px] text-xs font-bold text-on-accent">
           {issues}
           <span className="sr-only"> to fix</span>
         </span>
       )}
       {issues === 0 && warn && (
-        <span className="grid h-4 w-4 place-items-center rounded-full border-[1.5px] border-status-pending bg-status-pending-surface text-[10px] font-bold text-status-pending">
+        <span className="grid h-4 w-4 place-items-center rounded-full border-[1.5px] border-status-pending bg-status-pending-surface text-xs font-bold text-status-pending">
           !<span className="sr-only"> warning</span>
         </span>
       )}
