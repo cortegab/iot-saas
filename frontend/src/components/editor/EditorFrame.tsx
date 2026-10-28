@@ -101,6 +101,8 @@ export interface EditorFrameProps {
   /** Runs the save; resolve `false` when validation stopped it. */
   onSave: () => Promise<boolean>;
   onDiscard: () => void;
+  /** Creating: the bar's Cancel (always enabled). Defaults to going back. */
+  onCancel?: () => void;
   onClose?: () => void;
   menu?: DropdownMenuItem[][];
   /** Extra header buttons (e.g. Duplicate). */
@@ -192,6 +194,7 @@ export function EditorFrame({
   saveLabel,
   onSave,
   onDiscard,
+  onCancel,
   onClose,
   menu,
   headerActions,
@@ -608,6 +611,8 @@ export function EditorFrame({
     </div>
   );
 
+  const cancel = () => (onCancel ? onCancel() : window.history.back());
+
   const foot = showFoot && (
     <div
       data-savebar={mode === "page" || undefined}
@@ -638,10 +643,14 @@ export function EditorFrame({
         // The wizard (DESIGN.md §5): Back, then Next: {step}, and on the
         // last step the button that names the result.
         <div className="flex items-center gap-2">
-          {stepIndex > 0 && (
+          {stepIndex > 0 ? (
             <Button variant="ghost" onClick={() => goTo(groupList[stepIndex - 1].id)}>
               <ChevronLeft aria-hidden size={15} />
               Back
+            </Button>
+          ) : (
+            <Button variant="ghost" onClick={cancel}>
+              Cancel
             </Button>
           )}
           {stepIndex < groupList.length - 1 ? (
@@ -657,9 +666,17 @@ export function EditorFrame({
         </div>
       ) : (
         <div className="flex items-center gap-2">
-          <Button variant="ghost" disabled={!status.dirty || status.saving} onClick={onDiscard}>
-            Discard
-          </Button>
+          {/* DESIGN.md §7: creating offers Cancel (always a way back);
+              editing offers Discard. */}
+          {status.isNew ? (
+            <Button variant="ghost" disabled={status.saving} onClick={cancel}>
+              Cancel
+            </Button>
+          ) : (
+            <Button variant="ghost" disabled={!status.dirty || status.saving} onClick={onDiscard}>
+              Discard
+            </Button>
+          )}
           <Button disabled={!status.dirty || status.saving} onClick={() => void save()}>
             {status.saving ? "Saving…" : (saveLabel ?? (status.isNew ? `Create ${noun}` : "Save"))}
           </Button>

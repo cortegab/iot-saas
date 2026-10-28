@@ -180,7 +180,8 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
   button in a sheet, never a reason to widen the page. A list never
   changes width: its peek opens as a drawer over it.
   Padding is 36 px top, 40 px sides and 110 px bottom so the save bar never covers content.
-  Below 641 px the padding is 16 px at the sides, and the bottom padding clears the tab bar.
+  Below 641 px the padding is 16 px at the sides, and the bottom padding clears the tab bar
+  (which hides while a save bar shows, §7).
 - **Reconnecting banner:** while the live connection is down, a banner at the top of the content says
   "**Reconnecting…** Live updates are paused, so values on this page may be stale." The live
   indicator turns pending. Both go when it reconnects.

@@ -315,6 +315,11 @@ body {
   :root:has(.app-shell) {
     --tabbar-h: calc(58px + env(safe-area-inset-bottom, 0px));
   }
+  /* While a save bar shows, the tab bar hides (DESIGN.md §7): the bar's
+     Cancel / Discard is the way out, and the bar takes the window bottom. */
+  :root:has(.app-shell [data-savebar]) {
+    --tabbar-h: 0px;
+  }
 }
 
 /* Tabular figures wherever digits stack in a column. */
