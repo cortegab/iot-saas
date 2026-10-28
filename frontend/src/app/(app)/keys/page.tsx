@@ -88,8 +88,8 @@ export default function KeysPage() {
         return <Tag tone="neutral">{r ? ROLE_LABEL[r] : k.role}</Tag>;
       },
     },
-    { id: "used", header: "Last used", sortable: true, hideOnPhone: true, cell: (k) => <span className="text-ink-muted">{k.last_used_at ? timeAgo(k.last_used_at) : "Never"}</span> },
-    { id: "expires", header: "Expires", sortable: true, hideOnPhone: true, cell: (k) => <span className="whitespace-nowrap text-ink-muted">{k.expires_at ? formatDate(k.expires_at) : "Never"}</span> },
+    { id: "used", header: "Last used", sortable: true, hideOnPhone: true, priority: 3, fold: (k) => (k.last_used_at ? `Used ${timeAgo(k.last_used_at)}` : "Never used"), cell: (k) => <span className="text-ink-muted">{k.last_used_at ? timeAgo(k.last_used_at) : "Never"}</span> },
+    { id: "expires", header: "Expires", sortable: true, hideOnPhone: true, priority: 2, fold: (k) => (k.expires_at ? `Expires ${formatDate(k.expires_at)}` : null), cell: (k) => <span className="whitespace-nowrap text-ink-muted">{k.expires_at ? formatDate(k.expires_at) : "Never"}</span> },
     {
       id: "status",
       header: "Status",

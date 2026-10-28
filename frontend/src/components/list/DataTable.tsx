@@ -223,11 +223,15 @@ export function DataTable<T>({
                     {col.cell(row)}
                     {i === 0 && folding.length > 0 && (
                       <span className="block text-xs text-ink-muted">
-                        {folding.map((c) => (
-                          <span key={c.id} className={cn("hidden before:content-['·_'] first:before:content-none", FOLD_SHOW[c.priority!])}>
-                            {c.fold!(row)}{" "}
-                          </span>
-                        ))}
+                        {folding.map((c) => {
+                          // Join only values that exist, so a missing one leaves no stray "·".
+                          const value = c.fold!(row);
+                          return value == null || value === "" ? null : (
+                            <span key={c.id} className={cn("hidden before:content-['·_'] first:before:content-none", FOLD_SHOW[c.priority!])}>
+                              {value}{" "}
+                            </span>
+                          );
+                        })}
                       </span>
                     )}
                   </td>
