@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -33,6 +34,26 @@ function writeRefreshToken(token: string, keep: boolean) {
 
 function isKept(): boolean {
   return sessionStorage.getItem(REFRESH_TOKEN_KEY) === null;
+}
+
+/* Refresh tokens rotate, and the API treats a rotated one presented again as
+ * a replay: it revokes the whole session (auth/service.py
+ * rotate_refresh_token). So a refresh must never run twice with the same
+ * token — not by two requests that hit a 401 together (one shared promise
+ * per tab), nor by two tabs sharing a kept session (a Web Lock across tabs;
+ * the token is read again once it's held, so the second tab uses the one the
+ * first just wrote). */
+const REFRESH_LOCK = "iot-saas:refresh";
+
+/** Transient failures (no network, the API restarting, a 5xx) are retried;
+ * only the API saying the token is bad ends the session. */
+const RETRY_DELAYS_MS = [500, 1500, 3000];
+const isRejection = (err: unknown) => err instanceof ApiRequestError && (err.status === 401 || err.status === 403);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function withRefreshLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+  return locks ? locks.request(REFRESH_LOCK, fn) : fn();
 }
 
 type AuthStatus = "loading" | "authenticated" | "unauthenticated";
@@ -95,20 +116,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setState({ accessToken: null, memberships: [], currentTenantId: null, status: "unauthenticated" });
   }, []);
 
-  const refresh = useCallback(async (): Promise<TokenPairResponse | null> => {
-    const refreshToken = readRefreshToken();
-    if (!refreshToken) {
-      setState((s) => ({ ...s, status: "unauthenticated" }));
-      return null;
-    }
-    try {
-      const data = await apiClient.post<TokenPairResponse>("/auth/refresh", {}, { refresh_token: refreshToken });
-      applySession(data);
-      return data;
-    } catch {
-      clearSession();
-      return null;
-    }
+  const inFlight = useRef<Promise<TokenPairResponse | null> | null>(null);
+
+  const refresh = useCallback((): Promise<TokenPairResponse | null> => {
+    // Requests that hit a 401 together share one refresh.
+    if (inFlight.current) return inFlight.current;
+    const run = withRefreshLock(async (): Promise<TokenPairResponse | null> => {
+      for (let attempt = 0; ; attempt++) {
+        // Read under the lock: another tab may have just rotated it.
+        const refreshToken = readRefreshToken();
+        if (!refreshToken) {
+          setState((s) => ({ ...s, status: "unauthenticated" }));
+          return null;
+        }
+        try {
+          const data = await apiClient.post<TokenPairResponse>("/auth/refresh", {}, { refresh_token: refreshToken });
+          applySession(data);
+          return data;
+        } catch (err) {
+          if (isRejection(err)) {
+            clearSession();
+            return null;
+          }
+          if (attempt >= RETRY_DELAYS_MS.length) {
+            // Still unreachable: keep the session (a later request or a reload
+            // tries again); only a first load with nothing to show gives up.
+            setState((s) => (s.accessToken ? s : { ...s, status: "unauthenticated" }));
+            return null;
+          }
+          await sleep(RETRY_DELAYS_MS[attempt]);
+        }
+      }
+    }).finally(() => {
+      inFlight.current = null;
+    });
+    inFlight.current = run;
+    return run;
   }, [applySession, clearSession]);
 
   // Resume a session from the persisted refresh token on first load, so a reload
