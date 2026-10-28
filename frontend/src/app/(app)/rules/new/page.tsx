@@ -1,18 +1,19 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bell, Clock, DoorOpen, Droplets, Fan, Plus, WifiOff, Waves } from "lucide-react";
+import { Clock, DoorOpen, Droplets, Fan, Plus, WifiOff, Waves } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { Tag } from "@/components/ui/Badge";
 import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Select } from "@/components/ui/Select";
+import { Input } from "@/components/ui/Input";
 import { RuleEditor } from "@/components/rules/editor/RuleEditor";
 import { useRuleCatalog } from "@/components/rules/editor/useRuleCatalog";
 import { upsertRuleInCache } from "@/lib/rule-cache";
-import type { RuleDraft } from "@/lib/rule-draft";
-import { recipesFor, unavailableRecipes, type Recipe } from "@/lib/rule-recipes";
+import { emptyDraft, type RuleDraft } from "@/lib/rule-draft";
+import { MAX_NAME } from "@/lib/rule-preview";
+import { recipeStarts, type Recipe } from "@/lib/rule-recipes";
 import { cn } from "@/lib/cn";
 import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import type { components } from "@/types/api";
@@ -21,9 +22,10 @@ type RuleResponse = components["schemas"]["RuleResponse"];
 
 const ICON: Record<Recipe["icon"], typeof Fan> = { fan: Fan, door: DoorOpen, droplet: Droplets, pump: Waves, offline: WifiOff, clock: Clock };
 
-/** New rule (DESIGN.md §9.1): recipe cards generated from what the chosen
- * device can do, or Start blank; then the workbench. `?device=<id>` (from a
- * device page) preselects the device and returns there after saving. */
+/** New rule (DESIGN.md §9.1): name it, then start from a recipe or blank;
+ * the devices are picked in the steps, since one rule can read one device and
+ * switch another. `?device=<id>` (from a device page) fills that device into
+ * the recipes it can run, lists them first, and returns there after saving. */
 export default function NewRulePage() {
   const router = useRouter();
   const params = useSearchParams();
@@ -31,22 +33,37 @@ export default function NewRulePage() {
   const back = seededDevice ? `/devices/${seededDevice}?tab=rules` : "/rules";
   const catalog = useRuleCatalog();
   const { timezone } = useWorkspace();
-  const [deviceId, setDeviceId] = useState(seededDevice ?? "");
-  const [start, setStart] = useState<{ key: string; draft?: RuleDraft } | null>(null);
+  const [name, setName] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const [start, setStart] = useState<{ key: string; draft: RuleDraft } | null>(null);
 
-  const device = catalog.devices.find((d) => d.id === (deviceId || catalog.devices[0]?.id));
-  const recipes = useMemo(() => {
-    if (!device) return [];
-    return recipesFor(
-      {
-        id: device.id,
-        name: device.name,
-        metrics: catalog.metricOptionsFor(device.id).map((o) => ({ ...catalog.metricFor(device.id, o.id)!, key: o.id })),
-        actuators: catalog.actuatorOptionsFor(device.id).map((o) => ({ ...catalog.actuatorFor(device.id, o.id)!, key: o.id })),
-      },
-      timezone,
-    );
-  }, [device, catalog, timezone]);
+  const device = seededDevice ? catalog.devices.find((d) => d.id === seededDevice) : undefined;
+  const recipes = useMemo(
+    () =>
+      recipeStarts(
+        timezone,
+        device && {
+          id: device.id,
+          name: device.name,
+          metrics: catalog.metricOptionsFor(device.id).map((o) => ({ ...catalog.metricFor(device.id, o.id)!, key: o.id })),
+          actuators: catalog.actuatorOptionsFor(device.id).map((o) => ({ ...catalog.actuatorFor(device.id, o.id)!, key: o.id })),
+        },
+      ),
+    [device, catalog, timezone],
+  );
+
+  /** A recipe (or blank) starts the steps, once the rule has a name. */
+  function begin(key: string, draft: RuleDraft) {
+    const n = name.trim();
+    const problem = !n ? "Name the rule first." : n.length > MAX_NAME ? `Keep the name to ${MAX_NAME} characters.` : null;
+    if (problem) {
+      setNameError(problem);
+      nameRef.current?.focus();
+      return;
+    }
+    setStart({ key, draft: { ...structuredClone(draft), name: n } });
+  }
 
   // A new rule opens on its own page, where it can be checked and refined (DESIGN.md §7).
   function onSaved(saved: RuleResponse) {
@@ -57,31 +74,35 @@ export default function NewRulePage() {
   return (
     <div className={cn("flex flex-col gap-4", start && PAGE_WITH_BAR)}>
       <PageHeader
-        title="New rule"
+        // The typed name becomes the title, as on every create page (DESIGN.md §4).
+        title={(start ? start.draft.name : name.trim()) || "New rule"}
         breadcrumbs={[seededDevice ? { href: back, label: device?.name ?? "Device" } : { href: "/rules", label: "Rules" }]}
-        description={start ? undefined : "Pick the device, then start from a recipe. Everything stays editable."}
+        description={start ? undefined : "Name it, then start from a recipe. You pick its devices in the next steps."}
       />
       {start ? (
-        <RuleEditor key={start.key} deviceId={device?.id} initialDraft={start.draft} onSaved={onSaved} onCancel={() => setStart(null)} />
+        <RuleEditor key={start.key} deviceId={seededDevice} initialDraft={start.draft} onSaved={onSaved} onCancel={() => setStart(null)} />
       ) : (
-        <>
-          <Field label="Device" hint="Recipes come from what it measures and switches." className="max-w-sm">
-            <Select value={device?.id ?? ""} onChange={(e) => setDeviceId(e.target.value)} disabled={catalog.devices.length === 0}>
-              {catalog.devices.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </Select>
+        <div className="flex max-w-[760px] flex-col gap-4">
+          <Field label="Name" error={nameError ?? undefined} hint="What it does, in a few words, e.g. Fan on when the greenhouse is hot.">
+            <Input
+              ref={nameRef}
+              autoFocus
+              value={name}
+              maxLength={MAX_NAME + 1}
+              onChange={(e) => {
+                setName(e.target.value);
+                setNameError(null);
+              }}
+            />
           </Field>
-          <ul aria-label="Recipes" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <ul aria-label="Recipes" className="grid gap-3 sm:grid-cols-2">
             {recipes.map((r) => {
               const Icon = ICON[r.icon];
               return (
                 <li key={r.id}>
                   <button
                     type="button"
-                    onClick={() => setStart({ key: r.id, draft: structuredClone(r.draft) })}
+                    onClick={() => begin(r.id, r.draft)}
                     className="flex h-full w-full flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-left shadow-card hover:border-[color-mix(in_srgb,var(--color-accent)_50%,var(--color-border))]"
                   >
                     <span className="flex items-center gap-2.5">
@@ -102,34 +123,11 @@ export default function NewRulePage() {
                 </li>
               );
             })}
-            {/* What this device can't run, and what it would need (demo H). */}
-            {device &&
-              unavailableRecipes(recipes).map((r) => {
-                const Icon = ICON[r.icon];
-                return (
-                  <li key={r.id}>
-                    <button
-                      type="button"
-                      disabled
-                      aria-disabled="true"
-                      className="flex h-full w-full cursor-not-allowed flex-col gap-2 rounded-xl border border-border bg-surface p-4 text-left opacity-60"
-                    >
-                      <span className="flex items-center gap-2.5">
-                        <Icon aria-hidden size={18} className="shrink-0 text-accent" />
-                        <strong className="text-sm font-semibold text-ink">{r.title}</strong>
-                      </span>
-                      <span className="text-[13px] text-ink-muted">{r.why}</span>
-                    </button>
-                  </li>
-                );
-              })}
             <li>
               <button
                 type="button"
-                onClick={() => setStart({ key: "blank" })}
-                className={cn(
-                  "flex h-full min-h-[96px] w-full flex-col items-start gap-2 rounded-xl border border-dashed border-border bg-surface p-4 text-left hover:border-accent",
-                )}
+                onClick={() => begin("blank", emptyDraft(seededDevice ?? "", timezone))}
+                className="flex h-full min-h-[96px] w-full flex-col items-start gap-2 rounded-xl border border-dashed border-border bg-surface p-4 text-left hover:border-accent"
               >
                 <span className="flex items-center gap-2.5">
                   <Plus aria-hidden size={18} className="shrink-0 text-ink-muted" />
@@ -139,13 +137,7 @@ export default function NewRulePage() {
               </button>
             </li>
           </ul>
-          {catalog.devices.length === 0 && (
-            <p className="flex items-center gap-2 text-[13px] text-ink-muted">
-              <Bell aria-hidden size={14} />
-              Add a device first to get recipes for it; a blank rule works without one.
-            </p>
-          )}
-        </>
+        </div>
       )}
     </div>
   );

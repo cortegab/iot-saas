@@ -464,25 +464,29 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
 
 ### 9.1 Creating: recipes
 
-- "New rule" opens **recipe cards for a chosen device** (device select at the top). Recipes are
-  generated from what that device can do:
-  - Turn on a fan when it's too hot
+- "New rule" asks for the **Name** first (required; the H1 follows it as it's typed), then offers
+  **recipe cards** and **Start blank**. There is **no device select**: one rule can read one device
+  and switch another, so devices are picked in the steps (user decision 2026-10-27). Every recipe
+  is always offered:
+  - Tell me when a device goes offline
+  - Turn something on when it's too hot
   - Alert when a door stays open
   - Warn when humidity drops
   - Stop the pump when the tank is low (latches)
-  - Tell me when this device goes offline
   - Switch something on a schedule
-- **Start blank** is always offered.
-- A recipe a device can't do (no actuator, no on/off metric) is shown disabled with the reason.
-- Picking a recipe or Start blank opens the **new-rule wizard**: **When → If → Then → Behaviour →
-  Review**. Each step asks its question ("What starts it?", "What has to be true?", "What should
-  happen?", "How should it behave?") and uses the same section body as the matching edit tab. The
-  sentence stays on top and fills in as you go; the preview sits beside the steps when there's room.
-  Review holds the name (with the generated name as placeholder) and Status, then **Create rule**.
-  Back on the first step returns to the recipes.
+- A recipe arrives with its parts in place (the comparison and a sensible limit, the action and
+  its value, behaviour and timings) and **no device**: each reading, switch and watched device is
+  picked in the When / If / Then steps, whose Next waits until it is.
+- Picking a recipe or Start blank without a name refuses, says "Name the rule first." and focuses
+  the field. Then the **new-rule wizard** opens: **When → If → Then → Behaviour → Review**. Each
+  step asks its question ("What starts it?", "What has to be true?", "What should happen?", "How
+  should it behave?") and uses the same section body as the matching edit tab. The sentence stays
+  on top and fills in as you go; the preview is behind its button (§9.2). Review holds the name
+  (editable) and Status, then **Create rule**. Back on the first step returns to the recipes.
 - Each card shows an icon, a title, one line on what it does, and tags: *switches hardware* ·
   *latches* · *email*.
-- Starting from a device page preselects that device.
+- **From a device page** (`?device=`), the recipes that device can run come first, already filled
+  with it (its names in their titles); the rest stay device-free. Start blank starts with it too.
 - Recipes are built in the frontend as an ordinary draft. There is no recipe entity in the backend.
 
 ### 9.2 Layout: tabs and preview
@@ -867,3 +871,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-26 | §6, §8, after #167: **Notifications** take the same toolbar: the description beside the title, **Mark all as read** at the end of row 1, and the KPI strip becomes the status filter All · Unread · Critical · Warning (Critical and Warning count unread alerts, in red). **Rules lose their tabs:** Failed deliveries is the last state of the status filter, counting deliveries; choosing it shows the delivery feed in place of the table. `/rules/failed-actions` redirects there. The KPI strip is retired. |
 | 2026-10-27 | §4, §5, §6, §7, §9.2, §11 **one editor pattern**, from a review of the device Settings tab (the best-composed editor) against every other new / edit / settings page. **Column:** every editor, wizard and settings page is 760 px inside the 1120 px page, the rule editor included (it leaves the 1520 px wide view); the rule **preview is only behind its Preview button** (a sheet), at every width. **No title said twice:** breadcrumbs list parents only, the overline carries status and meta only (no record kind), a section heading never repeats the record kind, tab or step question, and a single-section page has none. **Sections** are hairline-divided with a one-line lead, no cards. **Fields:** the "Manage X" link ends the hint; short related fields pair. New **FactList** (read-only facts) and **Inherited** (a value that follows another record's) components. **Save bar**, superseding 2026-10-23: when editing it appears only while there is an edit, a save or a problem; when creating it is always shown. **Delete** is in the record menu only, superseding 2026-10-02's device "Danger zone"; a danger section remains only on pages with no record menu (Leave workspace). **Pager:** numbered pages `‹ 1 2 [3] … 9 ›` (`‹ 3 / 9 ›` on phones). **Lasting states** (can't evaluate, offline) are header state chips, not callouts or toasts; a toast marks a state *changing* while the page is open; a callout stays only when it holds the action. **Wording:** a template gives a device **Metrics** and **Actuators**. |
 | 2026-10-27 | §8 Connect, after review: the Credential step **always starts with Create credential / Rotate credential…** — Add device no longer hands its credential over, and the credential is held in the page only (a reload or leaving drops it; leaving or reloading before it's stored asks). Once made, **Store its credential** (demo H): Username and Password as read-only fields with Copy, "It won't be shown again", I've stored it, Continue in the bottom bar. Supersedes the 2026-10-01 handoff and the "survives a reload" rule. |
+| 2026-10-27 | §9.1 New rule, after review: **Name first, then the recipe; no device select** (a rule can involve several devices). Every recipe is always offered, device-free, its devices picked in the When / If / Then steps; "Name the rule first." when a recipe is picked without one. From a device page the recipes it can run come first, filled with it. The disabled "can't run" cards go. |
