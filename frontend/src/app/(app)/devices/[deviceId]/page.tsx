@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus, Wrench, Zap } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useChangeToast } from "@/hooks/useChangeToast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
@@ -31,7 +32,7 @@ import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { getDeviceActuators } from "@/lib/device-actuators";
 import { readingFreshness } from "@/lib/freshness";
-import { formatWhen, timeAgo } from "@/lib/time-ago";
+import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
@@ -149,6 +150,16 @@ export default function DeviceDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabParam]);
 
+  // DESIGN.md §5: going offline or coming back while the page is open is a
+  // toast; the header's status says it from then on.
+  useChangeToast(device?.id, device ? deviceStatusKey(device) : undefined, (before, now) =>
+    now === "offline" && before === "online"
+      ? { tone: "warning", title: `${device!.name} went offline`, detail: "Readings show the last ones received. Commands wait until it reconnects." }
+      : now === "online" && before !== "online"
+        ? { tone: "success", title: `${device!.name} is online`, detail: before === "never" ? "Its first message arrived." : "It reconnected." }
+        : null,
+  );
+
   if (isLoading) return <LoadingSkeleton rows={5} rowClassName="h-14" />;
   if (error) {
     if (error instanceof ApiRequestError && error.status === 404) {
@@ -241,12 +252,10 @@ export default function DeviceDetailPage() {
 
       <TabPanel id="overview" active={tab}>
         <div className="flex flex-col gap-5">
-          {device.connection_state === "offline" && !disabled ? (
-            <Callout tone="warning">
-              <b className="font-medium">Offline since {device.last_seen_at ? formatWhen(device.last_seen_at) : "its last message"}.</b> Readings below
-              are the last ones received.
-            </Callout>
-          ) : neverConnected && !disabled ? (
+          {/* Offline is said once, in the header ("Offline · last message …"),
+              and each readout is marked Stale; only waiting, which has a next
+              step, is a callout here (DESIGN.md §5). */}
+          {neverConnected && !disabled ? (
             <Callout>
               <b className="font-medium">Waiting for its first message.</b>{" "}
               {canWrite ? (

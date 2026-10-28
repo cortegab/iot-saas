@@ -56,7 +56,7 @@ test("dashboard: an unknown id explains itself instead of spinning", async ({ pa
 test("new dashboard: named on its own page, then straight to Edit layout", async ({ page, request }) => {
   const name = `E2E new dash ${Date.now()}`;
   await page.goto("/dashboards");
-  await page.locator("header").getByRole("link", { name: "New dashboard" }).click();
+  await page.getByRole("main").getByRole("link", { name: "New dashboard" }).click();
   await expect(page).toHaveURL("/dashboards/new");
   await page.waitForLoadState("networkidle");
 

@@ -5,7 +5,7 @@ test("zones: create, rename and delete an empty zone on its page", async ({ page
   const name = `E2E zone ${Date.now()}`;
   await page.goto("/zones");
   // The page header's link; an empty list repeats it in its first-use state.
-  await page.locator("header").getByRole("link", { name: "New zone" }).click();
+  await page.getByRole("main").getByRole("link", { name: "New zone" }).click();
   await expect(page).toHaveURL("/zones/new");
   await page.waitForLoadState("networkidle");
 
