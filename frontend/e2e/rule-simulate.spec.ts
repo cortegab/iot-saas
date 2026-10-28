@@ -18,7 +18,9 @@ test("preview: dry run reports missing data, and a tried value shows it would fi
 test("new rule: a recipe opens the workbench with its checks passing", async ({ page }) => {
   await page.goto("/rules/new");
   await expect(page.getByRole("list", { name: "Recipes" })).toBeVisible();
-  await page.getByRole("button", { name: /Tell me when this device goes offline/ }).click();
+  await page.getByLabel("Name", { exact: true }).fill("E2E offline preview");
+  await page.getByRole("button", { name: /Tell me when a device goes offline/ }).click();
+  await page.getByLabel("Watched device").selectOption({ index: 1 });
   // Creating is a wizard (DESIGN.md §9.1): steps, and the first question.
   await expect(page.getByRole("list", { name: "Steps" })).toContainText("Review");
   await expect(page.getByRole("heading", { name: "What starts it?" })).toBeVisible();

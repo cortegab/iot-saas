@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateDraft } from "./rule-draft";
-import { recipesFor, unavailableRecipes, type RecipeDevice } from "./rule-recipes";
+import { recipeStarts, recipesFor, type RecipeDevice } from "./rule-recipes";
 
 const climate: RecipeDevice = {
   id: "dev-1",
@@ -57,11 +57,24 @@ describe("recipesFor", () => {
   });
 });
 
-describe("unavailableRecipes", () => {
-  it("lists what a device can't run, with what it needs", () => {
-    const bare = recipesFor({ id: "x", name: "bare", metrics: [], actuators: [] });
-    expect(unavailableRecipes(bare).map((r) => r.id)).toEqual(["too-hot", "door-open", "humidity-low", "tank-low", "schedule"]);
-    expect(unavailableRecipes(recipesFor(climate)).map((r) => r.id)).toEqual(["tank-low"]);
-    expect(unavailableRecipes(recipesFor(climate))[0].why).toMatch(/^Needs /);
+describe("recipeStarts", () => {
+  it("offers every recipe without a device, its devices left to pick", () => {
+    const all = recipeStarts("UTC");
+    expect(all.map((r) => r.id)).toEqual(["offline", "too-hot", "door-open", "humidity-low", "tank-low", "schedule"]);
+    for (const r of all) {
+      const c = r.draft.condition;
+      if (c?.kind === "contact") expect(c.deviceId).toBe("");
+      for (const a of r.draft.actions) if ("deviceId" in a) expect(a.deviceId).toBe("");
+      expect(r.draft.name).toBe("");
+    }
+    expect(all.find((r) => r.id === "offline")!.draft.when.statusDeviceId).toBe("");
+  });
+
+  it("from a device page, puts what that device can run first, filled with it", () => {
+    const ids = recipeStarts("UTC", pumphouse).map((r) => r.id);
+    expect(ids).toEqual(["offline", "too-hot", "tank-low", "schedule", "door-open", "humidity-low"]);
+    const tank = recipeStarts("UTC", pumphouse).find((r) => r.id === "tank-low")!;
+    expect(tank.draft.actions[0]).toMatchObject({ kind: "actuator", deviceId: pumphouse.id });
+    expect(recipeStarts("UTC", pumphouse).find((r) => r.id === "door-open")!.draft.condition).toMatchObject({ deviceId: "" });
   });
 });
