@@ -743,7 +743,8 @@ path (CLAUDE.md §9.1).
     animation sits below its text), and the tab bar respects the safe area.
 - **Motion:** honour `prefers-reduced-motion`. Keep transitions under 200 ms and only on
   colour/opacity/transform.
-- **Contrast:** meet WCAG AA in both themes.
+- **Contrast:** meet WCAG AA in both themes. Never fade text with opacity: an inactive row (revoked, disabled) uses the muted text colour and its status word (`DataTable inactive`). Red text on a fill uses `status-error-strong`.
+- **Inline links:** a link inside running text (a hint, a sentence) is underlined (`link-inline`); stand-alone links underline on hover.
 
 ---
 
@@ -892,3 +893,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-28 | §3, §4, §5, §7, §8, §12 **interface audit** (iodriven Interface Audit, 28 findings at 1440 → 390 px and dark). **Controls:** two heights only, 36 px and 30 px `sm` buttons; segmented controls and tabs 36 px; a primary is always the 36 px accent button. **Type:** five steps 12 · 13 · 14 · 16 · 28 px through tokens, superseding 14.5 / 14 / 12.5. **Status:** one dot + word badge in tables and previews; roles one style. **Header:** one `PageHeader` for every page, status first in the overline, actions on the H1 row, one action row under the title on phones. **Destructive:** on-page entry points are secondary + red text + “…”; filled red only in dialogs. **Tabs** scroll sideways on phones, superseding “wrap or collapse into a menu”. **Peek:** no record kind, **Open {noun}**, its controls on their own row above the title on phones. **Save bar:** Cancel on create pages, one width, full-width buttons ≤ 480, and the phone tab bar hides while it shows. **Notifications:** unread is the accent bar and a bold title, superseding 2026-10-23's Unread pill and Mark read button. **Toolbar:** filters collapse ≤ 960 px. **Density:** the command timeline folds runs into ×N rows; a dashboard's first row ends with an *Add widget* tile where it has room; the device Overview's Health is a plain FactList of what was reported. |
 | 2026-10-28 | Round-2 audit fixes, §7 and §8: a create bar's state line is always **Not created yet** (the template wizard said *Unsaved changes*, New zone *New zone, not created yet*); the dashboard's *Add widget* tile is desktop-only and never reserves space on a phone. |
 | 2026-10-28 | §5 one **NotFound** state for every record page (round-2 audit R2): rules showed an error with Retry, zones and templates "Couldn't load…" (templates leaking "Catalog entry not found"), API keys and members a skeleton that never ended. |
+| 2026-10-28 | §12 contrast and links (round-2 audit R3, R5): no opacity on text (inactive rows use the muted colour; the "· optional" suffix too), `status-error-strong` for red text on a fill (the destructive button), and `link-inline` underlines links inside sentences. |

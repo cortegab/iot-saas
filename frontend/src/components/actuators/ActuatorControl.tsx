@@ -158,7 +158,7 @@ function ActuatorRow({
                 {latest.rule_id ? (
                   <>
                     by rule{" "}
-                    <Link href={`/rules/${latest.rule_id}`} className="text-accent hover:underline">
+                    <Link href={`/rules/${latest.rule_id}`} className="link-inline">
                       {rule ?? "a rule"}
                     </Link>
                   </>

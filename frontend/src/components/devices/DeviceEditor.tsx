@@ -263,7 +263,7 @@ export function DeviceEditor({
             hint={
               <>
                 Where it&apos;s installed.{" "}
-                <Link href="/zones" className="text-accent hover:underline">
+                <Link href="/zones" className="link-inline">
                   Manage zones
                 </Link>
               </>
