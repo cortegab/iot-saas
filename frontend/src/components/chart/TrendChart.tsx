@@ -9,6 +9,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
 import { boolBuckets } from "@/lib/bool-series";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, slideIntervalMs } from "@/lib/chart-range";
 import { decimateMinMax } from "@/lib/chart-decimate";
 import { appendToWindow, liveBuffer, reseed, type Series } from "@/lib/live-buffer";
@@ -398,23 +399,13 @@ export function TrendChart({
     <div className={`flex flex-col gap-2 ${fillHeight ? "h-full min-h-0" : ""}`}>
       <div className="flex items-center justify-between empty:hidden">
         {controlledRange == null ? (
-        <div className="flex gap-1" role="group" aria-label="Time range">
-          {RANGE_OPTIONS.map((opt) => (
-            <button
-              key={opt.label}
-              type="button"
-              aria-pressed={rangeMs === opt.ms}
-              onClick={() => setRangeMs(opt.ms)}
-              className={`rounded-md px-2.5 py-1 font-mono text-xs font-medium transition-colors duration-150 ${
-                rangeMs === opt.ms
-                  ? "bg-surface-raised text-ink"
-                  : "text-ink-muted hover:bg-surface-raised hover:text-ink"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        // The control-height segmented control (DESIGN.md §3), as on the dashboard header.
+        <SegmentedControl
+          ariaLabel="Time range"
+          value={String(rangeMs)}
+          onChange={(v) => setRangeMs(Number(v))}
+          options={RANGE_OPTIONS.map((opt) => ({ value: String(opt.ms), label: opt.label }))}
+        />
         ) : (
           null
         )}

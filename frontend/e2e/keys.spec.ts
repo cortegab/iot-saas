@@ -33,4 +33,12 @@ test("api keys: create, authenticate with it, then revoke", async ({ page, reque
 
   const refused = await request.get(`${API_URL}/devices`, { headers: { Authorization: `Bearer ${key}` } });
   expect(refused.status()).toBe(401);
+
+  // A revoked key can then be deleted for good; the page goes back to the list.
+  await page.getByRole("button", { name: "Delete key…" }).click();
+  await page.getByRole("button", { name: "Delete key" }).last().click();
+  await expect(page.getByText("Key deleted", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/keys$/);
+  await page.goto("/keys?show=all");
+  await expect(page.getByRole("link", { name })).toHaveCount(0);
 });

@@ -493,6 +493,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api-keys/{key_id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Api Key
+         * @description Delete a revoked or expired key. `DELETE /api-keys/{id}` still revokes.
+         */
+        delete: operations["delete_api_key_api_keys__key_id__permanent_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/devices/{device_id}/latest": {
         parameters: {
             query?: never;
@@ -3970,6 +3990,38 @@ export interface operations {
         };
     };
     revoke_api_key_api_keys__key_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_api_key_api_keys__key_id__permanent_delete: {
         parameters: {
             query?: never;
             header?: {

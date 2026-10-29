@@ -73,3 +73,23 @@ async def revoke_api_key(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
         ) from exc
+
+
+@router.delete("/{key_id}/permanent", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_api_key(
+    key_id: uuid.UUID,
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> None:
+    """Delete a revoked or expired key. `DELETE /api-keys/{id}` still revokes."""
+    try:
+        await service.delete_api_key(session, ctx.tenant_id, key_id)
+    except service.ApiKeyNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="API key not found"
+        ) from exc
+    except service.ApiKeyStillActiveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Revoke the key before deleting it.",
+        ) from exc
