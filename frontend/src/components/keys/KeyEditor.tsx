@@ -26,6 +26,7 @@ import { KEY_STATUS_LABEL, KEY_STATUS_TONE, keyStatus, type ApiKey } from "@/lib
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, formatWhen, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { NotFound } from "@/components/ui/NotFound";
 
 type ApiKeyCreateResponse = components["schemas"]["ApiKeyCreateResponse"];
 
@@ -101,6 +102,8 @@ export function KeyEditor({
   }
 
   if (!isNew) {
+    // The list has loaded and the key isn't in it: gone, not still loading.
+    if (!key && keys) return <NotFound noun="key" href="/keys" list="API keys" />;
     if (!key) {
       return (
         <div className="p-5">

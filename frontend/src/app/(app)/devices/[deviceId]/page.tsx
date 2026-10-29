@@ -12,7 +12,6 @@ import { buttonClassName } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { Card } from "@/components/ui/Card";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { FactList } from "@/components/ui/FactList";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -35,6 +34,7 @@ import { readingFreshness } from "@/lib/freshness";
 import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { NotFound, isNotFound } from "@/components/ui/NotFound";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
@@ -162,19 +162,7 @@ export default function DeviceDetailPage() {
 
   if (isLoading) return <LoadingSkeleton rows={5} rowClassName="h-14" />;
   if (error) {
-    if (error instanceof ApiRequestError && error.status === 404) {
-      return (
-        <EmptyState
-          title="This device doesn't exist"
-          description="It may have been deleted, or the link belongs to another workspace."
-          action={
-            <Link href="/devices" className={buttonClassName({ variant: "secondary" })}>
-              Back to devices
-            </Link>
-          }
-        />
-      );
-    }
+    if (isNotFound(error)) return <NotFound noun="device" href="/devices" list="devices" />;
     return <ErrorState message={error instanceof ApiRequestError ? error.message : "Couldn't load this device."} onRetry={() => void mutate()} />;
   }
   if (!device) return null;
