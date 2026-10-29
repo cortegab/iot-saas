@@ -6,7 +6,7 @@ test("notifications: a template change shows up, dismiss with Undo, mark unread"
   // notification without pushing a new profile to any real device.
   const { accessToken, tenantId } = await login(request);
   const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
-  const name = `E2E template ${Date.now()}`;
+  const name = `E2E template ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const created = await request.post(`${API_URL}/catalog`, { headers, data: { name, metrics: [], actuators: [] } });
   expect(created.ok(), await created.text()).toBeTruthy();
   const entry = (await created.json()) as { id: string };
@@ -50,7 +50,7 @@ test("notifications: a template change shows up, dismiss with Undo, mark unread"
     await request.delete(`${API_URL}/catalog/${entry.id}`, { headers });
     // Keep the shared dev feed clean: dismiss this run's row.
     const feed = (await (await request.get(`${API_URL}/notifications`, { headers })).json()) as { id: string; message: string }[];
-    for (const n of feed.filter((x) => x.message.startsWith("E2E template "))) {
+    for (const n of feed.filter((x) => x.message.startsWith(name))) {
       await request.post(`${API_URL}/notifications/${n.id}/dismiss`, { headers });
     }
   }
@@ -59,7 +59,7 @@ test("notifications: a template change shows up, dismiss with Undo, mark unread"
 test("notifications: repeats group into one row with ×2, and filters narrow by severity", async ({ page, request }) => {
   const { accessToken, tenantId } = await login(request);
   const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
-  const name = `E2E template ${Date.now()}`;
+  const name = `E2E template ${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
   const entry = (await (await request.post(`${API_URL}/catalog`, { headers, data: { name, metrics: [], actuators: [] } })).json()) as { id: string };
   // Two metric changes: the same alert from the same template, twice.
   await request.patch(`${API_URL}/catalog/${entry.id}`, { headers, data: { metrics: [{ key: "co2", name: "CO2", unit: "ppm" }] } });
@@ -81,22 +81,28 @@ test("notifications: repeats group into one row with ×2, and filters narrow by 
     await expect(page.getByText("Severity: Critical")).toBeVisible();
     await expect(rows).toHaveCount(0);
 
-    // The status filter (DESIGN.md §6): Unread shows only what's unread,
-    // Critical the unread critical ones, All clears both.
+    // The state filter (DESIGN.md §8): unread alerts by type. Opening the
+    // sheet read it, so Templates hides it until it's unread again.
     await page.getByRole("button", { name: "Clear all" }).click();
+    await expect(page.getByText("Severity: Critical")).toHaveCount(0);
     const states = page.getByRole("group", { name: "Filter by state" });
-    await states.getByRole("button", { name: /^Unread/ }).click();
-    await expect(page).toHaveURL(/show=unread/);
-    await states.getByRole("button", { name: /^Critical/ }).click();
-    await expect(page).toHaveURL(/severity=critical/);
-    await expect(states.getByRole("button", { name: /^Critical/ })).toHaveAttribute("aria-pressed", "true");
+    await states.getByRole("button", { name: /^Templates/ }).click();
+    await expect(page).toHaveURL(/state=template_changed/);
+    await expect(states.getByRole("button", { name: /^Templates/ })).toHaveAttribute("aria-pressed", "true");
+    await expect(rows).toHaveCount(0);
     await states.getByRole("button", { name: /^All/ }).click();
-    await expect(page).not.toHaveURL(/show=unread/);
-    await expect(page).not.toHaveURL(/severity=/);
+    await expect(page).not.toHaveURL(/state=/);
+    await rows.getByRole("button", { name: `Actions for ${name} updated` }).click();
+    await page.getByRole("menuitem", { name: "Mark as unread" }).click();
+    await states.getByRole("button", { name: /^Templates/ }).click();
+    await expect(rows).toHaveCount(1);
+    await states.getByRole("button", { name: /^Unread/ }).click();
+    await expect(page).toHaveURL(/state=unread/);
+    await expect(rows).toHaveCount(1);
   } finally {
     await request.delete(`${API_URL}/catalog/${entry.id}`, { headers });
     const feed = (await (await request.get(`${API_URL}/notifications`, { headers })).json()) as { id: string; message: string }[];
-    for (const n of feed.filter((x) => x.message.startsWith("E2E template "))) {
+    for (const n of feed.filter((x) => x.message.startsWith(name))) {
       await request.post(`${API_URL}/notifications/${n.id}/dismiss`, { headers });
     }
   }

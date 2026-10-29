@@ -239,7 +239,7 @@ gets restyled to the tokens. **NEW** means it has to be created.
      that needs someone (offline, latched, can't evaluate) shows its count in red when it isn't
      zero, and what each state means is its hover title. Every list with states has one
      (Templates Enabled / Disabled, Zones In use / Empty, Members Active / Invited, API keys
-     Active / Revoked or expired, Notifications All / Unread / Critical / Warning, the last two
+     Active / Revoked or expired, Notifications All / Unread and one state per type, the types
      counting unread alerts); Dashboards has none. A list with a closely related feed may add it
      as a last state that swaps the table for that feed (Rules → **Failed deliveries**); there are
      no tabs above a list.
@@ -454,9 +454,13 @@ edits a whole record, and there is no "Expand" toggle.
   with its neighbour's in reading order, so the desktop layout stays intact apart from that swap.
 - **Notifications** (the tab bar calls it **Alerts**): one Line row per alert, with severity icon,
   title, detail, device and rule links and the time. Repeats of the same alert from the same source
-  group into one row (**×4**, "since 09:12, last 2 min ago"). The status filter (§6) is All ·
-  Unread · Critical · Warning, counted per row of repeats (Critical and Warning: unread ones);
-  **Mark all as read** is the toolbar action. Filters: severity, device, rule.
+  group into one row (**×4**, "since Fri 2 Oct 09:12, last 2 min ago"; dates in the one §11
+  format, never the browser's language). The API groups, filters and pages, so the ×N counts and
+  the numbered pager (§6, 25 / 50 / 100 alerts) cover the whole history. The status filter (§6)
+  is All · Unread, then unread alerts by type: **Offline · Rules** (fired or cleared) **· Rule
+  health · Failed deliveries · Templates**, counted per row of repeats, never per notification;
+  the nav badge counts the same unread alerts. **Mark all as read** is the toolbar action.
+  Filters: severity, device, rule. The sheet lists each time the alert happened, paged.
   **Unread** is the 3 px accent bar and a bold title, nothing more: no Unread pill and no row
   button. Mark read / unread and Dismiss are in the row ⋯ menu; opening an alert marks it read.
   A row opens a sheet with the details. With the alarm lifecycle (§13) it becomes an alarm inbox:
@@ -768,7 +772,7 @@ interim is in the last column.
 
 | Feature | Backend need | Until then |
 |---|---|---|
-| Alarm lifecycle | Stored state on each notification (active / acknowledged / cleared), acknowledge with who, when and a note (one or many), grouping of repeats by source, and a timeline per alarm (an events table with `tenant_id` + RLS in the same migration). A rule's clear marks its alarm cleared. | Notifications grouped on the client, filters, a detail sheet; counts are unread. |
+| Alarm lifecycle | Stored state on each notification (active / acknowledged / cleared), acknowledge with who, when and a note (one or many), grouping of repeats by source, and a timeline per alarm (an events table with `tenant_id` + RLS in the same migration). A rule's clear marks its alarm cleared. | Notifications grouped and paged by the API, filters, a detail sheet; counts are unread alerts by type. |
 | Stored "No response" | A sweep off the hot path that marks each command whose TTL ran out with no ack, so the result is stored and the same for everyone. | The browser works it out from `issued_at`, `ttl` and `acked_at`. |
 | Widget titles | An optional `title` on each dashboard widget. | The generated title (reading · device). |
 | Reported actuator state | Devices report their real state and whether a command was applied: an additive change to the device contract (CLAUDE.md §4), made in both deployment variants, plus firmware. **Deferred by decision (2026-10-20).** | Requested state and Acknowledged / No response only. |
@@ -897,3 +901,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-28 | §12 screen-reader structure (round-2 audit R4, R10, R11): an editor with tabs renders its body as the active tab's `tabpanel` and only the selected tab carries `aria-controls`; editor section headings are h2 on a full page (h3 in drawers); landing markup fixed (figures list, comparison table corner cell) and its log timestamps lightened to AA. |
 | 2026-10-28 | §5, §7 menus and wizard (round-2 audit R6, R7): a row menu's first item is **Open** on every list (Zones and Templates said Edit / View, Devices Edit settings); a wizard marks only visited steps red. |
 | 2026-10-28 | Round-2 leftovers (B2, G4, R12): the trend chart's range is the segmented control (36 px, like the dashboard's); on phones a header whose only action is the ⋯ menu keeps it beside the title; §8 API keys: a revoked or expired key can be **deleted** (*Delete key…*, `DELETE /api-keys/{id}/permanent`); an active key is only ever revoked first. |
+| 2026-10-29 | §6, §8 notifications paged like every list: the API groups repeats (`GET /notifications/groups`, filters and limit / offset, total in `X-Total-Count`), so the numbered pager and the ×N counts cover the whole history instead of the latest 100–500 behind **Show older** (removed, with its second footer line). The status filter swaps Critical / Warning for unread alerts by type (Offline, Rules, Rule health, Failed deliveries, Templates; `GET /notifications/summary`); severity stays a filter menu. Counts are alerts (rows of repeats), and the nav badge uses the same count. Read, unread and dismiss act on a whole row (`/notifications/groups/{key}/…`, Undo restores the dismissed ids). "since …" uses the §11 date format instead of the browser's language. |
