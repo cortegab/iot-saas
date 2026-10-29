@@ -9,7 +9,6 @@ import { useChangeToast } from "@/hooks/useChangeToast";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -28,6 +27,7 @@ import { draftFromRule } from "@/lib/rule-draft";
 import { RULE_STATE, ruleStateKey } from "@/lib/rule-text";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { NotFound, isNotFound } from "@/components/ui/NotFound";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
@@ -92,6 +92,7 @@ export default function EditRulePage() {
   );
 
   if (isLoading) return <LoadingSkeleton rows={4} rowClassName="h-12" />;
+  if (isNotFound(error)) return <NotFound noun="rule" href="/rules" list="rules" />;
   if (error) {
     return (
       <ErrorState
@@ -100,7 +101,7 @@ export default function EditRulePage() {
       />
     );
   }
-  if (!rule) return <EmptyState title="Rule not found" />;
+  if (!rule) return <NotFound noun="rule" href="/rules" list="rules" />;
 
   // The editor stays on the rule after saving (DESIGN.md §7).
   function onSaved(saved: RuleResponse) {

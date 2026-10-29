@@ -53,6 +53,7 @@ import {
   type TemplateSectionId,
 } from "@/lib/template-draft";
 import type { components } from "@/types/api";
+import { NotFound, isNotFound } from "@/components/ui/NotFound";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogUsageResponse = components["schemas"]["CatalogUsageResponse"];
@@ -162,6 +163,7 @@ export function TemplateEditor({
   const editor = useRecordEditor<Draft>({ source: initial, isNew, validate });
   const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, onboard ? "this device" : (entry?.name ?? "this template"));
 
+  if (isNotFound(error)) return <NotFound noun="template" href="/templates" list="templates" />;
   if (error) {
     return (
       <div className="p-5">

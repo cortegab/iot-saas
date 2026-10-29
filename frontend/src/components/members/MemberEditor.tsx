@@ -26,6 +26,7 @@ import { cn } from "@/lib/cn";
 import { ROLE_LABEL, type Role } from "@/lib/permissions";
 import { formatWhen } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { NotFound } from "@/components/ui/NotFound";
 
 type MemberResponse = components["schemas"]["MemberResponse"];
 type InvitationResponse = components["schemas"]["InvitationResponse"];
@@ -141,6 +142,8 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
       </div>
     );
   }
+  // The list has loaded and the member isn't in it: gone, not still loading.
+  if (!isNew && members && !member) return <NotFound noun="member" href="/members" list="members" description="They may have left or been removed, or the link belongs to another workspace." />;
   const d = editor.draft;
   if (!d || (!isNew && !member)) {
     return (

@@ -50,7 +50,7 @@ test("dashboard: edit layout, add a widget in steps, change it in its sheet, rem
 test("dashboard: an unknown id explains itself instead of spinning", async ({ page }) => {
   await page.goto("/dashboards/00000000-0000-0000-0000-000000000000");
   await expect(page.getByRole("heading", { name: "This dashboard doesn't exist" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "All dashboards" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Back to dashboards" })).toBeVisible();
 });
 
 test("new dashboard: named on its own page, then straight to Edit layout", async ({ page, request }) => {
