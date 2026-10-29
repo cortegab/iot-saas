@@ -30,7 +30,7 @@ test("a device gets its own wiring and goes back to the template's", async ({ pa
   try {
     // The Connect flow's "Wire this device differently" lands on the section.
     await page.goto(`/devices/${device.id}?tab=settings#hardware`);
-    await expect(page.getByRole("heading", { level: 3, name: "Wiring", exact: true })).toBeInViewport();
+    await expect(page.getByRole("heading", { level: 2, name: "Wiring", exact: true })).toBeInViewport();
 
     // Starts on the template's wiring; a copy becomes this device's own.
     await page.getByRole("button", { name: "Wire this device differently" }).click();

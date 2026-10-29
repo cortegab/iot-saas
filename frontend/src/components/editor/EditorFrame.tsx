@@ -44,6 +44,8 @@ const EditorNavContext = createContext<EditorNav | null>(null);
 
 /** A page editor with one section and no tabs or steps: the title says it all. */
 const SoleSectionContext = createContext(false);
+/** A full page: its title is the h1, so section headings are h2 (drawers: h3). */
+const PageModeContext = createContext(false);
 
 /** The tab / step controls of the enclosing editor, or null for a rail. */
 export function useEditorNav(): EditorNav | null {
@@ -146,6 +148,7 @@ export function EditorSection({
 }) {
   const nav = useEditorNav();
   const sole = useContext(SoleSectionContext);
+  const HeadingTag = useContext(PageModeContext) ? "h2" : "h3";
   // DESIGN.md §7: a heading never repeats the page title, the tab label or the
   // step's question, so a section alone on its page, tab or step has none.
   const heading = title != null && !sole && !nav?.alone(id) ? title : null;
@@ -160,7 +163,7 @@ export function EditorSection({
     >
       {(heading != null || actions) && (
         <div className="flex items-baseline justify-between gap-3">
-          {heading != null && <h3 className={cn("text-section font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{heading}</h3>}
+          {heading != null && <HeadingTag className={cn("text-section font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{heading}</HeadingTag>}
           {actions}
         </div>
       )}
@@ -587,6 +590,8 @@ export function EditorFrame({
   const body = (
     <div
       ref={bodyRef}
+      // With tabs, the body is the active tab's panel (WAI-ARIA tabs).
+      {...(tabs && activeGroup ? { role: "tabpanel", id: `tabpanel-${activeGroup.id}`, "aria-labelledby": `tab-${activeGroup.id}` } : {})}
       className={cn(
         // @container: editor bodies lay out by their own width (dock vs page).
         "@container flex flex-col",
@@ -729,5 +734,9 @@ export function EditorFrame({
       </div>
     );
 
-  return <SoleSectionContext.Provider value={sole}>{frame}</SoleSectionContext.Provider>;
+  return (
+    <PageModeContext.Provider value={mode === "page"}>
+      <SoleSectionContext.Provider value={sole}>{frame}</SoleSectionContext.Provider>
+    </PageModeContext.Provider>
+  );
 }
