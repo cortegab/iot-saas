@@ -43,6 +43,9 @@ export interface DataTableProps<T> {
   rowMenu?: (row: T) => DropdownMenuItem[][];
   rowMenuLabel?: (row: T) => string;
   rowClassName?: (row: T) => string | undefined;
+  /** Rows that no longer act (revoked, disabled): drawn in the muted text
+   * colour, never faded, so they keep AA contrast; the status column says why. */
+  inactive?: (row: T) => boolean;
   /** Highlights the row whose peek is open. */
   currentKey?: string | null;
   /** Enter on a focused row; defaults to `onRowClick` (a peek list opens
@@ -69,6 +72,7 @@ export function DataTable<T>({
   rowMenu,
   rowMenuLabel,
   rowClassName,
+  inactive,
   currentKey,
   onRowEnter,
 }: DataTableProps<T>) {
@@ -193,6 +197,7 @@ export function DataTable<T>({
                   // Phone: a two-line card.
                   "@max-[600px]:relative @max-[600px]:flex @max-[600px]:flex-wrap @max-[600px]:items-center @max-[600px]:gap-x-3 @max-[600px]:gap-y-1.5 @max-[600px]:py-3 @max-[600px]:pl-3.5 @max-[600px]:pr-14",
                   selection && "@max-[600px]:pl-[50px]",
+                  inactive?.(row) && "text-ink-muted [&_.text-ink]:text-ink-muted",
                   rowClassName?.(row),
                 )}
               >

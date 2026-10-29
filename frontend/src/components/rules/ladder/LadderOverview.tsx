@@ -21,7 +21,7 @@ export function LadderOverview({ rules }: { rules: RuleResponse[] }) {
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,460px),1fr))] gap-3.5">
       {drafts.map(({ rule, draft }, i) => (
-        <Card key={rule.id} padding="md" className={rule.enabled ? undefined : "opacity-60"}>
+        <Card key={rule.id} padding="md" className={rule.enabled ? undefined : "text-ink-muted"}>
           <div className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-mono text-xs text-ink-muted">SEGMENT {i + 1}</span>

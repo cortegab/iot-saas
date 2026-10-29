@@ -135,7 +135,7 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
           hint={
             <>
               It sets what the device measures and switches.{" "}
-              <Link href="/templates" className="text-accent hover:underline">
+              <Link href="/templates" className="link-inline">
                 Manage templates
               </Link>
             </>

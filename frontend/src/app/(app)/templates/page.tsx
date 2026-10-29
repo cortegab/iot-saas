@@ -270,7 +270,7 @@ export default function DeviceTemplatesPage() {
                 onRowEnter={peek.onRowEnter}
                 rowMenu={rowMenu}
                 rowMenuLabel={(e) => `Actions for ${e.name}`}
-                rowClassName={(e) => (e.status === "disabled" ? "[&>td]:opacity-60" : undefined)}
+                inactive={(e) => e.status === "disabled"}
                 currentKey={peek.peekId}
               />
               <TableFooter

@@ -263,7 +263,7 @@ export default function DeviceDetailPage() {
               {actuators.length > 0 ? (
                 <>
                   It has nothing to read: it&apos;s switched from the{" "}
-                  <button type="button" onClick={() => setTab("controls")} className="text-accent hover:underline">
+                  <button type="button" onClick={() => setTab("controls")} className="link-inline">
                     Controls tab
                   </button>
                   .

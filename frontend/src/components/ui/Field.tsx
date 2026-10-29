@@ -54,7 +54,7 @@ export function Field({ label, optional, hint, error, warning, action, inline, c
       <label className={cn("grid min-w-0 content-start gap-[5px]", inline && "col-span-2 grid-cols-subgrid items-center")}>
         <span className={cn("text-xs font-medium text-ink-muted", inline && "text-meta text-ink")}>
           {label}
-          {optional && <span className="font-normal opacity-75"> · optional</span>}
+          {optional && <span className="font-normal text-ink-muted"> · optional</span>}
         </span>
         {control}
       </label>

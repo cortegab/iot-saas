@@ -201,7 +201,7 @@ export default function KeysPage() {
                     rowMenu={rowMenu}
                     rowMenuLabel={(k) => `Actions for ${k.name}`}
                     currentKey={peek.peekId}
-                    rowClassName={(k) => (keyStatus(k) === "active" ? undefined : "opacity-60")}
+                    inactive={(k) => keyStatus(k) !== "active"}
                   />
                   <TableFooter
                     shown={filtered.length}

@@ -27,7 +27,7 @@ const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary:
     "border border-transparent bg-accent text-on-accent shadow-[0_1px_2px_rgba(40,30,120,.25),inset_0_1px_0_rgba(255,255,255,.15)] hover:bg-accent-strong",
   secondary: "border border-border bg-surface-raised text-ink hover:border-ink-muted",
-  "secondary-danger": "border border-border bg-surface-raised text-status-error hover:border-status-error",
+  "secondary-danger": "border border-border bg-surface-raised text-status-error-strong hover:border-status-error",
   ghost: "border border-transparent bg-transparent text-ink-muted hover:bg-surface-raised hover:text-ink",
   danger: "border border-transparent bg-status-error text-on-accent hover:brightness-110",
   link: "hit text-sm text-accent hover:underline",

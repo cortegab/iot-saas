@@ -348,7 +348,7 @@ export default function RulesPage() {
                 currentKey={peek.peekId}
                 rowMenu={rowMenu}
                 rowMenuLabel={(r) => `Actions for ${r.name}`}
-                rowClassName={(r) => (r.enabled ? undefined : "[&>td]:opacity-60")}
+                inactive={(r) => !r.enabled}
               />
               <TableFooter
                 shown={filtered.length}
