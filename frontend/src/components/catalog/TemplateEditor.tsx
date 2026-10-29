@@ -327,7 +327,8 @@ export function TemplateEditor({
   // Adding a part brings its metrics and actuators (reconcileParts).
   const wiring = (
     <WiringSection
-      lead="Pick the board, then add each part. Every part brings its metrics or actuators: name them on the part, and fine-tune them below."
+      // The wizard step already says this as its lead; say it once (DESIGN.md §7).
+      lead={isNew ? undefined : "Pick the board, then add each part. Every part brings its metrics or actuators: name them on the part, and fine-tune them below."}
       hardware={d.hardware}
       rows={keyedRows(d)}
       readOnly={readOnly}
