@@ -76,7 +76,9 @@ export function Deployment() {
         <table className="w-full min-w-[640px] text-left text-[14px]">
           <thead>
             <tr className="border-b border-border text-ink-muted">
-              <th scope="col" className="px-4 py-2.5 font-medium" />
+              <th scope="col" className="px-4 py-2.5 font-medium">
+                <span className="sr-only">Feature</span>
+              </th>
               <th scope="col" className="px-4 py-2.5 font-medium">Cloud</th>
               <th scope="col" className="px-4 py-2.5 font-medium">Dedicated cloud</th>
               <th scope="col" className="px-4 py-2.5 font-medium">On-premise</th>

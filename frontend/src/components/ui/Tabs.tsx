@@ -105,7 +105,9 @@ export function Tabs({
             disabled={tab.disabled}
             aria-selected={selected}
             aria-disabled={tab.disabled || undefined}
-            aria-controls={tab.disabled ? undefined : `tabpanel-${tab.id}`}
+            // Only the shown panel is guaranteed to be in the page (editors render
+            // just the active one), so only the selected tab names it.
+            aria-controls={selected ? `tabpanel-${tab.id}` : undefined}
             tabIndex={selected ? 0 : -1}
             title={tab.disabled ? tab.disabledReason : undefined}
             id={`tab-${tab.id}`}

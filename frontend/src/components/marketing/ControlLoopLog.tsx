@@ -78,7 +78,7 @@ export function ControlLoopLog() {
             key={`${run}-${time}`}
             className="mkt-logline grid grid-cols-[92px_44px_minmax(0,1fr)] items-baseline gap-x-2.5 gap-y-1 text-[#c3cedc] max-sm:grid-cols-[44px_minmax(0,1fr)]"
           >
-            <span className="text-[#6b7a90] max-sm:hidden">{time}</span>
+            <span className="text-[#7d8ba1] max-sm:hidden">{time}</span>
             <span className={`text-[10.5px] font-bold uppercase tracking-[0.06em] ${KIND_COLOUR[kind]}`}>{kind}</span>
             <span className="truncate text-white">{who}</span>
             <span className="col-start-3 text-[#9fb0c6] max-sm:col-start-2 [&_b]:font-semibold [&_b]:text-white">{what}</span>
