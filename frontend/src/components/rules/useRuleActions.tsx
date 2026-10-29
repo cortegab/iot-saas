@@ -121,7 +121,7 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
       danger: false,
       details:
         readings.length > 0 ? (
-          <ul className="flex flex-col gap-1 text-[13px]">
+          <ul className="flex flex-col gap-1 text-meta">
             {readings.map((s) => (
               <li key={`${s.device_id}/${s.metric}`} className="flex justify-between gap-3">
                 <span className="text-ink-muted">

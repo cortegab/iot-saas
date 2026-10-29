@@ -113,7 +113,7 @@ export default function MembersPage() {
       sortable: true,
       cell: (x) => (
         <span className="flex flex-wrap items-center gap-1.5">
-          <Tag tone={x.role === "owner" ? "accent" : "neutral"}>{roleLabel(x.role)}</Tag>
+          <Tag>{roleLabel(x.role)}</Tag>
           {x.kind === "invite" && <Badge tone="pending" shape="hollow" label="Invited" />}
         </span>
       ),

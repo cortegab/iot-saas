@@ -7,6 +7,12 @@ import { test } from "./fixtures";
 
 test("a new rule is a wizard: Next waits for each step, Back to the recipes, Review creates", async ({ page }) => {
   await page.goto("/rules/new");
+  // DESIGN.md §9.1: the name comes first; a recipe or blank needs it.
+  await page.getByRole("button", { name: /Start blank/ }).click();
+  await expect(page.getByText("Name the rule first.")).toBeVisible();
+  await expect(page.getByLabel("Name", { exact: true })).toBeFocused();
+  await page.getByLabel("Name", { exact: true }).fill("E2E blank wizard");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("E2E blank wizard");
   await page.getByRole("button", { name: /Start blank/ }).click();
   const steps = page.getByRole("list", { name: "Steps" });
   await expect(steps).toContainText("When");
@@ -59,22 +65,29 @@ test("a saved rule: tabs in the URL, a condition edited in its sheet, Activity h
   await expect(tabs.getByRole("tab", { name: /^If/ })).toHaveAttribute("aria-selected", "true");
 });
 
-test("the preview sits beside the editor when there's room, and behind a button otherwise", async ({ page, ruleUnderTest }) => {
-  await page.setViewportSize({ width: 1600, height: 900 });
-  await page.goto(`/rules/${ruleUnderTest.id}`);
-  await expect(page.getByRole("complementary", { name: "Preview" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Preview" })).toBeHidden();
-
-  // 1150px with the rail leaves ~1006px of content: below 1080.
-  await page.setViewportSize({ width: 1150, height: 800 });
-  await expect(page.getByRole("complementary", { name: "Preview" })).toBeHidden();
-  await page.getByRole("button", { name: "Preview" }).click();
-  await expect(page.getByRole("dialog", { name: "Preview" })).toBeVisible();
+test("the preview is behind its button at every width, beside the 760px editor", async ({ page, ruleUnderTest }) => {
+  for (const width of [1600, 400]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(`/rules/${ruleUnderTest.id}`);
+    // The same column as every editor (DESIGN.md §4), and no side panel.
+    expect((await page.getByRole("tablist", { name: "Rule sections" }).boundingBox())!.width).toBeLessThanOrEqual(760);
+    await expect(page.getByRole("complementary", { name: "Preview" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Preview", exact: true }).click();
+    const sheet = page.getByRole("dialog", { name: "Preview" });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByRole("heading", { name: "Last 24 hours" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  }
 });
 
 test("walking a recipe to Review creates nothing until Create rule", async ({ page }) => {
   await page.goto("/rules/new");
-  await page.getByRole("button", { name: /Tell me when this device goes offline/ }).click();
+  // No device on the first page: name, recipe, then the device in the When step.
+  await expect(page.getByLabel("Device", { exact: true })).toHaveCount(0);
+  await page.getByLabel("Name", { exact: true }).fill("E2E offline recipe");
+  await page.getByRole("button", { name: /Tell me when a device goes offline/ }).click();
+  await page.getByLabel("Watched device").selectOption({ index: 1 });
   for (const next of ["Next: If", "Next: Then", "Next: Behaviour", "Next: Review"]) {
     await page.getByRole("button", { name: next }).click();
   }
@@ -82,6 +95,6 @@ test("walking a recipe to Review creates nothing until Create rule", async ({ pa
   // Regression: the last Next must not turn into the submit button mid-click.
   await expect(page).toHaveURL(/\/rules\/new/);
   await expect(page.getByText(/ created$/)).toHaveCount(0);
-  await expect(page.getByLabel("Name", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("E2E offline recipe");
   await expect(page.getByRole("button", { name: "Create rule" })).toBeEnabled();
 });

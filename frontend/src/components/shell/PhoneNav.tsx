@@ -19,7 +19,7 @@ import {
 import { CreateWorkspaceDialog } from "@/components/shell/CreateWorkspaceDialog";
 import { MORE_ITEMS, TAB_ITEMS, activeHref } from "@/components/shell/nav-config";
 import { useShell } from "@/components/shell/shell-context";
-import { useShellData } from "@/components/shell/useShellData";
+import { useNavCounts } from "@/components/shell/useShellData";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import type { RealtimeStatus } from "@/lib/realtime";
 import { cn } from "@/lib/cn";
@@ -53,7 +53,7 @@ export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
       <Link href="/dashboards" aria-label={`${name}, go to dashboards`} className="rounded-[9px]">
         <WorkspaceLogo name={name} />
       </Link>
-      <strong className="min-w-0 flex-1 truncate text-[15px] font-semibold text-ink">{name}</strong>
+      <strong className="min-w-0 flex-1 truncate text-section font-semibold text-ink">{name}</strong>
       {down && <LiveIndicator realtime={realtime} />}
       <button
         type="button"
@@ -71,7 +71,7 @@ export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
 export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
   const pathname = usePathname();
   const active = activeHref(pathname);
-  const { unreadCount } = useShellData();
+  const { unreadCount } = useNavCounts();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = active != null && MORE_ITEMS.some((i) => i.href === active);
 
@@ -80,12 +80,12 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
   }, [pathname]);
 
   const cell =
-    "relative flex h-[58px] flex-col items-center justify-center gap-[3px] text-[11px] font-medium text-ink-muted";
+    "relative flex h-[58px] flex-col items-center justify-center gap-[3px] text-xs font-medium text-ink-muted";
   return (
     <>
       <nav
         aria-label="Main"
-        className="fixed inset-x-0 bottom-0 z-[50] grid grid-cols-5 border-t border-border bg-surface pb-[env(safe-area-inset-bottom,0px)] rail:hidden"
+        className="fixed inset-x-0 bottom-0 z-[50] grid grid-cols-5 border-t border-border bg-surface pb-[env(safe-area-inset-bottom,0px)] rail:hidden [:root:has(.app-shell_[data-savebar])_&]:hidden"
       >
         {TAB_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -100,7 +100,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
               <Icon aria-hidden size={20} />
               <span>{item.tabLabel ?? item.label}</span>
               {item.alertCount && unreadCount > 0 && (
-                <AlertCount count={unreadCount} className="absolute left-[calc(50%+5px)] top-[5px] min-w-[17px] px-1 text-[10px] leading-4" />
+                <AlertCount count={unreadCount} className="absolute left-[calc(50%+5px)] top-[5px] min-w-[17px] px-1 text-xs leading-4" />
               )}
             </Link>
           );
@@ -139,14 +139,14 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
     <>
       <Sheet open={open} onClose={onClose} label="More" side="bottom">
         <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-3">
-          <h2 className="text-base font-semibold text-ink">More</h2>
+          <h2 className="text-section font-semibold text-ink">More</h2>
           <div className="flex items-center gap-3 border-b border-border-soft pb-4">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent-muted text-sm font-semibold text-accent-strong">
               {user ? initialsFor(user.name, user.email) : "…"}
             </span>
             <div className="min-w-0 flex-1 leading-tight">
               <b className="block truncate font-medium text-ink">{user?.name?.trim() || user?.email || "…"}</b>
-              <span className="block truncate text-[13px] text-ink-muted">
+              <span className="block truncate text-meta text-ink-muted">
                 {[user?.email, role && current ? `${ROLE_LABEL[role]} of ${current.tenant_name}` : null]
                   .filter(Boolean)
                   .join(" · ")}
@@ -197,7 +197,7 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
           </nav>
 
           <div className="flex items-center justify-between gap-3">
-            <LiveIndicator realtime={realtime} className="text-[13px]" />
+            <LiveIndicator realtime={realtime} className="text-meta" />
             <ThemeButton withLabel />
           </div>
         </div>

@@ -10,7 +10,7 @@ import re
 import uuid
 from typing import Any, NamedTuple
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -310,6 +310,17 @@ async def list_catalog_entries(
         .order_by(DeviceCatalogEntry.created_at)
     )
     return list(result.scalars().all())
+
+
+async def count_catalog_entries(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    return (
+        await session.scalar(
+            select(func.count())
+            .select_from(DeviceCatalogEntry)
+            .where(DeviceCatalogEntry.tenant_id == tenant_id)
+        )
+        or 0
+    )
 
 
 async def get_catalog_entry(

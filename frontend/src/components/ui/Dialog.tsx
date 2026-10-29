@@ -44,7 +44,7 @@ export function Dialog({ open, onClose, title, description, children, footer, on
   const body = (
     <>
       <div>
-        <h2 id={titleId} className="text-[17px] font-semibold text-ink">
+        <h2 id={titleId} className="text-section font-semibold text-ink">
           {title}
         </h2>
         {description && <p className="mt-1 text-sm text-ink-muted">{description}</p>}

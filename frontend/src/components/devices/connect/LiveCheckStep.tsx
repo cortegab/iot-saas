@@ -11,7 +11,7 @@ export function LiveCheckStep({ flow }: { flow: ConnectFlow }) {
   const { device, deviceId, items, live, allLive, boolActuators, phone } = flow;
   return (
     <>
-      <h2 className="text-lg font-semibold text-ink">Live check</h2>
+      <h2 className="text-section font-semibold text-ink">Live check</h2>
       <p className="text-sm text-ink-muted">
         This page listens for {device.name}. Each line turns green on its own as the board connects, reports and answers.
       </p>
@@ -53,7 +53,7 @@ export function LiveCheckStep({ flow }: { flow: ConnectFlow }) {
                 )}
               </div>
               {!it.actuator && (
-                <span aria-hidden className={cn("pt-0.5 text-[12.5px]", state === "ok" ? "text-status-online" : "text-ink-muted")}>
+                <span aria-hidden className={cn("pt-0.5 text-xs", state === "ok" ? "text-status-online" : "text-ink-muted")}>
                   {state === "ok" ? "OK" : "Waiting"}
                 </span>
               )}

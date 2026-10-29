@@ -15,7 +15,7 @@ export function PhoneStep({ flow, credential }: { flow: ConnectFlow; credential:
   const { install, device, name, security, boardInfo } = flow;
   return (
     <>
-      <h2 className="text-lg font-semibold text-ink">Wi-Fi from your phone</h2>
+      <h2 className="text-section font-semibold text-ink">Wi-Fi from your phone</h2>
       <p className="text-sm text-ink-muted">
         Once the {install ? "firmware" : "sketch"} is running, the board waits for Wi-Fi over Bluetooth as <b className="font-mono text-ink">{name}</b>
         {install ? " (its LED blinks slowly)" : ""}. Give it your network with

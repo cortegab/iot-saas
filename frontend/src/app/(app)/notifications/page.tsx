@@ -6,7 +6,7 @@ import { mutate as revalidate } from "swr";
 import { AlertTriangle, Bell, Check, CheckCheck, Info, Mail, X, Zap } from "lucide-react";
 import { NOTIFICATIONS_KEY, useNotifications } from "@/hooks/useNotifications";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { Badge, Tag } from "@/components/ui/Badge";
+import { Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -272,7 +272,7 @@ export default function NotificationsPage() {
                         if (!(e.target as HTMLElement).closest("a, button")) openSheet(g);
                       }}
                       className={cn(
-                        "flex cursor-pointer flex-wrap items-start gap-x-3 gap-y-2 border-t border-border-soft px-3.5 py-2.5 first:border-t-0 hover:bg-row-hover",
+                        "flex cursor-pointer items-start gap-x-3 gap-y-2 border-t border-border-soft px-3.5 py-2.5 first:border-t-0 hover:bg-row-hover",
                         // Unread: the demo's active bar on the left edge.
                         g.unread && "shadow-[inset_3px_0_0_var(--color-accent)]",
                       )}
@@ -281,30 +281,33 @@ export default function NotificationsPage() {
                         <SevIcon aria-hidden size={17} className={cn("mt-0.5 shrink-0", sev.tone)} />
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
                           <button type="button" onClick={() => openSheet(g)} aria-haspopup="dialog" className="min-w-0 text-left text-ink">
-                            <span className="sr-only">{sev.label}: </span>
-                            <strong className="font-medium">{n.message}</strong>
+                            <span className="sr-only">{sev.label}{g.unread ? ", Unread" : ""}: </span>
+                            {/* Unread is the accent bar and a bold title (DESIGN.md §8). */}
+                            <strong className={g.unread ? "font-semibold" : "font-normal"}>{n.message}</strong>
                             {repeats > 1 && (
                               <Tag size="sm" className="ml-2">
                                 ×{repeats}
                               </Tag>
                             )}
                           </button>
-                          {n.detail && <span className="text-[12.5px] text-ink-muted">{n.detail}</span>}
-                          <span className="text-[12.5px] text-ink-muted">
+                          {n.detail && <span className="text-xs text-ink-muted">{n.detail}</span>}
+                          <span className="text-xs text-ink-muted">
                             {repeats > 1 ? `since ${clock(g.first.created_at)}, last ${timeAgo(n.created_at)}` : timeAgo(n.created_at)}
                             <SourceLinks n={n} deviceName={deviceName} ruleName={ruleName} templateName={templateName} />
                           </span>
                         </div>
                       </div>
-                      <div className="ml-auto flex shrink-0 items-center gap-2.5 max-[600px]:w-full max-[600px]:pl-[29px]">
-                        {g.unread && <Badge tone="accent" label="Unread" />}
-                        <Button size="sm" variant="secondary" onClick={() => void (g.unread ? readAll(g) : unreadAll(g))}>
-                          {g.unread ? <Check aria-hidden size={14} /> : <Bell aria-hidden size={14} />}
-                          {g.unread ? "Mark read" : "Mark unread"}
-                        </Button>
+                      <div className="ml-auto shrink-0">
                         <DropdownMenu
                           label={`Actions for ${n.message}`}
-                          groups={[[{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }]]}
+                          groups={[
+                            [
+                              g.unread
+                                ? { label: "Mark as read", icon: <Check size={15} />, onClick: () => void readAll(g) }
+                                : { label: "Mark as unread", icon: <Bell size={15} />, onClick: () => void unreadAll(g) },
+                            ],
+                            [{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }],
+                          ]}
                         />
                       </div>
                     </li>
@@ -324,7 +327,7 @@ export default function NotificationsPage() {
               {/* Older than what's loaded: one request grows (useNotifications). */}
               {totalRows > notifications.length && (
                 <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-                  <span className="text-[12.5px] text-ink-muted">
+                  <span className="text-xs text-ink-muted">
                     The latest {notifications.length} of {totalRows} notifications
                   </span>
                   {limit < MAX_LOADED ? (
@@ -332,7 +335,7 @@ export default function NotificationsPage() {
                       Show older
                     </Button>
                   ) : (
-                    <span className="text-[12.5px] text-ink-muted">Dismiss old ones to see further back.</span>
+                    <span className="text-xs text-ink-muted">Dismiss old ones to see further back.</span>
                   )}
                 </div>
               )}
@@ -349,7 +352,7 @@ export default function NotificationsPage() {
         footer={
           open ? (
             <>
-              <Button variant="link-danger" className="mr-auto text-[13px]" onClick={() => void onDismiss(open)}>
+              <Button variant="link-danger" className="mr-auto text-meta" onClick={() => void onDismiss(open)}>
                 Dismiss
               </Button>
               <Button variant="ghost" onClick={() => void unreadAll(open)}>
@@ -395,8 +398,8 @@ export default function NotificationsPage() {
             </dl>
             {open.items.length > 1 && (
               <div className="flex flex-col gap-2">
-                <h3 className="text-[13px] font-medium text-ink-muted">Each time</h3>
-                <ol className="flex flex-col gap-1.5 border-l-2 border-border pl-3.5 text-[13px]">
+                <h3 className="text-meta font-medium text-ink-muted">Each time</h3>
+                <ol className="flex flex-col gap-1.5 border-l-2 border-border pl-3.5 text-meta">
                   {open.items.map((n) => (
                     <li key={n.id} className="tabular-nums text-ink">
                       {clock(n.created_at)}

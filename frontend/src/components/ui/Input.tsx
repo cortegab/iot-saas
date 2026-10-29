@@ -44,7 +44,7 @@ export function Affix({ suffix, children }: { suffix: string; children: ReactNod
   return (
     <div className="flex items-stretch [&>input]:rounded-r-none">
       {children}
-      <span className="grid place-items-center whitespace-nowrap rounded-r-md border border-l-0 border-border bg-surface-raised px-2.5 text-[13px] text-ink-muted">
+      <span className="grid place-items-center whitespace-nowrap rounded-r-md border border-l-0 border-border bg-surface-raised px-2.5 text-meta text-ink-muted">
         {suffix}
       </span>
     </div>

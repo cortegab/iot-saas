@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Responsive, WidthProvider, type Layout } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
-import { AlertTriangle, GripVertical } from "lucide-react";
+import { AlertTriangle, GripVertical, Plus } from "lucide-react";
 import { ValueCardWidget } from "@/components/dashboards/ValueCardWidget";
 import { TrendChartWidget } from "@/components/dashboards/TrendChartWidget";
 import { DeviceStatusWidget } from "@/components/dashboards/DeviceStatusWidget";
@@ -25,6 +25,7 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 // phone neither squeezes twelve columns nor rewrites the desktop layout.
 const BREAKPOINTS = { lg: 640, sm: 0 };
 const COLS = { lg: 12, sm: 1 };
+const ADD_TILE = "__add-widget";
 export const WIDGET_LABEL: Record<Widget["type"], string> = {
   value_card: "Value card",
   trend_chart: "Trend chart",
@@ -60,6 +61,7 @@ export function DashboardGrid({
   templates,
   onLayoutChange,
   onOpenWidget,
+  onAddWidget,
 }: {
   widgets: Widget[];
   /** Edit-layout mode: drag and resize, and a click opens the widget's
@@ -69,10 +71,25 @@ export function DashboardGrid({
   templates?: CatalogEntryResponse[];
   onLayoutChange: (updated: Widget[]) => void;
   onOpenWidget: (id: string) => void;
+  /** Shows an "Add widget" tile in the first row's free columns. */
+  onAddWidget?: () => void;
 }) {
   const [breakpoint, setBreakpoint] = useState("lg");
   const deviceName = (w: Widget) => devices?.find((d) => d.id === w.device_id)?.name;
-  const layout = useMemo<Layout>(() => widgets.map((w) => ({ i: w.id, x: w.x, y: w.y, w: w.w, h: w.h })), [widgets]);
+  // The first row's free columns hold an "Add widget" tile instead of blank
+  // space (at least 3 columns, and only where no widget reaches into them).
+  const addTile = useMemo(() => {
+    if (!onAddWidget || widgets.length === 0) return null;
+    const x = Math.max(...widgets.filter((w) => w.y === 0).map((w) => w.x + w.w), 0);
+    const tile = { i: ADD_TILE, x, y: 0, w: Math.min(COLS.lg - x, 4), h: 2, static: true };
+    if (tile.w < 3) return null;
+    const hits = widgets.some((w) => w.x < tile.x + tile.w && w.x + w.w > tile.x && w.y < tile.h);
+    return hits ? null : tile;
+  }, [widgets, onAddWidget]);
+  const layout = useMemo<Layout>(
+    () => [...widgets.map((w) => ({ i: w.id, x: w.x, y: w.y, w: w.w, h: w.h })), ...(addTile ? [addTile] : [])],
+    [widgets, addTile],
+  );
   const stacked = useMemo<Layout>(() => {
     let y = 0;
     return [...widgets]
@@ -110,13 +127,25 @@ export function DashboardGrid({
       onDragStop={handleStop}
       onResizeStop={handleStop}
     >
+      {addTile && breakpoint === "lg" && (
+        <div key={ADD_TILE}>
+          <button
+            type="button"
+            onClick={onAddWidget}
+            className="flex h-full w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border text-sm text-ink-muted transition-colors duration-150 hover:border-accent hover:text-accent"
+          >
+            <Plus aria-hidden size={15} />
+            Add widget
+          </button>
+        </div>
+      )}
       {widgets.map((widget) => {
         const broken = brokenReason(widget, devices, templates);
         return (
           <div key={widget.id} className={cn("group relative", editing && "rounded-xl outline-dashed outline-1 outline-offset-2 outline-accent/50 [&_.widget-title]:pr-12")}>
             {broken ? (
               <WidgetCard title={WIDGET_LABEL[widget.type]}>
-                <p className="flex gap-2.5 rounded-md bg-status-error-surface p-3 text-[13.5px] text-ink">
+                <p className="flex gap-2.5 rounded-md bg-status-error-surface p-3 text-meta text-ink">
                   <AlertTriangle aria-hidden size={16} className="mt-0.5 shrink-0 text-status-error" />
                   {broken}
                 </p>

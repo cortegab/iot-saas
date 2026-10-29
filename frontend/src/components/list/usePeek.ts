@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { PeekNav } from "./peek-nav";
 
@@ -59,12 +59,21 @@ export function usePeek<T>({
     }
   }, [legacyEdit, newHref, pageHref, router]);
 
+  // The row to land on once the drawer has closed. Done when `?peek=` has
+  // actually left the URL (the drawer is gone and has handed focus back to
+  // its trigger), not after a fixed delay: the route update can take longer
+  // than any delay, and the drawer's focus return would then win.
+  const focusAfterClose = useRef<string | null>(null);
+  useEffect(() => {
+    const id = focusAfterClose.current;
+    if (peekId || !id) return;
+    focusAfterClose.current = null;
+    window.requestAnimationFrame(() => rowFor(id)?.focus({ preventScroll: true }));
+  }, [peekId]);
+
   const close = useCallback(() => {
-    const last = peekId;
+    focusAfterClose.current = peekId;
     setPeek(null);
-    // After the drawer has returned focus to its trigger, land on the row
-    // the user browsed to.
-    if (last) window.setTimeout(() => rowFor(last)?.focus({ preventScroll: true }), 60);
   }, [peekId, setPeek]);
 
   const onRowClick = useCallback((row: T) => setPeek(rowKey(row)), [rowKey, setPeek]);

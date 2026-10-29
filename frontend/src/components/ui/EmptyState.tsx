@@ -24,7 +24,7 @@ export function EmptyState({ title, description, action, icon, size = "md", clas
       )}
     >
       {icon && <div className="text-ink-muted">{icon}</div>}
-      <h3 className="text-[15px] font-semibold text-ink">{title}</h3>
+      <h3 className="text-section font-semibold text-ink">{title}</h3>
       {description && <p className="max-w-[52ch] text-sm text-ink-muted">{description}</p>}
       {action && <div className="mt-1.5">{action}</div>}
     </div>

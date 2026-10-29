@@ -210,7 +210,7 @@ export function Combobox({
                 )}
                 {filteredGroups.map((group) => (
                   <li key={group.label} role="presentation">
-                    <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+                    <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-muted">
                       {group.label}
                     </p>
                     <ul role="presentation">

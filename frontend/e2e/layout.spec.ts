@@ -1,15 +1,21 @@
 import { expect, type Page } from "@playwright/test";
 import { test } from "./fixtures";
 
-// DESIGN.md §7: the save bar is always at the bottom of the window, short
-// pages included; controls in one row line up whatever hint sits under them.
+// DESIGN.md §7: the save bar sits at the bottom of the window, short pages
+// included; creating always shows it, editing only once there is a change.
+// Controls in one row line up whatever hint sits under them.
 
 async function barAtBottom(page: Page) {
-  const bar = page.locator("[data-savebar]").first();
+  const bar = page.locator("body [data-savebar]").first();
   await expect(bar).toBeVisible();
-  const box = (await bar.boundingBox())!;
   const viewport = page.viewportSize()!;
-  expect(Math.abs(box.y + box.height - viewport.height)).toBeLessThanOrEqual(1);
+  // Polled: an edit's bar slides up as it appears.
+  await expect
+    .poll(async () => {
+      const box = (await bar.boundingBox())!;
+      return Math.abs(box.y + box.height - viewport.height);
+    })
+    .toBeLessThanOrEqual(1);
 }
 
 test("the save bar sits at the window bottom on short pages", async ({ page }) => {
@@ -18,6 +24,20 @@ test("the save bar sits at the window bottom on short pages", async ({ page }) =
   await barAtBottom(page);
   await page.goto("/zones/new");
   await barAtBottom(page);
+});
+
+test("an edit page shows the save bar only while there is a change", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto("/settings");
+  const name = page.getByLabel("Your name", { exact: false });
+  await expect(name).toBeVisible();
+  await expect(page.locator("body [data-savebar]")).toHaveCount(0);
+  const before = await name.inputValue();
+  await name.fill(`${before} e2e`);
+  await barAtBottom(page);
+  await page.getByRole("button", { name: "Discard" }).click();
+  await expect(name).toHaveValue(before);
+  await expect(page.locator("body [data-savebar]")).toHaveCount(0);
 });
 
 test("controls in one row line up, whatever hint sits under them", async ({ page }) => {

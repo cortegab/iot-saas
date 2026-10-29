@@ -1,12 +1,11 @@
 "use client";
 
-import Link from "next/link";
-import { Send, Trash2, Users } from "lucide-react";
+import { Send, Trash2 } from "lucide-react";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
-import { Button, buttonClassName } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
-import { PeekFrame, PeekPlaceholder } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekOpen, PeekPlaceholder } from "@/components/editor/PeekFrame";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, timeAgo } from "@/lib/time-ago";
 import { ROLE_HELP } from "./MemberEditor";
@@ -45,12 +44,12 @@ export function MemberPeek({
           title={invite.email}
           eyebrow={
             <>
-              Invite <Badge tone="pending" shape="hollow" label="Invited" />
+              <Badge tone="pending" shape="hollow" label="Invited" />
             </>
           }
           description="They join when they open the link in their email."
           facts={[
-            ["Role", <Tag key="r" tone={invite.role === "owner" ? "accent" : "neutral"}>{roleLabel(invite.role)}</Tag>],
+            ["Role", <Tag key="r">{roleLabel(invite.role)}</Tag>],
             ["Sent", timeAgo(invite.created_at)],
             ["Link expires", formatDate(invite.expires_at)],
           ]}
@@ -80,19 +79,14 @@ export function MemberPeek({
       <PeekFrame
         noun="member"
         title={member.name || member.email}
-        eyebrow={<>Member{isMe && <span>· you</span>}</>}
+        eyebrow={isMe ? "You" : undefined}
         description={role ? ROLE_HELP[role] : undefined}
         facts={[
-          ["Email", <span key="e" className="font-mono text-[13px]">{member.email}</span>],
-          ["Role", <Tag key="r" tone={member.role === "owner" ? "accent" : "neutral"}>{roleLabel(member.role)}</Tag>],
+          ["Email", <span key="e" className="font-mono text-meta">{member.email}</span>],
+          ["Role", <Tag key="r">{roleLabel(member.role)}</Tag>],
           ["Joined", member.joined_at ? formatDate(member.joined_at) : null],
         ]}
-        primary={
-          <Link href={`/members/${member.user_id}`} className={buttonClassName({ size: "sm" })}>
-            <Users aria-hidden size={14} />
-            {canManage && !ownerLocked ? (isMe ? "Change your role" : "Change role") : "View member"}
-          </Link>
-        }
+        primary={<PeekOpen href={`/members/${member.user_id}`} noun="member" />}
         menu={menu}
         onClose={onClose}
       />

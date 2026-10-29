@@ -6,11 +6,13 @@
  * inspector. Each takes a slice of the RuleDraft and reports a new slice.
  */
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { ChoiceCards } from "@/components/ui/ChoiceCards";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { SchedulePicker } from "@/components/ui/SchedulePicker";
+import { FactList } from "@/components/ui/FactList";
 import { Field } from "@/components/ui/Field";
+import { Inherited } from "@/components/ui/Inherited";
 import { Affix, Input } from "@/components/ui/Input";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
@@ -18,6 +20,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Bell, Globe, Mail, Plus, Power } from "lucide-react";
 import { SwitchField } from "@/components/ui/Switch";
+import { useWorkspace } from "@/hooks/useWorkspace";
 import { cn } from "@/lib/cn";
 import {
   HYSTERESIS_OPERATORS,
@@ -26,6 +29,7 @@ import {
   type ActionDraft,
   type ActuatorActionDraft,
   type ContactDraft,
+  type EmailActionDraft,
   type TriggerType,
   type ValueKind,
   type WhenDraft,
@@ -587,6 +591,50 @@ function ActuatorFields({
   );
 }
 
+/** Who a rule's email goes to (DESIGN.md §5 Inherited): the workspace's
+ * alert recipients (an empty To), or the rule's own list. */
+function EmailRecipients({ action, onChange }: { action: EmailActionDraft; onChange: (next: ActionDraft) => void }) {
+  const { data: workspace } = useWorkspace();
+  // Choosing "Use different recipients" shows the field before anything is typed.
+  const [own, setOwn] = useState(action.to.trim() !== "");
+  const theirs = workspace?.notification_emails ?? [];
+  return (
+    <Inherited
+      from="the workspace"
+      what="recipients"
+      overridden={own}
+      overrideLabel="Use different recipients"
+      resetLabel="Use the workspace's"
+      onOverride={() => setOwn(true)}
+      onReset={() => {
+        setOwn(false);
+        onChange({ ...action, to: "" });
+      }}
+    >
+      {own ? (
+        <Field label="To" hint="Comma-separated.">
+          <Input
+            compact
+            autoFocus={action.to.trim() === ""}
+            value={action.to}
+            onChange={(e) => onChange({ ...action, to: e.target.value })}
+            placeholder="ops@example.com, oncall@example.com"
+          />
+        </Field>
+      ) : (
+        <FactList
+          facts={[
+            [
+              "To",
+              workspace ? (theirs.length ? theirs.join(", ") : "Owners and admins (nobody is listed)") : "…",
+            ],
+          ]}
+        />
+      )}
+    </Inherited>
+  );
+}
+
 export function ActionFields({
   action,
   catalog,
@@ -605,14 +653,7 @@ export function ActionFields({
   if (action.kind === "email") {
     return (
       <div className="flex flex-col gap-4">
-        <Field label="To" hint="Comma-separated. Leave empty to email the workspace alert recipients (Settings → Alerts).">
-          <Input
-            compact
-            value={action.to}
-            onChange={(e) => onChange({ ...action, to: e.target.value })}
-            placeholder="ops@example.com, oncall@example.com"
-          />
-        </Field>
+        <EmailRecipients action={action} onChange={onChange} />
         <Field label="Subject">
           <Input compact value={action.subject} onChange={(e) => onChange({ ...action, subject: e.target.value })} />
         </Field>

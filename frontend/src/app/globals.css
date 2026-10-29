@@ -162,10 +162,17 @@
   --spacing-control: 2.25rem; /* 36px — h-control */
   --spacing-cell: 0.75rem; /* 12px — p-cell */
 
-  --text-xs: 0.78125rem; /* 12.5px */
+  /* DESIGN.md §3 type scale: five steps, used through these tokens only. */
+  --text-xs: 0.75rem; /* 12px — tags, counts, micro labels */
   --text-xs--line-height: 1.4;
-  --text-sm: 0.875rem; /* 14px */
+  --text-meta: 0.8125rem; /* 13px — meta, hints, secondary lines */
+  --text-meta--line-height: 1.45;
+  --text-sm: 0.875rem; /* 14px — body and controls */
   --text-sm--line-height: 1.45;
+  --text-section: 1rem; /* 16px — section headings, drawer titles */
+  --text-section--line-height: 1.35;
+  --text-title: 1.75rem; /* 28px — page titles */
+  --text-title--line-height: 1.2;
 
   /* DESIGN.md §10 "night" brand surfaces (landing hero, close and footer, the
      sign-in brand panel). Dark in both themes, so static. */
@@ -243,9 +250,9 @@
 }
 
 :root {
-  --fs-base: 14.5px;
+  --fs-base: 14px;
   --fs-sm: 14px;
-  --fs-xs: 12.5px;
+  --fs-xs: 12px;
 }
 
 body {
@@ -315,6 +322,11 @@ body {
   :root:has(.app-shell) {
     --tabbar-h: calc(58px + env(safe-area-inset-bottom, 0px));
   }
+  /* While a save bar shows, the tab bar hides (DESIGN.md §7): the bar's
+     Cancel / Discard is the way out, and the bar takes the window bottom. */
+  :root:has(.app-shell [data-savebar]) {
+    --tabbar-h: 0px;
+  }
 }
 
 /* Tabular figures wherever digits stack in a column. */
@@ -360,5 +372,34 @@ body {
   }
   to {
     transform: translateX(250%);
+  }
+}
+
+/* DESIGN.md §12 touch targets. On a coarse pointer every `h-control` (buttons,
+   inputs, selects, tabs) grows to 44 px; segmented controls grow with
+   `pointer-coarse:` utilities in their components. Smaller visuals marked
+   `.hit` (row checkboxes, icon and pager buttons, `sm` buttons, inline links,
+   switches) keep their look and get a 44 px hit area from an invisible
+   ::before. In the components layer, so a utility such as `absolute` still
+   wins over the `relative` here. */
+@media (pointer: coarse) {
+  :root {
+    --spacing-control: 2.75rem;
+  }
+}
+@layer components {
+  @media (pointer: coarse) {
+    .hit {
+      position: relative;
+    }
+    .hit::before {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
   }
 }

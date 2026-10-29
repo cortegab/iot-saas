@@ -73,7 +73,7 @@ export default function RegisterPage() {
             {error}
           </p>
         )}
-        <Button type="submit" disabled={submitting} className="h-11 w-full text-[15px]">
+        <Button type="submit" disabled={submitting} className="w-full">
           {submitting ? "Creating…" : "Create account"}
         </Button>
       </form>

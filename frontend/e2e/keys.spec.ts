@@ -4,7 +4,7 @@ import { API_URL, test } from "./fixtures";
 test("api keys: create, authenticate with it, then revoke", async ({ page, request }) => {
   const name = `E2E key ${Date.now()}`;
   await page.goto("/keys");
-  await page.locator("header").getByRole("link", { name: "New key", exact: true }).click();
+  await page.getByRole("main").getByRole("link", { name: "New key", exact: true }).click();
   await expect(page).toHaveURL("/keys/new");
   await page.waitForLoadState("networkidle");
 
@@ -27,7 +27,7 @@ test("api keys: create, authenticate with it, then revoke", async ({ page, reque
   // Acknowledging the secret opens the key's page.
   await expect(page).toHaveURL(/\/keys\/[0-9a-f-]{36}$/);
   await expect(page.getByRole("heading", { name })).toBeVisible();
-  await page.getByRole("button", { name: "Revoke key" }).click();
+  await page.getByRole("button", { name: "Revoke key…" }).click();
   await page.getByRole("button", { name: "Revoke key" }).last().click();
   await expect(page.getByText("Key revoked", { exact: true })).toBeVisible();
 

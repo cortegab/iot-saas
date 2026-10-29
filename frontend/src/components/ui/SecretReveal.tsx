@@ -34,7 +34,7 @@ export function CopyField({
         className,
       )}
     >
-      <code className="min-w-0 flex-1 select-all break-all font-mono text-[12.5px] text-ink">{value}</code>
+      <code className="min-w-0 flex-1 select-all break-all font-mono text-xs text-ink">{value}</code>
       <button
         type="button"
         aria-label={copied ? "Copied" : `Copy ${label ?? "value"}`}
@@ -50,6 +50,29 @@ export function CopyField({
         {copied ? <Check aria-hidden size={14} className="text-status-online" /> : <Copy aria-hidden size={14} />}
       </button>
     </div>
+  );
+}
+
+/** A secondary "Copy" button beside a read-only field (the connect flow's
+ * credential): says Copied for a moment once it worked. */
+export function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={copied ? `${label} copied` : `Copy ${label}`}
+      onClick={() =>
+        void copyText(value).then((ok) => {
+          if (!ok) return;
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1500);
+        })
+      }
+      className={buttonClassName({ variant: "secondary" })}
+    >
+      {copied ? <Check aria-hidden size={14} className="text-status-online" /> : <Copy aria-hidden size={14} />}
+      {copied ? "Copied" : "Copy"}
+    </button>
   );
 }
 
@@ -120,7 +143,7 @@ export function SecretReveal({
         {fields.map((f) => (
           <div key={f.label} className="flex min-w-0 flex-wrap items-baseline gap-x-2">
             <dt className="w-24 shrink-0 text-xs text-ink-muted">{f.label}</dt>
-            <dd className="min-w-0 flex-1 select-all break-all font-mono text-[12.5px] text-ink">
+            <dd className="min-w-0 flex-1 select-all break-all font-mono text-xs text-ink">
               {f.secret && !shown ? "•".repeat(Math.min(f.value.length, 32)) : f.value}
             </dd>
           </div>

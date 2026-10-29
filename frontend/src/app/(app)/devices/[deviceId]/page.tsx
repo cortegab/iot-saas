@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus, Wrench, Zap } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useChangeToast } from "@/hooks/useChangeToast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
@@ -13,6 +14,7 @@ import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { Card } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { FactList } from "@/components/ui/FactList";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Readout } from "@/components/ui/Readout";
@@ -30,7 +32,7 @@ import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { getDeviceActuators } from "@/lib/device-actuators";
 import { readingFreshness } from "@/lib/freshness";
-import { formatWhen, timeAgo } from "@/lib/time-ago";
+import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 
@@ -148,6 +150,16 @@ export default function DeviceDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabParam]);
 
+  // DESIGN.md §5: going offline or coming back while the page is open is a
+  // toast; the header's status says it from then on.
+  useChangeToast(device?.id, device ? deviceStatusKey(device) : undefined, (before, now) =>
+    now === "offline" && before === "online"
+      ? { tone: "warning", title: `${device!.name} went offline`, detail: "Readings show the last ones received. Commands wait until it reconnects." }
+      : now === "online" && before !== "online"
+        ? { tone: "success", title: `${device!.name} is online`, detail: before === "never" ? "Its first message arrived." : "It reconnected." }
+        : null,
+  );
+
   if (isLoading) return <LoadingSkeleton rows={5} rowClassName="h-14" />;
   if (error) {
     if (error instanceof ApiRequestError && error.status === 404) {
@@ -184,11 +196,12 @@ export default function DeviceDetailPage() {
   ];
 
   // Fills the window (main's bottom padding traded for its own) so the Settings
-  // tab's floating save bar lands at the bottom, as every save bar does.
+  // tab's save bar, once there's a change, lands at the bottom like every bar.
   return (
     <div className="-mb-[110px] flex flex-1 flex-col gap-4 pb-6">
       <PageHeader
         breadcrumbs={[{ href: "/devices", label: "Devices" }]}
+        status={<Badge tone={st.tone} shape={st.shape} label={st.label} />}
         eyebrow={
           <span>
             {template ? (
@@ -206,15 +219,11 @@ export default function DeviceDetailPage() {
             ) : (
               "No zone"
             )}
+            {" · last message "}
+            {device.last_seen_at ? timeAgo(device.last_seen_at) : "never"}
           </span>
         }
         title={device.name}
-        description={
-          <span className="flex flex-wrap items-center gap-x-1.5">
-            <Badge tone={st.tone} shape={st.shape} variant="dot" label={st.label} />
-            <span>· last message {device.last_seen_at ? timeAgo(device.last_seen_at) : "never"}</span>
-          </span>
-        }
         actions={
           <>
             {canWrite &&
@@ -240,12 +249,10 @@ export default function DeviceDetailPage() {
 
       <TabPanel id="overview" active={tab}>
         <div className="flex flex-col gap-5">
-          {device.connection_state === "offline" && !disabled ? (
-            <Callout tone="warning">
-              <b className="font-medium">Offline since {device.last_seen_at ? formatWhen(device.last_seen_at) : "its last message"}.</b> Readings below
-              are the last ones received.
-            </Callout>
-          ) : neverConnected && !disabled ? (
+          {/* Offline is said once, in the header ("Offline · last message …"),
+              and each readout is marked Stale; only waiting, which has a next
+              step, is a callout here (DESIGN.md §5). */}
+          {neverConnected && !disabled ? (
             <Callout>
               <b className="font-medium">Waiting for its first message.</b>{" "}
               {canWrite ? (
@@ -264,12 +271,24 @@ export default function DeviceDetailPage() {
           {latest && (metrics.length > 0 || hasReadings) ? (
             <Readouts device={device} metrics={metrics} latest={latest} thresholds={thresholdsByMetric} />
           ) : !latestLoading && template && metrics.length === 0 ? (
-            <p className="text-sm text-ink-muted">This template has no metrics.</p>
+            <p className="text-sm text-ink-muted">
+              {actuators.length > 0 ? (
+                <>
+                  It has nothing to read: it&apos;s switched from the{" "}
+                  <button type="button" onClick={() => setTab("controls")} className="text-accent hover:underline">
+                    Controls tab
+                  </button>
+                  .
+                </>
+              ) : (
+                "Its template has no metrics."
+              )}
+            </p>
           ) : null}
 
           {(metrics.length > 0 || hasReadings) && (
             <Card>
-              <h2 className="mb-3 text-[15px] font-semibold text-ink">Trend</h2>
+              <h2 className="mb-3 text-section font-semibold text-ink">Trend</h2>
               {!hasReadings && neverConnected ? (
                 <p className="py-10 text-center text-sm text-ink-muted">The chart starts the moment a reading arrives.</p>
               ) : (
@@ -278,10 +297,11 @@ export default function DeviceDetailPage() {
             </Card>
           )}
 
-          <Card>
-            <h2 className="mb-3 text-[15px] font-semibold text-ink">Health</h2>
+          {/* A plain section with its facts (DESIGN.md §5, §7), not a card of dashes. */}
+          <section className="flex flex-col gap-3">
+            <h2 className="text-section font-semibold text-ink">Health</h2>
             <Health device={device} />
-          </Card>
+          </section>
         </div>
       </TabPanel>
 
@@ -304,8 +324,8 @@ export default function DeviceDetailPage() {
         <div className="flex flex-col gap-3">
           {can("rules.write") && (rules?.length ?? 0) > 0 && (
             <div className="flex justify-end">
-              <Link href={`/rules/new?device=${deviceId}`} className={buttonClassName({ variant: "secondary", size: "sm" })}>
-                <Plus aria-hidden size={14} />
+              <Link href={`/rules/new?device=${deviceId}`} className={buttonClassName()}>
+                <Plus aria-hidden size={15} />
                 New rule
               </Link>
             </div>
@@ -316,12 +336,11 @@ export default function DeviceDetailPage() {
 
       <TabPanel id="settings" active={tab} className="flex-1">
         {/* The one place a device is edited (DESIGN.md §7): plain stacked
-            sections, the Delete section last. */}
+            sections; Delete is in the header's ⋯ menu. */}
         <DeviceEditor
           deviceId={deviceId}
           embedded
           onRotate={() => void actions.rotate(device)}
-          onDelete={() => void actions.remove([device], () => router.push("/devices"))}
         />
       </TabPanel>
       {actions.dialog}
@@ -340,21 +359,18 @@ function uptime(s: number): string {
 /** The device's own report (demo H Health): signal, power, firmware, uptime
  * and the id it uses in MQTT topics. */
 function Health({ device }: { device: DeviceResponse }) {
-  const rows: [string, ReactNode][] = [
-    ["Signal", device.rssi != null ? `${device.rssi} dBm` : "—"],
-    ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : device.last_status_at ? "Mains" : "—"],
-    ["Firmware", device.fw_version ?? "—"],
-    ["Uptime", device.uptime_s != null ? uptime(device.uptime_s) : "—"],
-    ["MQTT id", <span key="id" className="font-mono">{device.slug}</span>],
-  ];
+  // Only what the device has reported; one line when it hasn't reported yet.
+  const reported = device.last_status_at != null || device.rssi != null || device.fw_version != null || device.uptime_s != null;
   return (
-    <dl className="grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] gap-x-4 gap-y-2.5 text-[13.5px]">
-      {rows.map(([k, v]) => (
-        <div key={k} className="contents">
-          <dt className="text-ink-muted">{k}</dt>
-          <dd className="m-0 min-w-0 break-words text-ink">{v}</dd>
-        </div>
-      ))}
-    </dl>
+    <FactList
+      facts={[
+        !reported && ["Report", <span key="r" className="text-ink-muted">Not reported yet</span>],
+        device.rssi != null && ["Signal", `${device.rssi} dBm`],
+        reported && ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : "Mains"],
+        device.fw_version != null && ["Firmware", device.fw_version],
+        device.uptime_s != null && ["Uptime", uptime(device.uptime_s)],
+        ["MQTT id", <span key="id" className="font-mono">{device.slug}</span>],
+      ]}
+    />
   );
 }

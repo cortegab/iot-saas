@@ -26,9 +26,9 @@ export interface QuickFilterOption {
 /** DESIGN.md §6 toolbar. Row 1: search, filter menus, the view switch and the
  * page's primary action at the end. Row 2: the status filter with a count
  * per state (it replaces the KPI strip on list pages). The search input
- * debounces into the URL. On phones the filter menus move into a **Filters**
- * bottom sheet and the status filter becomes a select; the primary action
- * stays in the toolbar. */
+ * debounces into the URL. Below 960 px the filter menus move into a **Filters**
+ * bottom sheet, so the primary action stays in row 1; on phones the status
+ * filter also becomes a select. */
 export function ListToolbar({
   query,
   onQuery,
@@ -59,6 +59,9 @@ export function ListToolbar({
   const [text, setText] = useState(query);
   const sent = useRef(query);
   const phone = useMediaQuery("(max-width: 640px)");
+  // Below ~960 px the filter menus would push the primary action onto its own
+  // row (DESIGN.md §12), so they fold into one Filters button there too.
+  const compact = useMediaQuery("(max-width: 960px)");
   const [sheetOpen, setSheetOpen] = useState(false);
   // Follow external changes only (chip removed, "Clear filters") — not the
   // echo of our own debounced write, which would clobber newer keystrokes.
@@ -95,7 +98,7 @@ export function ListToolbar({
           </div>
         )}
         {children &&
-          (phone ? (
+          (compact ? (
             <>
               <Button variant="secondary" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
                 <ListFilter aria-hidden size={14} />
@@ -104,7 +107,7 @@ export function ListToolbar({
               </Button>
               <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} label="Filters" side="bottom">
                 <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-3">
-                  <h2 className="text-base font-semibold text-ink">Filters</h2>
+                  <h2 className="text-section font-semibold text-ink">Filters</h2>
                   <div className="flex flex-col gap-3 [&>*]:w-full">{children}</div>
                   <Button onClick={() => setSheetOpen(false)}>Done</Button>
                 </div>
@@ -137,7 +140,7 @@ export function ListToolbar({
                   title={o.hint}
                   onClick={() => quick.onChange(o.value)}
                   className={cn(
-                    "inline-flex min-h-[30px] items-center gap-[7px] rounded-[6px] px-3 text-[13.5px] transition-colors duration-150",
+                    "inline-flex min-h-[30px] pointer-coarse:min-h-[38px] items-center gap-[7px] rounded-[6px] px-3 text-meta transition-colors duration-150",
                     on ? "bg-surface text-ink shadow-[0_1px_2px_rgba(0,0,0,.18)]" : "text-ink-muted hover:text-ink",
                   )}
                 >

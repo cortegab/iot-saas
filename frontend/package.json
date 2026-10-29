@@ -4,14 +4,15 @@
   "private": true,
   "packageManager": "pnpm@9.15.9",
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "codegen": "openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:clean": "node e2e/clean-e2e-data.mjs"
   },
   "dependencies": {
     "clsx": "^2.1.1",

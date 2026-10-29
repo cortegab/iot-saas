@@ -9,6 +9,7 @@ import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { FactList } from "@/components/ui/FactList";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -127,8 +128,7 @@ export function ZoneEditor({
         mode={mode}
         noun="zone"
         title={d.name.trim() || (isNew ? "New zone" : zone!.name)}
-        eyebrow={<>Zone{!isNew && <span>· {plural(devices, "device")}</span>}</>}
-        consequence={isNew ? "Devices are added to a zone from their own settings." : `${plural(devices, "device")} in it. Devices are moved from their own settings.`}
+        consequence="Devices join a zone from their own settings."
         sections={[{ id: "zone", label: "Zone" }]}
         status={editor}
         readOnly={readOnly}
@@ -159,14 +159,20 @@ export function ZoneEditor({
             <Textarea rows={4} value={d.notes} disabled={readOnly} onChange={(e) => editor.set({ ...d, notes: e.target.value })} onBlur={() => editor.touch("zone.notes")} />
           </Field>
           {!isNew && (
-            <p className="text-[13px] text-ink-muted">
-              Devices join a zone from their own settings.{" "}
-              {devices > 0 && (
-                <Link href={`/devices?zone=${zoneId}`} className="text-accent hover:underline">
-                  View its {plural(devices, "device")}
-                </Link>
-              )}
-            </p>
+            <FactList
+              facts={[
+                [
+                  "Devices",
+                  devices > 0 ? (
+                    <Link key="devices" href={`/devices?zone=${zoneId}`} className="text-accent hover:underline">
+                      {plural(devices, "device")}
+                    </Link>
+                  ) : (
+                    "None yet"
+                  ),
+                ],
+              ]}
+            />
           )}
         </EditorSection>
       </EditorFrame>

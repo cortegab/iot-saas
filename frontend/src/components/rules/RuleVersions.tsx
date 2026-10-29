@@ -44,7 +44,7 @@ export function RuleVersions({
               Version {v.version}
               {i === 0 && pager.page === 1 ? " · current" : ""}
             </b>
-            <span className="text-[12.5px] text-ink-muted">
+            <span className="text-xs text-ink-muted">
               {[v.author ?? "API key or removed member", formatWhen(v.created_at), v.change_lines.join("; ")].filter(Boolean).join(" · ")}
             </span>
           </span>

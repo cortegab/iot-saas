@@ -81,7 +81,7 @@ export default function LoginPage() {
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
                     <strong className="truncate text-sm font-semibold text-ink">{m.tenant_name}</strong>
-                    <span className="text-[12.5px] text-ink-muted">{role ? ROLE_LABEL[role] : m.role}</span>
+                    <span className="text-xs text-ink-muted">{role ? ROLE_LABEL[role] : m.role}</span>
                   </span>
                   <ChevronRight aria-hidden size={16} className="text-ink-muted" />
                 </button>
@@ -89,7 +89,7 @@ export default function LoginPage() {
             );
           })}
         </ul>
-        <p className="text-[12.5px] text-ink-muted">Switch any time from the workspace menu at the top of the sidebar.</p>
+        <p className="text-xs text-ink-muted">Switch any time from the workspace menu at the top of the sidebar.</p>
       </AuthCard>
     );
   }
@@ -124,7 +124,7 @@ export default function LoginPage() {
           label="Password"
           warning={failures >= 2 && capsOn ? "Caps Lock is on." : undefined}
           action={
-            <Link href="/forgot-password" className="text-[12.5px] font-medium text-accent hover:underline">
+            <Link href="/forgot-password" className="text-xs font-medium text-accent hover:underline">
               Forgot password?
             </Link>
           }
@@ -135,7 +135,7 @@ export default function LoginPage() {
           <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} className="mt-[3px] accent-[var(--color-accent)]" />
           Keep me signed in on this device
         </label>
-        <Button type="submit" disabled={submitting} className="h-11 w-full text-[15px]">
+        <Button type="submit" disabled={submitting} className="w-full">
           {submitting ? "Signing in…" : "Sign in"}
         </Button>
       </form>

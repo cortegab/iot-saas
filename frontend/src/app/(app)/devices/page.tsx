@@ -112,7 +112,7 @@ export default function DevicesPage() {
             </Link>
           }
           // demo H: the name in the UI face, its MQTT id under it in mono.
-          sub={<span className="font-mono text-[11.5px]">{d.slug}</span>}
+          sub={<span className="font-mono text-xs">{d.slug}</span>}
         />
       ),
     },
@@ -301,9 +301,9 @@ export default function DevicesPage() {
                 <Power aria-hidden size={14} />
                 Enable
               </Button>
-              <Button variant="danger" size="sm" onClick={() => void remove(selectedRows)}>
+              <Button variant="secondary-danger" size="sm" onClick={() => void remove(selectedRows)}>
                 <Trash2 aria-hidden size={14} />
-                Delete
+                Delete…
               </Button>
             </BulkBar>
           )}

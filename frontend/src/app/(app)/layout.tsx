@@ -15,7 +15,7 @@ import { cn } from "@/lib/cn";
 /** The app shell (DESIGN.md §4): the full 256px sidebar from 1440px; the
  * 64px icon rail from 641px, which a pin opens to the full sidebar over the
  * content; and on phones a top bar and a bottom tab bar. The content column
- * is 1120px wide, or 1520px for pages that call `useWideContent()`. */
+ * is 1120px wide. */
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { status, currentTenantId } = useAuth();
   const realtime = useRealtime();
@@ -23,7 +23,6 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const isFull = useMediaQuery("(min-width: 1440px)");
   const [pinned, setPinned] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [wide, setWide] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -53,7 +52,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   }, [pinned, isFull]);
 
   const openPalette = useCallback(() => setPaletteOpen(true), []);
-  const shell = useMemo(() => ({ openPalette, setWide }), [openPalette]);
+  const shell = useMemo(() => ({ openPalette }), [openPalette]);
 
   if (status === "loading") {
     return <div className="flex min-h-screen items-center justify-center text-ink-muted">Loading…</div>;
@@ -105,10 +104,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             ref={mainRef}
             id="content"
             tabIndex={-1}
-            className={cn(
-              "mx-auto flex w-full flex-1 flex-col gap-[22px] px-4 pb-[calc(110px+var(--tabbar-h))] pt-[22px] outline-none transition-[max-width] duration-200 rail:px-10 rail:pt-9",
-              wide ? "max-w-[1520px]" : "max-w-[1120px]",
-            )}
+            className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-[22px] px-4 pb-[calc(110px+var(--tabbar-h))] pt-[22px] outline-none rail:px-10 rail:pt-9"
           >
             <ReconnectingBanner realtime={realtime} />
             {children}

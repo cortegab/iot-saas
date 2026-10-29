@@ -222,6 +222,26 @@ export interface paths {
         patch: operations["update_current_tenant_tenants_current_patch"];
         trace?: never;
     };
+    "/tenants/current/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Nav Counts
+         * @description The sidebar's counts in one request, without loading the lists.
+         */
+        get: operations["get_nav_counts_tenants_current_counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/members": {
         parameters: {
             query?: never;
@@ -1960,6 +1980,27 @@ export interface components {
              */
             type: "metric";
         };
+        /**
+         * NavCountsResponse
+         * @description The sidebar's counts in one request, instead of every list (DESIGN.md §4).
+         *     Members and API keys are null for roles that can't manage them.
+         */
+        NavCountsResponse: {
+            /** Devices */
+            devices: number;
+            /** Rules */
+            rules: number;
+            /** Templates */
+            templates: number;
+            /** Dashboards */
+            dashboards: number;
+            /** Zones */
+            zones: number;
+            /** Members */
+            members: number | null;
+            /** Api Keys */
+            api_keys: number | null;
+        };
         /** NotificationAction */
         NotificationAction: {
             /**
@@ -3101,6 +3142,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TenantResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_nav_counts_tenants_current_counts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NavCountsResponse"];
                 };
             };
             /** @description Validation Error */

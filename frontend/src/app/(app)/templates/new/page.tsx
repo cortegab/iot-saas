@@ -10,7 +10,7 @@ export default function NewTemplatePage() {
   const duplicateId = useSearchParams().get("duplicate");
   return (
     <>
-      <Breadcrumbs crumbs={[{ label: "Device templates", href: "/templates" }, { label: duplicateId ? "Duplicate" : "New" }]} />
+      <Breadcrumbs crumbs={[{ label: "Device templates", href: "/templates" }]} />
       <TemplateEditor key={duplicateId ?? "new"} entryId={null} duplicateOf={duplicateId} mode="page" />
     </>
   );

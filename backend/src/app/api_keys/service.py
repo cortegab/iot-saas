@@ -7,7 +7,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api_keys.models import ApiKey
@@ -83,6 +83,18 @@ async def list_api_keys(session: AsyncSession, tenant_id: uuid.UUID) -> list[Api
         select(ApiKey).where(ApiKey.tenant_id == tenant_id).order_by(ApiKey.created_at.desc())
     )
     return list(result.scalars().all())
+
+
+async def count_active_api_keys(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    """Keys not revoked (expired ones included, as the list's default view)."""
+    return (
+        await session.scalar(
+            select(func.count())
+            .select_from(ApiKey)
+            .where(ApiKey.tenant_id == tenant_id, ApiKey.revoked_at.is_(None))
+        )
+        or 0
+    )
 
 
 async def revoke_api_key(session: AsyncSession, tenant_id: uuid.UUID, key_id: uuid.UUID) -> None:

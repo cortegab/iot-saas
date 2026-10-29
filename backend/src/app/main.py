@@ -40,6 +40,11 @@ app.add_middleware(
     allow_headers=["*"],
     # The history feeds' total row count (app/paging.py), readable cross-origin.
     expose_headers=[TOTAL_HEADER],
+    # The app (apex) calls the API (api. subdomain) cross-origin with an
+    # Authorization header, so each call needs a preflight unless it's cached:
+    # 2 h is the most Chrome keeps one (Starlette's default is 10 min), and
+    # each preflight costs a full round trip to the VPS.
+    max_age=7200,
 )
 
 app.include_router(auth_router)

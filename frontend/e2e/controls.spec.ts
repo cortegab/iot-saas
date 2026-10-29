@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { expect } from "@playwright/test";
-import { API_URL, login, test } from "./fixtures";
+import { API_URL, login, test, expandCommandRuns } from "./fixtures";
 
 // DESIGN.md §8 controls (demo H rows): what was requested, then Waiting… (counting down
 // the TTL), Acknowledged, or No response with Retry; offline sends warn
@@ -56,7 +56,11 @@ test("controls: warn when offline, count down, acknowledged by the device, then 
 
     // The timeline filters by result.
     const timeline = page.getByRole("list", { name: "Commands" });
-    await expect(timeline.getByRole("listitem")).toHaveCount(3);
+    // Rows keep landing (the retry); open any folded run until all three show.
+    await expect(async () => {
+      await expandCommandRuns(timeline);
+      await expect(timeline.getByRole("listitem")).toHaveCount(3, { timeout: 1000 });
+    }).toPass({ timeout: 15_000 });
     await page.getByRole("radiogroup", { name: "Result" }).getByRole("radio", { name: "Acknowledged" }).click();
     await expect(timeline.getByRole("listitem")).toHaveCount(1);
     await expect(timeline.getByRole("listitem")).toContainText("Fan → On");

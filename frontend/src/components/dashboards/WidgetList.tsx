@@ -52,7 +52,7 @@ export function WidgetList({
             <button type="button" onClick={() => onOpen(w.id)} className="flex min-w-0 flex-1 items-center gap-2 py-2 text-left">
               <span className="flex min-w-0 flex-1 flex-col">
                 <b className="truncate text-sm font-medium text-ink">{title}</b>
-                <span className="truncate text-[12.5px] text-ink-muted">{WIDGET_LABEL[w.type]}</span>
+                <span className="truncate text-xs text-ink-muted">{WIDGET_LABEL[w.type]}</span>
               </span>
               <ChevronRight aria-hidden size={15} className="shrink-0 text-ink-muted" />
             </button>

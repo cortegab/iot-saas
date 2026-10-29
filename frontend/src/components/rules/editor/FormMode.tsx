@@ -122,9 +122,9 @@ function GroupRows({
             { value: "OR", label: "Any" },
           ]}
         />
-        <span className="text-[13px] text-ink-muted">of these{depth === 0 ? " must be true" : ""}</span>
+        <span className="text-meta text-ink-muted">of these{depth === 0 ? " must be true" : ""}</span>
         {depth > 0 && (
-          <Button type="button" variant="link-danger" className="ml-auto text-[13px]" onClick={() => setCondition(removeNode(draft.condition, group.id))}>
+          <Button type="button" variant="link-danger" className="ml-auto text-meta" onClick={() => setCondition(removeNode(draft.condition, group.id))}>
             Remove group
           </Button>
         )}
@@ -132,7 +132,7 @@ function GroupRows({
       {group.children.map((child, i) => (
         <div key={child.id} className="flex flex-col gap-2">
           {i > 0 && (
-            <span aria-hidden className="pl-3.5 text-[12px] font-medium uppercase tracking-[0.06em] text-ink-muted">
+            <span aria-hidden className="pl-3.5 text-xs font-medium uppercase tracking-[0.06em] text-ink-muted">
               {word}
             </span>
           )}
@@ -234,7 +234,7 @@ export function ConditionSection({ draft, catalog, update }: { draft: RuleDraft;
               <Button
                 type="button"
                 variant="link-danger"
-                className="mr-auto text-[13px]"
+                className="mr-auto text-meta"
                 onClick={() => {
                   setCondition(removeNode(draft.condition, open.id));
                   setOpenId(null);
@@ -310,7 +310,7 @@ export function ThenSection({
       ) : (
         <EmptyCard title="No actions yet">Say what happens when it fires.</EmptyCard>
       )}
-      {draft.actions.length > 1 && <p className="text-[13px] text-ink-muted">All of them run together.</p>}
+      {draft.actions.length > 1 && <p className="text-meta text-ink-muted">All of them run together.</p>}
       {draft.preserved.actions.length > 0 && (
         <p className="text-sm text-ink-muted">
           Also keeps {draft.preserved.actions.length} action
@@ -327,10 +327,10 @@ export function ThenSection({
         />
       </div>
       {onClear.length > 0 && (
-        <p className="text-[13px] text-ink-muted">
+        <p className="text-meta text-ink-muted">
           When it clears{draft.clearDelay ? ` (after ${draft.clearDelay} s)` : ""}: {onClear.join(", ")}.{" "}
           {onGoBehaviour && (
-            <Button type="button" variant="link" className="text-[13px]" onClick={onGoBehaviour}>
+            <Button type="button" variant="link" className="text-meta" onClick={onGoBehaviour}>
               Change in Behaviour
             </Button>
           )}
@@ -348,7 +348,7 @@ export function ThenSection({
                 <Button
                   type="button"
                   variant="link-danger"
-                  className="mr-auto text-[13px]"
+                  className="mr-auto text-meta"
                   onClick={() => {
                     setActions(draft.actions.filter((a) => a.id !== open.id));
                     setOpenId(null);
@@ -419,7 +419,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
     <div className="@container flex flex-col gap-6">
       {reading && (
         <div className="flex flex-col gap-2">
-          <span className="text-[13px] font-medium text-ink">After it fires</span>
+          <span className="text-meta font-medium text-ink">After it fires</span>
           <ChoiceCards
             ariaLabel="After it fires"
             value={draft.behaviour === "latch" ? "latch" : "rearm"}
@@ -437,7 +437,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
         </div>
       )}
       <div className="flex flex-col gap-2">
-        <span className="text-[13px] font-medium text-ink">
+        <span className="text-meta font-medium text-ink">
           Safety <span className="font-normal text-ink-muted">always applied; they stop hardware flapping</span>
         </span>
         <div className="grid grid-cols-1 items-start gap-4 @min-[560px]:grid-cols-3">
@@ -465,7 +465,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
           />
         </div>
       </div>
-      {clearing ? <ClearFields draft={draft} update={update} /> : reading && <p className="text-[13px] text-ink-muted">Actions on clear are for reading rules that re-arm.</p>}
+      {clearing ? <ClearFields draft={draft} update={update} /> : reading && <p className="text-meta text-ink-muted">Actions on clear are for reading rules that re-arm.</p>}
     </div>
   );
 }
@@ -487,7 +487,7 @@ function ClearFields({ draft, update }: { draft: RuleDraft; update: Update }) {
           <Input value={draft.clearMessage} onChange={(e) => update({ ...draft, clearMessage: e.target.value })} placeholder="e.g. Temperature back to normal" />
         </Field>
       )}
-      <p className="text-[13px] text-ink-muted">
+      <p className="text-meta text-ink-muted">
         Actuators set to turn back (in Then) run once per firing. If a reading goes stale nothing is sent: the last state holds.
       </p>
       {draft.preserved.clearActions.length > 0 && (

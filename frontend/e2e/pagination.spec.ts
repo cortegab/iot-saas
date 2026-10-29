@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { API_URL, login, test } from "./fixtures";
+import { API_URL, login, test, expandCommandRuns } from "./fixtures";
 
 // DESIGN.md §6: every list that can grow pages at 25 / 50 / 100; history is
 // paged by the API (X-Total-Count), so all of it can be browsed, not just the
@@ -28,12 +28,22 @@ test("the command timeline pages past the old 100-row cap, filters on the server
 
     await page.goto(`/devices/${deviceId}?tab=controls`);
     const timeline = page.getByRole("list", { name: "Commands" });
+    await expect(timeline.getByRole("listitem").first()).toBeVisible();
+    await expandCommandRuns(timeline);
     await expect(timeline.getByRole("listitem")).toHaveCount(25);
-    await expect(page.getByText("Page 1 of 5")).toBeVisible();
+    // A numbered pager (DESIGN.md §6): every page is a button, the current one marked.
+    const pager = page.getByRole("navigation", { name: "Pagination" });
+    await expect(pager.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
+    for (let p = 1; p <= 5; p++) await expect(pager.getByRole("button", { name: `Page ${p}`, exact: true })).toBeVisible();
 
-    // The last page holds the oldest commands, beyond the old cap of 100.
-    for (let p = 1; p < 5; p++) await page.getByRole("button", { name: "Next", exact: true }).click();
-    await expect(page.getByText("Page 5 of 5")).toBeVisible();
+    // Next moves one page; a number jumps. The last page holds the oldest
+    // commands, beyond the old cap of 100.
+    await pager.getByRole("button", { name: "Next page" }).click();
+    await expect(pager.getByRole("button", { name: "Page 2" })).toHaveAttribute("aria-current", "page");
+    await pager.getByRole("button", { name: "Page 5" }).click();
+    await expect(pager.getByRole("button", { name: "Page 5" })).toHaveAttribute("aria-current", "page");
+    await expect(pager.getByRole("button", { name: "Next page" })).toBeDisabled();
+    await expandCommandRuns(timeline);
     await expect(timeline.getByRole("listitem")).toHaveCount(20);
 
     // A filter is applied by the API and goes back to page 1. Nothing was
@@ -41,12 +51,12 @@ test("the command timeline pages past the old 100-row cap, filters on the server
     await page.getByRole("radiogroup", { name: "Result" }).getByRole("radio", { name: "Acknowledged" }).click();
     await expect(page.getByText("No commands match.")).toBeVisible();
     await page.getByRole("radiogroup", { name: "Result" }).getByRole("radio", { name: "All" }).click();
-    await expect(page.getByText("Page 1 of 5")).toBeVisible();
+    await expect(pager.getByRole("button", { name: "Page 1" })).toHaveAttribute("aria-current", "page");
 
     // A short list (the fixture rule's one version) shows only its count.
     await page.goto(`/rules/${ruleUnderTest.id}?tab=activity`);
     await expect(page.getByRole("list", { name: "Versions" }).getByRole("listitem")).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Next", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Pagination" })).toHaveCount(0);
   } finally {
     await request.delete(`${API_URL}/devices/${deviceId}`, { headers });
     await request.delete(`${API_URL}/catalog/${tpl.id}`, { headers });

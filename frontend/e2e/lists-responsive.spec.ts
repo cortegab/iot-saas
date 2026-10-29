@@ -58,6 +58,9 @@ test("rules: the state filter, the Trigger filter makes a chip, and Ladder shows
   await page.getByRole("combobox", { name: "Filter by trigger" }).selectOption("schedule");
   await expect(page.getByRole("link", { name: ruleUnderTest.name })).toHaveCount(0);
   await page.getByRole("button", { name: "Remove filter Trigger: On a schedule" }).click();
+  // Let the removal land in the URL before the next change, or the view switch
+  // would be applied on top of the stale filters.
+  await expect(page.getByText("Trigger: On a schedule")).toHaveCount(0);
 
   await page.getByRole("radio", { name: "Ladder" }).click();
   await expect(page.getByRole("link", { name: `Edit ${ruleUnderTest.name}` })).toBeVisible();

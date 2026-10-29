@@ -198,13 +198,16 @@ export function DataTable<T>({
               >
                 {selection && (
                   <td className="w-9 pl-3 align-middle @max-[600px]:absolute @max-[600px]:left-3.5 @max-[600px]:top-[13px] @max-[600px]:w-auto @max-[600px]:p-0">
-                    <input
-                      type="checkbox"
-                      aria-label={`Select ${selection.rowLabel(row)}`}
-                      checked={selected}
-                      onChange={() => toggleOne(key)}
-                      className="h-[15px] w-[15px] accent-[var(--color-accent)] @max-[600px]:h-5 @max-[600px]:w-5"
-                    />
+                    {/* The label carries the 44 px touch area (.hit); the box keeps its size. */}
+                    <label className="hit inline-flex align-middle">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${selection.rowLabel(row)}`}
+                        checked={selected}
+                        onChange={() => toggleOne(key)}
+                        className="h-[15px] w-[15px] accent-[var(--color-accent)] @max-[600px]:h-5 @max-[600px]:w-5"
+                      />
+                    </label>
                   </td>
                 )}
                 {columns.map((col, i) => (
@@ -223,11 +226,15 @@ export function DataTable<T>({
                     {col.cell(row)}
                     {i === 0 && folding.length > 0 && (
                       <span className="block text-xs text-ink-muted">
-                        {folding.map((c) => (
-                          <span key={c.id} className={cn("hidden before:content-['·_'] first:before:content-none", FOLD_SHOW[c.priority!])}>
-                            {c.fold!(row)}{" "}
-                          </span>
-                        ))}
+                        {folding.map((c) => {
+                          // Join only values that exist, so a missing one leaves no stray "·".
+                          const value = c.fold!(row);
+                          return value == null || value === "" ? null : (
+                            <span key={c.id} className={cn("hidden before:content-['·_'] first:before:content-none", FOLD_SHOW[c.priority!])}>
+                              {value}{" "}
+                            </span>
+                          );
+                        })}
                       </span>
                     )}
                   </td>
@@ -276,7 +283,7 @@ export function NameCell({
         <span
           className={cn(
             "truncate font-medium text-ink group-hover:text-accent",
-            mono && "font-mono text-[13.5px]",
+            mono && "font-mono text-meta",
           )}
         >
           {name}

@@ -62,7 +62,6 @@ export function DashboardEditor() {
         mode="page"
         noun="dashboard"
         title={d.name.trim() || "New dashboard"}
-        eyebrow="Dashboard"
         consequence="Only you see it. Next you add widgets for the devices you watch most."
         sections={[{ id: "dashboard", label: "Dashboard" }]}
         status={editor}

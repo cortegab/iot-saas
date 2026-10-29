@@ -523,6 +523,15 @@ async def list_all_rules(session: AsyncSession, tenant_id: uuid.UUID) -> list[Ru
     return list(result.scalars().all())
 
 
+async def count_rules(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    return (
+        await session.scalar(
+            select(func.count()).select_from(Rule).where(Rule.tenant_id == tenant_id)
+        )
+        or 0
+    )
+
+
 async def count_key_usage(
     session: AsyncSession, tenant_id: uuid.UUID, device_ids: list[uuid.UUID]
 ) -> tuple[Counter[str], Counter[str]]:

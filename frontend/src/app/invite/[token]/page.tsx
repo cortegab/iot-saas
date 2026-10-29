@@ -108,7 +108,7 @@ export default function InvitePage() {
                   {error}
                 </p>
               )}
-              <Button onClick={() => void accept()} disabled={busy} className="h-11 w-full text-[15px]">
+              <Button onClick={() => void accept()} disabled={busy} className="w-full">
                 {busy ? "Joining…" : "Accept invitation"}
               </Button>
             </>
@@ -120,7 +120,7 @@ export default function InvitePage() {
               <Button
                 variant="secondary"
                 onClick={() => void logout().then(() => router.replace(`/login?next=/invite/${token}`))}
-                className="h-11 w-full"
+                className="w-full"
               >
                 Sign out and switch account
               </Button>
@@ -136,7 +136,7 @@ export default function InvitePage() {
           </p>
           <Link
             href={`/login?next=${encodeURIComponent(`/invite/${token}`)}`}
-            className="grid h-11 place-items-center rounded-md bg-accent text-[15px] font-medium text-on-accent hover:bg-accent-strong"
+            className="grid h-11 place-items-center rounded-md bg-accent text-section font-medium text-on-accent hover:bg-accent-strong"
           >
             Sign in to accept
           </Link>
@@ -167,7 +167,7 @@ export default function InvitePage() {
                 {error}
               </p>
             )}
-            <Button type="submit" disabled={busy || password.length < 8} className="h-11 w-full text-[15px]">
+            <Button type="submit" disabled={busy || password.length < 8} className="w-full">
               {busy ? "Joining…" : "Create account and join"}
             </Button>
           </form>

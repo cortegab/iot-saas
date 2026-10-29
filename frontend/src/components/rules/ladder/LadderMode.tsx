@@ -37,7 +37,7 @@ function Crumb({ draft, id, leaf, select }: { draft: RuleDraft; id?: string; lea
   const blocks = (id ? ancestry(draft.condition, id) : []).filter((p) => p.kind === "group" && p.id !== id);
   const word = (n: DraftNode) => (n.kind === "group" && n.op === "OR" ? "Parallel" : "Series");
   return (
-    <nav aria-label="Where this sits" className="flex flex-wrap items-center gap-1 font-mono text-[12px] text-ink-muted">
+    <nav aria-label="Where this sits" className="flex flex-wrap items-center gap-1 font-mono text-xs text-ink-muted">
       <button type="button" onClick={() => select(null)} className="hover:text-ink">
         Rung
       </button>
@@ -66,7 +66,7 @@ function Crumb({ draft, id, leaf, select }: { draft: RuleDraft; id?: string; lea
 }
 
 function Title({ children, show = true }: { children: string; show?: boolean }) {
-  return show ? <h3 className="text-[15px] font-semibold text-ink">{children}</h3> : null;
+  return show ? <h3 className="text-section font-semibold text-ink">{children}</h3> : null;
 }
 
 function InspectorBody({
@@ -91,7 +91,7 @@ function InspectorBody({
     return (
       <>
         <Title show={titled}>Rule</Title>
-        <p className="text-[13px] text-ink-muted">
+        <p className="text-meta text-ink-muted">
           Select the trigger, a contact, a block, the timer or a coil on the rung to edit it. Use <strong>+</strong> to add a contact at the end or another coil.
         </p>
       </>
@@ -120,7 +120,7 @@ function InspectorBody({
       <>
         <Crumb draft={draft} leaf="Coil" select={select} />
         <Title show={titled}>New coil</Title>
-        <p className="text-[13px] text-ink-muted">It runs together with the other coils when the rule fires.</p>
+        <p className="text-meta text-ink-muted">It runs together with the other coils when the rule fires.</p>
         <AddActionMenu
           onAdd={(kind) => {
             const action = emptyAction(kind, lastDevice(draft));
@@ -182,7 +182,7 @@ function InspectorBody({
             { value: "OR", label: "Parallel: any true" },
           ]}
         />
-        <p className="text-[13px] text-ink-muted">
+        <p className="text-meta text-ink-muted">
           {BLOCK_HINT[node.op]} {node.children.length} elements; changing the type keeps every contact.
         </p>
         {addButtons}
@@ -282,7 +282,7 @@ export function LadderCanvas({
           ariaLabel="Rule rung editor"
         />
       </div>
-      <p className="text-[13px] text-ink-muted">
+      <p className="text-meta text-ink-muted">
         Series contacts must all be true; parallel branches need any one. Select an element to open it; the arrow keys move between them. The ladder and the form edit the same rule.
       </p>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">

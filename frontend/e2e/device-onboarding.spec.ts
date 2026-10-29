@@ -142,13 +142,22 @@ test("a new device just like an existing template offers that template, and uses
   }
 });
 
-test("add device starts as two cards; From a template says what the template gives you", async ({ page }) => {
+test("add device starts as two cards; From a template says what the template gives", async ({ page }) => {
   await page.goto("/devices/new");
   const start = page.getByRole("radiogroup", { name: "How to start" });
   await expect(start.getByRole("radio", { name: /^From a template/ })).toBeChecked();
   await expect(page.getByLabel("Device name")).toBeVisible();
-  await expect(page.getByText("It gives you")).toBeVisible();
+  // What the template gives, as facts (DESIGN.md §5 FactList, §11 wording).
+  await expect(page.getByRole("term").filter({ hasText: /^Metrics$/ })).toBeVisible();
+  await expect(page.getByRole("term").filter({ hasText: /^Actuators$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create device" })).toBeDisabled();
+  // The typed name becomes the title, as on New template; empty, it says Add device.
+  const title = page.getByRole("heading", { level: 1 });
+  await expect(title).toHaveText("Add device");
+  await page.getByLabel("Device name").fill("bay1-climate");
+  await expect(title).toHaveText("bay1-climate");
+  await page.getByLabel("Device name").fill("");
+  await expect(title).toHaveText("Add device");
 
   // Something new: the wizard, with the same cards above its first question.
   await start.getByRole("radio", { name: /^Something new/ }).click();
@@ -158,4 +167,7 @@ test("add device starts as two cards; From a template says what the template giv
   // Regression: nothing typed yet, so no error yet (StrictMode once stole the name field's focus).
   await expect(page.getByText("Give the device a name.")).toHaveCount(0);
   await expect(page.getByLabel("Device name")).toBeFocused();
+  await expect(title).toHaveText("Add device");
+  await page.getByLabel("Device name").fill("bay2-pump");
+  await expect(title).toHaveText("bay2-pump");
 });

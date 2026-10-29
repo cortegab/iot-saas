@@ -106,7 +106,7 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
           ]}
         />
         {d.runsOn === "own_code" && d.hardware && (
-          <p className="text-[12.5px] text-status-pending">Saving drops the wiring: these devices run code of their own.</p>
+          <p className="text-xs text-status-pending">Saving drops the wiring: these devices run code of their own.</p>
         )}
       </div>
     </EditorSection>

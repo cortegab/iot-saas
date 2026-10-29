@@ -179,24 +179,80 @@ export function recipesFor(device: RecipeDevice, timezone = "UTC"): Recipe[] {
   return out;
 }
 
-/** A recipe this device can't run, shown disabled with what it needs (demo H). */
-export interface UnavailableRecipe {
-  id: string;
-  title: string;
-  why: string;
-  icon: Recipe["icon"];
-}
+/** Every recipe, ready to start without a device (DESIGN.md §9.1): its parts
+ * are in place and their devices are picked in the When / If / Then steps, so
+ * one rule can read one device and switch another. Given `device` (New rule
+ * from a device page), the recipes it can run come first, filled with it. */
+export function recipeStarts(timezone = "UTC", device?: RecipeDevice): Recipe[] {
+  const filled = device ? recipesFor(device, timezone) : [];
+  const base = () => emptyDraft("", timezone);
+  const switchOn = (on: boolean, revert: boolean): ActuatorActionDraft => ({ ...(emptyAction("actuator", "") as ActuatorActionDraft), bool: on, revertOnClear: revert });
+  const generic: Recipe[] = [];
 
-const EVERY_RECIPE: UnavailableRecipe[] = [
-  { id: "too-hot", title: "Turn something on when it's too hot", why: "Needs a number reading and something to switch.", icon: "fan" },
-  { id: "door-open", title: "Alert when a door stays open", why: "Needs an on/off reading such as a door contact.", icon: "door" },
-  { id: "humidity-low", title: "Warn when humidity drops", why: "Needs a humidity reading.", icon: "droplet" },
-  { id: "tank-low", title: "Stop the pump when the tank is low", why: "Needs a level reading and a pump to switch.", icon: "pump" },
-  { id: "schedule", title: "Switch something on a schedule", why: "Needs something to switch.", icon: "clock" },
-];
+  {
+    const d = base();
+    d.when = { ...d.when, type: "device_status", statusDeviceId: "", transition: "disconnected" };
+    d.condition = null;
+    d.actions = [{ ...emptyAction("notification", ""), message: "A device went offline." } as RuleDraft["actions"][number]];
+    d.cooldown = DEFAULT_COOLDOWN;
+    generic.push({ id: "offline", title: "Tell me when a device goes offline", description: "A notification when the device you pick disconnects.", icon: "offline", tags: [], draft: d });
+  }
+  {
+    const d = base();
+    d.condition = { ...emptyContact(""), operator: ">", value: 30, hysteresis: DEFAULT_HYSTERESIS };
+    d.actions = [switchOn(true, true)];
+    generic.push({
+      id: "too-hot",
+      title: "Turn something on when it's too hot",
+      description: "Above a limit for 10 s, switch something on; off again once it drops back.",
+      icon: "fan",
+      tags: ["switches hardware"],
+      draft: d,
+    });
+  }
+  {
+    const d = base();
+    d.condition = { ...emptyContact(""), operator: "==", value: 1, hysteresis: 0 };
+    d.forDuration = 120;
+    d.actions = [{ ...emptyAction("email", ""), subject: "Left open", body: "It has been open for 2 minutes." } as RuleDraft["actions"][number]];
+    generic.push({ id: "door-open", title: "Alert when a door stays open", description: "Emails the workspace's alert recipients after 2 minutes open.", icon: "door", tags: ["email"], draft: d });
+  }
+  {
+    const d = base();
+    d.condition = { ...emptyContact(""), operator: "<", value: 40, hysteresis: DEFAULT_HYSTERESIS };
+    d.actions = [{ ...emptyAction("notification", ""), message: "Humidity is low." } as RuleDraft["actions"][number]];
+    generic.push({ id: "humidity-low", title: "Warn when humidity drops", description: "Below a limit for 10 s, add a notification.", icon: "droplet", tags: [], draft: d });
+  }
+  {
+    const d = base();
+    d.condition = { ...emptyContact(""), operator: "<", value: 20, hysteresis: DEFAULT_HYSTERESIS };
+    d.actions = [switchOn(false, false)];
+    d.behaviour = "latch";
+    generic.push({
+      id: "tank-low",
+      title: "Stop the pump when the tank is low",
+      description: "Below a limit, switch the pump off and keep it off until someone resets the rule.",
+      icon: "pump",
+      tags: ["switches hardware", "latches"],
+      draft: d,
+    });
+  }
+  {
+    const d = base();
+    d.when = { ...d.when, type: "schedule", cron: "0 22 * * *", timezone };
+    d.condition = null;
+    d.actions = [switchOn(true, false)];
+    generic.push({
+      id: "schedule",
+      title: "Switch something on a schedule",
+      description: "Every day at 22:00; change the time and days in the editor.",
+      icon: "clock",
+      tags: ["switches hardware"],
+      draft: d,
+    });
+  }
 
-/** The recipes `recipesFor` didn't offer for this device, in the usual order. */
-export function unavailableRecipes(offered: Recipe[]): UnavailableRecipe[] {
-  const have = new Set(offered.map((r) => r.id));
-  return EVERY_RECIPE.filter((r) => !have.has(r.id));
+  const ready = generic.map((g) => filled.find((f) => f.id === g.id) ?? g);
+  // From a device page: what it can run first, already filled with it.
+  return [...ready.filter((r) => filled.includes(r)), ...ready.filter((r) => !filled.includes(r))];
 }

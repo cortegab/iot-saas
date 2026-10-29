@@ -1,12 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { Ban, Copy, Eye, Link2 } from "lucide-react";
+import { Ban, Copy, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
-import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
-import { PeekFrame, PeekPlaceholder } from "@/components/editor/PeekFrame";
+import { PeekFrame, PeekOpen, PeekPlaceholder } from "@/components/editor/PeekFrame";
 import { KEY_STATUS_LABEL, KEY_STATUS_TONE, keyStatus, type ApiKey } from "@/lib/api-key-status";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, timeAgo } from "@/lib/time-ago";
@@ -40,21 +38,17 @@ export function KeyPeek({ apiKey, onClose }: { apiKey: ApiKey | undefined; onClo
         title={apiKey.name}
         eyebrow={
           <>
-            API key <Badge tone={KEY_STATUS_TONE[st]} label={KEY_STATUS_LABEL[st]} />
+            <Badge tone={KEY_STATUS_TONE[st]} label={KEY_STATUS_LABEL[st]} />
           </>
         }
         facts={[
-          ["Prefix", <code key="p" className="font-mono text-[13px]">{apiKey.key_prefix}…</code>],
+          ["Prefix", <code key="p" className="font-mono text-meta">{apiKey.key_prefix}…</code>],
           ["Role", role ? ROLE_LABEL[role] : apiKey.role],
           ["Last used", apiKey.last_used_at ? timeAgo(apiKey.last_used_at) : "Never"],
           ["Expires", apiKey.expires_at ? formatDate(apiKey.expires_at) : "Never"],
           ["Created", formatDate(apiKey.created_at)],
         ]}
-        primary={
-          <Link href={`/keys/${apiKey.id}`} className={buttonClassName({ size: "sm" })}>
-            <Eye aria-hidden size={14} /> Open key
-          </Link>
-        }
+        primary={<PeekOpen href={`/keys/${apiKey.id}`} noun="key" />}
         menu={menu}
         onClose={onClose}
       />

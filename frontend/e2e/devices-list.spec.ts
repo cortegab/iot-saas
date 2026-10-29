@@ -32,16 +32,20 @@ test("a device peeks from the list and is edited in its Settings tab", async ({ 
   // The save bar only shows while there is something to save.
   await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 
-  // One settings page: plain stacked sections, Delete last.
+  // One settings page: plain stacked sections; Delete lives in the ⋯ menu only.
   await expect(page.getByText("Saving applies right away.", { exact: false })).toBeVisible();
-  for (const heading of ["General", "Rule evaluation", "Template", "Wiring", "Connection", "Delete"]) {
+  for (const heading of ["General", "Template", "Wiring", "Connection"]) {
     await expect(page.getByRole("heading", { level: 3, name: heading, exact: true })).toBeVisible();
   }
-  await expect(page.getByText("Gives it")).toBeVisible();
+  await expect(page.locator("#ps-template").getByRole("term").filter({ hasText: /^Metrics$/ })).toBeVisible();
   await page.getByText("Show its MQTT topics").click();
   await expect(page.getByText("Health (retained, last will)")).toBeVisible();
   await expect(page.getByRole("button", { name: "Rotate credential…" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Delete device…" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: /Status/ })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Delete", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "More actions" }).first().click();
+  await expect(page.getByRole("menuitem", { name: /^Delete…/ })).toBeVisible();
+  await page.keyboard.press("Escape");
 });
 
 test("devices list: status filter, chips and a search that matches nothing", async ({ page }) => {

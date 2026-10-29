@@ -5,6 +5,7 @@ import { useState } from "react";
 import { mutate as revalidate } from "swr";
 import { Play } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useChangeToast } from "@/hooks/useChangeToast";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
@@ -12,13 +13,13 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { StateChip } from "@/components/ui/StateChip";
 import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import { MiniStrip } from "@/components/ui/MiniStrip";
 import { Callout } from "@/components/ui/Callout";
 import { RuleExecutionHistory } from "@/components/rules/RuleExecutionHistory";
 import { RuleEditor } from "@/components/rules/editor/RuleEditor";
 import { useRuleActions } from "@/components/rules/useRuleActions";
-import { useWideContent } from "@/components/shell/shell-context";
 import { RuleVersions } from "@/components/rules/RuleVersions";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { ApiRequestError } from "@/lib/api-client";
@@ -64,7 +65,6 @@ export default function EditRulePage() {
   const params = useParams<{ ruleId: string }>();
   const router = useRouter();
   const isAdmin = useIsAdmin();
-  useWideContent();
   const {
     data: rule,
     error,
@@ -78,6 +78,18 @@ export default function EditRulePage() {
   const ruleActivity = activity?.find((a) => a.rule_id === params.ruleId);
   const lastFired = ruleActivity?.last_fired_at;
   const actions = useRuleActions();
+  // DESIGN.md §5: a state that changes while the page is open gets a toast;
+  // the header's chip and callouts carry it from then on.
+  useChangeToast(rule?.id, rule ? unhealthySummary(rule) : undefined, (before, now) =>
+    now && !before
+      ? { tone: "warning", title: "Can't evaluate now", detail: `${now}. Missing data never fires or clears it.` }
+      : !now && before
+        ? { tone: "success", title: "Evaluating again", detail: "Its inputs are fresh." }
+        : null,
+  );
+  useChangeToast(rule?.id, rule?.latched, (before, now) =>
+    now && !before ? { tone: "warning", title: "Latched", detail: "It fired and won't fire again until someone resets it." } : null,
+  );
 
   if (isLoading) return <LoadingSkeleton rows={4} rowClassName="h-12" />;
   if (error) {
@@ -113,8 +125,13 @@ export default function EditRulePage() {
         breadcrumbs={[{ label: "Rules", href: "/rules" }]}
         eyebrow={
           <span className="flex flex-wrap items-center gap-x-1.5">
-            Rule · <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
+            <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
             {rule.trigger.type === "schedule" ? (lastFired ? `fired ${timeAgo(lastFired)}` : "never fired") : fired ? `fired ${fired}× in 24 h` : "quiet in 24 h"}
+            {unhealthy && (
+              <StateChip label="Can't evaluate" className="ml-1">
+                <b className="font-medium">{unhealthy}.</b> Missing data never fires or clears it.
+              </StateChip>
+            )}
           </span>
         }
         title={rule.name}
@@ -133,7 +150,7 @@ export default function EditRulePage() {
       {actions.dialog}
 
       {rule.latched && (
-        <Callout tone="warning">
+        <Callout tone="warning" className="max-w-[760px]">
           <span className="flex flex-wrap items-center justify-between gap-3">
             <span>
               <b className="font-medium">Latched.</b> It fired and won&rsquo;t fire again until someone resets it.
@@ -147,14 +164,9 @@ export default function EditRulePage() {
         </Callout>
       )}
 
-      {unhealthy && (
-        <Callout>
-          <b className="font-medium">Can&rsquo;t evaluate now.</b> {unhealthy}. Missing data never fires or clears it.
-        </Callout>
-      )}
 
         {restored && (
-          <Callout tone="info" className="mb-3">
+          <Callout tone="info" className="mb-3 max-w-[760px]">
             <span className="flex flex-wrap items-center justify-between gap-3">
               <span>
                 Version {restored.version} is loaded. Save to make it current, or discard it.
@@ -177,8 +189,8 @@ export default function EditRulePage() {
           {rule.trigger.type !== "schedule" && ruleActivity && (
             <section className="flex flex-col gap-2">
               <div className="flex flex-wrap items-baseline gap-2">
-                <h2 className="text-base font-semibold text-ink">Last 24 hours</h2>
-                <span className="text-[13px] text-ink-muted">{fired ? `fired ${fired}×` : "quiet"}</span>
+                <h2 className="text-section font-semibold text-ink">Last 24 hours</h2>
+                <span className="text-meta text-ink-muted">{fired ? `fired ${fired}×` : "quiet"}</span>
               </div>
               <MiniStrip
                 variant="replay"
@@ -189,13 +201,13 @@ export default function EditRulePage() {
             </section>
           )}
           <section className="flex flex-col gap-3">
-            <h2 className="text-base font-semibold text-ink">Recent firings</h2>
+            <h2 className="text-section font-semibold text-ink">Recent firings</h2>
             <RuleExecutionHistory ruleId={params.ruleId} />
           </section>
           <section className="flex flex-col gap-3">
             <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className="text-base font-semibold text-ink">Versions</h2>
-              <span className="text-[13px] text-ink-muted">Restore loads one into the editor; nothing changes until you save.</span>
+              <h2 className="text-section font-semibold text-ink">Versions</h2>
+              <span className="text-meta text-ink-muted">Restore loads one into the editor; nothing changes until you save.</span>
             </div>
             <RuleVersions
               ruleId={params.ruleId}

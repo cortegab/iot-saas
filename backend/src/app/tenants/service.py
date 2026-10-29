@@ -176,6 +176,17 @@ async def list_members(
     return [(user_id, role, joined) for user_id, role, joined in result.all()]
 
 
+async def count_members(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    return (
+        await session.scalar(
+            select(func.count())
+            .select_from(TenantMembership)
+            .where(TenantMembership.tenant_id == tenant_id)
+        )
+        or 0
+    )
+
+
 async def add_member(
     session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, role: TenantRole
 ) -> None:

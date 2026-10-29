@@ -167,7 +167,7 @@ export default function WorkspaceSettingsPage() {
         onDiscard={editor.discard}
       >
         {/* Plain stacked sections divided by hairlines (demo H). */}
-        <div className="flex max-w-[760px] flex-col gap-7 [&>section+section]:border-t [&>section+section]:border-border-soft [&>section+section]:pt-7">
+        <div className="flex flex-col gap-7">
         <EditorSection id="workspace" title="Workspace" lead="Only an owner can rename the workspace.">
           <div className="grid gap-3.5 @xl:grid-cols-2">
             <Field
@@ -198,7 +198,7 @@ export default function WorkspaceSettingsPage() {
             {d.recipients.map((r) => (
               <li
                 key={r}
-                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-surface-raised pl-2.5 pr-1 text-[13px] text-ink"
+                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-border bg-surface-raised pl-2.5 pr-1 text-meta text-ink"
               >
                 <Mail aria-hidden size={12} className="text-ink-muted" />
                 {r}
@@ -264,12 +264,12 @@ export default function WorkspaceSettingsPage() {
 
         <EditorSection id="leave" title="Leave workspace" tone="danger">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="min-w-0 flex-1 text-[13px] text-ink-muted">
+            <p className="min-w-0 flex-1 text-meta text-ink-muted">
               {role === "owner"
                 ? "An owner can leave once another owner exists. Your personal dashboards here are deleted."
                 : "You lose access. Your personal dashboards here are deleted."}
             </p>
-            <Button variant="secondary" className="text-status-error" onClick={() => void leave()}>
+            <Button variant="secondary-danger" onClick={() => void leave()}>
               <LogOut aria-hidden size={14} />
               Leave workspace…
             </Button>

@@ -9,6 +9,17 @@ export function clampPage(page: number, total: number, pageSize: number): { page
   return { page: Math.min(Math.max(1, page), pageCount), pageCount };
 }
 
+/** The numbered pager's slots (DESIGN.md §6): the first and last page, the
+ * current one and its neighbours, "…" between. Always seven slots once there
+ * are more than seven pages, so the buttons don't jump as you move. */
+export function pageItems(page: number, pageCount: number): (number | "…")[] {
+  const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+  if (pageCount <= 7) return range(1, pageCount);
+  if (page <= 4) return [...range(1, 5), "…", pageCount];
+  if (page >= pageCount - 3) return [1, "…", ...range(pageCount - 4, pageCount)];
+  return [1, "…", page - 1, page, page + 1, "…", pageCount];
+}
+
 export interface Pager {
   page: number;
   pageCount: number;

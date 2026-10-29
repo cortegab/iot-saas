@@ -169,7 +169,7 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
 
       <div
         aria-live="polite"
-        className="flex items-start gap-2 rounded-md bg-surface-raised px-3 py-2.5 text-[13.5px] leading-relaxed"
+        className="flex items-start gap-2 rounded-md bg-surface-raised px-3 py-2.5 text-meta leading-relaxed"
       >
         {summary.valid ? (
           <>
@@ -274,7 +274,7 @@ function DayToggles({
                 if (next.length) onChange(next);
               }}
               className={cn(
-                "h-9 w-10 rounded-md border text-[13px] transition-colors duration-150 disabled:cursor-not-allowed",
+                "h-9 w-10 rounded-md border text-meta transition-colors duration-150 disabled:cursor-not-allowed",
                 on
                   ? "border-accent bg-accent-muted font-semibold text-accent-strong"
                   : "border-border bg-surface text-ink-muted hover:text-ink",

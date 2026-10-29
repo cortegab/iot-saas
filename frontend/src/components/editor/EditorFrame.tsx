@@ -5,6 +5,7 @@ import { AlertCircle, Check, ChevronLeft, ChevronRight, Eye, X } from "lucide-re
 import { Button, IconButton } from "@/components/ui/Button";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { Stepper } from "@/components/ui/Stepper";
+import { HeaderBlock } from "@/components/ui/PageHeader";
 import { Tabs } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
@@ -32,11 +33,17 @@ export interface EditorGroupDef {
 interface EditorNav {
   /** Whether a section is in the tab or step on show. */
   visible: (sectionId: string) => boolean;
+  /** Whether a section is alone in its tab or step (its heading would only
+   * repeat the tab label or the step's question). */
+  alone: (sectionId: string) => boolean;
   /** Show a tab or step (Review's "Change" links). */
   goTo: (groupId: string) => void;
 }
 
 const EditorNavContext = createContext<EditorNav | null>(null);
+
+/** A page editor with one section and no tabs or steps: the title says it all. */
+const SoleSectionContext = createContext(false);
 
 /** The tab / step controls of the enclosing editor, or null for a rail. */
 export function useEditorNav(): EditorNav | null {
@@ -49,6 +56,10 @@ function shownInvalid(root: HTMLElement | null): HTMLElement[] {
     (el) => el.getClientRects().length > 0,
   );
 }
+
+/** A hairline above every shown section that follows another shown one. */
+const SECTION_RULES =
+  "[&_section[data-editor-section]:not([hidden])~section[data-editor-section]:not([hidden])]:border-t [&_section[data-editor-section]:not([hidden])~section[data-editor-section]:not([hidden])]:border-border-soft [&_section[data-editor-section]:not([hidden])~section[data-editor-section]:not([hidden])]:pt-7";
 
 const nextFrame = (fn: () => void) => window.requestAnimationFrame(() => window.requestAnimationFrame(fn));
 
@@ -90,6 +101,8 @@ export interface EditorFrameProps {
   /** Runs the save; resolve `false` when validation stopped it. */
   onSave: () => Promise<boolean>;
   onDiscard: () => void;
+  /** Creating: the bar's Cancel (always enabled). Defaults to going back. */
+  onCancel?: () => void;
   onClose?: () => void;
   menu?: DropdownMenuItem[][];
   /** Extra header buttons (e.g. Duplicate). */
@@ -118,21 +131,24 @@ export function EditorSection({
   title,
   lead,
   actions,
-  card = false,
   tone,
   children,
 }: {
   id: string;
-  title: ReactNode;
+  /** Omitted, or hidden when the section is alone on its page, tab or step. */
+  title?: ReactNode;
   lead?: ReactNode;
   actions?: ReactNode;
-  /** A bordered card (stacked settings, e.g. a device's Settings tab). */
-  card?: boolean;
-  /** "danger": the red-outlined Danger zone, always last. */
+  /** "danger": the red heading of a danger section, always last (DESIGN.md
+   * §7: only on a page with no record menu, e.g. Leave workspace). */
   tone?: "danger";
   children: ReactNode;
 }) {
   const nav = useEditorNav();
+  const sole = useContext(SoleSectionContext);
+  // DESIGN.md §7: a heading never repeats the page title, the tab label or the
+  // step's question, so a section alone on its page, tab or step has none.
+  const heading = title != null && !sole && !nav?.alone(id) ? title : null;
   return (
     <section
       id={`ps-${id}`}
@@ -140,17 +156,15 @@ export function EditorSection({
       // Kept mounted while another tab or step shows, so its fields still
       // validate and keep their state.
       hidden={nav ? !nav.visible(id) : undefined}
-      className={cn(
-        "flex scroll-mt-6 flex-col gap-3",
-        card && "rounded-xl border border-border bg-surface p-5 shadow-card",
-        tone === "danger" && "border-status-error/45",
-      )}
+      className="flex scroll-mt-6 flex-col gap-3"
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className={cn("text-[15px] font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{title}</h3>
-        {actions}
-      </div>
-      {lead && <p className="-mt-1.5 max-w-[64ch] text-[13.5px] text-ink-muted">{lead}</p>}
+      {(heading != null || actions) && (
+        <div className="flex items-baseline justify-between gap-3">
+          {heading != null && <h3 className={cn("text-section font-semibold tracking-[-0.01em]", tone === "danger" ? "text-status-error" : "text-ink")}>{heading}</h3>}
+          {actions}
+        </div>
+      )}
+      {lead && <p className={cn("max-w-[64ch] text-meta text-ink-muted", heading != null && "-mt-1.5")}>{lead}</p>}
       {children}
     </section>
   );
@@ -180,6 +194,7 @@ export function EditorFrame({
   saveLabel,
   onSave,
   onDiscard,
+  onCancel,
   onClose,
   menu,
   headerActions,
@@ -228,9 +243,13 @@ export function EditorFrame({
   const navValue = useMemo<EditorNav | null>(
     () =>
       grouped && activeGroup
-        ? { visible: (id) => activeGroup.sections.includes(id), goTo }
+        ? {
+            visible: (id) => activeGroup.sections.includes(id),
+            alone: (id) => groups?.find((g) => g.sections.includes(id))?.sections.length === 1,
+            goTo,
+          }
         : null,
-    [grouped, activeGroup, goTo],
+    [grouped, activeGroup, goTo, groups],
   );
 
   // A new step moves focus to its question. Only on a real change of step:
@@ -355,14 +374,18 @@ export function EditorFrame({
     return () => document.removeEventListener("keydown", onKey);
   }, [save]);
 
+  // DESIGN.md §7: creating always shows the bar (it holds Create / Next);
+  // editing shows it only while there is an edit, a save or a problem.
+  const showFoot = !readOnly && (steps || status.isNew || status.dirty || status.saving || issues > 0);
+
   // A full-page save bar sits at the viewport bottom; lift toasts above it.
   useEffect(() => {
-    if (mode !== "page" || readOnly) return;
+    if (mode !== "page" || !showFoot) return;
     document.documentElement.dataset.savebar = "1";
     return () => {
       delete document.documentElement.dataset.savebar;
     };
-  }, [mode, readOnly]);
+  }, [mode, showFoot]);
 
   // Esc closes a docked editor while focus is inside it (the Sheet handles the drawer).
   useEffect(() => {
@@ -413,7 +436,7 @@ export function EditorFrame({
 
   const question = steps && activeGroup?.question && (
     <div className="flex flex-col gap-1">
-      <h2 ref={questionRef} tabIndex={-1} className="text-xl font-semibold tracking-[-0.01em] text-ink outline-none">
+      <h2 ref={questionRef} tabIndex={-1} className="text-section font-semibold tracking-[-0.01em] text-ink outline-none">
         {activeGroup.question}
       </h2>
       {activeGroup.lead && <p className="text-ink-muted">{activeGroup.lead}</p>}
@@ -421,39 +444,48 @@ export function EditorFrame({
   );
 
   const TitleTag = mode === "page" ? "h1" : "h2";
-  const head = headless ? null : (
-    <div
-      className={cn(
-        "flex shrink-0 items-start gap-2.5 max-md:flex-col max-md:items-stretch",
-        mode === "page" ? "pb-3.5 [grid-area:head]" : "border-b border-border px-5 pb-3 pt-4",
-      )}
-    >
+  const closeButton = onClose && (
+    <IconButton aria-label={`Close ${noun} editor`} onClick={onClose}>
+      <X size={18} />
+    </IconButton>
+  );
+  const head = headless ? null : mode === "page" ? (
+    // A full page shares the page header's anatomy (DESIGN.md §4).
+    <div className="shrink-0 pb-3.5 [grid-area:head]">
+      <HeaderBlock
+        overline={eyebrow}
+        heading={
+          <h1 tabIndex={-1} className="break-words text-title font-semibold leading-[1.2] tracking-[-0.015em] text-ink outline-none">
+            {title}
+          </h1>
+        }
+        actions={
+          (headerActions || (menu && menu.length > 0) || closeButton) && (
+            <>
+              {headerActions}
+              {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
+              {closeButton}
+            </>
+          )
+        }
+      >
+        {consequence && <p className="mt-1 max-w-[70ch] text-sm text-ink-muted">{consequence}</p>}
+      </HeaderBlock>
+    </div>
+  ) : (
+    <div className="flex shrink-0 items-start gap-2.5 border-b border-border px-5 pb-3 pt-4 max-md:flex-col max-md:items-stretch">
       <div className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        {eyebrow && <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-muted">{eyebrow}</div>}
-        {/* A full page's title is its H1 (demo H); a drawer's is a section heading. */}
-        <TitleTag
-          tabIndex={-1}
-          className={cn(
-            "break-words font-semibold text-ink outline-none",
-            mode === "page" ? "text-[24px] leading-[1.2] tracking-[-0.015em] md:text-[28px]" : "text-[19px] leading-[1.3] tracking-[-0.015em]",
-          )}
-        >
+        {eyebrow && <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">{eyebrow}</div>}
+        {/* A drawer's title is a section heading; a full page's is its H1 (above). */}
+        <TitleTag tabIndex={-1} className="break-words text-section font-semibold leading-[1.3] tracking-[-0.015em] text-ink outline-none">
           {title}
         </TitleTag>
-        {consequence && (
-          <p className={cn("mt-1 max-w-[70ch] text-ink-muted", mode === "page" ? "text-[14.5px]" : "text-[12.5px]")}>
-            {consequence}
-          </p>
-        )}
+        {consequence && <p className="mt-1 max-w-[70ch] text-xs text-ink-muted">{consequence}</p>}
       </div>
       <div className="flex shrink-0 items-center gap-1 max-md:order-first max-md:justify-end">
         {headerActions}
         {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
-        {onClose && (
-          <IconButton aria-label={`Close ${noun} editor`} onClick={onClose}>
-            <X size={18} />
-          </IconButton>
-        )}
+        {closeButton}
       </div>
     </div>
   );
@@ -478,14 +510,14 @@ export function EditorFrame({
             aria-current={on || undefined}
             onClick={() => jumpTo(s.id)}
             className={cn(
-              "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-[11px] text-[13px]",
+              "inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-[11px] text-meta",
               on ? "bg-accent-muted font-medium text-accent-strong" : "text-ink-muted hover:bg-surface-raised hover:text-ink",
             )}
           >
             {s.label}
             {s.count != null && <span className="text-xs text-ink-muted">{s.count}</span>}
             {e > 0 && (
-              <span aria-label={`${e} to fix`} className="grid h-[17px] min-w-[17px] place-items-center rounded-full bg-status-error px-[5px] text-[10.5px] font-bold text-on-accent">
+              <span aria-label={`${e} to fix`} className="grid h-[17px] min-w-[17px] place-items-center rounded-full bg-status-error px-[5px] text-xs font-bold text-on-accent">
                 {e}
               </span>
             )}
@@ -534,10 +566,10 @@ export function EditorFrame({
                     {s.label}
                     {s.count != null && <span className="ml-1 text-xs font-normal text-ink-muted">{s.count}</span>}
                   </strong>
-                  {s.description && <small className="text-[12.5px] text-ink-muted">{s.description}</small>}
+                  {s.description && <small className="text-xs text-ink-muted">{s.description}</small>}
                 </span>
                 {shown > 0 && (
-                  <span aria-label={`${shown} to fix`} className="mt-px grid h-[18px] min-w-[18px] place-items-center rounded-full bg-status-error px-[5px] text-[11px] font-bold text-on-accent">
+                  <span aria-label={`${shown} to fix`} className="mt-px grid h-[18px] min-w-[18px] place-items-center rounded-full bg-status-error px-[5px] text-xs font-bold text-on-accent">
                     {shown}
                   </span>
                 )}
@@ -556,19 +588,21 @@ export function EditorFrame({
       className={cn(
         // @container: editor bodies lay out by their own width (dock vs page).
         "@container flex flex-col",
+        // DESIGN.md §4/§7: one 760px column; sections divided by hairlines.
+        mode === "page" && SECTION_RULES,
         headless
-          ? "max-w-[760px] gap-4 pb-4"
+          ? "max-w-[760px] gap-7 pb-4"
           : grouped
             ? "max-w-[760px] gap-7 py-5"
             : mode === "page"
-              ? "max-w-[980px] gap-7 py-6 [grid-area:body] wb:pt-2"
+              ? "max-w-[760px] gap-7 py-6 [grid-area:body] wb:pt-2"
               : "min-h-0 flex-1 gap-7 overflow-auto px-5 pb-8 pt-5",
       )}
     >
       {steps && stepIndex === 0 && intro}
       {question}
       {readOnly && readOnlyNote !== false && (
-        <p className="flex items-center gap-2 rounded-md bg-accent-muted px-3.5 py-2.5 text-[13.5px] text-accent-strong">
+        <p className="flex items-center gap-2 rounded-md bg-accent-muted px-3.5 py-2.5 text-meta text-accent-strong">
           <Eye aria-hidden size={15} />
           {readOnlyNote ?? "View only. Ask an admin to make changes."}
         </p>
@@ -577,22 +611,20 @@ export function EditorFrame({
     </div>
   );
 
-  // Inside a host page the bar only appears when there is something to save.
-  const showFoot = !readOnly && (!headless || status.dirty || status.saving || issues > 0);
+  const cancel = () => (onCancel ? onCancel() : window.history.back());
+
   const foot = showFoot && (
     <div
       data-savebar={mode === "page" || undefined}
       className={cn(
         "flex shrink-0 flex-wrap items-center gap-2.5 border-t border-border",
-        // Inside a host page (a Settings tab): a floating bar within the column.
-        headless
-          ? "sticky bottom-[calc(12px+var(--tabbar-h))] z-[6] mt-auto max-w-[760px] rounded-xl border bg-surface/95 px-4 py-2.5 shadow-pop backdrop-blur-[10px] motion-safe:animate-[toastin_.15s_ease-out]"
-          : mode === "page"
-          ? `${SAVE_BAR} [grid-area:foot]`
+        mode === "page"
+          ? // An edit's bar slides up when the first change is made.
+            cn(SAVE_BAR, "[grid-area:foot]", !steps && !status.isNew && "motion-safe:animate-[toastin_.15s_ease-out]")
           : "bg-surface px-5 py-3",
       )}
     >
-      <div className="flex min-w-[150px] flex-1 items-center gap-2.5 text-[13px] text-ink-muted">
+      <div className="flex min-w-[150px] flex-1 items-center gap-2.5 text-meta text-ink-muted">
         <span aria-live="polite" className="inline-flex items-center">
           {stateText}
         </span>
@@ -600,7 +632,7 @@ export function EditorFrame({
           <button
             type="button"
             onClick={focusNextError}
-            className="inline-flex h-7 items-center gap-[5px] rounded-full bg-status-error-surface px-2.5 text-[12.5px] font-semibold text-status-error"
+            className="inline-flex h-7 items-center gap-[5px] rounded-full bg-status-error-surface px-2.5 text-xs font-semibold text-status-error"
           >
             <AlertCircle aria-hidden size={13} />
             {issues} to fix
@@ -611,10 +643,14 @@ export function EditorFrame({
         // The wizard (DESIGN.md §5): Back, then Next: {step}, and on the
         // last step the button that names the result.
         <div className="flex items-center gap-2">
-          {stepIndex > 0 && (
+          {stepIndex > 0 ? (
             <Button variant="ghost" onClick={() => goTo(groupList[stepIndex - 1].id)}>
               <ChevronLeft aria-hidden size={15} />
               Back
+            </Button>
+          ) : (
+            <Button variant="ghost" onClick={cancel}>
+              Cancel
             </Button>
           )}
           {stepIndex < groupList.length - 1 ? (
@@ -630,9 +666,17 @@ export function EditorFrame({
         </div>
       ) : (
         <div className="flex items-center gap-2">
-          <Button variant="ghost" disabled={!status.dirty || status.saving} onClick={onDiscard}>
-            Discard
-          </Button>
+          {/* DESIGN.md §7: creating offers Cancel (always a way back);
+              editing offers Discard. */}
+          {status.isNew ? (
+            <Button variant="ghost" disabled={status.saving} onClick={cancel}>
+              Cancel
+            </Button>
+          ) : (
+            <Button variant="ghost" disabled={!status.dirty || status.saving} onClick={onDiscard}>
+              Discard
+            </Button>
+          )}
           <Button disabled={!status.dirty || status.saving} onClick={() => void save()}>
             {status.saving ? "Saving…" : (saveLabel ?? (status.isNew ? `Create ${noun}` : "Save"))}
           </Button>
@@ -641,8 +685,10 @@ export function EditorFrame({
     </div>
   );
 
-  if (mode === "page") {
-    return (
+  const sole = !grouped && sections.length === 1;
+
+  const frame =
+    mode === "page" ? (
       <EditorNavContext.Provider value={navValue}>
         <div
           ref={rootRef}
@@ -662,25 +708,24 @@ export function EditorFrame({
           {foot}
         </div>
       </EditorNavContext.Provider>
+    ) : (
+      <div
+        ref={rootRef}
+        role={mode === "dock" ? "region" : undefined}
+        aria-label={mode === "dock" ? `${title} editor` : undefined}
+        className={cn(
+          "flex min-w-0 flex-col bg-surface [container-type:inline-size]",
+          mode === "dock"
+            ? "sticky top-4 h-[calc(100vh-32px)] overflow-hidden rounded-2xl border border-border shadow-pop motion-safe:animate-[panein_.18s_ease-out]"
+            : "h-full",
+        )}
+      >
+        {head}
+        {jump}
+        {body}
+        {foot}
+      </div>
     );
-  }
 
-  return (
-    <div
-      ref={rootRef}
-      role={mode === "dock" ? "region" : undefined}
-      aria-label={mode === "dock" ? `${title} editor` : undefined}
-      className={cn(
-        "flex min-w-0 flex-col bg-surface [container-type:inline-size]",
-        mode === "dock"
-          ? "sticky top-4 h-[calc(100vh-32px)] overflow-hidden rounded-2xl border border-border shadow-pop motion-safe:animate-[panein_.18s_ease-out]"
-          : "h-full",
-      )}
-    >
-      {head}
-      {jump}
-      {body}
-      {foot}
-    </div>
-  );
+  return <SoleSectionContext.Provider value={sole}>{frame}</SoleSectionContext.Provider>;
 }

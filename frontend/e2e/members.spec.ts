@@ -12,7 +12,7 @@ test("members: invite someone, resend the invite, then cancel it", async ({ page
 
   const email = `e2e-invite-${Date.now()}@example.com`;
   await page.goto("/members");
-  await page.locator("header").getByRole("link", { name: "Invite", exact: true }).click();
+  await page.getByRole("main").getByRole("link", { name: "Invite", exact: true }).click();
   await expect(page).toHaveURL("/members/invite");
   await page.waitForLoadState("networkidle");
 

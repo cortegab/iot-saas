@@ -18,8 +18,9 @@ export interface SegmentedControlProps<T extends string> {
    * ranges, AND/OR). `solid` — the selected segment fills with the accent, for
    * a control that IS the value being set (an actuator command). */
   variant?: "subtle" | "solid";
-  /** `sm` (default) for toolbars and inline choices; `md` is the 36px form
-   * height (DESIGN.md §12 touch targets). */
+  /** Text size only: `sm` (default) for toolbars and inline choices, `md` in
+   * forms. Both are the 36px control height (30px segments in a 3px inset),
+   * 40px segments on touch (DESIGN.md §3, §12). */
   size?: "sm" | "md";
   className?: string;
 }
@@ -73,7 +74,7 @@ export function SegmentedControl<T extends string>({
             onClick={() => onChange(opt.value)}
             className={cn(
               "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-[6px] px-2.5 transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
-              size === "md" ? "min-h-[30px] text-sm" : "min-h-[26px] text-xs",
+              "min-h-[30px] pointer-coarse:min-h-[38px]", size === "md" ? "text-sm" : "text-xs",
               checked && variant === "subtle" && "bg-surface font-medium text-ink shadow-[0_1px_2px_rgba(0,0,0,.18)]",
               checked && variant === "solid" && "bg-accent font-medium text-on-accent",
               !checked && "text-ink-muted hover:text-ink",

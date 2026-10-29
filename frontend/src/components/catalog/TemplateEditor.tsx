@@ -31,7 +31,6 @@ import { useRecordEditor } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
-import { handOffCredential } from "@/lib/credential-handoff";
 import { findDriver, useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import { resolveModel } from "@/lib/hardware/board-pins";
 import { blankHardware } from "@/lib/hardware/hardware-draft";
@@ -236,7 +235,6 @@ export function TemplateEditor({
             });
             void revalidate("/devices");
             void revalidate("/catalog");
-            handOffCredential(result.device, result.credential);
             router.push(`/devices/${result.device.id}/connect`);
           } else if (isNew) {
             const created = await api.post<CatalogEntryResponse>("/catalog", { name: body.name, ...parts });
@@ -410,7 +408,7 @@ export function TemplateEditor({
                   value: d.hardware ? (
                     <>
                       {resolveModel(catalog?.models, d.hardware.board)?.label ?? d.hardware.board}
-                      <span className="block text-[13px] text-ink-muted">
+                      <span className="block text-meta text-ink-muted">
                         {[...d.hardware.inputs, ...d.hardware.outputs].map((b) => findDriver(drivers ?? [], b.driver)?.label ?? b.driver).join("; ") || "No parts"}
                       </span>
                     </>
@@ -453,12 +451,11 @@ export function TemplateEditor({
       <EditorFrame
         mode={mode}
         noun={d.device ? "device" : "device template"}
-        title={d.device ? "Add device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
+        title={d.device ? d.device.name.trim() || "Add device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
         eyebrow={
-          d.device ? undefined : <>
-            {"Device template"}
-            {!isNew && (d.enabled ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />)}
-            {!isNew && <span>· {plural(devices, "device")}</span>}
+          d.device || isNew ? undefined : <>
+            {d.enabled ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />}
+            <span>· {plural(devices, "device")}</span>
           </>
         }
         // Adding something new says what the wizard does (demo H); a new template
@@ -476,7 +473,7 @@ export function TemplateEditor({
         onDiscard={editor.discard}
         headerActions={
           !isNew && !readOnly ? (
-            <Button variant="secondary" size="sm" className="max-md:hidden" onClick={() => router.push(`/templates/new?duplicate=${entryId}`)}>
+            <Button variant="secondary" onClick={() => router.push(`/templates/new?duplicate=${entryId}`)}>
               <Copy aria-hidden size={14} />
               Duplicate
             </Button>

@@ -36,7 +36,7 @@ export function Switch({
       disabled={disabled}
       onClick={() => onChange(!checked)}
       className={cn(
-        "relative h-6 w-[42px] shrink-0 rounded-full border p-0 transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
+        "hit relative h-6 w-[42px] shrink-0 rounded-full border p-0 transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50",
         checked ? "border-accent bg-accent" : "border-border bg-surface-raised",
         className,
       )}
