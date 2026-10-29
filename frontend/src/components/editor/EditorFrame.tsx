@@ -400,15 +400,17 @@ export function EditorFrame({
     return () => document.removeEventListener("keydown", onKey);
   }, [mode, onClose]);
 
+  // Creating says one thing whatever has been typed (DESIGN.md §7); "Unsaved
+  // changes" is for editing a record that exists.
   const stateText = status.saving ? (
     "Saving…"
-  ) : readOnly ? null : status.dirty ? (
+  ) : readOnly ? null : status.isNew ? (
+    "Not created yet"
+  ) : status.dirty ? (
     <>
       <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full bg-status-pending" />
       Unsaved changes
     </>
-  ) : status.isNew ? (
-    `New ${noun}, not created yet`
   ) : (
     <>
       <Check aria-hidden size={14} className="mr-1 inline text-status-online" />

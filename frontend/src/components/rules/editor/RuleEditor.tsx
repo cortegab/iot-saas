@@ -456,13 +456,13 @@ export function RuleEditor({
             <span aria-live="polite" className="inline-flex items-center gap-1.5">
               {submitting ? (
                 "Saving…"
+              ) : isNew ? (
+                "Not created yet"
               ) : dirty ? (
                 <>
                   <span aria-hidden className="h-2 w-2 rounded-full bg-status-pending" />
                   Unsaved changes
                 </>
-              ) : isNew ? (
-                "Not created yet"
               ) : (
                 <>
                   <Check aria-hidden size={14} className="text-status-online" />
