@@ -459,6 +459,7 @@ export function EditorFrame({
     <div className="shrink-0 pb-3.5 [grid-area:head]">
       <HeaderBlock
         overline={eyebrow}
+        menuOnly={!headerActions && !closeButton && !!menu?.length}
         heading={
           <h1 tabIndex={-1} className="break-words text-title font-semibold leading-[1.2] tracking-[-0.015em] text-ink outline-none">
             {title}

@@ -262,3 +262,43 @@ async def test_user_token_still_needs_tenant_header(client: httpx.AsyncClient) -
         "/devices", headers={"authorization": f"Bearer {owner['access_token']}"}
     )
     assert resp.status_code == 422
+
+
+async def test_delete_revoked_key_removes_it(client: httpx.AsyncClient) -> None:
+    headers, _, created = await _owner_with_key(client, "del1@example.com")
+    key_id = created["api_key"]["id"]
+    assert (await client.delete(f"/api-keys/{key_id}", headers=headers)).status_code == 204
+    resp = await client.delete(f"/api-keys/{key_id}/permanent", headers=headers)
+    assert resp.status_code == 204
+    listing = await client.get("/api-keys", headers=headers)
+    assert all(k["id"] != key_id for k in listing.json())
+
+
+async def test_delete_active_key_is_refused(client: httpx.AsyncClient) -> None:
+    headers, _, created = await _owner_with_key(client, "del2@example.com")
+    resp = await client.delete(f"/api-keys/{created['api_key']['id']}/permanent", headers=headers)
+    assert resp.status_code == 409
+    listing = await client.get("/api-keys", headers=headers)
+    assert [k["id"] for k in listing.json()] == [created["api_key"]["id"]]
+
+
+async def test_delete_expired_key(client: httpx.AsyncClient, admin_session: AsyncSession) -> None:
+    headers, _, created = await _owner_with_key(client, "del3@example.com")
+    await admin_session.execute(
+        text("UPDATE api_keys SET expires_at = now() - interval '1 minute' WHERE id = :id"),
+        {"id": created["api_key"]["id"]},
+    )
+    await admin_session.commit()
+    resp = await client.delete(f"/api-keys/{created['api_key']['id']}/permanent", headers=headers)
+    assert resp.status_code == 204
+
+
+async def test_delete_key_of_another_tenant_is_404(client: httpx.AsyncClient) -> None:
+    headers_a, _, created = await _owner_with_key(client, "del4@example.com")
+    key_id = created["api_key"]["id"]
+    await client.delete(f"/api-keys/{key_id}", headers=headers_a)
+    headers_b, _, _ = await _owner_with_key(client, "del5@example.com")
+    resp = await client.delete(f"/api-keys/{key_id}/permanent", headers=headers_b)
+    assert resp.status_code == 404
+    listing_a = await client.get("/api-keys", headers=headers_a)
+    assert any(k["id"] == key_id for k in listing_a.json())

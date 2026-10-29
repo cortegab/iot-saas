@@ -109,6 +109,27 @@ async def revoke_api_key(session: AsyncSession, tenant_id: uuid.UUID, key_id: uu
         await session.flush()
 
 
+class ApiKeyStillActiveError(Exception):
+    """Only a revoked or expired key can be deleted; an active one is revoked first."""
+
+
+async def delete_api_key(session: AsyncSession, tenant_id: uuid.UUID, key_id: uuid.UUID) -> None:
+    """Remove a key that no longer authenticates (revoked or expired), so the
+    list doesn't keep every key ever made. An active key must be revoked first:
+    deleting is tidying up, never the way a working key stops working."""
+    result = await session.execute(
+        select(ApiKey).where(ApiKey.tenant_id == tenant_id, ApiKey.id == key_id)
+    )
+    api_key = result.scalar_one_or_none()
+    if api_key is None:
+        raise ApiKeyNotFoundError
+    expired = api_key.expires_at is not None and api_key.expires_at <= datetime.now(UTC)
+    if api_key.revoked_at is None and not expired:
+        raise ApiKeyStillActiveError
+    await session.delete(api_key)
+    await session.flush()
+
+
 async def authenticate_api_key(session: AsyncSession, presented: str) -> ApiKeyPrincipal:
     """Resolve `iot_{key_id}_{secret}` to its tenant and role.
 
