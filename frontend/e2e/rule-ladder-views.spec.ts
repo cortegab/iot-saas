@@ -8,7 +8,7 @@ import { API_URL, login, test } from "./fixtures";
 
 test("ladder: horizontal when it fits, vertical on a phone, and nothing scrolls sideways", async ({ page, ruleUnderTest }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
-  await page.goto(`/rules/${ruleUnderTest.id}`);
+  await page.goto(`/rules/${ruleUnderTest.id}?tab=if`);
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
   const rung = page.getByRole("group", { name: "Rule rung editor" });
   await expect(rung).toBeVisible();
@@ -60,7 +60,7 @@ test("ladder: in the editor a wide rung scales down to fit before it goes vertic
 });
 
 test("ladder: arrow keys move along the rung, Enter opens a sheet, the trigger opens When", async ({ page, ruleUnderTest }) => {
-  await page.goto(`/rules/${ruleUnderTest.id}`);
+  await page.goto(`/rules/${ruleUnderTest.id}?tab=if`);
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Ladder" }).click();
   const rung = page.getByRole("group", { name: "Rule rung editor" });
 

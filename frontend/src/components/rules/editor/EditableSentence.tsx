@@ -130,11 +130,14 @@ export function EditableSentence({
   catalog,
   update,
   onOpenFull,
+  inline = false,
 }: {
   draft: RuleDraft;
   catalog: RuleCatalog;
   update: (d: RuleDraft) => void;
   onOpenFull: () => void;
+  /** Inside another line of text (the rule page's header description). */
+  inline?: boolean;
 }) {
   const metricName = (c: ContactDraft) => catalog.metricFor(c.deviceId, c.metric)?.name ?? (c.metric || "a reading");
   const deviceName = (id: string) => catalog.deviceNameById[id] ?? "a device";
@@ -217,8 +220,9 @@ export function EditableSentence({
       conditionPhrase(draft.condition)
     );
 
+  const Root = inline ? "span" : "p";
   return (
-    <p className="text-section leading-[2] text-ink" aria-label="Rule sentence">
+    <Root className={inline ? "leading-[1.9]" : "text-section leading-[2] text-ink"} aria-label="Rule sentence">
       <span>When </span>
       {when ?? <span className="text-ink-muted">…</span>}
       {w.type === "metric" && (
@@ -233,7 +237,7 @@ export function EditableSentence({
       {draft.actions.length ? draft.actions.map(actionPhrase) : <span className="text-ink-muted">do nothing yet</span>}
       {clearPhrase && <span>; {clearPhrase}</span>}
       <span>.</span>
-    </p>
+    </Root>
   );
 }
 

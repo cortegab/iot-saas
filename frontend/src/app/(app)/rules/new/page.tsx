@@ -1,18 +1,15 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Clock, DoorOpen, Droplets, Fan, Plus, WifiOff, Waves } from "lucide-react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { Tag } from "@/components/ui/Badge";
-import { Field } from "@/components/ui/Field";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { Input } from "@/components/ui/Input";
 import { RuleEditor } from "@/components/rules/editor/RuleEditor";
 import { useRuleCatalog } from "@/components/rules/editor/useRuleCatalog";
 import { upsertRuleInCache } from "@/lib/rule-cache";
 import { emptyDraft, type RuleDraft } from "@/lib/rule-draft";
-import { MAX_NAME } from "@/lib/rule-preview";
 import { recipeStarts, type Recipe } from "@/lib/rule-recipes";
 import { cn } from "@/lib/cn";
 import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
@@ -22,8 +19,8 @@ type RuleResponse = components["schemas"]["RuleResponse"];
 
 const ICON: Record<Recipe["icon"], typeof Fan> = { fan: Fan, door: DoorOpen, droplet: Droplets, pump: Waves, offline: WifiOff, clock: Clock };
 
-/** New rule (DESIGN.md §9.1): name it, then start from a recipe or blank;
- * the devices are picked in the steps, since one rule can read one device and
+/** New rule (DESIGN.md §9.1): start from a recipe or blank, then the steps,
+ * named on Review (a recipe suggests a name). The devices are picked in the steps, since one rule can read one device and
  * switch another. `?device=<id>` (from a device page) fills that device into
  * the recipes it can run, lists them first, and returns there after saving. */
 export default function NewRulePage() {
@@ -33,9 +30,6 @@ export default function NewRulePage() {
   const back = seededDevice ? `/devices/${seededDevice}?tab=rules` : "/rules";
   const catalog = useRuleCatalog();
   const { timezone } = useWorkspace();
-  const [name, setName] = useState("");
-  const [nameError, setNameError] = useState<string | null>(null);
-  const nameRef = useRef<HTMLInputElement>(null);
   const [start, setStart] = useState<{ key: string; draft: RuleDraft } | null>(null);
 
   const device = seededDevice ? catalog.devices.find((d) => d.id === seededDevice) : undefined;
@@ -53,16 +47,9 @@ export default function NewRulePage() {
     [device, catalog, timezone],
   );
 
-  /** A recipe (or blank) starts the steps, once the rule has a name. */
+  /** A recipe (or blank) starts the steps. */
   function begin(key: string, draft: RuleDraft) {
-    const n = name.trim();
-    const problem = !n ? "Name the rule first." : n.length > MAX_NAME ? `Keep the name to ${MAX_NAME} characters.` : null;
-    if (problem) {
-      setNameError(problem);
-      nameRef.current?.focus();
-      return;
-    }
-    setStart({ key, draft: { ...structuredClone(draft), name: n } });
+    setStart({ key, draft: structuredClone(draft) });
   }
 
   // A new rule opens on its own page, where it can be checked and refined (DESIGN.md §7).
@@ -74,27 +61,14 @@ export default function NewRulePage() {
   return (
     <div className={cn("flex flex-col gap-4", start && PAGE_WITH_BAR)}>
       <PageHeader
-        // The typed name becomes the title, as on every create page (DESIGN.md §4).
-        title={(start ? start.draft.name : name.trim()) || "New rule"}
+        title="New rule"
         breadcrumbs={[seededDevice ? { href: back, label: device?.name ?? "Device" } : { href: "/rules", label: "Rules" }]}
-        description={start ? undefined : "Name it, then start from a recipe. You pick its devices in the next steps."}
+        description={start ? undefined : "Start from a recipe or blank. You pick its devices and name it in the next steps."}
       />
       {start ? (
         <RuleEditor key={start.key} deviceId={seededDevice} initialDraft={start.draft} onSaved={onSaved} onCancel={() => setStart(null)} />
       ) : (
         <div className="flex max-w-[760px] flex-col gap-4">
-          <Field label="Name" error={nameError ?? undefined} hint="What it does, in a few words, e.g. Fan on when the greenhouse is hot.">
-            <Input
-              ref={nameRef}
-              autoFocus
-              value={name}
-              maxLength={MAX_NAME + 1}
-              onChange={(e) => {
-                setName(e.target.value);
-                setNameError(null);
-              }}
-            />
-          </Field>
           <ul aria-label="Recipes" className="grid gap-3 sm:grid-cols-2">
             {recipes.map((r) => {
               const Icon = ICON[r.icon];

@@ -482,8 +482,8 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
 
 ### 9.1 Creating: recipes
 
-- "New rule" asks for the **Name** first (required; the H1 follows it as it's typed), then offers
-  **recipe cards** and **Start blank**. There is **no device select**: one rule can read one device
+- "New rule" opens on the **recipe cards** and **Start blank**; the name is asked once, on Review
+  (user decision 2026-10-29). There is **no device select**: one rule can read one device
   and switch another, so devices are picked in the steps (user decision 2026-10-27). Every recipe
   is always offered:
   - Tell me when a device goes offline
@@ -494,13 +494,14 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
   - Switch something on a schedule
 - A recipe arrives with its parts in place (the comparison and a sensible limit, the action and
   its value, behaviour and timings) and **no device**: each reading, switch and watched device is
-  picked in the When / If / Then steps, whose Next waits until it is.
-- Picking a recipe or Start blank without a name refuses, says "Name the rule first." and focuses
-  the field. Then the **new-rule wizard** opens: **When → If → Then → Behaviour → Review**. Each
-  step asks its question ("What starts it?", "What has to be true?", "What should happen?", "How
+  picked in the When / If / Then steps, whose Next waits until it is. Each recipe suggests a
+  name ("Device offline", "Humidity low"; from a device page with its names), changed on Review.
+- Picking a recipe or Start blank opens the **new-rule wizard**: **When → If → Then → Behaviour →
+  Review**, without Behaviour for a rule not on a reading (§9.7). Each step asks its question ("What starts it?", "What has to be true?", "What should happen?", "How
   should it behave?") and uses the same section body as the matching edit tab. The sentence stays
   on top and fills in as you go; the preview is behind its button (§9.2). Review holds the name
-  (editable) and Status, then **Create rule**. Back on the first step returns to the recipes.
+  (pre-filled by the recipe, empty for Start blank: "Left blank, a name is generated") and Status,
+  then **Create rule**. Back on the first step returns to the recipes.
 - Each card shows an icon, a title, one line on what it does, and tags: *switches hardware* ·
   *latches* · *email*.
 - **From a device page** (`?device=`), the recipes that device can run come first, already filled
@@ -509,19 +510,23 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
 
 ### 9.2 Layout: tabs and preview
 
-- **Top of the page:** the header (breadcrumbs, state and last firing, the consequence line,
-  Preview, Run now…, ⋯), then **Name** and **Status** side by side, then the **editable sentence**.
-  The latched and restored-version callouts (each holds its action) sit above them;
-  can't-evaluate is a **state chip** in the header's meta row (§5 Callout).
-- **Tabs:** **When · If · Then · Behaviour · Activity** (`?tab=`, opening on If). The first four
-  carry their section's red problem count or amber "!"; Activity holds recent firings, then
-  Versions (§9.8), and has no save bar. Nothing else is a tab: there is no Logic tab, no section
+- **Top of the page:** the header (breadcrumbs, state and last firing, Run now…, ⋯) whose
+  description is the **editable sentence** (§9.3), so the tabs sit right under it like every
+  other editor's (user decision 2026-10-29). The latched and restored-version callouts (each holds
+  its action) sit between the header and the tabs; can't-evaluate is a **state chip** in the
+  header's meta row (§5 Callout).
+- **Tabs:** **Basics · When · If · Then · Behaviour · Activity** (`?tab=`, opening on Basics).
+  Basics holds **Name** and **Status** side by side, then the consequence line ("Saving applies
+  within a second. It watches 1 device and can switch 1 actuator."). The tabs from Basics to
+  Behaviour carry their section's red problem count or amber "!"; Activity holds recent firings,
+  then Versions (§9.8), and has no save bar. **Behaviour** is only on rules on a reading (§9.7). Nothing else is a tab: there is no Logic tab, no section
   rail and no inspector column.
   - **When:** the trigger as radio cards (each reading · a schedule · manually · device online /
     offline), then the reading or the schedule picker (§9.5).
   - **If:** the conditions (§9.3), **Then:** the actions and the clear actions. Both carry the
     **Form / Ladder** switch (§9.10).
   - **Behaviour:** Re-arm vs Latch, hold time, minimum interval and clear delay (§9.7).
+  - **Preview** sits at the end of the tab row on When, If, Then and Behaviour.
 - **Layout:** the standard 1120 px page with the 760 px editor column (§4), same left edge as
   every other editor. The **preview** (§9.4 cards) is **only behind the Preview button**, at every
   width (user decision 2026-10-27): it opens the cards in a sheet (bottom sheet on phones). The
@@ -621,7 +626,13 @@ path (CLAUDE.md §9.1).
 - **Behaviour:** Re-arm vs Latch until reset, as two illustrated radio cards.
 - **Hold time, minimum interval and clear delay** are always visible. They are never collapsed
   behind "advanced" (CLAUDE.md §9.7).
-- **Name and Status** (top of the rule page, the Review step of the wizard):
+- The wording follows what the rule acts on: with an actuator the timers "stop hardware flapping"
+  and a low value warns that relays cycle; with only notifications, emails or webhooks they "stop
+  repeat alerts" and a low value warns of an alert per noisy reading. Same limits either way.
+- A rule **not on a reading** (schedule, manual, device online / offline) has only the minimum
+  interval: it has **no Behaviour tab or step**, and the interval sits at the end of **Then**.
+  A link to its Behaviour tab opens Then.
+- **Name and Status** (the rule page's Basics tab, the Review step of the wizard):
   - Rule name, with an auto-generated placeholder ("Left blank, a name is generated").
   - **Status** beside the name (below it on narrow screens): a Switch with **Enabled / Disabled**
     (the same words as the header badge) and a hint that changes with it ("Fires when its trigger
@@ -902,3 +913,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-28 | §5, §7 menus and wizard (round-2 audit R6, R7): a row menu's first item is **Open** on every list (Zones and Templates said Edit / View, Devices Edit settings); a wizard marks only visited steps red. |
 | 2026-10-28 | Round-2 leftovers (B2, G4, R12): the trend chart's range is the segmented control (36 px, like the dashboard's); on phones a header whose only action is the ⋯ menu keeps it beside the title; §8 API keys: a revoked or expired key can be **deleted** (*Delete key…*, `DELETE /api-keys/{id}/permanent`); an active key is only ever revoked first. |
 | 2026-10-29 | §6, §8 notifications paged like every list: the API groups repeats (`GET /notifications/groups`, filters and limit / offset, total in `X-Total-Count`), so the numbered pager and the ×N counts cover the whole history instead of the latest 100–500 behind **Show older** (removed, with its second footer line). The status filter swaps Critical / Warning for unread alerts by type (Offline, Rules, Rule health, Failed deliveries, Templates; `GET /notifications/summary`); severity stays a filter menu. Counts are alerts (rows of repeats), and the nav badge uses the same count. Read, unread and dismiss act on a whole row (`/notifications/groups/{key}/…`, Undo restores the dismissed ids). "since …" uses the §11 date format instead of the browser's language. |
+| 2026-10-29 | §9.1, §9.2, §9.7 rule page and wizard: the rule page's tabs sit right under the header, like a template's. The editable sentence is the header's description, and **Basics** (first tab, the default) holds Name, Status and the consequence line. New rule opens on the recipes without a Name field; the name is asked once, on Review, suggested by the recipe. Behaviour words its timers by what the rule acts on (hardware flapping vs repeat alerts), and a rule not on a reading has no Behaviour tab or step: its minimum interval sits in Then. Recipes stay. |
