@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Cpu, MapPin, Pencil, Plus } from "lucide-react";
+import { Cpu, MapPin, Plus, SquareArrowOutUpRight } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
@@ -89,7 +89,7 @@ export default function ZonesPage() {
 
   const rowMenu = (z: ZoneResponse): DropdownMenuItem[][] => [
     [
-      { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => router.push(`/zones/${z.id}`) },
+      { label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/zones/${z.id}`) },
       { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${z.id}`) },
     ],
     ...(canWrite ? [[deleteZone.menuItem(z)]] : []),
