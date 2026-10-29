@@ -1,7 +1,7 @@
 "use client";
 
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { useNotifications } from "@/hooks/useNotifications";
+import { useNotificationSummary } from "@/hooks/useNotifications";
 import { usePermissions } from "@/hooks/usePermissions";
 import type { NavCountSource } from "@/components/shell/nav-config";
 import type { components } from "@/types/api";
@@ -20,7 +20,7 @@ type NavCountsResponse = components["schemas"]["NavCountsResponse"];
  * templates just to show their number. Any write revalidates it (useApi). */
 export function useNavCounts() {
   const { data } = useApiSWR<NavCountsResponse>("/tenants/current/counts");
-  const { unreadCount } = useNotifications();
+  const { unreadCount } = useNotificationSummary();
   const counts: Partial<Record<NavCountSource, number>> = {
     devices: data?.devices,
     rules: data?.rules,

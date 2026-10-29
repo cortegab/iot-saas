@@ -1,71 +1,48 @@
 "use client";
 
-import useSWR from "swr";
+import { mutate as revalidate } from "swr";
 import { useApi } from "@/hooks/useApi";
-import type { ApiPage } from "@/lib/api-client";
+import { useApiSWR } from "@/hooks/useApiSWR";
 import type { components } from "@/types/api";
 
-type NotificationResponse = components["schemas"]["NotificationResponse"];
+type NotificationSummaryResponse = components["schemas"]["NotificationSummaryResponse"];
+type NotificationIdsRequest = components["schemas"]["NotificationIdsRequest"];
 
 export const NOTIFICATIONS_KEY = "/notifications";
+export const SUMMARY_KEY = `${NOTIFICATIONS_KEY}/summary`;
 
-/** The latest `limit` notifications and how many there are in all
- * (X-Total-Count). The page's "Show older" raises `limit`, so one request
- * holds everything shown and read / unread / dismiss refresh all of it.
+/** Revalidates every notifications key: the summary, each page of alerts and
+ * each alert's history. */
+export function refreshNotifications(): Promise<unknown> {
+  return revalidate((key) => typeof key === "string" && (key === NOTIFICATIONS_KEY || key.startsWith(`${NOTIFICATIONS_KEY}/`) || key.startsWith(`${NOTIFICATIONS_KEY}?`)));
+}
+
+/** Alerts (repeats grouped) and how many are unread, by type; the nav badge
+ * and the page's state filter. Counted by the API over the whole feed.
  *
  * A fallback, not the primary freshness mechanism — useRealtime revalidates
- * every /notifications key the moment a `notification` event arrives. Unread
- * count is derived client-side from `read_at` over what's loaded. Dismissed
- * rows never come back from the API, so they never count. */
-export function useNotifications(limit = 50) {
+ * every /notifications key the moment a `notification` event arrives. */
+export function useNotificationSummary() {
+  const { data, error, isLoading } = useApiSWR<NotificationSummaryResponse>(SUMMARY_KEY, { refreshInterval: 30_000, keepPreviousData: true });
+  return { summary: data, unreadCount: data?.unread ?? 0, error, isLoading };
+}
+
+/** Read / unread / dismiss on one alert (all its repeats), by its group key. */
+export function useNotificationActions() {
   const api = useApi();
-  const key = `${NOTIFICATIONS_KEY}?limit=${limit}`;
-  const { data, isLoading, error, mutate } = useSWR<ApiPage<NotificationResponse>>(key, () => api.getPage<NotificationResponse>(key), {
-    refreshInterval: 30_000,
-    keepPreviousData: true,
-  });
-
-  const notifications = data?.items ?? [];
-  const unreadCount = notifications.filter((n) => n.read_at == null).length;
-
-  async function markAllRead() {
-    await api.post<NotificationResponse[]>("/notifications/read");
-    await mutate();
-  }
-
-  async function markRead(id: string) {
-    await api.patch<NotificationResponse>(`/notifications/${id}/read`);
-    await mutate();
-  }
-
-  async function markUnread(id: string) {
-    await api.patch<NotificationResponse>(`/notifications/${id}/unread`);
-    await mutate();
-  }
-
-  async function dismiss(id: string) {
-    // Drop it at once; the server agrees a moment later.
-    await mutate((page) => page && { items: page.items.filter((n) => n.id !== id), total: page.total - 1 }, { revalidate: false });
-    await api.post<NotificationResponse>(`/notifications/${id}/dismiss`);
-    await mutate();
-  }
-
-  async function restore(id: string) {
-    await api.post<NotificationResponse>(`/notifications/${id}/restore`);
-    await mutate();
-  }
+  const after = () => refreshNotifications();
+  const group = (key: string) => `${NOTIFICATIONS_KEY}/groups/${encodeURIComponent(key)}`;
 
   return {
-    notifications,
-    /** Every notification, loaded or not. */
-    total: data?.total ?? 0,
-    unreadCount,
-    isLoading,
-    error,
-    markAllRead,
-    markRead,
-    markUnread,
-    dismiss,
-    restore,
+    markAllRead: () => api.post(`${NOTIFICATIONS_KEY}/read`).then(after),
+    markRead: (key: string) => api.post(`${group(key)}/read`).then(after),
+    markUnread: (key: string) => api.post(`${group(key)}/unread`).then(after),
+    /** Returns the dismissed ids, for Undo. */
+    dismiss: async (key: string) => {
+      const { ids } = await api.post<NotificationIdsRequest>(`${group(key)}/dismiss`);
+      await after();
+      return ids;
+    },
+    restore: (ids: string[]) => api.post(`${NOTIFICATIONS_KEY}/restore`, { ids }).then(after),
   };
 }

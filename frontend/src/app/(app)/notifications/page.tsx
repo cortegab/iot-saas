@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { mutate as revalidate } from "swr";
+import useSWR from "swr";
 import { AlertTriangle, Bell, Check, CheckCheck, Info, Mail, X, Zap } from "lucide-react";
-import { NOTIFICATIONS_KEY, useNotifications } from "@/hooks/useNotifications";
+import { NOTIFICATIONS_KEY, refreshNotifications, useNotificationActions, useNotificationSummary } from "@/hooks/useNotifications";
+import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -16,19 +17,24 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
 import { useToast } from "@/components/ui/Toast";
-import { FilterChips, ListToolbar, type FilterChip } from "@/components/list/ListToolbar";
+import { FilterChips, ListToolbar, type FilterChip, type QuickFilterOption } from "@/components/list/ListToolbar";
 import { NoResults } from "@/components/list/ListStates";
 import { TableFooter } from "@/components/list/TableFooter";
-import { matchesQuery, paginate, useListState } from "@/components/list/useListState";
-import { ApiRequestError } from "@/lib/api-client";
+import { useListState } from "@/components/list/useListState";
+import { clampPage } from "@/components/list/usePager";
+import { pageKey, useServerPager } from "@/components/list/useServerPager";
+import { ApiRequestError, type ApiPage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { timeAgo } from "@/lib/time-ago";
-import type { components } from "@/types/api";
+import { formatWhen, timeAgo } from "@/lib/time-ago";
+import type { components, operations } from "@/types/api";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type NotificationResponse = components["schemas"]["NotificationResponse"];
+/** Repeats of one alert from one source, as one row (DESIGN.md §8); grouped by the API. */
+type AlertGroup = components["schemas"]["NotificationGroupResponse"];
+type NotificationType = NonNullable<NonNullable<operations["list_groups_notifications_groups_get"]["parameters"]["query"]>["type"]>;
 type Severity = NotificationResponse["severity"];
 
 const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; tone: string }> = {
@@ -37,105 +43,74 @@ const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; tone: strin
   info: { icon: Info, label: "Info", tone: "text-ink-muted" },
 };
 const SEVERITY_ORDER: Severity[] = ["critical", "warning", "info"];
-/** The API's largest page (backend app/paging.py MAX_LIMIT). */
-const MAX_LOADED = 500;
 
-/** Repeats of the same alert from the same source, as one row (DESIGN.md §8). */
-interface AlertGroup {
-  key: string;
-  /** Newest first. */
-  items: NotificationResponse[];
-  latest: NotificationResponse;
-  first: NotificationResponse;
-  unread: boolean;
-}
-
-function groupRepeats(list: NotificationResponse[]): AlertGroup[] {
-  const groups = new Map<string, NotificationResponse[]>();
-  for (const n of [...list].sort((a, b) => b.created_at.localeCompare(a.created_at))) {
-    const key = [n.kind, n.rule_id, n.device_id, n.catalog_entry_id, n.message].join("|");
-    groups.set(key, [...(groups.get(key) ?? []), n]);
-  }
-  return [...groups].map(([key, items]) => ({
-    key,
-    items,
-    latest: items[0],
-    first: items[items.length - 1],
-    unread: items.some((n) => n.read_at == null),
-  }));
-}
-
-const clock = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false });
+/** The state filter's types (DESIGN.md §8): what someone scans for. A rule
+ * firing and its clearing are both "Rules". */
+const TYPES: { value: NotificationType; label: string; hint: string; tone: QuickFilterOption["tone"]; alert?: boolean }[] = [
+  { value: "device_offline", label: "Offline", hint: "Devices that went offline, not read yet", tone: "offline", alert: true },
+  { value: "rules", label: "Rules", hint: "Rules that fired or cleared, not read yet", tone: "pending" },
+  { value: "rule_health", label: "Rule health", hint: "Rules that stopped working, not read yet", tone: "error", alert: true },
+  { value: "delivery_failed", label: "Failed deliveries", hint: "Emails and webhooks that failed, not read yet", tone: "error", alert: true },
+  { value: "template_changed", label: "Templates", hint: "Template changes, not read yet", tone: "unknown" },
+];
+const isType = (v: string): v is NotificationType => TYPES.some((t) => t.value === v);
 
 /** Notifications (DESIGN.md §8, demo H; the phone tab bar says "Alerts"):
  * one Line row per alert, repeats grouped (×4, "since …, last …"), filters
- * for severity, device and rule. A row opens a sheet with the details and
- * the links; the row menu marks read / unread or dismisses (with Undo).
- * Acknowledge and the Active / Acknowledged / Cleared lifecycle wait for
- * their backend (§13). */
+ * for type, severity, device and rule, paged like every list (§6). The API
+ * groups, filters and pages, so counts and pages cover the whole feed. A row
+ * opens a sheet with the details, the links and each time it happened; the
+ * row menu marks read / unread or dismisses (with Undo). Acknowledge and the
+ * Active / Acknowledged / Cleared lifecycle wait for their backend (§13). */
 export default function NotificationsPage() {
   const toast = useToast();
-  // The latest `limit` notifications; "Show older" loads 100 more (up to the API's 500 a request).
-  const [limit, setLimit] = useState(100);
-  const { notifications, total: totalRows, unreadCount, isLoading, error, markAllRead, markRead, markUnread, dismiss, restore } = useNotifications(limit);
+  const api = useApi();
+  const { summary, error: summaryError } = useNotificationSummary();
+  const { markAllRead, markRead, markUnread, dismiss, restore } = useNotificationActions();
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
   const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
-  const list = useListState({ show: "all", severity: "all", device: "all", rule: "all" });
-  const [openKey, setOpenKey] = useState<string | null>(null);
+  // `state`: all, unread, or a type (its unread alerts).
+  const list = useListState({ state: "all", severity: "all", device: "all", rule: "all" });
+  const [open, setOpen] = useState<AlertGroup | null>(null);
 
   const deviceName = useMemo(() => new Map((devices ?? []).map((d) => [d.id, d.name])), [devices]);
   const ruleName = useMemo(() => new Map((rules ?? []).map((r) => [r.id, r.name])), [rules]);
   const templateName = useMemo(() => new Map((templates ?? []).map((t) => [t.id, t.name])), [templates]);
 
   // Only devices and rules that have alerts are offered as filters.
-  const deviceOptions = useMemo(
-    () => [...new Set(notifications.map((n) => n.device_id).filter((x): x is string => !!x))].map((id) => ({ id, name: deviceName.get(id) ?? "Deleted device" })),
-    [notifications, deviceName],
-  );
-  const ruleOptions = useMemo(
-    () => [...new Set(notifications.map((n) => n.rule_id).filter((x): x is string => !!x))].map((id) => ({ id, name: ruleName.get(id) ?? "Deleted rule" })),
-    [notifications, ruleName],
-  );
+  const deviceOptions = (summary?.device_ids ?? []).map((id) => ({ id, name: deviceName.get(id) ?? "Deleted device" }));
+  const ruleOptions = (summary?.rule_ids ?? []).map((id) => ({ id, name: ruleName.get(id) ?? "Deleted rule" }));
 
-  const groups = useMemo(() => {
-    const f = list.filters;
-    const shown = notifications.filter(
-      (n) =>
-        (f.severity === "all" || n.severity === f.severity) &&
-        (f.device === "all" || n.device_id === f.device) &&
-        (f.rule === "all" || n.rule_id === f.rule) &&
-        matchesQuery(
-          list.q,
-          n.message,
-          n.detail,
-          n.device_id ? deviceName.get(n.device_id) : null,
-          n.rule_id ? ruleName.get(n.rule_id) : null,
-          n.catalog_entry_id ? templateName.get(n.catalog_entry_id) : null,
-        ),
-    );
-    return groupRepeats(shown).filter((g) => f.show === "all" || g.unread);
-  }, [notifications, list.filters, list.q, deviceName, ruleName, templateName]);
-
-  // Alerts waiting to be read, counted once per group of repeats.
-  const kpis = useMemo(() => {
-    const unread = groupRepeats(notifications).filter((g) => g.unread);
-    return { all: groupRepeats(notifications).length, critical: unread.filter((g) => g.latest.severity === "critical").length, warning: unread.filter((g) => g.latest.severity === "warning").length, unread: unread.length };
-  }, [notifications]);
-
-  const { pageRows, pageCount, page } = paginate(groups, list.page, list.pageSize);
-  const open = groups.find((g) => g.key === openKey) ?? null;
-
-  const readAll = (g: AlertGroup) => Promise.all(g.items.filter((n) => n.read_at == null).map((n) => markRead(n.id)));
-  const unreadAll = (g: AlertGroup) => markUnread(g.latest.id);
+  const f = list.filters;
+  const all = (v: string) => (v === "all" ? null : v);
+  const key = pageKey(`${NOTIFICATIONS_KEY}/groups`, list.page, list.pageSize, {
+    unread: f.state === "all" ? null : "true",
+    type: isType(f.state) ? f.state : null,
+    severity: all(f.severity),
+    device_id: all(f.device),
+    rule_id: all(f.rule),
+    q: list.q.trim() || null,
+  });
+  const { data, error, isLoading } = useSWR<ApiPage<AlertGroup>>(key, () => api.getPage<AlertGroup>(key), {
+    refreshInterval: 30_000,
+    keepPreviousData: true,
+  });
+  const groups = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const { page, pageCount } = clampPage(list.page, total, list.pageSize);
+  // The last alert on the last page was dismissed: step back a page.
+  useEffect(() => {
+    if (data && list.page > pageCount) list.setPage(pageCount);
+  }, [data, list, pageCount]);
 
   async function onDismiss(g: AlertGroup) {
     try {
-      await Promise.all(g.items.map((n) => dismiss(n.id)));
-      if (openKey === g.key) setOpenKey(null);
+      const ids = await dismiss(g.key);
+      if (open?.key === g.key) setOpen(null);
       toast({
-        title: g.items.length > 1 ? `${g.items.length} notifications dismissed` : "Notification dismissed",
-        action: { label: "Undo", onClick: () => void Promise.all(g.items.map((n) => restore(n.id))) },
+        title: ids.length > 1 ? `${ids.length} notifications dismissed` : "Notification dismissed",
+        action: { label: "Undo", onClick: () => void restore(ids) },
       });
     } catch (err) {
       toast({ tone: "error", title: "Couldn't dismiss it", detail: err instanceof ApiRequestError ? err.message : undefined });
@@ -143,37 +118,25 @@ export default function NotificationsPage() {
   }
 
   function openSheet(g: AlertGroup) {
-    setOpenKey(g.key);
-    if (g.unread) void readAll(g);
+    setOpen(g);
+    if (g.unread_count > 0) void markRead(g.key);
   }
-
-  // The status filter (DESIGN.md §6): Critical / Warning are unread alerts of
-  // that severity, so they sit on the show + severity filters already in the URL.
-  const fromState = list.filters.severity === "critical" || list.filters.severity === "warning";
-  const state = list.filters.show !== "unread" ? "all" : fromState ? list.filters.severity : "unread";
-  const setState = (v: string) =>
-    list.setFilters(
-      v === "critical" || v === "warning"
-        ? { show: "unread", severity: v }
-        : { show: v, severity: fromState && state !== "all" ? "all" : list.filters.severity },
-    );
 
   const chips: FilterChip[] = [];
   if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
-  if (list.filters.severity !== "all")
-    chips.push({ id: "severity", label: `Severity: ${SEVERITY[list.filters.severity as Severity]?.label}`, onRemove: () => list.setFilter("severity", "all") });
-  if (list.filters.device !== "all")
-    chips.push({ id: "device", label: `Device: ${deviceName.get(list.filters.device) ?? "unknown"}`, onRemove: () => list.setFilter("device", "all") });
-  if (list.filters.rule !== "all")
-    chips.push({ id: "rule", label: `Rule: ${ruleName.get(list.filters.rule) ?? "unknown"}`, onRemove: () => list.setFilter("rule", "all") });
+  if (f.severity !== "all") chips.push({ id: "severity", label: `Severity: ${SEVERITY[f.severity as Severity]?.label}`, onRemove: () => list.setFilter("severity", "all") });
+  if (f.device !== "all") chips.push({ id: "device", label: `Device: ${deviceName.get(f.device) ?? "unknown"}`, onRemove: () => list.setFilter("device", "all") });
+  if (f.rule !== "all") chips.push({ id: "rule", label: `Rule: ${ruleName.get(f.rule) ?? "unknown"}`, onRemove: () => list.setFilter("rule", "all") });
 
-
+  const unreadTotal = summary?.unread ?? 0;
   const markAllButton = (
-    <Button variant="secondary" disabled={unreadCount === 0} onClick={() => void markAllRead().then(() => toast({ title: "All notifications marked as read" }))}>
+    <Button variant="secondary" disabled={unreadTotal === 0} onClick={() => void markAllRead().then(() => toast({ title: "All notifications marked as read" }))}>
       <CheckCheck aria-hidden size={15} />
       Mark all as read
     </Button>
   );
+  const loadError = summaryError ?? error;
+  const empty = summary?.alerts === 0;
 
   return (
     <>
@@ -183,42 +146,41 @@ export default function NotificationsPage() {
         inline
         title="Notifications"
         description="Alarms that need someone, and what happened. Open one for its details and links."
-        actions={!error && !isLoading && notifications.length > 0 ? undefined : markAllButton}
+        actions={!loadError && summary && !empty ? undefined : markAllButton}
       />
 
-      {error ? (
+      {loadError ? (
         <ErrorState
           title="Couldn't load notifications"
-          message={error instanceof ApiRequestError ? error.message : "The API didn't respond."}
-          onRetry={() => void revalidate((key) => typeof key === "string" && key.startsWith(NOTIFICATIONS_KEY))}
+          message={loadError instanceof ApiRequestError ? loadError.message : "The API didn't respond."}
+          onRetry={() => void refreshNotifications()}
         />
-      ) : isLoading ? (
+      ) : !summary || (isLoading && !data) ? (
         <LoadingSkeleton rows={4} rowClassName="h-16" />
-      ) : notifications.length === 0 ? (
+      ) : empty ? (
         <EmptyState icon={<Bell aria-hidden size={26} />} title="Nothing needs attention" description="No alerts. New ones appear here, with a count in the sidebar." />
       ) : (
         <>
-          {/* demo H's severity figures, as the status filter. Unread stands in
-              for "not acknowledged" until alarms have a lifecycle (DESIGN.md §13). */}
+          {/* The state filter: unread alerts by type. Unread stands in for
+              "not acknowledged" until alarms have a lifecycle (DESIGN.md §13). */}
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
             placeholder="Search notifications"
-            activeFilters={[list.filters.severity, list.filters.device, list.filters.rule].filter((v) => v !== "all").length}
+            activeFilters={[f.severity, f.device, f.rule].filter((v) => v !== "all").length}
             actions={markAllButton}
             quick={{
               label: "Filter by state",
-              value: state,
-              onChange: setState,
+              value: f.state,
+              onChange: (v) => list.setFilter("state", v),
               options: [
-                { value: "all", label: "All", count: kpis.all },
-                { value: "unread", label: "Unread", count: kpis.unread, tone: "accent", hint: "Not read yet" },
-                { value: "critical", label: "Critical", count: kpis.critical, tone: "offline", hint: "Critical, not read yet", alert: true },
-                { value: "warning", label: "Warning", count: kpis.warning, tone: "pending", hint: "Warnings, not read yet", alert: true },
+                { value: "all", label: "All", count: summary.alerts },
+                { value: "unread", label: "Unread", count: unreadTotal, tone: "accent", hint: "Not read yet" },
+                ...TYPES.map((t) => ({ ...t, count: summary.unread_by_type[t.value] ?? 0 })),
               ],
             }}
           >
-            <Select aria-label="Filter by severity" value={list.filters.severity} onChange={(e) => list.setFilter("severity", e.target.value)} className="w-auto">
+            <Select aria-label="Filter by severity" value={f.severity} onChange={(e) => list.setFilter("severity", e.target.value)} className="w-auto">
               <option value="all">All severities</option>
               {SEVERITY_ORDER.map((s) => (
                 <option key={s} value={s}>
@@ -227,7 +189,7 @@ export default function NotificationsPage() {
               ))}
             </Select>
             {deviceOptions.length > 0 && (
-              <Select aria-label="Filter by device" value={list.filters.device} onChange={(e) => list.setFilter("device", e.target.value)} className="w-auto">
+              <Select aria-label="Filter by device" value={f.device} onChange={(e) => list.setFilter("device", e.target.value)} className="w-auto">
                 <option value="all">All devices</option>
                 {deviceOptions.map((d) => (
                   <option key={d.id} value={d.id}>
@@ -237,7 +199,7 @@ export default function NotificationsPage() {
               </Select>
             )}
             {ruleOptions.length > 0 && (
-              <Select aria-label="Filter by rule" value={list.filters.rule} onChange={(e) => list.setFilter("rule", e.target.value)} className="w-auto">
+              <Select aria-label="Filter by rule" value={f.rule} onChange={(e) => list.setFilter("rule", e.target.value)} className="w-auto">
                 <option value="all">All rules</option>
                 {ruleOptions.map((r) => (
                   <option key={r.id} value={r.id}>
@@ -248,9 +210,9 @@ export default function NotificationsPage() {
             )}
           </ListToolbar>
           <FilterChips chips={chips} onClearAll={list.clearAll} />
-          {groups.length === 0 ? (
-            list.filters.show === "unread" && chips.length === 0 ? (
-              <EmptyState icon={<Check aria-hidden size={26} />} title="Nothing unread" description="Every notification has been read." />
+          {total === 0 ? (
+            f.state !== "all" && chips.length === 0 ? (
+              <EmptyState icon={<Check aria-hidden size={26} />} title="Nothing unread" description={f.state === "unread" ? "Every notification has been read." : "Nothing of this type is waiting to be read."} />
             ) : (
               <NoResults noun="notifications" onClear={list.clearAll} />
             )
@@ -260,11 +222,11 @@ export default function NotificationsPage() {
                   detail, small meta with links), the state and its action on
                   the right. The whole row opens the sheet. */}
               <ul aria-label="Alerts" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
-                {pageRows.map((g) => {
+                {groups.map((g) => {
                   const n = g.latest;
                   const sev = SEVERITY[n.severity];
                   const SevIcon = n.kind === "delivery_failed" ? Mail : sev.icon;
-                  const repeats = g.items.length;
+                  const unread = g.unread_count > 0;
                   return (
                     <li
                       key={g.key}
@@ -274,25 +236,25 @@ export default function NotificationsPage() {
                       className={cn(
                         "flex cursor-pointer items-start gap-x-3 gap-y-2 border-t border-border-soft px-3.5 py-2.5 first:border-t-0 hover:bg-row-hover",
                         // Unread: the demo's active bar on the left edge.
-                        g.unread && "shadow-[inset_3px_0_0_var(--color-accent)]",
+                        unread && "shadow-[inset_3px_0_0_var(--color-accent)]",
                       )}
                     >
                       <div className="flex min-w-0 flex-1 basis-[260px] items-start gap-3">
                         <SevIcon aria-hidden size={17} className={cn("mt-0.5 shrink-0", sev.tone)} />
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
                           <button type="button" onClick={() => openSheet(g)} aria-haspopup="dialog" className="min-w-0 text-left text-ink">
-                            <span className="sr-only">{sev.label}{g.unread ? ", Unread" : ""}: </span>
+                            <span className="sr-only">{sev.label}{unread ? ", Unread" : ""}: </span>
                             {/* Unread is the accent bar and a bold title (DESIGN.md §8). */}
-                            <strong className={g.unread ? "font-semibold" : "font-normal"}>{n.message}</strong>
-                            {repeats > 1 && (
+                            <strong className={unread ? "font-semibold" : "font-normal"}>{n.message}</strong>
+                            {g.count > 1 && (
                               <Tag size="sm" className="ml-2">
-                                ×{repeats}
+                                ×{g.count}
                               </Tag>
                             )}
                           </button>
                           {n.detail && <span className="text-xs text-ink-muted">{n.detail}</span>}
                           <span className="text-xs text-ink-muted">
-                            {repeats > 1 ? `since ${clock(g.first.created_at)}, last ${timeAgo(n.created_at)}` : timeAgo(n.created_at)}
+                            {g.count > 1 ? `since ${formatWhen(g.first_at)}, last ${timeAgo(g.last_at)}` : timeAgo(g.last_at)}
                             <SourceLinks n={n} deviceName={deviceName} ruleName={ruleName} templateName={templateName} />
                           </span>
                         </div>
@@ -302,9 +264,9 @@ export default function NotificationsPage() {
                           label={`Actions for ${n.message}`}
                           groups={[
                             [
-                              g.unread
-                                ? { label: "Mark as read", icon: <Check size={15} />, onClick: () => void readAll(g) }
-                                : { label: "Mark as unread", icon: <Bell size={15} />, onClick: () => void unreadAll(g) },
+                              unread
+                                ? { label: "Mark as read", icon: <Check size={15} />, onClick: () => void markRead(g.key) }
+                                : { label: "Mark as unread", icon: <Bell size={15} />, onClick: () => void markUnread(g.key) },
                             ],
                             [{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }],
                           ]}
@@ -315,8 +277,8 @@ export default function NotificationsPage() {
                 })}
               </ul>
               <TableFooter
-                shown={groups.length}
-                total={kpis.all}
+                shown={total}
+                total={total}
                 noun={["alert", "alerts"]}
                 page={page}
                 pageCount={pageCount}
@@ -324,21 +286,6 @@ export default function NotificationsPage() {
                 onPage={list.setPage}
                 onPageSize={list.setPageSize}
               />
-              {/* Older than what's loaded: one request grows (useNotifications). */}
-              {totalRows > notifications.length && (
-                <div className="flex flex-wrap items-center justify-center gap-3 pt-1">
-                  <span className="text-xs text-ink-muted">
-                    The latest {notifications.length} of {totalRows} notifications
-                  </span>
-                  {limit < MAX_LOADED ? (
-                    <Button variant="secondary" size="sm" onClick={() => setLimit((l) => Math.min(l + 100, MAX_LOADED))}>
-                      Show older
-                    </Button>
-                  ) : (
-                    <span className="text-xs text-ink-muted">Dismiss old ones to see further back.</span>
-                  )}
-                </div>
-              )}
             </div>
           )}
         </>
@@ -346,19 +293,19 @@ export default function NotificationsPage() {
 
       <ItemSheet
         open={open != null}
-        onClose={() => setOpenKey(null)}
+        onClose={() => setOpen(null)}
         title={open?.latest.message ?? "Notification"}
-        sub={open ? `${SEVERITY[open.latest.severity].label}${open.items.length > 1 ? ` · ${open.items.length} times` : ""}` : undefined}
+        sub={open ? `${SEVERITY[open.latest.severity].label}${open.count > 1 ? ` · ${open.count} times` : ""}` : undefined}
         footer={
           open ? (
             <>
               <Button variant="link-danger" className="mr-auto text-meta" onClick={() => void onDismiss(open)}>
                 Dismiss
               </Button>
-              <Button variant="ghost" onClick={() => void unreadAll(open)}>
+              <Button variant="ghost" onClick={() => void markUnread(open.key)}>
                 Mark as unread
               </Button>
-              <Button onClick={() => setOpenKey(null)}>Done</Button>
+              <Button onClick={() => setOpen(null)}>Done</Button>
             </>
           ) : undefined
         }
@@ -385,33 +332,40 @@ export default function NotificationsPage() {
                   <dd>{templateName.has(open.latest.catalog_entry_id) ? <Link href={`/templates/${open.latest.catalog_entry_id}`} className="text-accent hover:underline">{templateName.get(open.latest.catalog_entry_id)}</Link> : "Deleted template"}</dd>
                 </>
               )}
-              <dt className="text-ink-muted">{open.items.length > 1 ? "First" : "When"}</dt>
-              <dd>{clock(open.first.created_at)}</dd>
-              {open.items.length > 1 && (
+              <dt className="text-ink-muted">{open.count > 1 ? "First" : "When"}</dt>
+              <dd>{formatWhen(open.first_at)}</dd>
+              {open.count > 1 && (
                 <>
                   <dt className="text-ink-muted">Last</dt>
                   <dd>
-                    {clock(open.latest.created_at)} · {open.items.length} times
+                    {formatWhen(open.last_at)} · {open.count} times
                   </dd>
                 </>
               )}
             </dl>
-            {open.items.length > 1 && (
-              <div className="flex flex-col gap-2">
-                <h3 className="text-meta font-medium text-ink-muted">Each time</h3>
-                <ol className="flex flex-col gap-1.5 border-l-2 border-border pl-3.5 text-meta">
-                  {open.items.map((n) => (
-                    <li key={n.id} className="tabular-nums text-ink">
-                      {clock(n.created_at)}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            )}
+            {open.count > 1 && <EachTime groupKey={open.key} />}
           </div>
         )}
       </ItemSheet>
     </>
+  );
+}
+
+/** Each time one alert happened, newest first, paged by the API. */
+function EachTime({ groupKey }: { groupKey: string }) {
+  const pager = useServerPager<NotificationResponse>(`${NOTIFICATIONS_KEY}/groups/${encodeURIComponent(groupKey)}/items`);
+  return (
+    <div className="flex flex-col gap-2">
+      <h3 className="text-meta font-medium text-ink-muted">Each time</h3>
+      <ol aria-label="Each time" className="flex flex-col gap-1.5 border-l-2 border-border pl-3.5 text-meta">
+        {pager.rows.map((n) => (
+          <li key={n.id} className="tabular-nums text-ink">
+            {formatWhen(n.created_at)}
+          </li>
+        ))}
+      </ol>
+      <TableFooter shown={pager.total} total={pager.total} noun={["time", "times"]} page={pager.page} pageCount={pager.pageCount} pageSize={pager.pageSize} onPage={pager.setPage} onPageSize={pager.setPageSize} />
+    </div>
   );
 }
 
