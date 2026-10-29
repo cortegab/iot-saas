@@ -130,9 +130,14 @@ export function RuleEditor({
   });
   const questionRef = useRef<HTMLHeadingElement>(null);
   const stepIndex = Math.max(0, tabs.indexOf(tab));
+  // DESIGN.md §5 Wizard: a step is marked red only once it has been visited
+  // (or a Create was refused), never before the author has seen it.
+  const [visited, setVisited] = useState<Set<RuleTab>>(() => new Set([defaultTab]));
+  const [revealAll, setRevealAll] = useState(false);
   const setTab = useCallback(
     (next: RuleTab) => {
       setTabState(next);
+      setVisited((v) => (v.has(next) ? v : new Set(v).add(next)));
       // A wizard's step isn't in the URL; it moves focus to its question.
       if (wizard) {
         window.requestAnimationFrame(() => {
@@ -152,6 +157,9 @@ export function RuleEditor({
   const dirty = useMemo(() => JSON.stringify(draft) !== JSON.stringify(baseline), [draft, baseline]);
   const issues = useMemo(() => sectionIssues(draft), [draft]);
   const blocking = issues.filter((i) => i.blocking);
+  // What the wizard shows: problems on steps already seen (all of them once
+  // Create was refused). Editing shows every problem.
+  const shown = wizard && !revealAll ? blocking.filter((i) => visited.has(i.section === "name" ? "review" : (i.section as RuleTab))) : blocking;
   const { confirmLeave, dialog: guardDialog } = useUnsavedGuard(dirty, existing?.name ?? "this rule");
 
   // A new rule's schedule defaults to the workspace time zone, which may
@@ -219,6 +227,7 @@ export function RuleEditor({
     setError(null);
     // Blocking issues stop the save and take you to the first one (DESIGN.md §7).
     if (blocking.length > 0) {
+      setRevealAll(true);
       goTo(blocking[0].section);
       toast({ tone: "error", title: `${blocking.length} to fix`, detail: blocking[0].message });
       return;
@@ -372,7 +381,7 @@ export function RuleEditor({
             {wizard && (
               <Stepper
                 current={stepIndex}
-                steps={tabs.map((t) => ({ id: t, label: TAB_LABEL[t], issues: tabIssues(t === "review" ? "name" : t).filter((i) => i.blocking).length }))}
+                steps={tabs.map((t) => ({ id: t, label: TAB_LABEL[t], issues: shown.filter((i) => i.section === (t === "review" ? "name" : t)).length }))}
               />
             )}
             {!wizard && <div className="grid items-start gap-x-4 gap-y-3 @min-[640px]:grid-cols-2">{nameFields}</div>}
@@ -470,14 +479,14 @@ export function RuleEditor({
                 </>
               )}
             </span>
-            {blocking.length > 0 && (
+            {shown.length > 0 && (
               <button
                 type="button"
-                onClick={() => goTo(blocking[0].section)}
+                onClick={() => goTo(shown[0].section)}
                 className="inline-flex h-7 items-center gap-[5px] rounded-full bg-status-error-surface px-2.5 text-xs font-semibold text-status-error"
               >
                 <AlertCircle aria-hidden size={13} />
-                {blocking.length} to fix
+                {shown.length} to fix
               </button>
             )}
             {error && (

@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Pencil, Power, SquareArrowOutUpRight, Trash2, Wrench } from "lucide-react";
+import { KeyRound, Power, SquareArrowOutUpRight, Trash2, Wrench } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -118,19 +118,18 @@ export function useDeviceActions({
   }
 
   /** The ⋯ menu. `where` drops what that place already shows: a peek has its
-   * own Open device button; the device's page is already open and has a
-   * Settings tab. `onDeleted` runs after a delete (close the peek, leave the
+   * own Open device button; the device's page is already open. Settings is a
+   * tab of the page, so the menu never links to it (DESIGN.md §7: Open first). `onDeleted` runs after a delete (close the peek, leave the
    * page). */
   function menu(d: DeviceResponse, opts: { where?: "list" | "peek" | "page"; onDeleted?: () => void } = {}): DropdownMenuItem[][] {
     const where = opts.where ?? "list";
     const open: DropdownMenuItem[] =
-      where === "list" ? [{ label: "Open device", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/devices/${d.id}`) }] : [];
+      where === "list" ? [{ label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/devices/${d.id}`) }] : [];
     if (!canWrite) return open.length ? [open] : [];
     const never = d.connection_state === "never_connected";
     return [
       [
         ...open,
-        ...(where === "page" ? [] : [{ label: "Edit settings", icon: <Pencil size={15} />, onClick: () => router.push(`/devices/${d.id}?tab=settings`) }]),
         { label: never ? "Connect…" : "Install or reconnect…", icon: <Wrench size={15} />, onClick: () => router.push(`/devices/${d.id}/connect`) },
         { label: "Rotate credential…", icon: <KeyRound size={15} />, onClick: () => void rotate(d) },
         { label: d.status === "active" ? "Disable" : "Enable", icon: <Power size={15} />, onClick: () => void setEnabled([d], d.status !== "active") },
