@@ -28,7 +28,7 @@ import { Stepper } from "@/components/ui/Stepper";
 import { Tabs } from "@/components/ui/Tabs";
 import { ApiRequestError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
-import { contacts, draftFromRule, draftToRequest, emptyDraft, validateDraft, type RuleDraft } from "@/lib/rule-draft";
+import { contacts, draftFromRule, draftToRequest, emptyDraft, isReadingRule, validateDraft, type RuleDraft } from "@/lib/rule-draft";
 import { MAX_NAME, sectionIssues, type RuleSection } from "@/lib/rule-preview";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
@@ -36,7 +36,7 @@ import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { EditableSentence } from "./EditableSentence";
 import { LadderCanvas, LadderSheet, liveSelection, type EditorSelection } from "@/components/rules/ladder/LadderMode";
 import type { components } from "@/types/api";
-import { BehaviourSection, ConditionSection, ThenSection, WhenSection } from "./FormMode";
+import { BehaviourSection, ConditionSection, IntervalField, ThenSection, WhenSection } from "./FormMode";
 import { RulePreview } from "./RulePreview";
 import { SAVE_BAR } from "@/components/editor/save-bar";
 import { useRuleCatalog } from "./useRuleCatalog";
@@ -44,10 +44,11 @@ import { useRuleCatalog } from "./useRuleCatalog";
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
 type EditorMode = "form" | "ladder";
-type RuleTab = "when" | "if" | "then" | "behaviour" | "activity" | "review";
+type RuleTab = "basics" | "when" | "if" | "then" | "behaviour" | "activity" | "review";
 
 const MODE_KEY = "rule-editor-mode";
 const TAB_LABEL: Record<RuleTab, string> = {
+  basics: "Basics",
   when: "When",
   if: "If",
   then: "Then",
@@ -55,16 +56,20 @@ const TAB_LABEL: Record<RuleTab, string> = {
   activity: "Activity",
   review: "Review",
 };
-// A new rule is a wizard (DESIGN.md §9.1): one question per step.
-const WIZARD: RuleTab[] = ["when", "if", "then", "behaviour", "review"];
+// A new rule is a wizard (DESIGN.md §9.1): one question per step. Behaviour
+// is only for rules on a reading; the others keep their one timer in Then.
 const QUESTION: Partial<Record<RuleTab, [string, string]>> = {
   when: ["What starts it?", "A reading, a schedule, a person, or a device going online or offline."],
   if: ["What has to be true?", "Add conditions. Combine them with All (and) or Any (or)."],
   then: ["What should happen?", "Switch something, send an email, call a webhook or post a notification."],
-  behaviour: ["How should it behave?", "Re-arm or latch, and the safety timers that stop hardware flapping."],
   review: ["Check and create", "Name it, see what it would have done, and create it."],
 };
+const BEHAVIOUR_QUESTION = (hardware: boolean): [string, string] => [
+  "How should it behave?",
+  hardware ? "Re-arm or latch, and the safety timers that stop hardware flapping." : "Re-arm or latch, and the timers that stop repeat alerts.",
+];
 // The rule page's older tab names (Logic / Activity, before them Simulate / Versions).
+// A rule page link to Behaviour on a rule without one lands on Then.
 const OLD_TABS: Record<string, RuleTab> = { edit: "if", simulate: "if", versions: "activity" };
 
 function readMode(): EditorMode {
@@ -90,6 +95,8 @@ export function RuleEditor({
   onSaved,
   onCancel,
   activity,
+  header,
+  consequence,
 }: {
   /** Seeds the first condition and action device for a new rule. */
   deviceId?: string;
@@ -102,6 +109,11 @@ export function RuleEditor({
   onCancel?: () => void;
   /** A saved rule's Activity tab: recent firings, then Versions. */
   activity?: ReactNode;
+  /** A saved rule's page header, given the live sentence for its
+   * description (DESIGN.md §9.3), so the tabs sit right under it. */
+  header?: (sentence: ReactNode) => ReactNode;
+  /** A saved rule's "what saving touches", under Basics. */
+  consequence?: string;
 }) {
   const api = useApi();
   const catalog = useRuleCatalog();
@@ -120,14 +132,30 @@ export function RuleEditor({
   const nameRef = useRef<HTMLInputElement>(null);
 
   const wizard = isNew;
-  const tabs: RuleTab[] = wizard ? WIZARD : activity ? ["when", "if", "then", "behaviour", "activity"] : ["when", "if", "then", "behaviour"];
-  const defaultTab: RuleTab = isNew ? "when" : "if";
+  const reading = isReadingRule(draft);
+  const hardware = draft.actions.some((a) => a.kind === "actuator");
+  const tabs: RuleTab[] = [
+    ...(wizard ? [] : (["basics"] as const)),
+    "when",
+    "if",
+    "then",
+    ...(reading ? (["behaviour"] as const) : []),
+    ...(wizard ? (["review"] as const) : activity ? (["activity"] as const) : []),
+  ];
+  const defaultTab: RuleTab = isNew ? "when" : "basics";
   const [tab, setTabState] = useState<RuleTab>(() => {
     if (typeof window === "undefined" || wizard) return defaultTab;
     const raw = new URLSearchParams(window.location.search).get("tab") ?? "";
     const t = (OLD_TABS[raw] ?? raw) as RuleTab;
+    if (t === "behaviour" && !tabs.includes(t)) return "then";
     return tabs.includes(t) ? t : defaultTab;
   });
+  /** The tab a problem shows on: the name is on Basics (Review while
+   * creating); Behaviour's timer is in Then when there's no Behaviour tab. */
+  const tabOf = useCallback(
+    (section: RuleSection): RuleTab => (section === "name" ? (wizard ? "review" : "basics") : section === "behaviour" && !reading ? "then" : section),
+    [wizard, reading],
+  );
   const questionRef = useRef<HTMLHeadingElement>(null);
   const stepIndex = Math.max(0, tabs.indexOf(tab));
   // DESIGN.md §5 Wizard: a step is marked red only once it has been visited
@@ -159,7 +187,7 @@ export function RuleEditor({
   const blocking = issues.filter((i) => i.blocking);
   // What the wizard shows: problems on steps already seen (all of them once
   // Create was refused). Editing shows every problem.
-  const shown = wizard && !revealAll ? blocking.filter((i) => visited.has(i.section === "name" ? "review" : (i.section as RuleTab))) : blocking;
+  const shown = wizard && !revealAll ? blocking.filter((i) => visited.has(tabOf(i.section))) : blocking;
   const { confirmLeave, dialog: guardDialog } = useUnsavedGuard(dirty, existing?.name ?? "this rule");
 
   // A new rule's schedule defaults to the workspace time zone, which may
@@ -184,15 +212,21 @@ export function RuleEditor({
 
   const live = liveSelection(draft, selection);
 
+  // The trigger changed away from a reading while Behaviour was open: its
+  // timer is in Then now.
+  useEffect(() => {
+    if (tab === "behaviour" && !reading) setTab("then");
+  }, [tab, reading, setTab]);
+
   /** Go to a section: its tab (and, in Ladder, its element on the rung). */
   const goTo = useCallback(
     (section: RuleSection) => {
       if (section === "name") {
-        if (wizard) setTab("review");
+        setTab(tabOf(section));
         window.requestAnimationFrame(() => nameRef.current?.focus());
         return;
       }
-      setTab(section);
+      setTab(tabOf(section));
       if (mode === "ladder") {
         const first = contacts(draft.condition)[0];
         setSelection(
@@ -210,12 +244,12 @@ export function RuleEditor({
         );
       }
     },
-    [mode, draft, setTab, wizard],
+    [mode, draft, setTab, tabOf],
   );
 
   /** Wizard Next: refused while this step has problems that block saving. */
   function next() {
-    const stopping = blocking.filter((i) => i.section === tab);
+    const stopping = blocking.filter((i) => tabOf(i.section) === tab);
     if (stopping.length > 0) {
       toast({ tone: "error", title: "Fix the marked items first", detail: stopping[0].message });
       return;
@@ -319,11 +353,12 @@ export function RuleEditor({
     </>
   );
 
+  const question: [string, string] = tab === "behaviour" ? BEHAVIOUR_QUESTION(hardware) : (QUESTION[tab] ?? ["", ""]);
   const preview = <RulePreview draft={draft} catalog={catalog} ruleId={existing?.id} />;
   // The ladder is a diagram: on If and Then it may use the page's full width
   // (past the 760px column), so a wide rung stays legible.
   const canvasWide = mode === "ladder" && (tab === "if" || tab === "then");
-  const tabIssues = (t: RuleTab | RuleSection) => issues.filter((i) => i.section === t);
+  const tabIssues = (t: RuleTab) => issues.filter((i) => tabOf(i.section) === t);
   const modeSwitch = (
     <div className="flex flex-wrap items-center gap-2.5">
       <SegmentedControl
@@ -355,7 +390,7 @@ export function RuleEditor({
       setTab("when");
     } else if (s?.kind === "timing") {
       setSelection(null);
-      setTab("behaviour");
+      setTab(tabOf("behaviour"));
     } else setSelection(s);
   }
   const ladder = (
@@ -373,6 +408,7 @@ export function RuleEditor({
 
   return (
     <>
+      {header?.(<EditableSentence draft={draft} catalog={catalog} update={setDraft} onOpenFull={openFull} inline />)}
       <form onSubmit={handleSubmit} className="@container flex flex-1 flex-col gap-4">
         {/* DESIGN.md §9.2: the 760px editor column every editor has; the
             preview is behind its button at every width. */}
@@ -381,23 +417,25 @@ export function RuleEditor({
             {wizard && (
               <Stepper
                 current={stepIndex}
-                steps={tabs.map((t) => ({ id: t, label: TAB_LABEL[t], issues: shown.filter((i) => i.section === (t === "review" ? "name" : t)).length }))}
+                steps={tabs.map((t) => ({ id: t, label: TAB_LABEL[t], issues: shown.filter((i) => tabOf(i.section) === t).length }))}
               />
             )}
-            {!wizard && <div className="grid items-start gap-x-4 gap-y-3 @min-[640px]:grid-cols-2">{nameFields}</div>}
 
-            {/* The rule as a sentence in a highlighted box (DESIGN.md §9.3). */}
-            <div className="rounded-xl border border-accent/30 bg-accent-muted/60 px-4 py-3">
-              <EditableSentence draft={draft} catalog={catalog} update={setDraft} onOpenFull={openFull} />
-            </div>
+            {/* The rule as a sentence (DESIGN.md §9.3): in a highlighted box
+                while creating, the page header's description once saved. */}
+            {wizard && (
+              <div className="rounded-xl border border-accent/30 bg-accent-muted/60 px-4 py-3">
+                <EditableSentence draft={draft} catalog={catalog} update={setDraft} onOpenFull={openFull} />
+              </div>
+            )}
 
             <div className="flex items-end gap-2">
               {wizard ? (
                 <div className="flex min-w-0 flex-1 flex-col gap-1 pt-2">
                   <h2 ref={questionRef} tabIndex={-1} className="text-section font-semibold tracking-[-0.01em] text-ink outline-none">
-                    {QUESTION[tab]?.[0]}
+                    {question[0]}
                   </h2>
-                  <p className="text-ink-muted">{QUESTION[tab]?.[1]}</p>
+                  <p className="text-ink-muted">{question[1]}</p>
                 </div>
               ) : (
                 <Tabs
@@ -412,7 +450,7 @@ export function RuleEditor({
                   onChange={(id) => setTab(id as RuleTab)}
                 />
               )}
-              {tab !== "review" && (
+              {tab !== "review" && tab !== "basics" && tab !== "activity" && (
                 <Button type="button" variant="secondary" size="sm" className="mb-1.5" onClick={() => setPreviewOpen(true)}>
                   <Activity aria-hidden size={14} />
                   Preview
@@ -422,6 +460,14 @@ export function RuleEditor({
           </div>
 
           <div className={cn("flex min-w-0 flex-col gap-4", !canvasWide && "max-w-[760px]")}>
+            {!wizard &&
+              panel(
+                "basics",
+                <>
+                  <div className="grid items-start gap-x-4 gap-y-3 @min-[640px]:grid-cols-2">{nameFields}</div>
+                  {consequence && <p className="text-meta text-ink-muted">{consequence}</p>}
+                </>,
+              )}
             {panel("when", <WhenSection draft={draft} catalog={catalog} update={setDraft} />)}
             {panel(
               "if",
@@ -435,9 +481,10 @@ export function RuleEditor({
               <>
                 {modeSwitch}
                 {mode === "form" ? <ThenSection draft={draft} catalog={catalog} update={setDraft} onGoBehaviour={() => setTab("behaviour")} /> : tab === "then" && ladder}
+                {!reading && <IntervalField draft={draft} update={setDraft} hardware={hardware} />}
               </>,
             )}
-            {panel("behaviour", <BehaviourSection draft={draft} update={setDraft} />)}
+            {reading && panel("behaviour", <BehaviourSection draft={draft} update={setDraft} />)}
             {activity && panel("activity", activity)}
             {wizard &&
               panel(

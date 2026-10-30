@@ -65,7 +65,8 @@ describe("recipeStarts", () => {
       const c = r.draft.condition;
       if (c?.kind === "contact") expect(c.deviceId).toBe("");
       for (const a of r.draft.actions) if ("deviceId" in a) expect(a.deviceId).toBe("");
-      expect(r.draft.name).toBe("");
+      // A suggested name, changed on Review (the page no longer asks first).
+      expect(r.draft.name).not.toBe("");
     }
     expect(all.find((r) => r.id === "offline")!.draft.when.statusDeviceId).toBe("");
   });

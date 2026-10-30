@@ -4,7 +4,7 @@ test("a clear notification is configured in the form, summarised, and persisted"
   page,
   ruleUnderTest,
 }) => {
-  await page.goto(`/rules/${ruleUnderTest.id}`);
+  await page.goto(`/rules/${ruleUnderTest.id}?tab=if`);
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Form" }).click();
   // What happens on clear is part of Behaviour (DESIGN.md §9.2 tabs).
   await page.getByRole("tablist", { name: "Rule sections" }).getByRole("tab", { name: /^Behaviour/ }).click();
@@ -15,6 +15,9 @@ test("a clear notification is configured in the form, summarised, and persisted"
   // The fixture's only action is a notification — there's no actuator to turn back.
   await expect(page.getByLabel("Turn it back when the condition clears")).toHaveCount(0);
 
+  // Nothing is switched, so the timers are about repeat alerts, not relays.
+  await expect(behaviour.getByText("they stop repeat alerts")).toBeVisible();
+  await expect(behaviour.getByText(/relays|flapping/)).toHaveCount(0);
   // An on/off setting is a Switch (DESIGN.md §5), not a checkbox.
   const notify = page.getByRole("switch", { name: "Notify when it clears" });
   await notify.click();

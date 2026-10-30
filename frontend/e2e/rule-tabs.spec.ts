@@ -1,18 +1,14 @@
 import { expect } from "@playwright/test";
 import { test } from "./fixtures";
 
-// DESIGN.md §9.2–9.3 (demo H): Name and Status, the sentence, then tabs
-// When · If · Then · Behaviour · Activity; conditions and actions are rows
-// that open a sheet; the preview is beside the editor when there's room.
+// DESIGN.md §9.2–9.3 (demo H): the sentence is the header's description,
+// then tabs Basics · When · If · Then · Behaviour · Activity; conditions and
+// actions are rows that open a sheet; the preview is behind its button.
 
 test("a new rule is a wizard: Next waits for each step, Back to the recipes, Review creates", async ({ page }) => {
   await page.goto("/rules/new");
-  // DESIGN.md §9.1: the name comes first; a recipe or blank needs it.
-  await page.getByRole("button", { name: /Start blank/ }).click();
-  await expect(page.getByText("Name the rule first.")).toBeVisible();
-  await expect(page.getByLabel("Name", { exact: true })).toBeFocused();
-  await page.getByLabel("Name", { exact: true }).fill("E2E blank wizard");
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("E2E blank wizard");
+  // DESIGN.md §9.1: a recipe or blank first; the name is asked on Review.
+  await expect(page.getByLabel("Name", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /Start blank/ }).click();
   const steps = page.getByRole("list", { name: "Steps" });
   await expect(steps).toContainText("When");
@@ -37,11 +33,17 @@ test("a new rule is a wizard: Next waits for each step, Back to the recipes, Rev
 test("a saved rule: tabs in the URL, a condition edited in its sheet, Activity has no save bar", async ({ page, ruleUnderTest }) => {
   await page.goto(`/rules/${ruleUnderTest.id}`);
   const tabs = page.getByRole("tablist", { name: "Rule sections" });
-  await expect(tabs.getByRole("tab")).toHaveText([/^When/, /^If/, /^Then/, /^Behaviour/, /^Activity/]);
-  // A saved rule opens on If, with the name and status on top.
-  await expect(tabs.getByRole("tab", { name: /^If/ })).toHaveAttribute("aria-selected", "true");
+  await expect(tabs.getByRole("tab")).toHaveText([/^Basics/, /^When/, /^If/, /^Then/, /^Behaviour/, /^Activity/]);
+  // The sentence sits in the header, above the tabs (like a template's).
+  const sentence = page.getByLabel("Rule sentence");
+  expect((await sentence.boundingBox())!.y).toBeLessThan((await tabs.boundingBox())!.y);
+  // A saved rule opens on Basics: its name and status.
+  await expect(tabs.getByRole("tab", { name: /^Basics/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue(ruleUnderTest.name);
   await expect(page.getByRole("switch", { name: "Status" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Preview", exact: true })).toHaveCount(0);
+
+  await tabs.getByRole("tab", { name: /^If/ }).click();
 
   await page.getByRole("radiogroup", { name: "Editor view" }).getByRole("radio", { name: "Form" }).click();
   // The condition is a row; it opens in a sheet.
@@ -68,7 +70,7 @@ test("a saved rule: tabs in the URL, a condition edited in its sheet, Activity h
 test("the preview is behind its button at every width, beside the 760px editor", async ({ page, ruleUnderTest }) => {
   for (const width of [1600, 400]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto(`/rules/${ruleUnderTest.id}`);
+    await page.goto(`/rules/${ruleUnderTest.id}?tab=if`);
     // The same column as every editor (DESIGN.md §4), and no side panel.
     expect((await page.getByRole("tablist", { name: "Rule sections" }).boundingBox())!.width).toBeLessThanOrEqual(760);
     await expect(page.getByRole("complementary", { name: "Preview" })).toHaveCount(0);
@@ -83,14 +85,19 @@ test("the preview is behind its button at every width, beside the 760px editor",
 
 test("walking a recipe to Review creates nothing until Create rule", async ({ page }) => {
   await page.goto("/rules/new");
-  // No device on the first page: name, recipe, then the device in the When step.
+  // No device on the first page: recipe, then the device in the When step.
   await expect(page.getByLabel("Device", { exact: true })).toHaveCount(0);
-  await page.getByLabel("Name", { exact: true }).fill("E2E offline recipe");
   await page.getByRole("button", { name: /Tell me when a device goes offline/ }).click();
   await page.getByLabel("Watched device").selectOption({ index: 1 });
-  for (const next of ["Next: If", "Next: Then", "Next: Behaviour", "Next: Review"]) {
-    await page.getByRole("button", { name: next }).click();
-  }
+  // Not on a reading, so no Behaviour step: its one timer is in Then.
+  await expect(page.getByRole("list", { name: "Steps" })).not.toContainText("Behaviour");
+  await page.getByRole("button", { name: "Next: If" }).click();
+  await page.getByRole("button", { name: "Next: Then" }).click();
+  await expect(page.getByLabel(/^Minimum interval/)).toBeVisible();
+  await page.getByRole("button", { name: "Next: Review" }).click();
+  // The recipe suggests a name; Review is where it's changed.
+  await expect(page.getByLabel("Name", { exact: true })).toHaveValue("Device offline");
+  await page.getByLabel("Name", { exact: true }).fill("E2E offline recipe");
   await expect(page.getByRole("heading", { name: "Check and create" })).toBeVisible();
   // Regression: the last Next must not turn into the submit button mid-click.
   await expect(page).toHaveURL(/\/rules\/new/);

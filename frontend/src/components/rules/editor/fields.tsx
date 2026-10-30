@@ -69,6 +69,7 @@ export function NumberSafetyField({
   onChange,
   min = 0,
   disabled = false,
+  hardware = true,
 }: {
   label: string;
   hint: string;
@@ -76,6 +77,8 @@ export function NumberSafetyField({
   onChange: (v: number) => void;
   min?: number;
   disabled?: boolean;
+  /** The rule switches an actuator: the warning is about relays, not alerts. */
+  hardware?: boolean;
 }) {
   return (
     <Field
@@ -85,7 +88,8 @@ export function NumberSafetyField({
           {hint}
           {!disabled && value < min && (
             <span className="block text-status-pending">
-              Low values make relays cycle rapidly on noisy readings — consider {min} or higher.
+              {hardware ? "Low values make relays cycle rapidly on noisy readings" : "Low values can send an alert for every noisy reading"} — consider {min} or
+              higher.
             </span>
           )}
         </>

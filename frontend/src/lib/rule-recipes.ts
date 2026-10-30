@@ -187,6 +187,7 @@ export function recipeStarts(timezone = "UTC", device?: RecipeDevice): Recipe[] 
   const filled = device ? recipesFor(device, timezone) : [];
   const base = () => emptyDraft("", timezone);
   const switchOn = (on: boolean, revert: boolean): ActuatorActionDraft => ({ ...(emptyAction("actuator", "") as ActuatorActionDraft), bool: on, revertOnClear: revert });
+  // Each starts with a suggested name, changed on Review.
   const generic: Recipe[] = [];
 
   {
@@ -195,12 +196,14 @@ export function recipeStarts(timezone = "UTC", device?: RecipeDevice): Recipe[] 
     d.condition = null;
     d.actions = [{ ...emptyAction("notification", ""), message: "A device went offline." } as RuleDraft["actions"][number]];
     d.cooldown = DEFAULT_COOLDOWN;
+    d.name = "Device offline";
     generic.push({ id: "offline", title: "Tell me when a device goes offline", description: "A notification when the device you pick disconnects.", icon: "offline", tags: [], draft: d });
   }
   {
     const d = base();
     d.condition = { ...emptyContact(""), operator: ">", value: 30, hysteresis: DEFAULT_HYSTERESIS };
     d.actions = [switchOn(true, true)];
+    d.name = "Too hot → switch on";
     generic.push({
       id: "too-hot",
       title: "Turn something on when it's too hot",
@@ -215,12 +218,14 @@ export function recipeStarts(timezone = "UTC", device?: RecipeDevice): Recipe[] 
     d.condition = { ...emptyContact(""), operator: "==", value: 1, hysteresis: 0 };
     d.forDuration = 120;
     d.actions = [{ ...emptyAction("email", ""), subject: "Left open", body: "It has been open for 2 minutes." } as RuleDraft["actions"][number]];
+    d.name = "Door open too long";
     generic.push({ id: "door-open", title: "Alert when a door stays open", description: "Emails the workspace's alert recipients after 2 minutes open.", icon: "door", tags: ["email"], draft: d });
   }
   {
     const d = base();
     d.condition = { ...emptyContact(""), operator: "<", value: 40, hysteresis: DEFAULT_HYSTERESIS };
     d.actions = [{ ...emptyAction("notification", ""), message: "Humidity is low." } as RuleDraft["actions"][number]];
+    d.name = "Humidity low";
     generic.push({ id: "humidity-low", title: "Warn when humidity drops", description: "Below a limit for 10 s, add a notification.", icon: "droplet", tags: [], draft: d });
   }
   {
@@ -228,6 +233,7 @@ export function recipeStarts(timezone = "UTC", device?: RecipeDevice): Recipe[] 
     d.condition = { ...emptyContact(""), operator: "<", value: 20, hysteresis: DEFAULT_HYSTERESIS };
     d.actions = [switchOn(false, false)];
     d.behaviour = "latch";
+    d.name = "Tank low → stop pump";
     generic.push({
       id: "tank-low",
       title: "Stop the pump when the tank is low",
@@ -242,6 +248,7 @@ export function recipeStarts(timezone = "UTC", device?: RecipeDevice): Recipe[] 
     d.when = { ...d.when, type: "schedule", cron: "0 22 * * *", timezone };
     d.condition = null;
     d.actions = [switchOn(true, false)];
+    d.name = "On at 22:00";
     generic.push({
       id: "schedule",
       title: "Switch something on a schedule",
