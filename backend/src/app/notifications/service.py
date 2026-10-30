@@ -419,6 +419,14 @@ class FeedSummary:
     rule_ids: list[uuid.UUID]
 
 
+async def count_unread_critical(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    """Critical alerts (rows of repeats) with something unread."""
+    _, total = await list_groups(
+        session, tenant_id, FeedFilters(severity="critical", unread=True), limit=1
+    )
+    return total
+
+
 async def summarize(session: AsyncSession, tenant_id: uuid.UUID) -> FeedSummary:
     """Alerts (groups) in the feed and how many are unread, by type; and the
     devices and rules that have any, for the page's filters."""
