@@ -13,6 +13,7 @@ from app.catalog import service as catalog_service
 from app.db import set_tenant_context
 from app.shared.slug import slugify
 from app.tenants.models import Invitation, Tenant, TenantMembership, TenantRole
+from app.tenants.schemas import LandingTarget
 
 LEGACY_CATALOG_ENTRY_NAME = "Legacy / Uncategorized"
 
@@ -287,6 +288,75 @@ async def set_default_dashboard(
     membership = await _membership(session, tenant_id, user_id)
     membership.default_dashboard_id = dashboard_id
     await session.flush()
+
+
+class SetupStatus(NamedTuple):
+    template: bool
+    device: bool
+    rule: bool
+    dashboard: bool
+    invite: bool
+    dismissed: bool
+
+    @property
+    def complete(self) -> bool:
+        """The four required steps; inviting is optional."""
+        return self.template and self.device and self.rule and self.dashboard
+
+
+async def setup_status(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> SetupStatus:
+    """Get started's steps, each read from data, never ticked by hand: a
+    template, a device that has sent something, a rule, a dashboard of this
+    person's, and (optional) someone else invited. Imported here: dashboards,
+    devices and rules import this module."""
+    from app.dashboards import service as dashboards_service
+    from app.devices import service as devices_service
+    from app.rules import service as rules_service
+
+    tenant = await get_tenant(session, tenant_id)
+    return SetupStatus(
+        template=await catalog_service.count_catalog_entries(session, tenant_id) > 0,
+        device=await devices_service.first_seen_device(session, tenant_id) is not None,
+        rule=await rules_service.count_rules(session, tenant_id) > 0,
+        dashboard=await dashboards_service.count_my_dashboards(session, tenant_id, user_id) > 0,
+        invite=await count_members(session, tenant_id) > 1
+        or len(await list_invitations(session, tenant_id)) > 0,
+        dismissed=tenant.setup_dismissed_at is not None,
+    )
+
+
+class Landing(NamedTuple):
+    target: LandingTarget
+    dashboard_id: uuid.UUID | None
+    dashboard_ids: list[uuid.UUID]
+    setup_complete: bool
+
+
+async def landing(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, role: str
+) -> Landing:
+    """Where this person lands after signing in, in order: Get started for an
+    owner or admin while setup is unfinished and not dismissed; the one-time
+    Welcome for someone with no dashboard here yet; their dashboards (the
+    default, else the page's last opened); else Devices."""
+    from app.dashboards import service as dashboards_service
+
+    setup = await setup_status(session, tenant_id, user_id)
+    membership = await _membership(session, tenant_id, user_id)
+    ids = await dashboards_service.list_my_dashboard_ids(session, tenant_id, user_id)
+    manages = role in (TenantRole.OWNER.value, TenantRole.ADMIN.value)
+    target: LandingTarget
+    if manages and not setup.complete and not setup.dismissed:
+        target = "setup"
+    elif not ids and membership.welcomed_at is None:
+        target = "welcome"
+    elif ids:
+        target = "dashboard"
+    else:
+        target = "devices"
+    return Landing(target, membership.default_dashboard_id, ids, setup.complete)
 
 
 def assert_can_assign(actor_role: str, role: TenantRole) -> None:

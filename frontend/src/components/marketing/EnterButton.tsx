@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
+import { HOME } from "@/lib/landing";
 import { nightButtonClassName } from "./night";
 
 /** The landing page's sign-in action, on the night surfaces. A visitor who is
@@ -11,7 +12,7 @@ export function EnterButton({ size = "md" }: { size?: "md" | "lg" }) {
   const { status } = useAuth();
   const authenticated = status === "authenticated";
   return (
-    <Link href={authenticated ? "/devices" : "/login"} className={nightButtonClassName({ kind: "ghost", size })}>
+    <Link href={authenticated ? HOME : "/login"} className={nightButtonClassName({ kind: "ghost", size })}>
       {authenticated ? "Open console" : "Sign in"}
     </Link>
   );

@@ -29,6 +29,7 @@ import { CreateWorkspaceDialog } from "@/components/shell/CreateWorkspaceDialog"
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import type { RealtimeStatus } from "@/lib/realtime";
 import { cn } from "@/lib/cn";
+import { HOME } from "@/lib/landing";
 
 export function initialsFor(name: string | null | undefined, email: string): string {
   if (name && name.trim()) {
@@ -337,6 +338,7 @@ function WorkspaceSwitcher({
  * phone More sheet's workspace block. */
 export function WorkspaceMenu({ onCreate, onSwitched }: { onCreate: () => void; onSwitched: () => void }) {
   const { memberships, currentTenantId, setCurrentTenantId } = useAuth();
+  const router = useRouter();
   return (
     <div role="menu" aria-label="Workspaces" className="flex flex-col">
       <p className="px-2.5 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-ink-muted">
@@ -355,6 +357,8 @@ export function WorkspaceMenu({ onCreate, onSwitched }: { onCreate: () => void; 
               if (isCurrent) return;
               setCurrentTenantId(m.tenant_id);
               onSwitched();
+              // Another workspace lands like a sign-in (DESIGN.md §4 Landing).
+              router.push(HOME);
             }}
             className="flex items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-sm hover:bg-surface-raised focus-visible:bg-surface-raised focus-visible:outline-none"
           >

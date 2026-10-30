@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { HOME } from "@/lib/landing";
 import { useApi } from "@/hooks/useApi";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
@@ -45,7 +46,8 @@ export function CreateWorkspaceDialog({ open, onClose }: { open: boolean; onClos
       await refresh();
       setCurrentTenantId(tenant.id);
       close();
-      router.push("/dashboards");
+      // A new workspace lands like a sign-in: on Get started.
+      router.push(HOME);
       toast({ title: "Workspace created", detail: `You're the owner of ${tenant.name}.` });
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Couldn't create the workspace.");

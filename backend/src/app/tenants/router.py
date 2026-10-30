@@ -31,6 +31,7 @@ from app.tenants.schemas import (
     ChangeRoleRequest,
     InvitationCreateRequest,
     InvitationResponse,
+    LandingResponse,
     MemberResponse,
     NavCountsResponse,
     TenantCreateRequest,
@@ -109,6 +110,23 @@ async def get_nav_counts(
         api_keys=await api_keys_service.count_active_api_keys(session, ctx.tenant_id)
         if admin
         else None,
+    )
+
+
+@router.get("/current/landing", response_model=LandingResponse)
+async def get_landing(
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> LandingResponse:
+    """Where this person goes after signing in (the /home page)."""
+    assert ctx.user_id is not None  # people_only
+    result = await service.landing(session, ctx.tenant_id, ctx.user_id, ctx.role.value)
+    return LandingResponse(
+        target=result.target,
+        dashboard_id=result.dashboard_id,
+        dashboard_ids=result.dashboard_ids,
+        setup_complete=result.setup_complete,
+        role=ctx.role.value,
     )
 
 

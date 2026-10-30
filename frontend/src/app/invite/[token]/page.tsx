@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { HOME } from "@/lib/landing";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -58,7 +59,7 @@ export default function InvitePage() {
       );
       const joined = data.memberships.find((m) => m.tenant_name === preview?.tenant_name) ?? data.memberships[0];
       adoptSession(data, joined?.tenant_id);
-      router.replace("/devices");
+      router.replace(HOME);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Couldn't accept the invitation. Try again.");
     } finally {
