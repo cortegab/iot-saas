@@ -66,6 +66,9 @@ class SetupStatusResponse(BaseModel):
     invite: bool
     complete: bool
     dismissed: bool
+    # The device heard from most recently, for the page's live first reading.
+    first_device_id: uuid.UUID | None = None
+    first_device_name: str | None = None
 
 
 class LandingResponse(BaseModel):
