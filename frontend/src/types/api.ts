@@ -282,6 +282,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tenants/current/welcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Welcomed
+         * @description The one-time Welcome was answered: sign-in stops landing on it.
+         */
+        post: operations["mark_welcomed_tenants_current_welcome_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/current/landing": {
         parameters: {
             query?: never;
@@ -3557,6 +3577,36 @@ export interface operations {
         };
     };
     dismiss_setup_tenants_current_setup_dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_welcomed_tenants_current_welcome_post: {
         parameters: {
             query?: never;
             header?: {
