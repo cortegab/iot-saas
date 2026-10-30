@@ -174,7 +174,7 @@ export default function LandingPage() {
                 <div key={dt}>
                   <dt className="text-[12.5px] text-night-dim">{dt}</dt>
                   <dd className="mb-0.5 mt-1 font-mono text-[22px] tracking-[-0.02em] text-white tabular-nums md:text-[28px]">{dd}</dd>
-                  <span className="text-[12.5px] text-night-faint">{note}</span>
+                  <dd className="m-0 text-[12.5px] text-night-faint">{note}</dd>
                 </div>
               ))}
             </dl>

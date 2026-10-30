@@ -9,7 +9,6 @@ import { useChangeToast } from "@/hooks/useChangeToast";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
-import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -28,13 +27,15 @@ import { draftFromRule } from "@/lib/rule-draft";
 import { RULE_STATE, ruleStateKey } from "@/lib/rule-text";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { NotFound, isNotFound } from "@/components/ui/NotFound";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-/** demo G's consequence line: what saving touches. */
+/** demo G's consequence line: what saving touches (under Basics; the
+ * header's description is the rule's sentence). */
 function consequence(rule: RuleResponse): string {
   const watched = new Set(rule.devices.filter((d) => d.role === "input").map((d) => d.device_id)).size;
   const actuators = new Set(
@@ -92,6 +93,7 @@ export default function EditRulePage() {
   );
 
   if (isLoading) return <LoadingSkeleton rows={4} rowClassName="h-12" />;
+  if (isNotFound(error)) return <NotFound noun="rule" href="/rules" list="rules" />;
   if (error) {
     return (
       <ErrorState
@@ -100,7 +102,7 @@ export default function EditRulePage() {
       />
     );
   }
-  if (!rule) return <EmptyState title="Rule not found" />;
+  if (!rule) return <NotFound noun="rule" href="/rules" list="rules" />;
 
   // The editor stays on the rule after saving (DESIGN.md §7).
   function onSaved(saved: RuleResponse) {
@@ -121,63 +123,64 @@ export default function EditRulePage() {
 
   return (
     <div className={`${PAGE_WITH_BAR} gap-4`}>
-      <PageHeader
-        breadcrumbs={[{ label: "Rules", href: "/rules" }]}
-        eyebrow={
-          <span className="flex flex-wrap items-center gap-x-1.5">
-            <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
-            {rule.trigger.type === "schedule" ? (lastFired ? `fired ${timeAgo(lastFired)}` : "never fired") : fired ? `fired ${fired}× in 24 h` : "quiet in 24 h"}
-            {unhealthy && (
-              <StateChip label="Can't evaluate" className="ml-1">
-                <b className="font-medium">{unhealthy}.</b> Missing data never fires or clears it.
-              </StateChip>
+      <RuleEditor
+        header={(sentence) => (
+          <>
+            <PageHeader
+              breadcrumbs={[{ label: "Rules", href: "/rules" }]}
+              eyebrow={
+                <span className="flex flex-wrap items-center gap-x-1.5">
+                  <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
+                  {rule.trigger.type === "schedule" ? (lastFired ? `fired ${timeAgo(lastFired)}` : "never fired") : fired ? `fired ${fired}× in 24 h` : "quiet in 24 h"}
+                  {unhealthy && (
+                    <StateChip label="Can't evaluate" className="ml-1">
+                      <b className="font-medium">{unhealthy}.</b> Missing data never fires or clears it.
+                    </StateChip>
+                  )}
+                </span>
+              }
+              title={rule.name}
+              // The rule as a sentence (DESIGN.md §9.3): its chips edit it in place.
+              description={sentence}
+              actions={
+                isAdmin ? (
+                  <>
+                    <Button type="button" variant="secondary" onClick={() => void actions.runNow(rule)}>
+                      <Play size={14} aria-hidden /> Run now…
+                    </Button>
+                    <DropdownMenu label="More actions" groups={actions.menu(rule, { where: "page", onDeleted: () => router.push("/rules") })} />
+                  </>
+                ) : undefined
+              }
+            />
+            {actions.dialog}
+            {rule.latched && (
+              <Callout tone="warning" className="max-w-[760px]">
+                <span className="flex flex-wrap items-center justify-between gap-3">
+                  <span>
+                    <b className="font-medium">Latched.</b> It fired and won&rsquo;t fire again until someone resets it.
+                  </span>
+                  {isAdmin && (
+                    <Button variant="secondary" size="sm" onClick={() => void actions.resetLatch(rule)}>
+                      Reset latch…
+                    </Button>
+                  )}
+                </span>
+              </Callout>
             )}
-          </span>
-        }
-        title={rule.name}
-        description={consequence(rule)}
-        actions={
-          isAdmin ? (
-            <>
-              <Button type="button" variant="secondary" onClick={() => void actions.runNow(rule)}>
-                <Play size={14} aria-hidden /> Run now…
-              </Button>
-              <DropdownMenu label="More actions" groups={actions.menu(rule, { where: "page", onDeleted: () => router.push("/rules") })} />
-            </>
-          ) : undefined
-        }
-      />
-      {actions.dialog}
-
-      {rule.latched && (
-        <Callout tone="warning" className="max-w-[760px]">
-          <span className="flex flex-wrap items-center justify-between gap-3">
-            <span>
-              <b className="font-medium">Latched.</b> It fired and won&rsquo;t fire again until someone resets it.
-            </span>
-            {isAdmin && (
-              <Button variant="secondary" size="sm" onClick={() => void actions.resetLatch(rule)}>
-                Reset latch…
-              </Button>
+            {restored && (
+              <Callout tone="info" className="max-w-[760px]">
+                <span className="flex flex-wrap items-center justify-between gap-3">
+                  <span>Version {restored.version} is loaded. Save to make it current, or discard it.</span>
+                  <button type="button" className="text-sm font-medium text-accent hover:underline" onClick={() => setRestored(null)}>
+                    Discard
+                  </button>
+                </span>
+              </Callout>
             )}
-          </span>
-        </Callout>
-      )}
-
-
-        {restored && (
-          <Callout tone="info" className="mb-3 max-w-[760px]">
-            <span className="flex flex-wrap items-center justify-between gap-3">
-              <span>
-                Version {restored.version} is loaded. Save to make it current, or discard it.
-              </span>
-              <button type="button" className="text-sm font-medium text-accent hover:underline" onClick={() => setRestored(null)}>
-                Discard
-              </button>
-            </span>
-          </Callout>
+          </>
         )}
-        <RuleEditor
+          consequence={consequence(rule)}
           key={restored ? `${rule.id}-v${restored.version}` : rule.id}
           deviceId={seedDevice}
           existing={rule}

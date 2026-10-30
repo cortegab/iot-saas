@@ -263,7 +263,7 @@ export function DeviceEditor({
             hint={
               <>
                 Where it&apos;s installed.{" "}
-                <Link href="/zones" className="text-accent hover:underline">
+                <Link href="/zones" className="link-inline">
                   Manage zones
                 </Link>
               </>
@@ -298,7 +298,7 @@ export function DeviceEditor({
                 [
                   "Template",
                   <>
-                    <Link href={`/templates/${template.id}`} className="text-accent hover:underline">
+                    <Link href={`/templates/${template.id}`} className="link-inline">
                       {template.name}
                     </Link>
                     <span className="text-ink-muted"> · {template.runs_on === "generic_firmware" ? "Our firmware" : "Custom firmware"}</span>
@@ -360,7 +360,7 @@ export function DeviceEditor({
             {!d.wiring && !templateWiring && (
               <Callout>
                 {template.name} has no wiring, so this device gets a sketch to edit and upload. Wire this device alone, or{" "}
-                <Link href={`/templates/${template.id}#hardware`} className="text-accent hover:underline">
+                <Link href={`/templates/${template.id}#hardware`} className="link-inline">
                   set up the template&apos;s wiring
                 </Link>{" "}
                 for every device of it.

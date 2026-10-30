@@ -410,10 +410,12 @@ const LATCH = (
 
 /** Behaviour (demo H): Re-arm or Latch as illustrated cards, then the safety
  * timers three across (always applied), then what happens when it clears.
- * An event or manual rule only has the minimum interval. */
+ * The wording follows what it acts on: relays flap, alerts repeat. An event
+ * or manual rule only has the minimum interval (in Then, IntervalField). */
 export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: Update }) {
   const reading = isReadingRule(draft);
   const clearing = canClear(draft);
+  const hardware = switchesHardware(draft);
 
   return (
     <div className="@container flex flex-col gap-6">
@@ -438,7 +440,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
       )}
       <div className="flex flex-col gap-2">
         <span className="text-meta font-medium text-ink">
-          Safety <span className="font-normal text-ink-muted">always applied; they stop hardware flapping</span>
+          Safety <span className="font-normal text-ink-muted">always applied; {hardware ? "they stop hardware flapping" : "they stop repeat alerts"}</span>
         </span>
         <div className="grid grid-cols-1 items-start gap-4 @min-[560px]:grid-cols-3">
           <NumberSafetyField
@@ -448,6 +450,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
             onChange={(forDuration) => update({ ...draft, forDuration })}
             min={5}
             disabled={!reading}
+            hardware={hardware}
           />
           <NumberSafetyField
             label="Minimum interval"
@@ -455,6 +458,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
             value={draft.cooldown}
             onChange={(cooldown) => update({ ...draft, cooldown })}
             min={reading ? 30 : 0}
+            hardware={hardware}
           />
           <NumberSafetyField
             label="Clear delay"
@@ -469,6 +473,24 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
     </div>
   );
 }
+
+/** A rule not on a reading (schedule, manual, online / offline) has one
+ * timer, so it sits under Then instead of a Behaviour tab of its own. */
+export function IntervalField({ draft, update, hardware }: { draft: RuleDraft; update: Update; hardware: boolean }) {
+  return (
+    <div className="max-w-[260px]">
+      <NumberSafetyField
+        label="Minimum interval"
+        hint={hardware ? "Time between two firings, so the hardware isn't switched too often." : "Time between two firings, so alerts don't repeat too often."}
+        value={draft.cooldown}
+        onChange={(cooldown) => update({ ...draft, cooldown })}
+        hardware={hardware}
+      />
+    </div>
+  );
+}
+
+const switchesHardware = (draft: RuleDraft) => draft.actions.some((a) => a.kind === "actuator");
 
 function ClearFields({ draft, update }: { draft: RuleDraft; update: Update }) {
   return (
@@ -487,9 +509,11 @@ function ClearFields({ draft, update }: { draft: RuleDraft; update: Update }) {
           <Input value={draft.clearMessage} onChange={(e) => update({ ...draft, clearMessage: e.target.value })} placeholder="e.g. Temperature back to normal" />
         </Field>
       )}
-      <p className="text-meta text-ink-muted">
-        Actuators set to turn back (in Then) run once per firing. If a reading goes stale nothing is sent: the last state holds.
-      </p>
+      {switchesHardware(draft) && (
+        <p className="text-meta text-ink-muted">
+          Actuators set to turn back (in Then) run once per firing. If a reading goes stale nothing is sent: the last state holds.
+        </p>
+      )}
       {draft.preserved.clearActions.length > 0 && (
         <p className="text-sm text-ink-muted">
           Also keeps {draft.preserved.clearActions.length} clear action

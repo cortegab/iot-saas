@@ -2,7 +2,8 @@
 
 import { useCallback, useMemo } from "react";
 import { mutate as revalidate } from "swr";
-import { Ban, Link2 } from "lucide-react";
+import { Ban, Link2, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -26,6 +27,7 @@ import { KEY_STATUS_LABEL, KEY_STATUS_TONE, keyStatus, type ApiKey } from "@/lib
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, formatWhen, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { NotFound } from "@/components/ui/NotFound";
 
 type ApiKeyCreateResponse = components["schemas"]["ApiKeyCreateResponse"];
 
@@ -54,7 +56,8 @@ export function KeyEditor({
   const api = useApi();
   const toast = useToast();
   const { can } = usePermissions();
-  const { revoke, dialog } = useRevokeKey();
+  const router = useRouter();
+  const { revoke, remove, endItems, dialog } = useRevokeKey();
   const { data: keys, error, mutate } = useApiSWR<ApiKey[]>("/api-keys");
   const isNew = keyId == null;
   const key = keys?.find((k) => k.id === keyId);
@@ -101,6 +104,8 @@ export function KeyEditor({
   }
 
   if (!isNew) {
+    // The list has loaded and the key isn't in it: gone, not still loading.
+    if (!key && keys) return <NotFound noun="key" href="/keys" list="API keys" />;
     if (!key) {
       return (
         <div className="p-5">
@@ -132,6 +137,7 @@ export function KeyEditor({
                 onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/keys/${key.id}`).then(() => toast({ tone: "info", title: "Link copied" })),
               },
             ],
+            ...(can("keys.manage") ? endItems(key, () => router.push("/keys")) : []),
           ]}
         >
           <EditorSection id="key" title="Key">
@@ -157,8 +163,14 @@ export function KeyEditor({
                   Revoke key…
                 </Button>
               </div>
-            ) : st !== "active" ? (
-              <p className="text-meta text-ink-muted">{st === "revoked" ? "Revoked" : "Expired"} keys stay listed for audit.</p>
+            ) : st !== "active" && can("keys.manage") ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <Button variant="secondary-danger" onClick={() => void remove(key, () => router.push("/keys"))}>
+                  <Trash2 aria-hidden size={14} />
+                  Delete key…
+                </Button>
+                <span className="text-meta text-ink-muted">{st === "revoked" ? "Revoked" : "Expired"}, so it can&apos;t authenticate any more.</span>
+              </div>
             ) : null}
           </EditorSection>
         </EditorFrame>

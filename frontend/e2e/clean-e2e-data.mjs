@@ -36,13 +36,17 @@ export default async function cleanE2eData() {
   };
   const counts = {};
   // Rules first (they reference devices), then devices before their templates.
-  // API keys can only be revoked (DELETE revokes; revoked keys are kept and
-  // hidden by the list's default Active filter), so only active ones count.
-  for (const [path, key] of [["/rules", "rules"], ["/dashboards", "dashboards"], ["/devices", "devices"], ["/catalog", "catalog"], ["/zones", "zones"], ["/api-keys", "api-keys revoked"]]) {
-    const rows = (await list(path)).filter((r) => IS_TEST(r.name) && !(path === "/api-keys" && r.revoked_at));
+  for (const [path, key] of [["/rules", "rules"], ["/dashboards", "dashboards"], ["/devices", "devices"], ["/catalog", "catalog"], ["/zones", "zones"]]) {
+    const rows = (await list(path)).filter((r) => IS_TEST(r.name));
     for (const r of rows) await fetch(`${API}${path}/${r.id}`, { method: "DELETE", headers });
     counts[key] = rows.length;
   }
+  // API keys: DELETE revokes; only a revoked or expired key can be deleted
+  // for good (/permanent). Revoke the active ones first, then delete them all.
+  const keys = (await list("/api-keys")).filter((k) => IS_TEST(k.name));
+  for (const k of keys.filter((k) => !k.revoked_at)) await fetch(`${API}/api-keys/${k.id}`, { method: "DELETE", headers });
+  for (const k of keys) await fetch(`${API}/api-keys/${k.id}/permanent`, { method: "DELETE", headers });
+  counts["api-keys"] = keys.length;
   let dismissed = 0;
   for (let round = 0; round < 10; round++) {
     const notes = (await list("/notifications?limit=100")).filter((n) => IS_TEST_NOTE(n.message));

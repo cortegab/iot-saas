@@ -6,6 +6,7 @@ import { Tag } from "@/components/ui/Badge";
 import { Callout } from "@/components/ui/Callout";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Select } from "@/components/ui/Select";
 import { Table } from "@/components/ui/Table";
 import { OptionGroup, plural, StepNav } from "@/components/devices/connect/parts";
@@ -175,7 +176,7 @@ function WifiOptions({ flow }: { flow: ConnectFlow }) {
             <Input value={flow.ssid} autoComplete="off" onChange={(e) => flow.setSsid(e.target.value)} />
           </Field>
           <Field label="Password">
-            <Input type="password" value={flow.wifiPassword} autoComplete="off" onChange={(e) => flow.setWifiPassword(e.target.value)} />
+            <PasswordInput aria-label="Wi-Fi password" value={flow.wifiPassword} autoComplete="off" onChange={(e) => flow.setWifiPassword(e.target.value)} />
           </Field>
         </div>
       )}

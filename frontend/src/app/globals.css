@@ -39,6 +39,8 @@
   --color-status-pending: #b45309;
   --color-status-unknown: #6b7280;
   --color-status-error: #dc2626;
+  /* Red text on a raised fill (the destructive button): AA at 14 px. */
+  --color-status-error-strong: #b91c1c;
   --color-status-error-surface: #fef2f2;
   --color-status-pending-surface: #fffbeb;
 
@@ -76,6 +78,7 @@
   --color-status-pending: #fbbf24;
   --color-status-unknown: #9ca3af;
   --color-status-error: #f87171;
+  --color-status-error-strong: #f87171;
   --color-status-error-surface: #2a1517;
   --color-status-pending-surface: #2a2211;
 
@@ -124,6 +127,7 @@
   --color-status-pending: var(--color-status-pending);
   --color-status-unknown: var(--color-status-unknown);
   --color-status-error: var(--color-status-error);
+  --color-status-error-strong: var(--color-status-error-strong);
   --color-status-error-surface: var(--color-status-error-surface);
   --color-status-pending-surface: var(--color-status-pending-surface);
 
@@ -270,6 +274,13 @@ body {
   outline-offset: 2px;
 }
 
+/* Edge draws its own reveal (and clear) button inside password fields; ours
+   is PasswordInput's Show / Hide, so the native one would be a second eye. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 /* Native select with the design's chevron (components/ui/Select.tsx). */
 .ui-select {
   appearance: none;
@@ -401,5 +412,18 @@ body {
       height: max(100%, 44px);
       transform: translate(-50%, -50%);
     }
+  }
+}
+
+/* DESIGN.md §12: a link inside running text (a hint, a sentence) is
+   underlined, so it doesn't rely on colour alone (WCAG 1.4.1). Stand-alone
+   links keep the hover underline. */
+@utility link-inline {
+  color: var(--color-accent);
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  text-underline-offset: 3px;
+  &:hover {
+    text-decoration-color: var(--color-accent);
   }
 }

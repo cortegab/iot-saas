@@ -1,14 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { mutate as revalidate } from "swr";
 import { Check, ChevronDown, Copy, LayoutDashboard, LayoutGrid, List, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Button, buttonClassName } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -26,6 +25,7 @@ import { AddWidgetSheet, WidgetSheet } from "@/components/dashboards/WidgetSheet
 import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
+import { NotFound, isNotFound } from "@/components/ui/NotFound";
 
 type DashboardResponse = components["schemas"]["DashboardResponse"];
 type Widget = components["schemas"]["Widget"];
@@ -169,19 +169,8 @@ export default function DashboardDetailPage() {
   // Errors first: a failed fetch never seeds `widgets`, so checking the
   // loading state first would spin forever (the old 404 bug).
   if (error) {
-    if (error instanceof ApiRequestError && error.status === 404) {
-      return (
-        <EmptyState
-          icon={<LayoutDashboard aria-hidden size={26} />}
-          title="This dashboard doesn't exist"
-          description="Dashboards are personal, so a teammate's link opens nothing for you."
-          action={
-            <Link href="/dashboards" className={buttonClassName({ variant: "secondary" })}>
-              All dashboards
-            </Link>
-          }
-        />
-      );
+    if (isNotFound(error)) {
+      return <NotFound noun="dashboard" href="/dashboards" list="dashboards" description="Dashboards are personal, so a teammate's link opens nothing for you." />;
     }
     return <ErrorState title="Couldn't load this dashboard" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />;
   }

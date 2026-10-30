@@ -324,7 +324,7 @@ export default function DevicesPage() {
                 selection={canWrite ? { selected, onChange: setSelected, rowLabel: (d) => d.name } : undefined}
                 rowMenu={rowMenu}
                 rowMenuLabel={(d) => `Actions for ${d.name}`}
-                rowClassName={(d) => (d.status === "disabled" ? "[&>td]:opacity-60" : undefined)}
+                inactive={(d) => d.status === "disabled"}
                 currentKey={peek.peekId}
               />
               <TableFooter

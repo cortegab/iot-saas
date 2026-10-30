@@ -27,7 +27,6 @@ test("builds A AND (B OR C) AND D in the ladder, round-trips through the form, a
   const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
 
   await page.goto("/rules/new");
-  await page.getByLabel("Name", { exact: true }).fill(name);
   await page.getByRole("button", { name: /Start blank/ }).click();
   // A new rule is a wizard (DESIGN.md §9.1); Form / Ladder is in its If and Then steps.
   await page.getByRole("button", { name: "Next: If" }).click();

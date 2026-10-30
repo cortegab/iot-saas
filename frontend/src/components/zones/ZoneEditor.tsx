@@ -22,6 +22,7 @@ import { useDeleteZone } from "./useDeleteZone";
 import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
 import type { components } from "@/types/api";
+import { NotFound, isNotFound } from "@/components/ui/NotFound";
 
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
@@ -105,6 +106,7 @@ export function ZoneEditor({
       .catch(() => false);
   }
 
+  if (isNotFound(error)) return <NotFound noun="zone" href="/zones" list="zones" />;
   if (error) {
     return (
       <div className="p-5">

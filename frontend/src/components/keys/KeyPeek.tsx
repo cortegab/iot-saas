@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, Copy, Link2 } from "lucide-react";
+import { Copy, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
@@ -13,7 +13,7 @@ import { useRevokeKey } from "./useRevokeKey";
 /** An API key at a glance; its page is /keys/{id}. */
 export function KeyPeek({ apiKey, onClose }: { apiKey: ApiKey | undefined; onClose: () => void }) {
   const toast = useToast();
-  const { revoke, dialog } = useRevokeKey();
+  const { endItems, dialog } = useRevokeKey();
   if (!apiKey) return <PeekPlaceholder noun="key" missing onClose={onClose} />;
 
   const st = keyStatus(apiKey);
@@ -28,7 +28,7 @@ export function KeyPeek({ apiKey, onClose }: { apiKey: ApiKey | undefined; onClo
       { label: "Copy prefix", icon: <Copy size={15} />, onClick: () => copy(apiKey.key_prefix, "Prefix copied") },
       { label: "Copy link", icon: <Link2 size={15} />, onClick: () => copy(`${window.location.origin}/keys/${apiKey.id}`, "Link copied") },
     ],
-    ...(st === "active" ? [[{ label: "Revoke…", icon: <Ban size={15} />, danger: true, onClick: () => void revoke(apiKey) }]] : []),
+    ...endItems(apiKey, onClose),
   ];
 
   return (

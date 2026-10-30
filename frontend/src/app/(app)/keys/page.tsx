@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Copy, Eye, KeyRound, Lock, Plus } from "lucide-react";
+import { Copy, Eye, KeyRound, Lock, Plus } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
@@ -34,7 +34,7 @@ import { formatDate, timeAgo } from "@/lib/time-ago";
 export default function KeysPage() {
   const router = useRouter();
   const toast = useToast();
-  const { revoke, dialog } = useRevokeKey();
+  const { endItems, dialog } = useRevokeKey();
   const { can } = usePermissions();
   const canManage = can("keys.manage");
   const { data: keys, error, isLoading, mutate } = useApiSWR<ApiKey[]>(canManage ? "/api-keys" : null);
@@ -113,7 +113,7 @@ export default function KeysPage() {
             .catch(() => toast({ tone: "error", title: "Couldn't reach the clipboard", detail: k.key_prefix })),
       },
     ],
-    ...(keyStatus(k) === "active" ? [[{ label: "Revoke…", icon: <Ban size={15} />, danger: true, onClick: () => void revoke(k) }]] : []),
+    ...endItems(k, () => peek.peekId === k.id && peek.close()),
   ];
 
   if (!canManage) {
@@ -201,7 +201,7 @@ export default function KeysPage() {
                     rowMenu={rowMenu}
                     rowMenuLabel={(k) => `Actions for ${k.name}`}
                     currentKey={peek.peekId}
-                    rowClassName={(k) => (keyStatus(k) === "active" ? undefined : "opacity-60")}
+                    inactive={(k) => keyStatus(k) !== "active"}
                   />
                   <TableFooter
                     shown={filtered.length}

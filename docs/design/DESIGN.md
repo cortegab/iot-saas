@@ -211,11 +211,11 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | **FactList** | NEW | Read-only facts of a record as a definition list: a muted label column (140 px) and the value, stacking on phones. A value links to its source ("ESP32 Inputs · Our firmware") and may carry inline link actions (**Copy**, **Rotate credential…**, a disclosure). Never a disabled input, a grey box or a loose sentence for a fact. |
 | **Inherited** | NEW | A value that follows another record's unless overridden (a device's wiring from its template, a rule email's recipients from the workspace): says what it follows and from where, shows that value read-only, and offers **Use a different …**; once overridden, the field plus **Use the {source}'s …**. |
 | **Sheet / Drawer** | existing | The record peek and the item sheet (§7), 560 px, full height, from the right. **Bottom** placement on phones (≤ 640 px) for the More menu, sentence editors and short pickers: rounded top, a grab handle, up to 85% of the height. Scrim + focus trap + Esc; focus returns to the trigger. On phones the **record peek** fills the screen, and its ‹ › ⋯ × controls take their own row above the title so the title keeps the full width. |
-| **Wizard** | NEW | Creating a record (§7). Numbered steps (done ✓ / current / red when a step has a problem); on phones "Step n of N · Name" over a thin progress bar instead. Each step opens with a question as its heading ("What starts it?"), which takes focus, and a one-line lead. The save bar holds **Back** and **Next: {step}**; the last step is **Review**, a definition list with a **Change** link per row, and the primary button names the result ("Create rule"). Next is refused while the step has blocking problems: they are marked and the first takes focus. |
+| **Wizard** | NEW | Creating a record (§7). Numbered steps (done ✓ / current / red when a step has a problem); on phones "Step n of N · Name" over a thin progress bar instead. Each step opens with a question as its heading ("What starts it?"), which takes focus, and a one-line lead. The save bar holds **Back** and **Next: {step}**; the last step is **Review**, a definition list with a **Change** link per row, and the primary button names the result ("Create rule"). Next is refused while the step has blocking problems: they are marked and the first takes focus. A step turns red, and counts in the bar's "N to fix", only once it has been visited or a Create was refused, never before the author has seen it. |
 | **Line row** | NEW | One child item as one line (a part, metric, actuator, condition, action, alarm): icon, a bold name with a muted second line, tags, and a chevron. A red count or amber "!" marks its problems. Clicking or Enter opens its item sheet. Rows stack in a bordered **Lines** group. |
 | **CopyField / SecretReveal** | NEW | One component for every one-time secret (device token, API key). It replaces the four copies in the devices and tokens pages. Shown once, with a copy button and a "won't be shown again" warning. |
 | **ProgressBar** | NEW | Only for a running job with real steps (the device Install). 6 px `--color-border` track, `--color-accent` fill, fully rounded. Determinate when the share done is known (with the % in words beside it); otherwise a sliding segment, static under reduced motion. Stage text sits above it, in words, never just a bar. `role="progressbar"`. |
-| EmptyState / ErrorState / LoadingSkeleton | existing | Every list and panel has all three. Empty explains why and offers the primary action. Error and empty never render together. |
+| EmptyState / ErrorState / LoadingSkeleton | existing | Every list and panel has all three. Empty explains why and offers the primary action. Error and empty never render together. A record page whose record doesn't exist (a 404, or an id missing from a loaded list) shows **NotFound** (`components/ui/NotFound.tsx`): "This {noun} doesn't exist", why, and *Back to {list}*; never an error with Retry, never a skeleton that doesn't end. |
 | Table | existing | See §6. |
 | **KPI strip** | retired | No page uses it: every list, the alerts inbox included, filters by state from the toolbar's status filter (§6). |
 | **Mini strip / sparkline** | NEW | 48-cell 24 h strip (true / unknown-hatched / fired) for rules. Sparkline for readings. Uses `--color-chart`, with accent for fire marks. |
@@ -239,7 +239,7 @@ gets restyled to the tokens. **NEW** means it has to be created.
      that needs someone (offline, latched, can't evaluate) shows its count in red when it isn't
      zero, and what each state means is its hover title. Every list with states has one
      (Templates Enabled / Disabled, Zones In use / Empty, Members Active / Invited, API keys
-     Active / Revoked or expired, Notifications All / Unread / Critical / Warning, the last two
+     Active / Revoked or expired, Notifications All / Unread and one state per type, the types
      counting unread alerts); Dashboards has none. A list with a closely related feed may add it
      as a last state that swaps the table for that feed (Rules → **Failed deliveries**); there are
      no tabs above a list.
@@ -312,7 +312,8 @@ edits a whole record, and there is no "Expand" toggle.
 - A **save bar** at the bottom of the window, full width. **Editing:** it appears (slides up) only
   while there is an edit, a save in progress or a problem to fix, with "Unsaved changes",
   **Discard** and **Save**; Save and Discard hide it again, and the save toast confirms. **Creating**
-  (a form or a wizard): always shown, since it holds **Create** / **Back** / **Next**, and offers
+  (a form or a wizard): always shown, with the state line **Not created yet** whatever has been
+  typed, since it holds **Create** / **Back** / **Next**, and offers
   **Cancel** (always enabled, back to where you came from), never a greyed-out Discard. Save
   focuses the first error when invalid. One bar on every page (`SAVE_BAR`), the same width and
   height everywhere. At content ≤ 480 px the status line takes its own row and the buttons share
@@ -453,9 +454,13 @@ edits a whole record, and there is no "Expand" toggle.
   with its neighbour's in reading order, so the desktop layout stays intact apart from that swap.
 - **Notifications** (the tab bar calls it **Alerts**): one Line row per alert, with severity icon,
   title, detail, device and rule links and the time. Repeats of the same alert from the same source
-  group into one row (**×4**, "since 09:12, last 2 min ago"). The status filter (§6) is All ·
-  Unread · Critical · Warning, counted per row of repeats (Critical and Warning: unread ones);
-  **Mark all as read** is the toolbar action. Filters: severity, device, rule.
+  group into one row (**×4**, "since Fri 2 Oct 09:12, last 2 min ago"; dates in the one §11
+  format, never the browser's language). The API groups, filters and pages, so the ×N counts and
+  the numbered pager (§6, 25 / 50 / 100 alerts) cover the whole history. The status filter (§6)
+  is All · Unread, then unread alerts by type: **Offline · Rules** (fired or cleared) **· Rule
+  health · Failed deliveries · Templates**, counted per row of repeats, never per notification;
+  the nav badge counts the same unread alerts. **Mark all as read** is the toolbar action.
+  Filters: severity, device, rule. The sheet lists each time the alert happened, paged.
   **Unread** is the 3 px accent bar and a bold title, nothing more: no Unread pill and no row
   button. Mark read / unread and Dismiss are in the row ⋯ menu; opening an alert marks it read.
   A row opens a sheet with the details. With the alarm lifecycle (§13) it becomes an alarm inbox:
@@ -477,8 +482,8 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
 
 ### 9.1 Creating: recipes
 
-- "New rule" asks for the **Name** first (required; the H1 follows it as it's typed), then offers
-  **recipe cards** and **Start blank**. There is **no device select**: one rule can read one device
+- "New rule" opens on the **recipe cards** and **Start blank**; the name is asked once, on Review
+  (user decision 2026-10-29). There is **no device select**: one rule can read one device
   and switch another, so devices are picked in the steps (user decision 2026-10-27). Every recipe
   is always offered:
   - Tell me when a device goes offline
@@ -489,13 +494,14 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
   - Switch something on a schedule
 - A recipe arrives with its parts in place (the comparison and a sensible limit, the action and
   its value, behaviour and timings) and **no device**: each reading, switch and watched device is
-  picked in the When / If / Then steps, whose Next waits until it is.
-- Picking a recipe or Start blank without a name refuses, says "Name the rule first." and focuses
-  the field. Then the **new-rule wizard** opens: **When → If → Then → Behaviour → Review**. Each
-  step asks its question ("What starts it?", "What has to be true?", "What should happen?", "How
+  picked in the When / If / Then steps, whose Next waits until it is. Each recipe suggests a
+  name ("Device offline", "Humidity low"; from a device page with its names), changed on Review.
+- Picking a recipe or Start blank opens the **new-rule wizard**: **When → If → Then → Behaviour →
+  Review**, without Behaviour for a rule not on a reading (§9.7). Each step asks its question ("What starts it?", "What has to be true?", "What should happen?", "How
   should it behave?") and uses the same section body as the matching edit tab. The sentence stays
   on top and fills in as you go; the preview is behind its button (§9.2). Review holds the name
-  (editable) and Status, then **Create rule**. Back on the first step returns to the recipes.
+  (pre-filled by the recipe, empty for Start blank: "Left blank, a name is generated") and Status,
+  then **Create rule**. Back on the first step returns to the recipes.
 - Each card shows an icon, a title, one line on what it does, and tags: *switches hardware* ·
   *latches* · *email*.
 - **From a device page** (`?device=`), the recipes that device can run come first, already filled
@@ -504,19 +510,23 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
 
 ### 9.2 Layout: tabs and preview
 
-- **Top of the page:** the header (breadcrumbs, state and last firing, the consequence line,
-  Preview, Run now…, ⋯), then **Name** and **Status** side by side, then the **editable sentence**.
-  The latched and restored-version callouts (each holds its action) sit above them;
-  can't-evaluate is a **state chip** in the header's meta row (§5 Callout).
-- **Tabs:** **When · If · Then · Behaviour · Activity** (`?tab=`, opening on If). The first four
-  carry their section's red problem count or amber "!"; Activity holds recent firings, then
-  Versions (§9.8), and has no save bar. Nothing else is a tab: there is no Logic tab, no section
+- **Top of the page:** the header (breadcrumbs, state and last firing, Run now…, ⋯) whose
+  description is the **editable sentence** (§9.3), so the tabs sit right under it like every
+  other editor's (user decision 2026-10-29). The latched and restored-version callouts (each holds
+  its action) sit between the header and the tabs; can't-evaluate is a **state chip** in the
+  header's meta row (§5 Callout).
+- **Tabs:** **Basics · When · If · Then · Behaviour · Activity** (`?tab=`, opening on Basics).
+  Basics holds **Name** and **Status** side by side, then the consequence line ("Saving applies
+  within a second. It watches 1 device and can switch 1 actuator."). The tabs from Basics to
+  Behaviour carry their section's red problem count or amber "!"; Activity holds recent firings,
+  then Versions (§9.8), and has no save bar. **Behaviour** is only on rules on a reading (§9.7). Nothing else is a tab: there is no Logic tab, no section
   rail and no inspector column.
   - **When:** the trigger as radio cards (each reading · a schedule · manually · device online /
     offline), then the reading or the schedule picker (§9.5).
   - **If:** the conditions (§9.3), **Then:** the actions and the clear actions. Both carry the
     **Form / Ladder** switch (§9.10).
   - **Behaviour:** Re-arm vs Latch, hold time, minimum interval and clear delay (§9.7).
+  - **Preview** sits at the end of the tab row on When, If, Then and Behaviour.
 - **Layout:** the standard 1120 px page with the 760 px editor column (§4), same left edge as
   every other editor. The **preview** (§9.4 cards) is **only behind the Preview button**, at every
   width (user decision 2026-10-27): it opens the cards in a sheet (bottom sheet on phones). The
@@ -616,7 +626,13 @@ path (CLAUDE.md §9.1).
 - **Behaviour:** Re-arm vs Latch until reset, as two illustrated radio cards.
 - **Hold time, minimum interval and clear delay** are always visible. They are never collapsed
   behind "advanced" (CLAUDE.md §9.7).
-- **Name and Status** (top of the rule page, the Review step of the wizard):
+- The wording follows what the rule acts on: with an actuator the timers "stop hardware flapping"
+  and a low value warns that relays cycle; with only notifications, emails or webhooks they "stop
+  repeat alerts" and a low value warns of an alert per noisy reading. Same limits either way.
+- A rule **not on a reading** (schedule, manual, device online / offline) has only the minimum
+  interval: it has **no Behaviour tab or step**, and the interval sits at the end of **Then**.
+  A link to its Behaviour tab opens Then.
+- **Name and Status** (the rule page's Basics tab, the Review step of the wizard):
   - Rule name, with an auto-generated placeholder ("Left blank, a name is generated").
   - **Status** beside the name (below it on narrow screens): a Switch with **Enabled / Disabled**
     (the same words as the header badge) and a hint that changes with it ("Fires when its trigger
@@ -742,7 +758,8 @@ path (CLAUDE.md §9.1).
     animation sits below its text), and the tab bar respects the safe area.
 - **Motion:** honour `prefers-reduced-motion`. Keep transitions under 200 ms and only on
   colour/opacity/transform.
-- **Contrast:** meet WCAG AA in both themes.
+- **Contrast:** meet WCAG AA in both themes. Never fade text with opacity: an inactive row (revoked, disabled) uses the muted text colour and its status word (`DataTable inactive`). Red text on a fill uses `status-error-strong`.
+- **Inline links:** a link inside running text (a hint, a sentence) is underlined (`link-inline`); stand-alone links underline on hover.
 
 ---
 
@@ -766,7 +783,7 @@ interim is in the last column.
 
 | Feature | Backend need | Until then |
 |---|---|---|
-| Alarm lifecycle | Stored state on each notification (active / acknowledged / cleared), acknowledge with who, when and a note (one or many), grouping of repeats by source, and a timeline per alarm (an events table with `tenant_id` + RLS in the same migration). A rule's clear marks its alarm cleared. | Notifications grouped on the client, filters, a detail sheet; counts are unread. |
+| Alarm lifecycle | Stored state on each notification (active / acknowledged / cleared), acknowledge with who, when and a note (one or many), grouping of repeats by source, and a timeline per alarm (an events table with `tenant_id` + RLS in the same migration). A rule's clear marks its alarm cleared. | Notifications grouped and paged by the API, filters, a detail sheet; counts are unread alerts by type. |
 | Stored "No response" | A sweep off the hot path that marks each command whose TTL ran out with no ack, so the result is stored and the same for everyone. | The browser works it out from `issued_at`, `ttl` and `acked_at`. |
 | Widget titles | An optional `title` on each dashboard widget. | The generated title (reading · device). |
 | Reported actuator state | Devices report their real state and whether a command was applied: an additive change to the device contract (CLAUDE.md §4), made in both deployment variants, plus firmware. **Deferred by decision (2026-10-20).** | Requested state and Acknowledged / No response only. |
@@ -889,3 +906,11 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-27 | §8 Connect, after review: the Credential step **always starts with Create credential / Rotate credential…** — Add device no longer hands its credential over, and the credential is held in the page only (a reload or leaving drops it; leaving or reloading before it's stored asks). Once made, **Store its credential** (demo H): Username and Password as read-only fields with Copy, "It won't be shown again", I've stored it, Continue in the bottom bar. Supersedes the 2026-10-01 handoff and the "survives a reload" rule. |
 | 2026-10-27 | §9.1 New rule, after review: **Name first, then the recipe; no device select** (a rule can involve several devices). Every recipe is always offered, device-free, its devices picked in the When / If / Then steps; "Name the rule first." when a recipe is picked without one. From a device page the recipes it can run come first, filled with it. The disabled "can't run" cards go. |
 | 2026-10-28 | §3, §4, §5, §7, §8, §12 **interface audit** (iodriven Interface Audit, 28 findings at 1440 → 390 px and dark). **Controls:** two heights only, 36 px and 30 px `sm` buttons; segmented controls and tabs 36 px; a primary is always the 36 px accent button. **Type:** five steps 12 · 13 · 14 · 16 · 28 px through tokens, superseding 14.5 / 14 / 12.5. **Status:** one dot + word badge in tables and previews; roles one style. **Header:** one `PageHeader` for every page, status first in the overline, actions on the H1 row, one action row under the title on phones. **Destructive:** on-page entry points are secondary + red text + “…”; filled red only in dialogs. **Tabs** scroll sideways on phones, superseding “wrap or collapse into a menu”. **Peek:** no record kind, **Open {noun}**, its controls on their own row above the title on phones. **Save bar:** Cancel on create pages, one width, full-width buttons ≤ 480, and the phone tab bar hides while it shows. **Notifications:** unread is the accent bar and a bold title, superseding 2026-10-23's Unread pill and Mark read button. **Toolbar:** filters collapse ≤ 960 px. **Density:** the command timeline folds runs into ×N rows; a dashboard's first row ends with an *Add widget* tile where it has room; the device Overview's Health is a plain FactList of what was reported. |
+| 2026-10-28 | Round-2 audit fixes, §7 and §8: a create bar's state line is always **Not created yet** (the template wizard said *Unsaved changes*, New zone *New zone, not created yet*); the dashboard's *Add widget* tile is desktop-only and never reserves space on a phone. |
+| 2026-10-28 | §5 one **NotFound** state for every record page (round-2 audit R2): rules showed an error with Retry, zones and templates "Couldn't load…" (templates leaking "Catalog entry not found"), API keys and members a skeleton that never ended. |
+| 2026-10-28 | §12 contrast and links (round-2 audit R3, R5): no opacity on text (inactive rows use the muted colour; the "· optional" suffix too), `status-error-strong` for red text on a fill (the destructive button), and `link-inline` underlines links inside sentences. |
+| 2026-10-28 | §12 screen-reader structure (round-2 audit R4, R10, R11): an editor with tabs renders its body as the active tab's `tabpanel` and only the selected tab carries `aria-controls`; editor section headings are h2 on a full page (h3 in drawers); landing markup fixed (figures list, comparison table corner cell) and its log timestamps lightened to AA. |
+| 2026-10-28 | §5, §7 menus and wizard (round-2 audit R6, R7): a row menu's first item is **Open** on every list (Zones and Templates said Edit / View, Devices Edit settings); a wizard marks only visited steps red. |
+| 2026-10-28 | Round-2 leftovers (B2, G4, R12): the trend chart's range is the segmented control (36 px, like the dashboard's); on phones a header whose only action is the ⋯ menu keeps it beside the title; §8 API keys: a revoked or expired key can be **deleted** (*Delete key…*, `DELETE /api-keys/{id}/permanent`); an active key is only ever revoked first. |
+| 2026-10-29 | §6, §8 notifications paged like every list: the API groups repeats (`GET /notifications/groups`, filters and limit / offset, total in `X-Total-Count`), so the numbered pager and the ×N counts cover the whole history instead of the latest 100–500 behind **Show older** (removed, with its second footer line). The status filter swaps Critical / Warning for unread alerts by type (Offline, Rules, Rule health, Failed deliveries, Templates; `GET /notifications/summary`); severity stays a filter menu. Counts are alerts (rows of repeats), and the nav badge uses the same count. Read, unread and dismiss act on a whole row (`/notifications/groups/{key}/…`, Undo restores the dismissed ids). "since …" uses the §11 date format instead of the browser's language. |
+| 2026-10-29 | §9.1, §9.2, §9.7 rule page and wizard: the rule page's tabs sit right under the header, like a template's. The editable sentence is the header's description, and **Basics** (first tab, the default) holds Name, Status and the consequence line. New rule opens on the recipes without a Name field; the name is asked once, on Review, suggested by the recipe. Behaviour words its timers by what the rule acts on (hardware flapping vs repeat alerts), and a rule not on a reading has no Behaviour tab or step: its minimum interval sits in Then. Recipes stay. |

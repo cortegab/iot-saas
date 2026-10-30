@@ -10,7 +10,7 @@ import { Callout } from "@/components/ui/Callout";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { AuthCard } from "@/components/auth/AuthCard";
-import { PasswordInput } from "@/components/auth/PasswordInput";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { ApiRequestError, apiClient } from "@/lib/api-client";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { safeNext } from "@/lib/safe-next";

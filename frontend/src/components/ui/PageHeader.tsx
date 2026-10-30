@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
+import { cn } from "@/lib/cn";
 
 export interface Crumb {
   label: ReactNode;
@@ -67,18 +68,22 @@ export function HeaderBlock({
   overline,
   heading,
   actions,
+  menuOnly = false,
   children,
 }: {
   overline?: ReactNode;
   /** The title element itself (an `h1`, or the title and description inline). */
   heading: ReactNode;
   actions?: ReactNode;
+  /** The actions are only the ⋯ menu: on phones it stays beside the title
+   * instead of taking a row of its own. */
+  menuOnly?: boolean;
   children?: ReactNode;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-[3px]">
       {overline && <div className="flex flex-wrap items-center gap-2 text-meta text-ink-muted">{overline}</div>}
-      <div className="flex items-start justify-between gap-x-4 gap-y-2.5 max-md:flex-col max-md:items-stretch">
+      <div className={cn("flex items-start justify-between gap-x-4 gap-y-2.5", !menuOnly && "max-md:flex-col max-md:items-stretch")}>
         <div className="min-w-0 flex-1">{heading}</div>
         {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
       </div>

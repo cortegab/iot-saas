@@ -167,7 +167,7 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
                   <span className="text-ink-muted">
                     {" · "}
                     {c.rule_id ? (
-                      <Link href={`/rules/${c.rule_id}`} className="hover:text-accent hover:underline">
+                      <Link href={`/rules/${c.rule_id}`} className="link-inline">
                         {rule ?? "a rule"}
                       </Link>
                     ) : (

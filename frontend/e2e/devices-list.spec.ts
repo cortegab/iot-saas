@@ -35,14 +35,14 @@ test("a device peeks from the list and is edited in its Settings tab", async ({ 
   // One settings page: plain stacked sections; Delete lives in the ⋯ menu only.
   await expect(page.getByText("Saving applies right away.", { exact: false })).toBeVisible();
   for (const heading of ["General", "Template", "Wiring", "Connection"]) {
-    await expect(page.getByRole("heading", { level: 3, name: heading, exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: heading, exact: true })).toBeVisible();
   }
   await expect(page.locator("#ps-template").getByRole("term").filter({ hasText: /^Metrics$/ })).toBeVisible();
   await page.getByText("Show its MQTT topics").click();
   await expect(page.getByText("Health (retained, last will)")).toBeVisible();
   await expect(page.getByRole("button", { name: "Rotate credential…" })).toBeVisible();
   await expect(page.getByRole("switch", { name: /Status/ })).toBeVisible();
-  await expect(page.getByRole("heading", { level: 3, name: "Delete", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Delete", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "More actions" }).first().click();
   await expect(page.getByRole("menuitem", { name: /^Delete…/ })).toBeVisible();
   await page.keyboard.press("Escape");

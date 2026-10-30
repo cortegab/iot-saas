@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BookOpen, Boxes, Copy, Cpu, Pencil, Plus, Power, Trash2 } from "lucide-react";
+import { BookOpen, Boxes, Copy, Cpu, Plus, Power, SquareArrowOutUpRight, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -159,7 +159,7 @@ export default function DeviceTemplatesPage() {
   const rowMenu = (e: CatalogEntryResponse): DropdownMenuItem[][] => {
     const groups: DropdownMenuItem[][] = [
       [
-        { label: canWrite ? "Edit" : "View", icon: <Pencil size={15} />, onClick: () => router.push(`/templates/${e.id}`) },
+        { label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/templates/${e.id}`) },
         { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${e.id}`) },
         ...(e.runs_on === "generic_firmware" && e.hardware ? [{ label: "Wiring guide", icon: <BookOpen size={15} />, onClick: () => router.push(`/templates/${e.id}/wiring`) }] : []),
       ],
@@ -270,7 +270,7 @@ export default function DeviceTemplatesPage() {
                 onRowEnter={peek.onRowEnter}
                 rowMenu={rowMenu}
                 rowMenuLabel={(e) => `Actions for ${e.name}`}
-                rowClassName={(e) => (e.status === "disabled" ? "[&>td]:opacity-60" : undefined)}
+                inactive={(e) => e.status === "disabled"}
                 currentKey={peek.peekId}
               />
               <TableFooter
