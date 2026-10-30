@@ -105,6 +105,14 @@ test("connect flow: phone provisioning with a QR from the credential, or typed W
   await stepButton(page, /Options/).click();
   await page.getByRole("radio", { name: /Type it into the sketch/ }).check();
   await page.getByLabel("Network (2.4 GHz)").fill("bench-net");
+  // The Wi-Fi password has Show / Hide, like sign-in's.
+  const wifiPassword = page.getByLabel("Wi-Fi password");
+  await wifiPassword.fill("bench-secret");
+  await expect(wifiPassword).toHaveAttribute("type", "password");
+  await page.getByRole("button", { name: "Show password" }).click();
+  await expect(wifiPassword).toHaveAttribute("type", "text");
+  await page.getByRole("button", { name: "Hide password" }).click();
+  await expect(wifiPassword).toHaveAttribute("type", "password");
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByText("Preview the sketch").click();
   await expect(sketch).toContainText('WIFI_SSID = "bench-net"');

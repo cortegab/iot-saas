@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { AuthCard } from "@/components/auth/AuthCard";
-import { PasswordInput } from "@/components/auth/PasswordInput";
+import { PasswordInput } from "@/components/ui/PasswordInput";
 import { ApiRequestError } from "@/lib/api-client";
 
 /** Create an account (DESIGN.md §10): the workspace is created in the same

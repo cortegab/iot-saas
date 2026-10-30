@@ -4,9 +4,10 @@ import { forwardRef, useState, type InputHTMLAttributes, type KeyboardEvent } fr
 import { Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/Input";
 
-/** A password field with Show / Hide (DESIGN.md §10 sign-in). Reports Caps
- * Lock through `onCapsLock` so a page can hint when it matters (after
- * failed attempts), rather than nagging on every keystroke. */
+/** A password field with Show / Hide (DESIGN.md §10 sign-in; also the Wi-Fi
+ * password in Connect). Reports Caps Lock through `onCapsLock` so a page can
+ * hint when it matters (after failed attempts), rather than nagging on every
+ * keystroke. */
 export const PasswordInput = forwardRef<
   HTMLInputElement,
   Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & { onCapsLock?: (on: boolean) => void }
