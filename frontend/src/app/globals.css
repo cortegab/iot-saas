@@ -274,6 +274,13 @@ body {
   outline-offset: 2px;
 }
 
+/* Edge draws its own reveal (and clear) button inside password fields; ours
+   is PasswordInput's Show / Hide, so the native one would be a second eye. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 /* Native select with the design's chevron (components/ui/Select.tsx). */
 .ui-select {
   appearance: none;
