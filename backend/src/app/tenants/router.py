@@ -28,6 +28,7 @@ from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import Invitation, Tenant, TenantRole
 from app.tenants.schemas import (
     AddMemberRequest,
+    AttentionResponse,
     ChangeRoleRequest,
     InvitationCreateRequest,
     InvitationResponse,
@@ -142,6 +143,21 @@ async def dismiss_setup(
 ) -> None:
     """Get started's "I'll set it up myself": sign-in stops landing on it."""
     await service.dismiss_setup(session, ctx.tenant_id)
+
+
+@router.get("/current/attention", response_model=AttentionResponse)
+async def get_attention(
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> AttentionResponse:
+    """What needs someone now: the strip above every dashboard."""
+    a = await service.attention(session, ctx.tenant_id)
+    return AttentionResponse(
+        critical_alerts=a.critical_alerts,
+        offline_devices=a.offline_devices,
+        latched_rules=a.latched_rules,
+        unhealthy_rules=a.unhealthy_rules,
+    )
 
 
 @router.post("/current/welcome", status_code=status.HTTP_204_NO_CONTENT)

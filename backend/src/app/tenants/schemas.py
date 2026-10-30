@@ -83,6 +83,16 @@ class LandingResponse(BaseModel):
     role: str
 
 
+class AttentionResponse(BaseModel):
+    """What needs someone now, for the strip above dashboards (DESIGN.md §8).
+    Alerts count rows of repeats, as the notifications page does."""
+
+    critical_alerts: int
+    offline_devices: int
+    latched_rules: int
+    unhealthy_rules: int
+
+
 class NavCountsResponse(BaseModel):
     """The sidebar's counts in one request, instead of every list (DESIGN.md §4).
     Members and API keys are null for roles that can't manage them."""

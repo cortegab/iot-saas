@@ -4,20 +4,16 @@ Thin per CLAUDE.md §6 — validation and delegation only, business logic lives
 in devices/service.py.
 """
 
-from datetime import UTC, datetime, timedelta
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.catalog import service as catalog_service
 from app.catalog.schemas import HardwareConfig
-from app.config import settings
 from app.db import get_session
 from app.devices import service
 from app.devices.deps import get_device_or_404
 from app.devices.models import Device
 from app.devices.schemas import (
-    ConnectionState,
     DeviceCreateRequest,
     DeviceCreateResponse,
     DeviceCredential,
@@ -35,20 +31,6 @@ from app.zones import service as zones_service
 router = APIRouter(prefix="/devices", tags=["devices"])
 
 
-def _connection_state(device: Device) -> ConnectionState:
-    # last_status_online is push-driven (a retained status message or its
-    # Last-Will) and authoritative when present — an LWT firing "offline"
-    # means offline right now, independent of elapsed time. Devices that have
-    # never sent a status message (older firmware — permanent, not a
-    # migration-window case) fall back to the last_seen_at heuristic.
-    if device.last_status_online is not None:
-        return "online" if device.last_status_online else "offline"
-    if device.last_seen_at is None:
-        return "never_connected"
-    offline_after = timedelta(seconds=settings.device_offline_after_seconds)
-    return "online" if datetime.now(UTC) - device.last_seen_at <= offline_after else "offline"
-
-
 def _to_response(
     device: Device, metrics_health: list[DeviceMetricHealth] | None = None
 ) -> DeviceResponse:
@@ -63,7 +45,7 @@ def _to_response(
         last_seen_at=device.last_seen_at,
         created_at=device.created_at,
         credential_rotated_at=device.credential_rotated_at,
-        connection_state=_connection_state(device),
+        connection_state=service.connection_state(device),
         last_status_at=device.last_status_at,
         rssi=device.rssi,
         battery_pct=device.battery_pct,
