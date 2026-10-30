@@ -129,3 +129,50 @@ async def test_a_member_with_a_dashboard_lands_on_it_while_setup_is_unfinished(
     assert body["dashboard_ids"] == [dash["id"]]
     # The owner still has setup to finish.
     assert (await _landing(client, _headers(owner, tenant_id)))["target"] == "setup"
+
+
+async def test_setup_steps_are_read_from_data(
+    client: httpx.AsyncClient, app_session_factory: async_sessionmaker[AsyncSession]
+) -> None:
+    owner = await _register(client, "land5@example.com", "Land5")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _headers(owner, tenant_id)
+    before = (await client.get("/tenants/current/setup", headers=headers)).json()
+    assert before["device"] is False
+    assert before["rule"] is False
+    assert before["dashboard"] is False
+    assert before["complete"] is False
+    assert before["first_device_id"] is None
+
+    await _complete_setup(client, headers, app_session_factory)
+    after = (await client.get("/tenants/current/setup", headers=headers)).json()
+    assert after["template"] and after["device"] and after["rule"] and after["dashboard"]
+    assert after["complete"] is True
+    assert after["first_device_name"] == "bay1"
+    # Inviting is optional: it doesn't hold back "complete".
+    assert after["invite"] is False
+
+
+async def test_dismissing_setup_stops_the_landing_for_the_workspace(
+    client: httpx.AsyncClient,
+) -> None:
+    owner = await _register(client, "land6@example.com", "Land6")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _headers(owner, tenant_id)
+    viewer = await _register(client, "land6v@example.com", "Land6V")
+    await client.post(
+        "/tenants/members",
+        json={"email": "land6v@example.com", "role": "viewer"},
+        headers=headers,
+    )
+    # A viewer can't dismiss it.
+    resp = await client.post("/tenants/current/setup/dismiss", headers=_headers(viewer, tenant_id))
+    assert resp.status_code == 403
+
+    assert (await client.post("/tenants/current/setup/dismiss", headers=headers)).status_code == 204
+    setup = (await client.get("/tenants/current/setup", headers=headers)).json()
+    assert setup["dismissed"] is True
+    # Someone else joined, so the optional step is done.
+    assert setup["invite"] is True
+    # No dashboard yet: the owner gets the one-time Welcome instead.
+    assert (await _landing(client, headers))["target"] == "welcome"
