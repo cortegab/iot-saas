@@ -272,6 +272,23 @@ async def _membership(
     return membership
 
 
+async def get_default_dashboard_id(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> uuid.UUID | None:
+    """This person's default dashboard in this workspace, if they set one."""
+    return (await _membership(session, tenant_id, user_id)).default_dashboard_id
+
+
+async def set_default_dashboard(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, dashboard_id: uuid.UUID | None
+) -> None:
+    """Sets (or with None, clears) where this person lands. The caller checks
+    the dashboard is theirs (dashboards.service)."""
+    membership = await _membership(session, tenant_id, user_id)
+    membership.default_dashboard_id = dashboard_id
+    await session.flush()
+
+
 def assert_can_assign(actor_role: str, role: TenantRole) -> None:
     """Nobody can grant a role above their own; only an owner grants Owner."""
     if _RANK[role.value] > _RANK[actor_role]:

@@ -82,7 +82,7 @@ export interface ApiPage<T> {
 }
 
 async function request<T>(
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   ctx: ApiClientContext,
   body?: JsonBody,
@@ -91,7 +91,7 @@ async function request<T>(
 }
 
 async function send<T>(
-  method: "GET" | "POST" | "PATCH" | "DELETE",
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   ctx: ApiClientContext,
   body?: JsonBody,
@@ -139,5 +139,6 @@ export const apiClient = {
   getPage: <T>(path: string, ctx: ApiClientContext = {}) => getPage<T>(path, ctx),
   post: <T>(path: string, ctx: ApiClientContext = {}, body?: JsonBody) => request<T>("POST", path, ctx, body),
   patch: <T>(path: string, ctx: ApiClientContext = {}, body?: JsonBody) => request<T>("PATCH", path, ctx, body),
+  put: <T>(path: string, ctx: ApiClientContext = {}, body?: JsonBody) => request<T>("PUT", path, ctx, body),
   delete: <T>(path: string, ctx: ApiClientContext = {}) => request<T>("DELETE", path, ctx),
 };
