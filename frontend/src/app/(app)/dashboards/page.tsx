@@ -20,6 +20,8 @@ import { TableFooter } from "@/components/list/TableFooter";
 import { matchesQuery, paginate, sortRows, useListState } from "@/components/list/useListState";
 import { ListWithPeek } from "@/components/list/ListWithPeek";
 import { DashboardPeek } from "@/components/dashboards/DashboardPeek";
+import { defaultNote, useDefaultDashboard } from "@/components/dashboards/useDefaultDashboard";
+import { Tag } from "@/components/ui/Badge";
 import { usePeek } from "@/components/list/usePeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { widgetSummary } from "@/lib/dashboard-summary";
@@ -40,6 +42,7 @@ export default function DashboardsPage() {
   const { confirm, dialog } = useConfirm();
   const { data: dashboards, error, isLoading, mutate } = useApiSWR<DashboardResponse[]>("/dashboards");
   const list = useListState({}, { key: "updated", dir: "asc" });
+  const defaults = useDefaultDashboard();
 
   const filtered = useMemo(() => {
     const rows = (dashboards ?? []).filter((d) => matchesQuery(list.q, d.name, widgetSummary(d.layout)));
@@ -67,7 +70,7 @@ export default function DashboardsPage() {
   }
 
   async function remove(d: DashboardResponse) {
-    const ok = await confirm(`Its ${plural(d.layout.length, "widget")} are removed. Devices and their data aren't affected.`, {
+    const ok = await confirm(`${defaultNote(d)}Its ${plural(d.layout.length, "widget")} are removed. Devices and their data aren't affected.`, {
       title: `Delete ${d.name}?`,
       confirmLabel: "Delete dashboard",
     });
@@ -90,9 +93,12 @@ export default function DashboardsPage() {
       cell: (d) => (
         <NameCell
           name={
-            <Link href={`/dashboards/${d.id}`} className="hover:underline hover:underline-offset-[3px]">
-              {d.name}
-            </Link>
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <Link href={`/dashboards/${d.id}`} className="hover:underline hover:underline-offset-[3px]">
+                {d.name}
+              </Link>
+              {d.is_default && <Tag size="sm">Default</Tag>}
+            </span>
           }
           sub={widgetSummary(d.layout)}
         />
@@ -119,6 +125,7 @@ export default function DashboardsPage() {
     [
       { label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/dashboards/${d.id}`) },
       { label: "Edit layout", icon: <LayoutGrid size={15} />, onClick: () => router.push(`/dashboards/${d.id}?edit=1`) },
+      defaults.item(d),
       { label: "Duplicate", icon: <Copy size={15} />, onClick: () => void duplicate(d) },
     ],
     [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(d) }],

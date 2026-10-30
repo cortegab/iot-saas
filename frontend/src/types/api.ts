@@ -904,6 +904,30 @@ export interface paths {
         patch: operations["update_dashboard_dashboards__dashboard_id__patch"];
         trace?: never;
     };
+    "/dashboards/{dashboard_id}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Default
+         * @description Land here after signing in; replaces any earlier default.
+         */
+        put: operations["set_default_dashboards__dashboard_id__default_put"];
+        post?: never;
+        /**
+         * Clear Default
+         * @description Stop landing here, if it was the default.
+         */
+        delete: operations["clear_default_dashboards__dashboard_id__default_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications": {
         parameters: {
             query?: never;
@@ -1612,6 +1636,11 @@ export interface components {
             /** Layout */
             layout: components["schemas"]["Widget"][];
             /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
              * Created At
              * Format: date-time
              */
@@ -2155,6 +2184,8 @@ export interface components {
             members: number | null;
             /** Api Keys */
             api_keys: number | null;
+            /** Default Dashboard Id */
+            default_dashboard_id?: string | null;
         };
         /** NotificationAction */
         NotificationAction: {
@@ -5227,6 +5258,70 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DashboardResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_default_dashboards__dashboard_id__default_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_default_dashboards__dashboard_id__default_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

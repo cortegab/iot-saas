@@ -71,7 +71,7 @@ export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
 export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
   const pathname = usePathname();
   const active = activeHref(pathname);
-  const { unreadCount } = useNavCounts();
+  const { unreadCount, linkFor } = useNavCounts();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = active != null && MORE_ITEMS.some((i) => i.href === active);
 
@@ -93,7 +93,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={linkFor(item.href)}
               aria-current={isActive ? "page" : undefined}
               className={cn(cell, isActive && "text-accent-strong")}
             >

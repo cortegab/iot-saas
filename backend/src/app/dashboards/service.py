@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dashboards.models import Dashboard
+from app.tenants import service as tenants_service
 
 
 class DashboardNotFoundError(Exception):
@@ -65,6 +66,22 @@ async def get_dashboard(
     if dashboard is None:
         raise DashboardNotFoundError
     return dashboard
+
+
+async def get_default_dashboard_id(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> uuid.UUID | None:
+    return await tenants_service.get_default_dashboard_id(session, tenant_id, user_id)
+
+
+async def set_default(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, dashboard: Dashboard | None
+) -> None:
+    """Makes one of this person's dashboards where they land after signing in,
+    or with None clears it. One default per person per workspace."""
+    await tenants_service.set_default_dashboard(
+        session, tenant_id, user_id, dashboard.id if dashboard else None
+    )
 
 
 async def update_dashboard(

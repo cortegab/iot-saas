@@ -159,7 +159,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
   const active = activeHref(pathname);
   const { can } = usePermissions();
   const { openPalette } = useShell();
-  const { counts, unreadCount } = useNavCounts();
+  const { counts, unreadCount, linkFor } = useNavCounts();
   const tips = useRailTips(compact);
 
   const pin = onTogglePin && (
@@ -234,7 +234,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
                 return (
                   <Link
                     key={item.href}
-                    href={item.href}
+                    href={linkFor(item.href)}
                     aria-current={isActive ? "page" : undefined}
                     aria-label={compact ? item.label : undefined}
                     data-tip={compact ? item.label : undefined}

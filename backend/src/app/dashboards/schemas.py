@@ -43,5 +43,7 @@ class DashboardResponse(BaseModel):
     id: uuid.UUID
     name: str
     layout: list[Widget]
+    # Where this person lands after signing in (one per person per workspace).
+    is_default: bool = False
     created_at: datetime
     updated_at: datetime

@@ -109,6 +109,9 @@ async def get_nav_counts(
         api_keys=await api_keys_service.count_active_api_keys(session, ctx.tenant_id)
         if admin
         else None,
+        default_dashboard_id=await service.get_default_dashboard_id(
+            session, ctx.tenant_id, ctx.user_id
+        ),
     )
 
 
