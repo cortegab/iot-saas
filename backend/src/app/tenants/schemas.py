@@ -62,8 +62,6 @@ class NavCountsResponse(BaseModel):
     zones: int
     members: int | None
     api_keys: int | None
-    # Where the sidebar's Dashboards link goes, when this person set one.
-    default_dashboard_id: uuid.UUID | None = None
 
 
 class TenantResponse(BaseModel):

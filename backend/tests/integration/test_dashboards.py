@@ -152,11 +152,11 @@ async def test_dashboard_tenant_isolation(client: httpx.AsyncClient) -> None:
     assert resp.json() == []
 
 
-async def _default_in_nav(client: httpx.AsyncClient, headers: dict[str, str]) -> str | None:
-    resp = await client.get("/tenants/current/counts", headers=headers)
+async def _default_id(client: httpx.AsyncClient, headers: dict[str, str]) -> str | None:
+    """The id of the dashboard marked default, if any."""
+    resp = await client.get("/dashboards", headers=headers)
     assert resp.status_code == 200
-    value: str | None = resp.json()["default_dashboard_id"]
-    return value
+    return next((str(d["id"]) for d in resp.json() if d["is_default"]), None)
 
 
 async def test_default_dashboard_set_replace_and_clear(client: httpx.AsyncClient) -> None:
@@ -165,13 +165,13 @@ async def test_default_dashboard_set_replace_and_clear(client: httpx.AsyncClient
     headers = _auth_headers(owner, tenant_id)
     a = (await client.post("/dashboards", json={"name": "A"}, headers=headers)).json()["id"]
     b = (await client.post("/dashboards", json={"name": "B"}, headers=headers)).json()["id"]
-    assert await _default_in_nav(client, headers) is None
+    assert await _default_id(client, headers) is None
 
     assert (await client.put(f"/dashboards/{a}/default", headers=headers)).status_code == 204
     listed = (await client.get("/dashboards", headers=headers)).json()
     assert [d["is_default"] for d in listed] == [True, False]
     assert (await client.get(f"/dashboards/{a}", headers=headers)).json()["is_default"] is True
-    assert await _default_in_nav(client, headers) == a
+    assert await _default_id(client, headers) == a
 
     # One default per person: B replaces A.
     await client.put(f"/dashboards/{b}/default", headers=headers)
@@ -180,9 +180,9 @@ async def test_default_dashboard_set_replace_and_clear(client: httpx.AsyncClient
 
     # Clearing A (not the default) leaves B; clearing B clears it.
     await client.delete(f"/dashboards/{a}/default", headers=headers)
-    assert await _default_in_nav(client, headers) == b
+    assert await _default_id(client, headers) == b
     assert (await client.delete(f"/dashboards/{b}/default", headers=headers)).status_code == 204
-    assert await _default_in_nav(client, headers) is None
+    assert await _default_id(client, headers) is None
 
 
 async def test_deleting_the_default_dashboard_clears_it(client: httpx.AsyncClient) -> None:
@@ -193,7 +193,7 @@ async def test_deleting_the_default_dashboard_clears_it(client: httpx.AsyncClien
     await client.put(f"/dashboards/{a}/default", headers=headers)
 
     assert (await client.delete(f"/dashboards/{a}", headers=headers)).status_code == 204
-    assert await _default_in_nav(client, headers) is None
+    assert await _default_id(client, headers) is None
 
 
 async def test_cannot_set_someone_elses_dashboard_as_default(client: httpx.AsyncClient) -> None:
@@ -211,7 +211,7 @@ async def test_cannot_set_someone_elses_dashboard_as_default(client: httpx.Async
     teammate_headers = _auth_headers(teammate, tenant_id)
     resp = await client.put(f"/dashboards/{mine['id']}/default", headers=teammate_headers)
     assert resp.status_code == 404
-    assert await _default_in_nav(client, teammate_headers) is None
+    assert await _default_id(client, teammate_headers) is None
 
     # Another workspace can't reach it either.
     other = await _register(client, "owner11@example.com", "Acme11")

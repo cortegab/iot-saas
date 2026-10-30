@@ -14,8 +14,8 @@ type DashboardResponse = components["schemas"]["DashboardResponse"];
 export const defaultNote = (d: DashboardResponse) => (d.is_default ? "It's your default dashboard; you'll land on the one you opened last. " : "");
 
 /** Set as default / Remove as default (DESIGN.md §8): the one dashboard a
- * person lands on after signing in, and where the sidebar's Dashboards link
- * goes. Per person per workspace, like dashboards themselves. */
+ * person lands on after signing in. Per person per workspace, like dashboards
+ * themselves. */
 export function useDefaultDashboard() {
   const api = useApi();
   const toast = useToast();
@@ -30,7 +30,6 @@ export function useDefaultDashboard() {
         toast({ title: `${d.name} is your default dashboard`, detail: "You'll land here after signing in." });
       }
       void revalidate((key) => typeof key === "string" && key.startsWith("/dashboards"));
-      void revalidate("/tenants/current/counts");
     } catch (err) {
       toast({ tone: "error", title: "Couldn't change your default dashboard", detail: err instanceof ApiRequestError ? err.message : undefined });
     }

@@ -30,10 +30,7 @@ export function useNavCounts() {
     members: data?.members ?? undefined,
     keys: data?.api_keys ?? undefined,
   };
-  // Dashboards opens this person's default dashboard when they set one
-  // (DESIGN.md §4); the list is a breadcrumb away.
-  const linkFor = (href: string) => (href === "/dashboards" && data?.default_dashboard_id ? `/dashboards/${data.default_dashboard_id}` : href);
-  return { counts, unreadCount, linkFor };
+  return { counts, unreadCount };
 }
 
 /** The lists ⌘K searches. Only the open palette calls it, so they load when

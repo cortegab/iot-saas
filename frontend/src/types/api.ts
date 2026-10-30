@@ -2184,8 +2184,6 @@ export interface components {
             members: number | null;
             /** Api Keys */
             api_keys: number | null;
-            /** Default Dashboard Id */
-            default_dashboard_id?: string | null;
         };
         /** NotificationAction */
         NotificationAction: {

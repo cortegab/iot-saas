@@ -107,11 +107,11 @@ test("dashboard on a phone: Edit layout is a list to open and reorder", async ({
   }
 });
 
-test("default dashboard: set from the row menu, tagged, and the sidebar's Dashboards opens it", async ({ page, request }) => {
+test("default dashboard: set from the row menu, tagged, removed from its page", async ({ page, request }) => {
   const { accessToken, tenantId } = await login(request);
   const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
   // The dev account may have its own default: put it back afterwards.
-  const before = ((await (await request.get(`${API_URL}/tenants/current/counts`, { headers })).json()) as { default_dashboard_id: string | null }).default_dashboard_id;
+  const before = ((await (await request.get(`${API_URL}/dashboards`, { headers })).json()) as { id: string; is_default: boolean }[]).find((d) => d.is_default)?.id;
   const name = `E2E default dash ${Date.now()}`;
   const dash = (await (await request.post(`${API_URL}/dashboards`, { headers, data: { name } })).json()) as { id: string };
 
@@ -123,8 +123,8 @@ test("default dashboard: set from the row menu, tagged, and the sidebar's Dashbo
     await expect(page.getByText(`${name} is your default dashboard`)).toBeVisible();
     await expect(row.getByText("Default", { exact: true })).toBeVisible();
 
-    // DESIGN.md §4: Dashboards in the sidebar goes to the default.
-    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Dashboards/ })).toHaveAttribute("href", `/dashboards/${dash.id}`);
+    // Only sign-in uses the default: the nav's Dashboards still opens the list.
+    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Dashboards/ })).toHaveAttribute("href", "/dashboards");
 
     // Its page says so, and its menu takes it back.
     await page.goto(`/dashboards/${dash.id}`);
@@ -132,7 +132,6 @@ test("default dashboard: set from the row menu, tagged, and the sidebar's Dashbo
     await page.getByRole("button", { name: "More dashboard actions" }).click();
     await page.getByRole("menuitem", { name: "Remove as default" }).click();
     await expect(page.getByText(`${name} is no longer your default`)).toBeVisible();
-    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /^Dashboards/ })).toHaveAttribute("href", "/dashboards");
   } finally {
     await request.delete(`${API_URL}/dashboards/${dash.id}`, { headers });
     if (before) await request.put(`${API_URL}/dashboards/${before}/default`, { headers });
