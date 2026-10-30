@@ -192,8 +192,7 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
   owner or admin while setup is unfinished and not dismissed; the one-time **Welcome** for
   someone with no dashboard here yet; their **default dashboard** (§8); the dashboard they
   opened last on this browser; their most recently changed one; else **Devices**. A `?next=`
-  link (an invite, a deep link) skips it. Get started is §10.1; until Welcome has its page, that
-  target falls through to the dashboards rule.
+  link (an invite, a deep link) skips it. Get started is §10.1 and Welcome §10.2.
 
 ---
 
@@ -728,6 +727,19 @@ path (CLAUDE.md §9.1).
 - **Live finish:** once a device has reported, its row shows the latest reading ("bay1 ·
   temperature 24.1, just now"). The rule step opens the recipes with that device (`?device=`).
 - **Done:** a "Setup complete" callout with **Open your dashboard**; sign-in lands there from then on.
+- The dashboard step also offers **Or build one from my devices** (§10.2) once a device reports.
+
+### 10.2 Welcome (new to a workspace)
+
+- **Who and when:** once, for someone with no dashboard in this workspace who hasn't answered it
+  yet (usually just invited; also an owner who dismissed Get started before making one).
+- **Content:** "Welcome to {workspace}", "You're in as {Role}.", then what's here as one line of
+  facts ("3 devices · 0 rules · 2 alerts need attention"). A viewer in an unfinished workspace
+  also sees an info callout "Your workspace is being set up".
+- **Your own dashboard** card: **Build my dashboard** (primary) makes "{Workspace} overview", a
+  trend chart of each device's first numeric reading, else its status card, two per row, up to 8
+  devices, and sets it as their default (§8); **Look around first** goes to Devices. Either answer
+  ends the Welcome. With no devices yet there's nothing to chart, so only Look around first shows.
 
 ---
 
@@ -950,3 +962,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-29 | §8 default dashboard: **Set as default** / **Remove as default** in the dashboard row menu, peek and page ⋯; a **Default** tag in the list and header; only sign-in uses it, and the nav's Dashboards keeps opening the list. Per person per workspace (`tenant_memberships.default_dashboard_id`, cleared when that dashboard is deleted). First of the landing / onboarding plan. |
 | 2026-10-30 | §4 Landing: one decision for where people go after signing in (`/home` + `GET /tenants/current/landing`), used by sign-in, register, invites, "Open console" and switching / creating a workspace; Devices is now the last fallback instead of every entry point. Second of the landing / onboarding plan. |
 | 2026-10-30 | §10.1 Get started: `/start` for a new workspace's owners and admins (four steps read from data plus an optional invite, the next one highlighted, a live first reading, "I'll set it up myself" for the whole workspace, a Setup guide link in Workspace settings; viewers see "being set up"). Third of the landing / onboarding plan. |
+| 2026-10-30 | §10.2 Welcome: a one-time `/welcome` for someone with no dashboard in the workspace (facts, a "being set up" note for viewers, **Build my dashboard**: a starter dashboard from the devices set as their default, or **Look around first**); Get started's dashboard step offers the same build. `POST /tenants/current/welcome`. Fourth of the landing / onboarding plan. |

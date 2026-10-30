@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Check, Construction } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { useStarterDashboard } from "@/components/dashboards/useStarterDashboard";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
@@ -44,6 +46,19 @@ export default function GetStartedPage() {
   const toast = useToast();
   const { can } = usePermissions();
   const manages = can("workspace.setup");
+  const build = useStarterDashboard();
+  const { data: ws } = useWorkspace();
+
+  // The dashboard step's shortcut (DESIGN.md §10.2): one made from the devices.
+  async function buildFromDevices() {
+    try {
+      const id = await build(`${ws?.name ?? "My"} overview`);
+      toast({ title: "Dashboard built", detail: "A chart for each device, set as where you land." });
+      router.push(`/dashboards/${id}`);
+    } catch (err) {
+      toast({ tone: "error", title: "Couldn't build the dashboard", detail: err instanceof ApiRequestError ? err.message : undefined });
+    }
+  }
   // Polled while the device step waits: it turns done when a first reading arrives.
   const { data: setup, error, mutate } = useApiSWR<SetupStatusResponse>("/tenants/current/setup", { refreshInterval: (s) => (s?.device ? 0 : 5_000) });
 
@@ -138,6 +153,11 @@ export default function GetStartedPage() {
         {steps.map((s, i) => (
           <StepRow key={s.key} n={i + 1} step={s} done={setup[s.key]} current={s.key === current}>
             {s.key === "device" && device && <FirstReading deviceId={device} deviceName={setup.first_device_name ?? "Your device"} />}
+            {s.key === "dashboard" && !setup.dashboard && device && (
+              <Button variant="link" className="w-fit text-meta" onClick={() => void buildFromDevices()}>
+                Or build one from my devices
+              </Button>
+            )}
           </StepRow>
         ))}
       </ol>
