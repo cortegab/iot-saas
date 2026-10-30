@@ -128,6 +128,18 @@ async def count_devices(session: AsyncSession, tenant_id: uuid.UUID) -> int:
     )
 
 
+async def first_seen_device(session: AsyncSession, tenant_id: uuid.UUID) -> Device | None:
+    """A device that has sent something (the Get started "connected" step),
+    the most recently heard first; None while no device ever has."""
+    result = await session.execute(
+        select(Device)
+        .where(Device.tenant_id == tenant_id, Device.last_seen_at.is_not(None))
+        .order_by(Device.last_seen_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def count_devices_by_catalog_entry(
     session: AsyncSession, tenant_id: uuid.UUID
 ) -> dict[uuid.UUID, int]:

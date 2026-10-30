@@ -1,33 +1,37 @@
 import { expect, test } from "@playwright/test";
+import { API_URL, landed, login } from "./fixtures";
 
-// The public page: signed out, no fixture login.
-test("landing: sections in G's order, the tour switches, Talk to us sends", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Your sensors report.");
-  await expect(page.getByRole("link", { name: "Sign in" }).first()).toHaveAttribute("href", "/login");
+// DESIGN.md §4 Landing: every entry point goes through /home, which sends
+// each person where they belong; a ?next= link skips it.
 
-  // Product tour tabs.
-  await page.getByRole("tab", { name: "Rules" }).click();
-  await expect(page.getByRole("heading", { name: "Rules you can read out loud" })).toBeVisible();
+async function signIn(page: import("@playwright/test").Page, next?: string) {
+  await page.goto(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
+  await page.getByLabel("Email").fill(process.env.E2E_EMAIL!);
+  await page.getByLabel("Password", { exact: true }).fill(process.env.E2E_PASSWORD!);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+}
 
-  // Onboarding illustrates its own steps; the control loop sits in How it works.
-  await expect(page.locator("#onboarding").getByRole("img", { name: /^Onboarding example/ })).toBeVisible();
-  await expect(page.locator('#how [aria-label="Example control loop"]')).toBeVisible();
+test("sign-in lands on the default dashboard, and a ?next= link still wins", async ({ page, request }) => {
+  const { accessToken, tenantId } = await login(request);
+  const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
+  const before = ((await (await request.get(`${API_URL}/dashboards`, { headers })).json()) as { id: string; is_default: boolean }[]).find((d) => d.is_default)?.id;
+  const dash = (await (await request.post(`${API_URL}/dashboards`, { headers, data: { name: `E2E landing ${Date.now()}` } })).json()) as { id: string };
+  await request.put(`${API_URL}/dashboards/${dash.id}/default`, { headers });
 
-  // Deployment → Talk to us (Dedicated cloud preselected).
-  await page.getByRole("navigation", { name: "Page sections" }).getByRole("link", { name: "Deployment" }).click().catch(() => {});
-  await page.locator("#deployment").getByRole("button", { name: "Talk to us" }).nth(1).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByLabel("Interested in")).toHaveValue("dedicated");
+  try {
+    await signIn(page);
+    await landed(page);
+    await expect(page).toHaveURL(`/dashboards/${dash.id}`);
 
-  // Validation first, then a real send.
-  await dialog.getByRole("button", { name: "Send" }).click();
-  await expect(dialog.getByText("Tell us your name.")).toBeVisible();
-  await dialog.getByLabel("Name").fill("E2E Visitor");
-  await dialog.getByLabel("Work email").fill("e2e.visitor@example.com");
-  await dialog.getByLabel("Company or site").fill("E2E Greenhouses");
-  await dialog.getByRole("button", { name: "Send" }).click();
-  // Five enquiries per hour per address: a rerun may meet the limit, which is
-  // itself the designed answer.
-  await expect(page.getByText(/Thanks, we've got it|Too many messages from here/)).toBeVisible();
+    await page.context().clearCookies();
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+    await signIn(page, "/rules");
+    await expect(page).toHaveURL("/rules");
+  } finally {
+    await request.delete(`${API_URL}/dashboards/${dash.id}`, { headers });
+    if (before) await request.put(`${API_URL}/dashboards/${before}/default`, { headers });
+  }
 });

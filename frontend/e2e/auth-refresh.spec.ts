@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import { API_URL, expect, test } from "./fixtures";
+import { API_URL, expect, landed, test } from "./fixtures";
 
 // Refresh tokens rotate, and the API revokes the whole session when a rotated
 // one comes back (a replay). These pin the frontend to one refresh at a time:
@@ -45,8 +45,8 @@ async function goToRules(page: Page) {
 
 test("many 401s at once share one refresh, and the session survives", async ({ page }) => {
   const api = await expireTokens(page.context());
-  // Reloaded so the route sees the page's access token.
-  await page.reload();
+  // Loaded so the route sees the page's access token (sign-in lands on /home's pick).
+  await page.goto("/devices");
   await expect(page.getByRole("table", { name: "Devices" })).toBeVisible();
   const before = api.refreshes;
   api.expire();
@@ -74,7 +74,8 @@ test("two tabs on one kept session refresh in turn, without revoking it", async 
     await a.getByLabel("Password", { exact: true }).fill(process.env.E2E_PASSWORD!);
     await a.getByLabel("Keep me signed in on this device").check();
     await a.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(a).toHaveURL("/devices");
+    await landed(a);
+    await a.goto("/devices");
     await b.goto("/devices");
     await expect(b.getByRole("table", { name: "Devices" })).toBeVisible();
 
@@ -97,7 +98,7 @@ test("two tabs on one kept session refresh in turn, without revoking it", async 
 
 test("a refresh the network drops is retried, not a sign-out", async ({ page }) => {
   const api = await expireTokens(page.context());
-  await page.reload();
+  await page.goto("/devices");
   await expect(page.getByRole("table", { name: "Devices" })).toBeVisible();
   // The first two refresh attempts never reach the API.
   let dropped = 0;
