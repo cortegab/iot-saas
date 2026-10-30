@@ -332,6 +332,29 @@ async def setup_status(
     )
 
 
+class Attention(NamedTuple):
+    critical_alerts: int
+    offline_devices: int
+    latched_rules: int
+    unhealthy_rules: int
+
+
+async def attention(session: AsyncSession, tenant_id: uuid.UUID) -> Attention:
+    """Unread critical alerts, offline devices, latched rules and rules that
+    can't evaluate, each counted by its own module."""
+    from app.devices import service as devices_service
+    from app.notifications import service as notifications_service
+    from app.rules import service as rules_service
+
+    latched, unhealthy = await rules_service.count_needing_attention(session, tenant_id)
+    return Attention(
+        critical_alerts=await notifications_service.count_unread_critical(session, tenant_id),
+        offline_devices=await devices_service.count_offline(session, tenant_id),
+        latched_rules=latched,
+        unhealthy_rules=unhealthy,
+    )
+
+
 async def mark_welcomed(session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> None:
     """The one-time Welcome was answered (built a dashboard or looked around)."""
     membership = await _membership(session, tenant_id, user_id)

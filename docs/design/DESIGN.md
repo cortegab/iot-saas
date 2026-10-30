@@ -465,6 +465,13 @@ edits a whole record, and there is no "Expand" toggle.
   decision 2026-10-29). A **Default** tag marks it in the list and the page header. One per person per workspace, stored on the
   server. Deleting it says so in the confirm; the next landing falls back to the dashboard opened
   last.
+  **Attention strip:** above every dashboard (not while editing its layout), a warning callout
+  "Needs attention:" listing only what's non-zero: **N critical alerts** (unread, rows of repeats)
+  · **N devices offline** · **N rules latched** · **N rules can't evaluate**, each linking to its
+  filtered list (`/notifications?state=unread&severity=critical`, `/devices?status=offline`,
+  `/rules?state=latched`, `/rules?state=stale`). When nothing needs someone it isn't there at all,
+  so it never becomes wallpaper. Realtime refreshes it on notification, device-health and
+  rule-health events.
 - **Notifications** (the tab bar calls it **Alerts**): one Line row per alert, with severity icon,
   title, detail, device and rule links and the time. Repeats of the same alert from the same source
   group into one row (**×4**, "since Fri 2 Oct 09:12, last 2 min ago"; dates in the one §11
@@ -963,3 +970,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-30 | §4 Landing: one decision for where people go after signing in (`/home` + `GET /tenants/current/landing`), used by sign-in, register, invites, "Open console" and switching / creating a workspace; Devices is now the last fallback instead of every entry point. Second of the landing / onboarding plan. |
 | 2026-10-30 | §10.1 Get started: `/start` for a new workspace's owners and admins (four steps read from data plus an optional invite, the next one highlighted, a live first reading, "I'll set it up myself" for the whole workspace, a Setup guide link in Workspace settings; viewers see "being set up"). Third of the landing / onboarding plan. |
 | 2026-10-30 | §10.2 Welcome: a one-time `/welcome` for someone with no dashboard in the workspace (facts, a "being set up" note for viewers, **Build my dashboard**: a starter dashboard from the devices set as their default, or **Look around first**); Get started's dashboard step offers the same build. `POST /tenants/current/welcome`. Fourth of the landing / onboarding plan. |
+| 2026-10-30 | §8 attention strip above every dashboard: unread critical alerts, offline devices, latched rules and rules that can't evaluate, only when non-zero, each linking to its filtered list (`GET /tenants/current/attention`). Last of the landing / onboarding plan. |
