@@ -186,6 +186,14 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
   "**Reconnecting…** Live updates are paused, so values on this page may be stale." The live
   indicator turns pending. Both go when it reconnects.
 - **Skip link:** "Skip to content" is the first focusable element and moves focus to the content.
+- **Landing:** every entry point (sign in, register, an accepted invite, the landing page's
+  "Open console", switching or creating a workspace) goes to `/home`, which asks the API once
+  (`GET /tenants/current/landing`) and replaces itself with, in order: **Get started** for an
+  owner or admin while setup is unfinished and not dismissed; the one-time **Welcome** for
+  someone with no dashboard here yet; their **default dashboard** (§8); the dashboard they
+  opened last on this browser; their most recently changed one; else **Devices**. A `?next=`
+  link (an invite, a deep link) skips it. Get started and Welcome land with their own pages;
+  until then those targets fall through to the dashboards rule.
 
 ---
 
@@ -921,3 +929,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-29 | §6, §8 notifications paged like every list: the API groups repeats (`GET /notifications/groups`, filters and limit / offset, total in `X-Total-Count`), so the numbered pager and the ×N counts cover the whole history instead of the latest 100–500 behind **Show older** (removed, with its second footer line). The status filter swaps Critical / Warning for unread alerts by type (Offline, Rules, Rule health, Failed deliveries, Templates; `GET /notifications/summary`); severity stays a filter menu. Counts are alerts (rows of repeats), and the nav badge uses the same count. Read, unread and dismiss act on a whole row (`/notifications/groups/{key}/…`, Undo restores the dismissed ids). "since …" uses the §11 date format instead of the browser's language. |
 | 2026-10-29 | §9.1, §9.2, §9.7 rule page and wizard: the rule page's tabs sit right under the header, like a template's. The editable sentence is the header's description, and **Basics** (first tab, the default) holds Name, Status and the consequence line. New rule opens on the recipes without a Name field; the name is asked once, on Review, suggested by the recipe. Behaviour words its timers by what the rule acts on (hardware flapping vs repeat alerts), and a rule not on a reading has no Behaviour tab or step: its minimum interval sits in Then. Recipes stay. |
 | 2026-10-29 | §8 default dashboard: **Set as default** / **Remove as default** in the dashboard row menu, peek and page ⋯; a **Default** tag in the list and header; only sign-in uses it, and the nav's Dashboards keeps opening the list. Per person per workspace (`tenant_memberships.default_dashboard_id`, cleared when that dashboard is deleted). First of the landing / onboarding plan. |
+| 2026-10-30 | §4 Landing: one decision for where people go after signing in (`/home` + `GET /tenants/current/landing`), used by sign-in, register, invites, "Open console" and switching / creating a workspace; Devices is now the last fallback instead of every entry point. Second of the landing / onboarding plan. |

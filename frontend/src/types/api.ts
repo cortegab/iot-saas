@@ -242,6 +242,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tenants/current/landing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Landing
+         * @description Where this person goes after signing in (the /home page).
+         */
+        get: operations["get_landing_tenants_current_landing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/members": {
         parameters: {
             query?: never;
@@ -2072,6 +2092,27 @@ export interface components {
             /** Widgets */
             widgets: number;
         };
+        /**
+         * LandingResponse
+         * @description Where this person goes after signing in (/home). `dashboard_id` is their
+         *     default; without one the page picks the dashboard opened last on this
+         *     browser from `dashboard_ids` (most recently changed first).
+         */
+        LandingResponse: {
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "setup" | "welcome" | "dashboard" | "devices";
+            /** Dashboard Id */
+            dashboard_id: string | null;
+            /** Dashboard Ids */
+            dashboard_ids: string[];
+            /** Setup Complete */
+            setup_complete: boolean;
+            /** Role */
+            role: string;
+        };
         /** LoginRequest */
         LoginRequest: {
             /** Email */
@@ -3406,6 +3447,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NavCountsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_landing_tenants_current_landing_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LandingResponse"];
                 };
             };
             /** @description Validation Error */

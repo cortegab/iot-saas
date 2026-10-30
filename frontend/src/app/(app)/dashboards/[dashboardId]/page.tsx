@@ -6,6 +6,8 @@ import { mutate as revalidate } from "swr";
 import { Check, ChevronDown, Copy, LayoutDashboard, LayoutGrid, List, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useAuth } from "@/hooks/useAuth";
+import { rememberDashboard } from "@/lib/landing";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -57,6 +59,11 @@ export default function DashboardDetailPage() {
   const { data: all } = useApiSWR<DashboardResponse[]>("/dashboards");
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
   const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
+  // The landing's fallback when no default is set: the dashboard opened last.
+  const { currentTenantId } = useAuth();
+  useEffect(() => {
+    if (data && currentTenantId) rememberDashboard(currentTenantId, data.id);
+  }, [data, currentTenantId]);
 
   const [widgets, setWidgets] = useState<Widget[] | null>(null);
   const [adding, setAdding] = useState(false);

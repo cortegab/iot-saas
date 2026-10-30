@@ -7,6 +7,7 @@ Register/login's membership list reuses app.auth.schemas.MembershipSummary
 import re
 import uuid
 from datetime import datetime
+from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, field_validator
@@ -49,6 +50,34 @@ class TenantUpdateRequest(BaseModel):
         except (ZoneInfoNotFoundError, ValueError) as exc:
             raise ValueError(f"Unknown time zone: {zone}") from exc
         return zone
+
+
+LandingTarget = Literal["setup", "welcome", "dashboard", "devices"]
+
+
+class SetupStatusResponse(BaseModel):
+    """Get started (DESIGN.md §10.x), each step read from data, never ticked."""
+
+    template: bool
+    device: bool
+    rule: bool
+    dashboard: bool
+    # Optional: someone else joined or was invited.
+    invite: bool
+    complete: bool
+    dismissed: bool
+
+
+class LandingResponse(BaseModel):
+    """Where this person goes after signing in (/home). `dashboard_id` is their
+    default; without one the page picks the dashboard opened last on this
+    browser from `dashboard_ids` (most recently changed first)."""
+
+    target: LandingTarget
+    dashboard_id: uuid.UUID | None
+    dashboard_ids: list[uuid.UUID]
+    setup_complete: bool
+    role: str
 
 
 class NavCountsResponse(BaseModel):
