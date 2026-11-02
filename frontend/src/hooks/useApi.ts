@@ -71,6 +71,8 @@ export function useApi() {
         withRetry<T>((ctx) => apiClient.post<T>(path, ctx, body)),
       patch: <T,>(path: string, body?: Record<string, unknown>) =>
         withRetry<T>((ctx) => apiClient.patch<T>(path, ctx, body)).then(afterWrite),
+      put: <T,>(path: string, body?: Record<string, unknown>) =>
+        withRetry<T>((ctx) => apiClient.put<T>(path, ctx, body)).then(afterWrite),
       delete: <T,>(path: string) =>
         withRetry<T>((ctx) => apiClient.delete<T>(path, ctx)).then(afterWrite),
     };

@@ -6,6 +6,7 @@ import { buttonClassName } from "@/components/ui/Button";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
 import { PeekFrame, PeekOpen, PeekPlaceholder } from "@/components/editor/PeekFrame";
+import { useDefaultDashboard } from "@/components/dashboards/useDefaultDashboard";
 import { widgetSummary } from "@/lib/dashboard-summary";
 import { formatWhen, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
@@ -27,11 +28,13 @@ export function DashboardPeek({
   onDelete: (d: DashboardResponse) => void;
 }) {
   const toast = useToast();
+  const defaults = useDefaultDashboard();
   if (!dashboard) return <PeekPlaceholder noun="dashboard" missing onClose={onClose} />;
 
   const devices = new Set(dashboard.layout.map((w) => w.device_id)).size;
   const menu: DropdownMenuItem[][] = [
     [
+      defaults.item(dashboard),
       { label: "Duplicate", icon: <Copy size={15} />, onClick: () => onDuplicate(dashboard) },
       {
         label: "Copy link",
@@ -46,7 +49,7 @@ export function DashboardPeek({
     <PeekFrame
       noun="dashboard"
       title={dashboard.name}
-      eyebrow="Only you see it"
+      eyebrow={dashboard.is_default ? "Your default · only you see it" : "Only you see it"}
       description={widgetSummary(dashboard.layout)}
       facts={[
         ["Widgets", String(dashboard.layout.length)],

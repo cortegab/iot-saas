@@ -49,8 +49,7 @@ async def get_latest(
         {"tenant_id": tenant_id, "device_id": device_id},
     )
     return [
-        TelemetryLatestResponse(metric=row.metric, value=row.value, time=row.time)
-        for row in result
+        TelemetryLatestResponse(metric=row.metric, value=row.value, time=row.time) for row in result
     ]
 
 
@@ -74,7 +73,13 @@ async def get_range(
             f"AND {time_col} BETWEEN :from_ AND :to "
             f"ORDER BY {time_col}"
         ),
-        {"tenant_id": tenant_id, "device_id": device_id, "metric": metric, "from_": from_, "to": to},
+        {
+            "tenant_id": tenant_id,
+            "device_id": device_id,
+            "metric": metric,
+            "from_": from_,
+            "to": to,
+        },
     )
     points = [TelemetryDataPoint(time=row.time, value=row.value) for row in result]
     return TelemetryDataResponse(metric=metric, resolution=resolution, points=points)

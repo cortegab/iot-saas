@@ -15,6 +15,8 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { NameDialog } from "@/components/ui/NameDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Tag } from "@/components/ui/Badge";
+import { defaultNote, useDefaultDashboard } from "@/components/dashboards/useDefaultDashboard";
 import { useToast } from "@/components/ui/Toast";
 import { DashboardGrid, WIDGET_LABEL } from "@/components/dashboards/DashboardGrid";
 import { DashboardRange } from "@/components/dashboards/widget-common";
@@ -46,6 +48,7 @@ export default function DashboardDetailPage() {
   const api = useApi();
   const toast = useToast();
   const { confirm, dialog } = useConfirm();
+  const defaults = useDefaultDashboard();
   // Dashboards are personal: every member edits their own.
   const canEdit = usePermissions().can("dashboards.write");
   const editing = canEdit && params.get("edit") === "1";
@@ -138,7 +141,7 @@ export default function DashboardDetailPage() {
 
   async function remove() {
     if (!data || !widgets) return;
-    const ok = await confirm(`Its ${plural(widgets.length, "widget")} are removed. Devices, rules and data aren't affected.`, {
+    const ok = await confirm(`${defaultNote(data)}Its ${plural(widgets.length, "widget")} are removed. Devices, rules and data aren't affected.`, {
       title: `Delete ${data.name}?`,
       confirmLabel: "Delete dashboard",
     });
@@ -207,6 +210,7 @@ export default function DashboardDetailPage() {
       <PageHeader
         title={switcher}
         breadcrumbs={[{ label: "Dashboards", href: "/dashboards" }]}
+        eyebrow={data.is_default ? <Tag size="sm">Default</Tag> : undefined}
         description={`${plural(widgets.length, "widget")} · live`}
         actions={
           <>
@@ -246,6 +250,7 @@ export default function DashboardDetailPage() {
                 label="More dashboard actions"
                 groups={[
                   [
+                    defaults.item(data),
                     { label: "Rename…", icon: <Pencil size={15} />, onClick: () => setRenaming(true) },
                     { label: "Duplicate…", icon: <Copy size={15} />, onClick: () => setDuplicating(true) },
                   ],

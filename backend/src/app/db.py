@@ -58,7 +58,9 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             await callback()
 
 
-def add_post_commit_callback(session: AsyncSession, callback: Callable[[], Awaitable[None]]) -> None:
+def add_post_commit_callback(
+    session: AsyncSession, callback: Callable[[], Awaitable[None]]
+) -> None:
     """Register an async callback to run once this session's transaction has
     actually committed — see get_session's docstring for why this exists.
     """
