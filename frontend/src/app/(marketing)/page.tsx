@@ -87,7 +87,7 @@ const FAQ: [string, ReactNode][] = [
     "The requirement is under two seconds from breach to command. On a single host, typical breach-to-command time is well under 500 ms because rules run in memory before anything is written.",
   ],
   ["Can I connect OPC UA or Modbus equipment?", "Yes, through an edge connector running on your network. It translates to the device contract and looks like any other device to the platform."],
-  ["Who can see what?", "Every workspace is isolated by Postgres row-level security. Inside a workspace, Viewers see everything and change nothing; dashboards are personal to each member."],
+  ["Who can see what?", "Every workspace is isolated by Postgres row-level security. Inside a workspace, Viewers see everything and change nothing, apart from dashboards, which everyone in the workspace shares."],
   [
     "What does a device need to speak?",
     <>

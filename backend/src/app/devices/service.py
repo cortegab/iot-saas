@@ -9,7 +9,7 @@ once at creation/rotation and never retrievable afterward.
 import secrets
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple
 
 from sqlalchemy import func, select, text, update
@@ -17,8 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth import service as auth_service
 from app.catalog import service as catalog_service
+from app.config import settings
 from app.db import set_tenant_context
 from app.devices.models import Device, DeviceStatus
+from app.devices.schemas import ConnectionState
 from app.shared.slug import slugify
 from app.zones import service as zones_service
 
@@ -126,6 +128,43 @@ async def count_devices(session: AsyncSession, tenant_id: uuid.UUID) -> int:
         )
         or 0
     )
+
+
+def connection_state(device: Device) -> ConnectionState:
+    """Online, offline or never connected. last_status_online is push-driven
+    (a retained status message or its Last-Will) and authoritative when
+    present: an LWT firing "offline" means offline right now, independent of
+    elapsed time. Devices that have never sent a status message (older
+    firmware, permanently) fall back to the last_seen_at heuristic."""
+    if device.last_status_online is not None:
+        return "online" if device.last_status_online else "offline"
+    if device.last_seen_at is None:
+        return "never_connected"
+    offline_after = timedelta(seconds=settings.device_offline_after_seconds)
+    return "online" if datetime.now(UTC) - device.last_seen_at <= offline_after else "offline"
+
+
+async def count_offline(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    """Enabled devices that connected before and are offline now (never
+    connected isn't offline; it's waiting)."""
+    devices = await list_devices(session, tenant_id)
+    return sum(
+        1
+        for d in devices
+        if d.status == DeviceStatus.ACTIVE.value and connection_state(d) == "offline"
+    )
+
+
+async def first_seen_device(session: AsyncSession, tenant_id: uuid.UUID) -> Device | None:
+    """A device that has sent something (the Get started "connected" step),
+    the most recently heard first; None while no device ever has."""
+    result = await session.execute(
+        select(Device)
+        .where(Device.tenant_id == tenant_id, Device.last_seen_at.is_not(None))
+        .order_by(Device.last_seen_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
 
 
 async def count_devices_by_catalog_entry(

@@ -186,6 +186,13 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
   "**Reconnecting…** Live updates are paused, so values on this page may be stale." The live
   indicator turns pending. Both go when it reconnects.
 - **Skip link:** "Skip to content" is the first focusable element and moves focus to the content.
+- **Landing:** every entry point (sign in, register, an accepted invite, the landing page's
+  "Open console", switching or creating a workspace) goes to `/home`, which asks the API once
+  (`GET /tenants/current/landing`) and replaces itself with, in order: **Get started** for an
+  owner or admin while setup is unfinished and not dismissed; the one-time **Welcome** while
+  the workspace has no dashboard; their **default dashboard** (§8); the dashboard they opened
+  last on this browser; the workspace's most recently changed one; else **Devices**. A `?next=`
+  link (an invite, a deep link) skips it. Get started is §10.1 and Welcome §10.2.
 
 ---
 
@@ -445,13 +452,29 @@ edits a whole record, and there is no "Expand" toggle.
   - The list shows Zone / Devices / Status.
   - Delete is blocked while devices are assigned.
   - The Devices list can filter by zone.
-- **Dashboards** are per user. They are edited **in place on the grid** (Edit layout): drag and
+- **Dashboards** are shared by everyone in the workspace (user decision 2026-11-02); until
+  permissions by role are decided, any member may edit, rename, duplicate and delete them. Who
+  made one is recorded but filters nothing; leaving a workspace leaves your dashboards with it.
+  They are edited **in place on the grid** (Edit layout): drag and
   resize as before, and **click a widget** to open its item sheet: Type, Device, Reading (or
   Actuator), Title (optional, once §13 lands) and Size (S · M · L · Full = 3 · 4 · 8 · 12 columns),
   applied as you change them, with **Remove widget** in the sheet. **Add a widget** is a sheet with
   three steps: Type → Source → Size. On phones, Edit layout shows a **reorderable list** of the
   widgets (open, remove, move up / down) instead of the grid. Moving a widget swaps its grid place
   with its neighbour's in reading order, so the desktop layout stays intact apart from that swap.
+  **Default dashboard:** each person may mark one of their dashboards **Set as default** (row
+  menu after Edit layout, the peek's ⋯ and the dashboard's ⋯; **Remove as default** undoes it).
+  It's where they land after signing in; the nav's Dashboards always opens the list (user
+  decision 2026-10-29). A **Default** tag marks it in the list and the page header. One per person per workspace, stored on the
+  server. Deleting it says so in the confirm; the next landing falls back to the dashboard opened
+  last.
+  **Attention strip:** above every dashboard (not while editing its layout), a warning callout
+  "Needs attention:" listing only what's non-zero: **N critical alerts** (unread, rows of repeats)
+  · **N devices offline** · **N rules latched** · **N rules can't evaluate**, each linking to its
+  filtered list (`/notifications?state=unread&severity=critical`, `/devices?status=offline`,
+  `/rules?state=latched`, `/rules?state=stale`). When nothing needs someone it isn't there at all,
+  so it never becomes wallpaper. Realtime refreshes it on notification, device-health and
+  rule-health events.
 - **Notifications** (the tab bar calls it **Alerts**): one Line row per alert, with severity icon,
   title, detail, device and rule links and the time. Repeats of the same alert from the same source
   group into one row (**×4**, "since Fri 2 Oct 09:12, last 2 min ago"; dates in the one §11
@@ -696,6 +719,39 @@ path (CLAUDE.md §9.1).
   - Contract terms and data retention are answered in the **FAQ**.
   - **No plan tiers.**
 
+### 10.1 Get started (first run)
+
+- **Who and when:** an owner or admin of a workspace whose setup isn't finished lands on
+  `/start` after signing in (§4 Landing), until the four steps are done or someone picks **I'll set
+  it up myself** (workspace-wide). Afterwards it stays reachable from Workspace settings → **Setup
+  guide**. A viewer opening it sees "Your workspace is being set up", never a checklist they can't
+  act on.
+- **Steps**, one Line row each, read from data (never ticked by hand, so deleting the only device
+  reopens its step): **Create a device template · Connect a device** (done once it sends a
+  reading) **· Create a rule · Make a dashboard**, then under **Optional**, **Invite your team**,
+  which never holds back "done".
+- Each row: a numbered circle (a ✓ once done; the next step in accent with the 3 px accent bar),
+  the title, one sentence, or what it's waiting for ("Needs a connected device") in its place, and
+  one button that opens the real page (the next step's is primary; a done step's says **Open**).
+  Rows waiting on an earlier step stay clickable.
+- **Live finish:** once a device has reported, its row shows the latest reading ("bay1 ·
+  temperature 24.1, just now"). The rule step opens the recipes with that device (`?device=`).
+- **Done:** a "Setup complete" callout with **Open your dashboard**; sign-in lands there from then on.
+- The dashboard step also offers **Or build one from my devices** (§10.2) once a device reports.
+
+### 10.2 Welcome (new to a workspace)
+
+- **Who and when:** once, while the workspace has no dashboard and this person hasn't answered it
+  yet (usually just invited; also an owner who dismissed Get started before making one).
+  Dashboards are shared, so someone joining a workspace that has them lands on one instead.
+- **Content:** "Welcome to {workspace}", "You're in as {Role}.", then what's here as one line of
+  facts ("3 devices · 0 rules · 2 alerts need attention"). A viewer in an unfinished workspace
+  also sees an info callout "Your workspace is being set up".
+- **A first dashboard** card: **Build my dashboard** (primary) makes "{Workspace} overview", a
+  trend chart of each device's first numeric reading, else its status card, two per row, up to 8
+  devices, and sets it as their default (§8); **Look around first** goes to Devices. Either answer
+  ends the Welcome. With no devices yet there's nothing to chart, so only Look around first shows.
+
 ---
 
 ## 11. Content and wording
@@ -914,3 +970,9 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-28 | Round-2 leftovers (B2, G4, R12): the trend chart's range is the segmented control (36 px, like the dashboard's); on phones a header whose only action is the ⋯ menu keeps it beside the title; §8 API keys: a revoked or expired key can be **deleted** (*Delete key…*, `DELETE /api-keys/{id}/permanent`); an active key is only ever revoked first. |
 | 2026-10-29 | §6, §8 notifications paged like every list: the API groups repeats (`GET /notifications/groups`, filters and limit / offset, total in `X-Total-Count`), so the numbered pager and the ×N counts cover the whole history instead of the latest 100–500 behind **Show older** (removed, with its second footer line). The status filter swaps Critical / Warning for unread alerts by type (Offline, Rules, Rule health, Failed deliveries, Templates; `GET /notifications/summary`); severity stays a filter menu. Counts are alerts (rows of repeats), and the nav badge uses the same count. Read, unread and dismiss act on a whole row (`/notifications/groups/{key}/…`, Undo restores the dismissed ids). "since …" uses the §11 date format instead of the browser's language. |
 | 2026-10-29 | §9.1, §9.2, §9.7 rule page and wizard: the rule page's tabs sit right under the header, like a template's. The editable sentence is the header's description, and **Basics** (first tab, the default) holds Name, Status and the consequence line. New rule opens on the recipes without a Name field; the name is asked once, on Review, suggested by the recipe. Behaviour words its timers by what the rule acts on (hardware flapping vs repeat alerts), and a rule not on a reading has no Behaviour tab or step: its minimum interval sits in Then. Recipes stay. |
+| 2026-10-29 | §8 default dashboard: **Set as default** / **Remove as default** in the dashboard row menu, peek and page ⋯; a **Default** tag in the list and header; only sign-in uses it, and the nav's Dashboards keeps opening the list. Per person per workspace (`tenant_memberships.default_dashboard_id`, cleared when that dashboard is deleted). First of the landing / onboarding plan. |
+| 2026-10-30 | §4 Landing: one decision for where people go after signing in (`/home` + `GET /tenants/current/landing`), used by sign-in, register, invites, "Open console" and switching / creating a workspace; Devices is now the last fallback instead of every entry point. Second of the landing / onboarding plan. |
+| 2026-10-30 | §10.1 Get started: `/start` for a new workspace's owners and admins (four steps read from data plus an optional invite, the next one highlighted, a live first reading, "I'll set it up myself" for the whole workspace, a Setup guide link in Workspace settings; viewers see "being set up"). Third of the landing / onboarding plan. |
+| 2026-10-30 | §10.2 Welcome: a one-time `/welcome` for someone with no dashboard in the workspace (facts, a "being set up" note for viewers, **Build my dashboard**: a starter dashboard from the devices set as their default, or **Look around first**); Get started's dashboard step offers the same build. `POST /tenants/current/welcome`. Fourth of the landing / onboarding plan. |
+| 2026-10-30 | §8 attention strip above every dashboard: unread critical alerts, offline devices, latched rules and rules that can't evaluate, only when non-zero, each linking to its filtered list (`GET /tenants/current/attention`). Last of the landing / onboarding plan. |
+| 2026-11-02 | §8, §4, §10.2 dashboards are shared by the workspace instead of per person: everyone sees every dashboard and, until permissions by role are decided, anyone may change them. The default dashboard stays per person and may be any of them. Landing and Welcome follow: Welcome only while the workspace has no dashboard; otherwise newcomers land on the most recently changed one. Leaving a workspace keeps the dashboards you made. |

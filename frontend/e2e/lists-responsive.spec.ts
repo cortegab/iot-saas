@@ -5,6 +5,7 @@ import { test } from "./fixtures";
 // cards at 600px, and on phones the filter menus move into a sheet.
 
 test("devices: Template and Zone fold into the name line as the content narrows", async ({ page }) => {
+  await page.goto("/devices");
   const table = page.getByRole("table", { name: "Devices" });
   const header = (name: string) => table.getByRole("columnheader", { name });
 
@@ -24,6 +25,7 @@ test("devices: Template and Zone fold into the name line as the content narrows"
 
 test("devices on a phone: cards, a Filters sheet, and no sideways scroll", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/devices");
   await expect(page.getByRole("combobox", { name: "Filter by zone" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Filters" }).click();

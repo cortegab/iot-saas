@@ -1,10 +1,13 @@
-"""Dashboard routes: CRUD for personal, composable dashboards.
+"""Dashboard routes: CRUD for the workspace's composable dashboards.
 
 Thin per CLAUDE.md §6 — validation and delegation only, business logic lives
-in dashboards/service.py. No admin gate on any route: a dashboard is a
-personal utility view, not tenant configuration, so tenant membership alone
-(require_tenant_context) is enough.
+in dashboards/service.py. Dashboards are shared by the workspace, and for now
+anyone in it may change them (permissions by role are to be decided), so
+tenant membership alone (require_tenant_context) is enough. The default is
+per person: the signed-in user's, never the creator's.
 """
+
+import uuid
 
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,11 +29,12 @@ from app.tenants.deps import TenantContext, require_tenant_context
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
 
-def _to_response(dashboard: Dashboard) -> DashboardResponse:
+def _to_response(dashboard: Dashboard, default_id: uuid.UUID | None) -> DashboardResponse:
     return DashboardResponse(
         id=dashboard.id,
         name=dashboard.name,
         layout=[Widget.model_validate(w) for w in dashboard.layout],
+        is_default=dashboard.id == default_id,
         created_at=dashboard.created_at,
         updated_at=dashboard.updated_at,
     )
@@ -42,8 +46,9 @@ async def list_dashboards(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> list[DashboardResponse]:
-    dashboards = await service.list_my_dashboards(session, ctx.tenant_id, current_user.id)
-    return [_to_response(d) for d in dashboards]
+    dashboards = await service.list_dashboards(session, ctx.tenant_id)
+    default_id = await service.get_default_dashboard_id(session, ctx.tenant_id, current_user.id)
+    return [_to_response(d, default_id) for d in dashboards]
 
 
 @router.post("", response_model=DashboardResponse, status_code=status.HTTP_201_CREATED)
@@ -54,18 +59,28 @@ async def create_dashboard(
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DashboardResponse:
     dashboard = await service.create_dashboard(session, ctx.tenant_id, current_user.id, body.name)
-    return _to_response(dashboard)
+    return _to_response(dashboard, None)
+
+
+async def _default_id(session: AsyncSession, dashboard: Dashboard, user: User) -> uuid.UUID | None:
+    """The signed-in person's default (not the creator's)."""
+    return await service.get_default_dashboard_id(session, dashboard.tenant_id, user.id)
 
 
 @router.get("/{dashboard_id}", response_model=DashboardResponse)
-async def get_dashboard(dashboard: Dashboard = Depends(get_dashboard_or_404)) -> DashboardResponse:
-    return _to_response(dashboard)
+async def get_dashboard(
+    dashboard: Dashboard = Depends(get_dashboard_or_404),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> DashboardResponse:
+    return _to_response(dashboard, await _default_id(session, dashboard, current_user))
 
 
 @router.patch("/{dashboard_id}", response_model=DashboardResponse)
 async def update_dashboard(
     body: DashboardUpdateRequest,
     dashboard: Dashboard = Depends(get_dashboard_or_404),
+    current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DashboardResponse:
     layout = [w.model_dump(mode="json") for w in body.layout] if body.layout is not None else None
@@ -76,7 +91,28 @@ async def update_dashboard(
     # attribute access trigger an implicit (and, in async SQLAlchemy,
     # unsupported) lazy load.
     await session.refresh(updated)
-    return _to_response(updated)
+    return _to_response(updated, await _default_id(session, updated, current_user))
+
+
+@router.put("/{dashboard_id}/default", status_code=status.HTTP_204_NO_CONTENT)
+async def set_default(
+    dashboard: Dashboard = Depends(get_dashboard_or_404),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> None:
+    """Land here after signing in; replaces any earlier default."""
+    await service.set_default(session, dashboard.tenant_id, current_user.id, dashboard)
+
+
+@router.delete("/{dashboard_id}/default", status_code=status.HTTP_204_NO_CONTENT)
+async def clear_default(
+    dashboard: Dashboard = Depends(get_dashboard_or_404),
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> None:
+    """Stop landing here, if it was the default."""
+    if await _default_id(session, dashboard, current_user) == dashboard.id:
+        await service.set_default(session, dashboard.tenant_id, current_user.id, None)
 
 
 @router.delete("/{dashboard_id}", status_code=status.HTTP_204_NO_CONTENT)

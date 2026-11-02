@@ -4,12 +4,10 @@ Tenant-scoped: RLS-protected with the standard single-tenant predicate (see
 the migration) — same treatment every other small, uncompressed tenant-scoped
 table gets (rules, commands, ...).
 
-A dashboard also belongs to one user within that tenant ("saved per user" —
-UX_UI_Description.md §5), but that ownership is enforced in
-dashboards/service.py by filtering on user_id, not by a second RLS predicate:
-getting it wrong means a teammate can't see your dashboard, not a cross-tenant
-leak, so app-layer scoping is proportionate here (see tenant_memberships'
-migration for what a *real* second predicate looks like, when one is needed).
+Dashboards are shared by everyone in the workspace (user decision
+2026-11-02; who may change them by role is to be decided). `user_id` records
+who created it and filters nothing. Where each person lands is their own
+choice, on the membership (tenant_memberships.default_dashboard_id).
 
 `user_id` is a plain FK to "users.id" — never importing app.auth.models.User
 here (CLAUDE.md §6: modules don't import each other's models.py), the same

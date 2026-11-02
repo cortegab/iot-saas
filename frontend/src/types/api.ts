@@ -242,6 +242,106 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tenants/current/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Setup
+         * @description Get started's steps (DESIGN.md §10.x), read from data.
+         */
+        get: operations["get_setup_tenants_current_setup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/current/setup/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Setup
+         * @description Get started's "I'll set it up myself": sign-in stops landing on it.
+         */
+        post: operations["dismiss_setup_tenants_current_setup_dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/current/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attention
+         * @description What needs someone now: the strip above every dashboard.
+         */
+        get: operations["get_attention_tenants_current_attention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/current/welcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Welcomed
+         * @description The one-time Welcome was answered: sign-in stops landing on it.
+         */
+        post: operations["mark_welcomed_tenants_current_welcome_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/current/landing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Landing
+         * @description Where this person goes after signing in (the /home page).
+         */
+        get: operations["get_landing_tenants_current_landing_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/members": {
         parameters: {
             query?: never;
@@ -904,6 +1004,30 @@ export interface paths {
         patch: operations["update_dashboard_dashboards__dashboard_id__patch"];
         trace?: never;
     };
+    "/dashboards/{dashboard_id}/default": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Default
+         * @description Land here after signing in; replaces any earlier default.
+         */
+        put: operations["set_default_dashboards__dashboard_id__default_put"];
+        post?: never;
+        /**
+         * Clear Default
+         * @description Stop landing here, if it was the default.
+         */
+        delete: operations["clear_default_dashboards__dashboard_id__default_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications": {
         parameters: {
             query?: never;
@@ -1344,6 +1468,21 @@ export interface components {
             /** Expires At */
             expires_at: string | null;
         };
+        /**
+         * AttentionResponse
+         * @description What needs someone now, for the strip above dashboards (DESIGN.md §8).
+         *     Alerts count rows of repeats, as the notifications page does.
+         */
+        AttentionResponse: {
+            /** Critical Alerts */
+            critical_alerts: number;
+            /** Offline Devices */
+            offline_devices: number;
+            /** Latched Rules */
+            latched_rules: number;
+            /** Unhealthy Rules */
+            unhealthy_rules: number;
+        };
         /** CatalogActuator */
         CatalogActuator: {
             /** Name */
@@ -1611,6 +1750,11 @@ export interface components {
             name: string;
             /** Layout */
             layout: components["schemas"]["Widget"][];
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
             /**
              * Created At
              * Format: date-time
@@ -2042,6 +2186,27 @@ export interface components {
             rules: number;
             /** Widgets */
             widgets: number;
+        };
+        /**
+         * LandingResponse
+         * @description Where this person goes after signing in (/home). `dashboard_id` is their
+         *     default; without one the page picks the dashboard opened last on this
+         *     browser from `dashboard_ids` (most recently changed first).
+         */
+        LandingResponse: {
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "setup" | "welcome" | "dashboard" | "devices";
+            /** Dashboard Id */
+            dashboard_id: string | null;
+            /** Dashboard Ids */
+            dashboard_ids: string[];
+            /** Setup Complete */
+            setup_complete: boolean;
+            /** Role */
+            role: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -2575,6 +2740,30 @@ export interface components {
             source: "set";
             /** Values */
             values: number[];
+        };
+        /**
+         * SetupStatusResponse
+         * @description Get started (DESIGN.md §10.x), each step read from data, never ticked.
+         */
+        SetupStatusResponse: {
+            /** Template */
+            template: boolean;
+            /** Device */
+            device: boolean;
+            /** Rule */
+            rule: boolean;
+            /** Dashboard */
+            dashboard: boolean;
+            /** Invite */
+            invite: boolean;
+            /** Complete */
+            complete: boolean;
+            /** Dismissed */
+            dismissed: boolean;
+            /** First Device Id */
+            first_device_id?: string | null;
+            /** First Device Name */
+            first_device_name?: string | null;
         };
         /** SignalOverride */
         SignalOverride: {
@@ -3377,6 +3566,162 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NavCountsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_setup_tenants_current_setup_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_setup_tenants_current_setup_dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attention_tenants_current_attention_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttentionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_welcomed_tenants_current_welcome_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_landing_tenants_current_landing_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LandingResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5227,6 +5572,70 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["DashboardResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_default_dashboards__dashboard_id__default_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_default_dashboards__dashboard_id__default_delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                dashboard_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

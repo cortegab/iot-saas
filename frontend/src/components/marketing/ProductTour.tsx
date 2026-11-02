@@ -17,7 +17,7 @@ const TOUR = {
     points: [
       "Value cards, trend charts, gauges, device status and actuator switches.",
       "Readings stream over WebSocket; charts read 1-minute rollups, never raw rows.",
-      "Each member builds their own dashboards. Offline devices show their last value, marked stale.",
+      "Dashboards are shared by the whole workspace. Offline devices show their last value, marked stale.",
     ],
   },
   devices: {

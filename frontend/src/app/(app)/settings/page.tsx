@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
 import { LogOut, Mail, Plus, X } from "lucide-react";
@@ -9,7 +10,7 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClassName } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Field } from "@/components/ui/Field";
@@ -106,7 +107,7 @@ export default function WorkspaceSettingsPage() {
 
   async function leave() {
     if (!ws) return;
-    const ok = await confirm("You lose access immediately and your personal dashboards here are deleted. An admin has to invite you again.", {
+    const ok = await confirm("You lose access immediately. Dashboards you made stay with the workspace. An admin has to invite you again.", {
       title: `Leave ${ws.name}?`,
       confirmLabel: "Leave workspace",
     });
@@ -156,6 +157,7 @@ export default function WorkspaceSettingsPage() {
           { id: "workspace", label: "Workspace" },
           { id: "alerts", label: "Alerts", count: d.recipients.length },
           { id: "time", label: "Time and region" },
+          ...(canEdit ? [{ id: "setup", label: "Setup guide" }] : []),
           { id: "account", label: "You" },
           { id: "leave", label: "Leave workspace" },
         ]}
@@ -250,6 +252,16 @@ export default function WorkspaceSettingsPage() {
           </Field>
         </EditorSection>
 
+        {canEdit && (
+          <EditorSection id="setup" title="Setup guide" lead="The Get started steps: a template, a connected device, a rule and a dashboard.">
+            <div>
+              <Link href="/start" className={buttonClassName({ variant: "secondary" })}>
+                Open Get started
+              </Link>
+            </div>
+          </EditorSection>
+        )}
+
         <EditorSection id="account" title="You" lead={`Signed in as ${me?.email ?? ""}. Your name shows to the people you work with.`}>
           <Field label="Your name" optional error={editor.errorFor("me.name")}>
             <Input
@@ -266,8 +278,8 @@ export default function WorkspaceSettingsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="min-w-0 flex-1 text-meta text-ink-muted">
               {role === "owner"
-                ? "An owner can leave once another owner exists. Your personal dashboards here are deleted."
-                : "You lose access. Your personal dashboards here are deleted."}
+                ? "An owner can leave once another owner exists. Dashboards you made stay with the workspace."
+                : "You lose access. Dashboards you made stay with the workspace."}
             </p>
             <Button variant="secondary-danger" onClick={() => void leave()}>
               <LogOut aria-hidden size={14} />

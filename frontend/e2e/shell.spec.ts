@@ -6,6 +6,7 @@ import { test } from "./fixtures";
 
 test("from 1440px the full sidebar shows the grouped nav, and ⌘K navigates", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/devices");
   const nav = page.getByRole("navigation", { name: "Main" });
   for (const group of ["Monitor", "Automate", "Configure", "Admin"]) {
     await expect(nav.getByText(group, { exact: true })).toBeVisible();
@@ -52,6 +53,7 @@ test("at laptop widths the icon rail labels its icons and pins open over the con
 
 test("on a phone the tab bar and More sheet replace the sidebar, with no sideways scroll", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/devices");
   await expect(page.getByRole("complementary", { name: "Primary" })).toBeHidden();
 
   const tabs = page.getByRole("navigation", { name: "Main" });

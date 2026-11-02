@@ -6,6 +6,8 @@ import { mutate as revalidate } from "swr";
 import { Check, ChevronDown, Copy, LayoutDashboard, LayoutGrid, List, Pencil, Plus, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useAuth } from "@/hooks/useAuth";
+import { rememberDashboard } from "@/lib/landing";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
@@ -15,6 +17,9 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { NameDialog } from "@/components/ui/NameDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Tag } from "@/components/ui/Badge";
+import { AttentionStrip } from "@/components/dashboards/AttentionStrip";
+import { defaultNote, useDefaultDashboard } from "@/components/dashboards/useDefaultDashboard";
 import { useToast } from "@/components/ui/Toast";
 import { DashboardGrid, WIDGET_LABEL } from "@/components/dashboards/DashboardGrid";
 import { DashboardRange } from "@/components/dashboards/widget-common";
@@ -34,7 +39,7 @@ type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-/** A dashboard (DESIGN.md §8, demo H): personal, viewed by default, laid out
+/** A dashboard (DESIGN.md §8, demo H): shared by the workspace, viewed by default, laid out
  * in edit mode (`?edit=1`): drag by the handle, resize from the corner, click a
  * widget to change it in its sheet, add one in three steps; on a phone, a list
  * to open and reorder. Removing has an Undo. Changes save as you go. */
@@ -46,7 +51,8 @@ export default function DashboardDetailPage() {
   const api = useApi();
   const toast = useToast();
   const { confirm, dialog } = useConfirm();
-  // Dashboards are personal: every member edits their own.
+  const defaults = useDefaultDashboard();
+  // Shared by the workspace; every member may change it for now (DESIGN.md §8).
   const canEdit = usePermissions().can("dashboards.write");
   const editing = canEdit && params.get("edit") === "1";
 
@@ -54,6 +60,11 @@ export default function DashboardDetailPage() {
   const { data: all } = useApiSWR<DashboardResponse[]>("/dashboards");
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
   const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
+  // The landing's fallback when no default is set: the dashboard opened last.
+  const { currentTenantId } = useAuth();
+  useEffect(() => {
+    if (data && currentTenantId) rememberDashboard(currentTenantId, data.id);
+  }, [data, currentTenantId]);
 
   const [widgets, setWidgets] = useState<Widget[] | null>(null);
   const [adding, setAdding] = useState(false);
@@ -138,7 +149,7 @@ export default function DashboardDetailPage() {
 
   async function remove() {
     if (!data || !widgets) return;
-    const ok = await confirm(`Its ${plural(widgets.length, "widget")} are removed. Devices, rules and data aren't affected.`, {
+    const ok = await confirm(`${defaultNote(data)}Its ${plural(widgets.length, "widget")} are removed. Devices, rules and data aren't affected.`, {
       title: `Delete ${data.name}?`,
       confirmLabel: "Delete dashboard",
     });
@@ -170,7 +181,7 @@ export default function DashboardDetailPage() {
   // loading state first would spin forever (the old 404 bug).
   if (error) {
     if (isNotFound(error)) {
-      return <NotFound noun="dashboard" href="/dashboards" list="dashboards" description="Dashboards are personal, so a teammate's link opens nothing for you." />;
+      return <NotFound noun="dashboard" href="/dashboards" list="dashboards" />;
     }
     return <ErrorState title="Couldn't load this dashboard" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />;
   }
@@ -207,6 +218,7 @@ export default function DashboardDetailPage() {
       <PageHeader
         title={switcher}
         breadcrumbs={[{ label: "Dashboards", href: "/dashboards" }]}
+        eyebrow={data.is_default ? <Tag size="sm">Default</Tag> : undefined}
         description={`${plural(widgets.length, "widget")} · live`}
         actions={
           <>
@@ -246,6 +258,7 @@ export default function DashboardDetailPage() {
                 label="More dashboard actions"
                 groups={[
                   [
+                    defaults.item(data),
                     { label: "Rename…", icon: <Pencil size={15} />, onClick: () => setRenaming(true) },
                     { label: "Duplicate…", icon: <Copy size={15} />, onClick: () => setDuplicating(true) },
                   ],
@@ -257,6 +270,8 @@ export default function DashboardDetailPage() {
           </>
         }
       />
+
+      {!editing && <AttentionStrip />}
 
       {editing && (
         <p role="status" className="flex items-center gap-2 rounded-md border border-accent/40 bg-accent-muted px-3.5 py-2.5 text-meta text-ink">

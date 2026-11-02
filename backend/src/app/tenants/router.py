@@ -28,11 +28,14 @@ from app.tenants.deps import TenantContext, require_role, require_tenant_context
 from app.tenants.models import Invitation, Tenant, TenantRole
 from app.tenants.schemas import (
     AddMemberRequest,
+    AttentionResponse,
     ChangeRoleRequest,
     InvitationCreateRequest,
     InvitationResponse,
+    LandingResponse,
     MemberResponse,
     NavCountsResponse,
+    SetupStatusResponse,
     TenantCreateRequest,
     TenantResponse,
     TenantUpdateRequest,
@@ -101,14 +104,84 @@ async def get_nav_counts(
         devices=await devices_service.count_devices(session, ctx.tenant_id),
         rules=await rules_service.count_rules(session, ctx.tenant_id),
         templates=await catalog_service.count_catalog_entries(session, ctx.tenant_id),
-        dashboards=await dashboards_service.count_my_dashboards(
-            session, ctx.tenant_id, ctx.user_id
-        ),
+        dashboards=await dashboards_service.count_dashboards(session, ctx.tenant_id),
         zones=await zones_service.count_zones(session, ctx.tenant_id),
         members=await service.count_members(session, ctx.tenant_id) if admin else None,
         api_keys=await api_keys_service.count_active_api_keys(session, ctx.tenant_id)
         if admin
         else None,
+    )
+
+
+@router.get("/current/setup", response_model=SetupStatusResponse)
+async def get_setup(
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> SetupStatusResponse:
+    """Get started's steps (DESIGN.md §10.x), read from data."""
+    assert ctx.user_id is not None  # people_only
+    s = await service.setup_status(session, ctx.tenant_id, ctx.user_id)
+    return SetupStatusResponse(
+        template=s.template,
+        device=s.device,
+        rule=s.rule,
+        dashboard=s.dashboard,
+        invite=s.invite,
+        complete=s.complete,
+        dismissed=s.dismissed,
+        first_device_id=s.first_device_id,
+        first_device_name=s.first_device_name,
+    )
+
+
+@router.post("/current/setup/dismiss", status_code=status.HTTP_204_NO_CONTENT)
+async def dismiss_setup(
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> None:
+    """Get started's "I'll set it up myself": sign-in stops landing on it."""
+    await service.dismiss_setup(session, ctx.tenant_id)
+
+
+@router.get("/current/attention", response_model=AttentionResponse)
+async def get_attention(
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> AttentionResponse:
+    """What needs someone now: the strip above every dashboard."""
+    a = await service.attention(session, ctx.tenant_id)
+    return AttentionResponse(
+        critical_alerts=a.critical_alerts,
+        offline_devices=a.offline_devices,
+        latched_rules=a.latched_rules,
+        unhealthy_rules=a.unhealthy_rules,
+    )
+
+
+@router.post("/current/welcome", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_welcomed(
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> None:
+    """The one-time Welcome was answered: sign-in stops landing on it."""
+    assert ctx.user_id is not None  # people_only
+    await service.mark_welcomed(session, ctx.tenant_id, ctx.user_id)
+
+
+@router.get("/current/landing", response_model=LandingResponse)
+async def get_landing(
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> LandingResponse:
+    """Where this person goes after signing in (the /home page)."""
+    assert ctx.user_id is not None  # people_only
+    result = await service.landing(session, ctx.tenant_id, ctx.user_id, ctx.role.value)
+    return LandingResponse(
+        target=result.target,
+        dashboard_id=result.dashboard_id,
+        dashboard_ids=result.dashboard_ids,
+        setup_complete=result.setup_complete,
+        role=ctx.role.value,
     )
 
 

@@ -1,7 +1,7 @@
-"""Dashboard CRUD. Every function takes tenant_id and user_id explicitly —
-RLS enforces the tenant boundary, the user_id filter on top enforces that a
-dashboard is personal (see dashboards/models.py's module docstring for why
-that's app-layer, not a second RLS predicate).
+"""Dashboard CRUD. Dashboards are shared by the workspace: RLS enforces the
+tenant boundary and every function also filters on tenant_id. The creator
+(`user_id`) is recorded, never used to filter. A person's default dashboard
+is theirs (tenants.service, on the membership).
 """
 
 import uuid
@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.dashboards.models import Dashboard
+from app.tenants import service as tenants_service
 
 
 class DashboardNotFoundError(Exception):
@@ -27,44 +28,58 @@ async def create_dashboard(
     return dashboard
 
 
-async def list_my_dashboards(
-    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
-) -> list[Dashboard]:
+async def list_dashboards(session: AsyncSession, tenant_id: uuid.UUID) -> list[Dashboard]:
     result = await session.execute(
-        select(Dashboard)
-        .where(Dashboard.tenant_id == tenant_id, Dashboard.user_id == user_id)
-        .order_by(Dashboard.created_at)
+        select(Dashboard).where(Dashboard.tenant_id == tenant_id).order_by(Dashboard.created_at)
     )
     return list(result.scalars().all())
 
 
-async def count_my_dashboards(
-    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
-) -> int:
+async def list_dashboard_ids(session: AsyncSession, tenant_id: uuid.UUID) -> list[uuid.UUID]:
+    """The workspace's dashboards, the most recently changed first."""
+    result = await session.execute(
+        select(Dashboard.id)
+        .where(Dashboard.tenant_id == tenant_id)
+        .order_by(Dashboard.updated_at.desc())
+    )
+    return list(result.scalars().all())
+
+
+async def count_dashboards(session: AsyncSession, tenant_id: uuid.UUID) -> int:
     return (
         await session.scalar(
-            select(func.count())
-            .select_from(Dashboard)
-            .where(Dashboard.tenant_id == tenant_id, Dashboard.user_id == user_id)
+            select(func.count()).select_from(Dashboard).where(Dashboard.tenant_id == tenant_id)
         )
         or 0
     )
 
 
 async def get_dashboard(
-    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, dashboard_id: uuid.UUID
+    session: AsyncSession, tenant_id: uuid.UUID, dashboard_id: uuid.UUID
 ) -> Dashboard:
     result = await session.execute(
-        select(Dashboard).where(
-            Dashboard.tenant_id == tenant_id,
-            Dashboard.user_id == user_id,
-            Dashboard.id == dashboard_id,
-        )
+        select(Dashboard).where(Dashboard.tenant_id == tenant_id, Dashboard.id == dashboard_id)
     )
     dashboard = result.scalar_one_or_none()
     if dashboard is None:
         raise DashboardNotFoundError
     return dashboard
+
+
+async def get_default_dashboard_id(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> uuid.UUID | None:
+    return await tenants_service.get_default_dashboard_id(session, tenant_id, user_id)
+
+
+async def set_default(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, dashboard: Dashboard | None
+) -> None:
+    """Makes a workspace dashboard where this person lands after signing in,
+    or with None clears it. One default per person per workspace."""
+    await tenants_service.set_default_dashboard(
+        session, tenant_id, user_id, dashboard.id if dashboard else None
+    )
 
 
 async def update_dashboard(

@@ -47,6 +47,10 @@ class Tenant(Base):
     )
     # IANA zone name: the default for new schedules and for showing times.
     timezone: Mapped[str] = mapped_column(nullable=False, server_default="UTC")
+    # Get started was dismissed for the whole workspace.
+    setup_dismissed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -66,6 +70,13 @@ class TenantMembership(Base):
     )
     role: Mapped[str] = mapped_column(nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    # Where this person lands after signing in (their own dashboard; dashboards
+    # are per person). SET NULL when that dashboard is deleted.
+    default_dashboard_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("dashboards.id", ondelete="SET NULL"), nullable=True
+    )
+    # The one-time Welcome was answered (built a dashboard or looked around).
+    welcomed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Invitation(Base):

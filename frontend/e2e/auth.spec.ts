@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { landed } from "./fixtures";
 
 const API_URL = process.env.E2E_API_URL ?? "http://localhost:8000";
 
@@ -37,7 +38,7 @@ test("sign in: generic error, show/hide password, then a workspace choice", asyn
   const choices = page.getByRole("list", { name: "Workspaces" });
   await expect(page.getByRole("heading", { name: "Choose a workspace" })).toBeVisible();
   await choices.getByRole("button", { name: /E2E Second/ }).click();
-  await expect(page).toHaveURL("/devices");
+  await landed(page);
   await expect(
     page.getByRole("complementary", { name: "Primary" }).getByRole("button", { name: /Workspace: E2E Second/ }),
   ).toBeVisible();
@@ -57,7 +58,7 @@ test("sign in without 'Keep me signed in' keeps the session out of localStorage"
   await expect(page.getByLabel("Keep me signed in on this device")).not.toBeChecked();
   await page.getByLabel("Keep me signed in on this device").uncheck();
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL("/devices");
+  await landed(page);
   const stored = await page.evaluate(() => ({
     local: localStorage.getItem("iot-saas:refresh_token"),
     session: sessionStorage.getItem("iot-saas:refresh_token"),
@@ -76,5 +77,5 @@ test("register: the workspace is created with the account", async ({ page }) => 
   await expect(page.getByText("Use at least 8 characters.")).toBeVisible();
   await page.getByLabel("Password", { exact: true }).fill("hunter2hunter2");
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL("/devices");
+  await landed(page);
 });

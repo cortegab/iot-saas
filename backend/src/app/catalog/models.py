@@ -4,9 +4,8 @@ metrics (unit/data type/range) and named actuators (value type/allowed
 values).
 
 Tenant-scoped: RLS-protected with the standard single-tenant predicate (see
-the migration) — same treatment as rules/commands/dashboards. Not per-user
-(unlike dashboards) — a catalog entry is tenant configuration, the same trust
-tier as a device or a rule, not a personal view.
+the migration) — same treatment as rules/commands/dashboards. A catalog
+entry is tenant configuration, the same trust tier as a device or a rule.
 """
 
 import uuid

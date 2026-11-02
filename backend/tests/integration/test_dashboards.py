@@ -102,37 +102,44 @@ async def test_delete_dashboard(client: httpx.AsyncClient) -> None:
     assert get_resp.status_code == 404
 
 
-async def test_dashboard_not_visible_to_other_member_of_same_tenant(
+async def test_dashboards_are_shared_with_the_workspace(
     client: httpx.AsyncClient,
 ) -> None:
     owner = await _register(client, "owner5@example.com", "Acme5")
     tenant_id = owner["memberships"][0]["tenant_id"]
     owner_headers = _auth_headers(owner, tenant_id)
-    created = await client.post("/dashboards", json={"name": "Owner's dashboard"}, headers=owner_headers)
+    created = await client.post(
+        "/dashboards", json={"name": "Owner's dashboard"}, headers=owner_headers
+    )
     dashboard_id = created.json()["id"]
 
     teammate = await _register(client, "teammate5@example.com", "TeammateOwnTenant5")
     await client.post(
         "/tenants/members",
-        json={"email": "teammate5@example.com", "role": "admin"},
+        json={"email": "teammate5@example.com", "role": "viewer"},
         headers=owner_headers,
     )
     teammate_headers = _auth_headers(teammate, tenant_id)
 
+    # Everyone in the workspace sees it, and (until roles decide otherwise)
+    # can change it.
     list_resp = await client.get("/dashboards", headers=teammate_headers)
-    assert list_resp.status_code == 200
-    assert list_resp.json() == []
-
-    get_resp = await client.get(f"/dashboards/{dashboard_id}", headers=teammate_headers)
-    assert get_resp.status_code == 404
-
+    assert [d["id"] for d in list_resp.json()] == [dashboard_id]
+    assert (
+        await client.get(f"/dashboards/{dashboard_id}", headers=teammate_headers)
+    ).status_code == 200
     patch_resp = await client.patch(
-        f"/dashboards/{dashboard_id}", json={"name": "Hijacked"}, headers=teammate_headers
+        f"/dashboards/{dashboard_id}", json={"name": "Renamed"}, headers=teammate_headers
     )
-    assert patch_resp.status_code == 404
+    assert patch_resp.status_code == 200
+    assert (await client.get(f"/dashboards/{dashboard_id}", headers=owner_headers)).json()[
+        "name"
+    ] == "Renamed"
+    counts = (await client.get("/tenants/current/counts", headers=teammate_headers)).json()
+    assert counts["dashboards"] == 1
 
     delete_resp = await client.delete(f"/dashboards/{dashboard_id}", headers=teammate_headers)
-    assert delete_resp.status_code == 404
+    assert delete_resp.status_code == 204
 
 
 async def test_dashboard_tenant_isolation(client: httpx.AsyncClient) -> None:
@@ -148,3 +155,82 @@ async def test_dashboard_tenant_isolation(client: httpx.AsyncClient) -> None:
     resp = await client.get("/dashboards", headers=headers_b)
     assert resp.status_code == 200
     assert resp.json() == []
+
+
+async def _default_id(client: httpx.AsyncClient, headers: dict[str, str]) -> str | None:
+    """The id of the dashboard marked default, if any."""
+    resp = await client.get("/dashboards", headers=headers)
+    assert resp.status_code == 200
+    return next((str(d["id"]) for d in resp.json() if d["is_default"]), None)
+
+
+async def test_default_dashboard_set_replace_and_clear(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner8@example.com", "Acme8")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    a = (await client.post("/dashboards", json={"name": "A"}, headers=headers)).json()["id"]
+    b = (await client.post("/dashboards", json={"name": "B"}, headers=headers)).json()["id"]
+    assert await _default_id(client, headers) is None
+
+    assert (await client.put(f"/dashboards/{a}/default", headers=headers)).status_code == 204
+    listed = (await client.get("/dashboards", headers=headers)).json()
+    assert [d["is_default"] for d in listed] == [True, False]
+    assert (await client.get(f"/dashboards/{a}", headers=headers)).json()["is_default"] is True
+    assert await _default_id(client, headers) == a
+
+    # One default per person: B replaces A.
+    await client.put(f"/dashboards/{b}/default", headers=headers)
+    listed = (await client.get("/dashboards", headers=headers)).json()
+    assert [d["is_default"] for d in listed] == [False, True]
+
+    # Clearing A (not the default) leaves B; clearing B clears it.
+    await client.delete(f"/dashboards/{a}/default", headers=headers)
+    assert await _default_id(client, headers) == b
+    assert (await client.delete(f"/dashboards/{b}/default", headers=headers)).status_code == 204
+    assert await _default_id(client, headers) is None
+
+
+async def test_deleting_the_default_dashboard_clears_it(client: httpx.AsyncClient) -> None:
+    owner = await _register(client, "owner9@example.com", "Acme9")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    a = (await client.post("/dashboards", json={"name": "A"}, headers=headers)).json()["id"]
+    await client.put(f"/dashboards/{a}/default", headers=headers)
+
+    assert (await client.delete(f"/dashboards/{a}", headers=headers)).status_code == 204
+    assert await _default_id(client, headers) is None
+
+
+async def test_the_default_is_per_person_over_shared_dashboards(
+    client: httpx.AsyncClient,
+) -> None:
+    owner = await _register(client, "owner10@example.com", "Acme10")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    owner_headers = _auth_headers(owner, tenant_id)
+    a = (await client.post("/dashboards", json={"name": "A"}, headers=owner_headers)).json()["id"]
+    b = (await client.post("/dashboards", json={"name": "B"}, headers=owner_headers)).json()["id"]
+    await client.put(f"/dashboards/{a}/default", headers=owner_headers)
+
+    teammate = await _register(client, "teammate10@example.com", "TeammateOwnTenant10")
+    await client.post(
+        "/tenants/members",
+        json={"email": "teammate10@example.com", "role": "viewer"},
+        headers=owner_headers,
+    )
+    teammate_headers = _auth_headers(teammate, tenant_id)
+    # The owner's default isn't the teammate's.
+    assert await _default_id(client, teammate_headers) is None
+    assert (
+        await client.put(f"/dashboards/{b}/default", headers=teammate_headers)
+    ).status_code == 204
+    assert await _default_id(client, teammate_headers) == b
+    assert await _default_id(client, owner_headers) == a
+    assert (await client.get(f"/dashboards/{a}", headers=teammate_headers)).json()[
+        "is_default"
+    ] is False
+
+    # Another workspace can't reach them.
+    other = await _register(client, "owner11@example.com", "Acme11")
+    other_headers = _auth_headers(other, other["memberships"][0]["tenant_id"])
+    resp = await client.put(f"/dashboards/{a}/default", headers=other_headers)
+    assert resp.status_code == 404

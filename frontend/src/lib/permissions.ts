@@ -20,6 +20,7 @@ export type Action =
   | "keys.manage"
   | "workspace.rename"
   | "workspace.alerts"
+  | "workspace.setup"
   | "dashboards.write";
 
 const RANK: Record<Role, number> = { viewer: 0, admin: 1, owner: 2 };
@@ -36,7 +37,9 @@ const MIN_ROLE: Record<Action, Role> = {
   "workspace.rename": "owner",
   // Alert recipients and the time zone (DESIGN.md §8); renaming stays owner-only.
   "workspace.alerts": "admin",
-  // Dashboards are personal: every member edits their own.
+  "workspace.setup": "admin",
+  // Dashboards are shared by the workspace; until permissions by role are
+  // decided, every member may change them.
   "dashboards.write": "viewer",
 };
 

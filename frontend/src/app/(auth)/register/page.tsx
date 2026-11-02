@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
+import { HOME } from "@/lib/landing";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -34,7 +35,7 @@ export default function RegisterPage() {
     setSubmitting(true);
     try {
       await register(email.trim(), password, tenantName.trim(), name);
-      router.replace("/devices");
+      router.replace(HOME);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Couldn't create the account. Try again in a moment.");
     } finally {
