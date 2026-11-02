@@ -39,7 +39,7 @@ type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
-/** A dashboard (DESIGN.md §8, demo H): personal, viewed by default, laid out
+/** A dashboard (DESIGN.md §8, demo H): shared by the workspace, viewed by default, laid out
  * in edit mode (`?edit=1`): drag by the handle, resize from the corner, click a
  * widget to change it in its sheet, add one in three steps; on a phone, a list
  * to open and reorder. Removing has an Undo. Changes save as you go. */
@@ -52,7 +52,7 @@ export default function DashboardDetailPage() {
   const toast = useToast();
   const { confirm, dialog } = useConfirm();
   const defaults = useDefaultDashboard();
-  // Dashboards are personal: every member edits their own.
+  // Shared by the workspace; every member may change it for now (DESIGN.md §8).
   const canEdit = usePermissions().can("dashboards.write");
   const editing = canEdit && params.get("edit") === "1";
 
@@ -181,7 +181,7 @@ export default function DashboardDetailPage() {
   // loading state first would spin forever (the old 404 bug).
   if (error) {
     if (isNotFound(error)) {
-      return <NotFound noun="dashboard" href="/dashboards" list="dashboards" description="Dashboards are personal, so a teammate's link opens nothing for you." />;
+      return <NotFound noun="dashboard" href="/dashboards" list="dashboards" />;
     }
     return <ErrorState title="Couldn't load this dashboard" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />;
   }

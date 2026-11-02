@@ -88,7 +88,7 @@ async def test_counts_match_the_workspace_and_ignore_others(client: httpx.AsyncC
     assert counts["api_keys"] == 1
 
 
-async def test_viewer_gets_no_member_or_key_counts_and_only_their_dashboards(
+async def test_viewer_gets_no_member_or_key_counts_and_the_shared_dashboards(
     client: httpx.AsyncClient,
 ) -> None:
     owner = await _owner(client, "nc3")
@@ -104,6 +104,6 @@ async def test_viewer_gets_no_member_or_key_counts_and_only_their_dashboards(
 
     body = (await client.get("/tenants/current/counts", headers=viewer_headers)).json()
     assert body["devices"] == 2
-    assert body["dashboards"] == 0  # the owner's dashboard is theirs alone
+    assert body["dashboards"] == 1  # dashboards are shared by the workspace
     assert body["members"] is None
     assert body["api_keys"] is None

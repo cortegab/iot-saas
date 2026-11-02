@@ -154,7 +154,7 @@ export function KeyEditor({
             />
             <p className="text-meta text-ink-muted">
               The key names its workspace, so <code className="font-mono">X-Tenant-Id</code> is optional. It works on devices, telemetry,
-              rules, templates, zones and notifications, never on members, keys or personal dashboards.
+              rules, templates, zones and notifications, never on members, keys or dashboards.
             </p>
             {st === "active" && can("keys.manage") ? (
               <div>

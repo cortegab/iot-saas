@@ -42,6 +42,11 @@ test("a dashboard shows what needs attention, linked to its list, and nothing wh
   await page.reload();
   const strip = page.getByRole("status", { name: "Needs attention" });
   await expect(strip).toContainText("1 rule can't evaluate");
-  await strip.getByRole("link", { name: "1 rule can't evaluate" }).click();
-  await expect(page).toHaveURL(/\/rules\?state=stale$/);
+  const link = strip.getByRole("link", { name: "1 rule can't evaluate" });
+  await expect(link).toHaveAttribute("href", "/rules?state=stale");
+  // The strip may re-render as realtime revalidates it: retry a lost click.
+  await expect(async () => {
+    await link.click();
+    await expect(page).toHaveURL(/\/rules\?state=stale$/, { timeout: 2_000 });
+  }).toPass();
 });

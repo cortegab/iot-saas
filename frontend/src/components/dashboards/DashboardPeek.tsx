@@ -49,7 +49,7 @@ export function DashboardPeek({
     <PeekFrame
       noun="dashboard"
       title={dashboard.name}
-      eyebrow={dashboard.is_default ? "Your default · only you see it" : "Only you see it"}
+      eyebrow={dashboard.is_default ? "Your default · shared with the workspace" : "Shared with the workspace"}
       description={widgetSummary(dashboard.layout)}
       facts={[
         ["Widgets", String(dashboard.layout.length)],

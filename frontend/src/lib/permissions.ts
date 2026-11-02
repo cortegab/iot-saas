@@ -38,7 +38,8 @@ const MIN_ROLE: Record<Action, Role> = {
   // Alert recipients and the time zone (DESIGN.md §8); renaming stays owner-only.
   "workspace.alerts": "admin",
   "workspace.setup": "admin",
-  // Dashboards are personal: every member edits their own.
+  // Dashboards are shared by the workspace; until permissions by role are
+  // decided, every member may change them.
   "dashboards.write": "viewer",
 };
 
