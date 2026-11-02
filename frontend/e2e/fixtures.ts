@@ -1,4 +1,4 @@
-import { type Locator, test as base, expect, type APIRequestContext } from "@playwright/test";
+import { type Locator, test as base, expect, type APIRequestContext, type Page } from "@playwright/test";
 
 export const API_URL = process.env.E2E_API_URL ?? "http://localhost:8000";
 
@@ -58,7 +58,7 @@ export const test = base.extend<{ ruleUnderTest: RuleFixture }>({
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await expect(page).toHaveURL("/devices");
+    await landed(page);
     await use(page);
   },
 
@@ -123,4 +123,10 @@ export { expect } from "@playwright/test";
 export async function expandCommandRuns(timeline: Locator) {
   const folded = timeline.getByRole("button", { expanded: false });
   for (let i = 0; i < 50 && (await folded.count()) > 0; i++) await folded.first().click();
+}
+
+/** Sign-in goes through /home, which replaces itself with where this person
+ * lands (DESIGN.md §4 Landing): wait until it has. */
+export async function landed(page: Page): Promise<void> {
+  await page.waitForURL((url) => !["/login", "/home"].includes(url.pathname), { timeout: 15_000 });
 }

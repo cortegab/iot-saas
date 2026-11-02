@@ -39,6 +39,18 @@ async def list_my_dashboards(
     return list(result.scalars().all())
 
 
+async def list_my_dashboard_ids(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> list[uuid.UUID]:
+    """This person's dashboards, the most recently changed first."""
+    result = await session.execute(
+        select(Dashboard.id)
+        .where(Dashboard.tenant_id == tenant_id, Dashboard.user_id == user_id)
+        .order_by(Dashboard.updated_at.desc())
+    )
+    return list(result.scalars().all())
+
+
 async def count_my_dashboards(
     session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
 ) -> int:
