@@ -32,8 +32,8 @@ type DashboardResponse = components["schemas"]["DashboardResponse"];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** Dashboards are personal (DESIGN.md §8): every member creates and edits
- * their own, so nothing here is role-gated. A row peeks; a dashboard is
+/** Dashboards are shared by the workspace (DESIGN.md §8): every member sees
+ * all of them and, until permissions by role are decided, may change them. A row peeks; a dashboard is
  * created on /dashboards/new and opened, arranged and renamed on its page. */
 export default function DashboardsPage() {
   const router = useRouter();
@@ -147,7 +147,7 @@ export default function DashboardsPage() {
       <PageHeader
         inline
         title="Dashboards"
-        description="Your own views of live readings and controls. Only you see your dashboards."
+        description="Views of live readings and controls, shared with everyone in the workspace."
         actions={!error && dashboards && total > 0 ? undefined : newButton}
       />
 

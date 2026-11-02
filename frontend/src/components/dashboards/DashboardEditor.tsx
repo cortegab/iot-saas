@@ -21,8 +21,8 @@ interface DashboardDraft {
 
 /** New dashboard (/dashboards/new, DESIGN.md §7/§8): a name, then straight
  * to the dashboard in Edit layout to add widgets. An existing dashboard is
- * renamed and arranged on its own page. Dashboards are personal, so nothing
- * is role-gated. */
+ * renamed and arranged on its own page. Dashboards are shared by the
+ * workspace and, for now, nothing is role-gated. */
 export function DashboardEditor() {
   const api = useApi();
   const router = useRouter();
@@ -62,7 +62,7 @@ export function DashboardEditor() {
         mode="page"
         noun="dashboard"
         title={d.name.trim() || "New dashboard"}
-        consequence="Only you see it. Next you add widgets for the devices you watch most."
+        consequence="Everyone in the workspace sees it. Next you add widgets for the devices you watch most."
         sections={[{ id: "dashboard", label: "Dashboard" }]}
         status={editor}
         saveLabel="Create dashboard"

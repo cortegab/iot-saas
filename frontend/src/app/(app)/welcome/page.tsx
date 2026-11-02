@@ -23,10 +23,11 @@ type SetupStatusResponse = components["schemas"]["SetupStatusResponse"];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** Welcome (DESIGN.md §10.2): once, for someone with no dashboard in this
- * workspace yet (usually just invited). What's here, then Build my dashboard,
- * which makes one from the workspace's devices and sets it as their default,
- * or Look around first. Either answer ends it. */
+/** Welcome (DESIGN.md §10.2): once, while the workspace has no dashboard
+ * (dashboards are shared, so someone joining a workspace that has them lands
+ * on one instead). What's here, then Build my dashboard, which makes the
+ * first one from the workspace's devices and sets it as their default, or
+ * Look around first. Either answer ends it. */
 export default function WelcomePage() {
   const router = useRouter();
   const api = useApi();
@@ -79,11 +80,11 @@ export default function WelcomePage() {
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
         <h2 className="flex items-center gap-2 text-section font-semibold text-ink">
           <LayoutDashboard aria-hidden size={18} className="text-accent" />
-          Your own dashboard
+          A first dashboard
         </h2>
         <p className="text-meta text-ink-muted">
           {devices > 0
-            ? `A chart for each device's main reading (up to 8), made for you and set as where you land. Only you see it; change it any time.`
+            ? `A chart for each device's main reading (up to 8), shared with everyone in the workspace and set as where you land. Change it any time.`
             : "There are no devices yet, so there's nothing to chart. Look around first; you can make one later from Dashboards."}
         </p>
         <div className="flex flex-wrap items-center gap-2">

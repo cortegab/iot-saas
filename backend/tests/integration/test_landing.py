@@ -196,3 +196,24 @@ async def test_after_the_welcome_someone_without_dashboards_lands_on_devices(
     assert (await _landing(client, headers))["target"] == "devices"
     # Per person: the owner's own landing is unchanged.
     assert (await _landing(client, _headers(owner, tenant_id)))["target"] == "setup"
+
+
+async def test_someone_new_to_a_workspace_with_dashboards_lands_on_one(
+    client: httpx.AsyncClient,
+) -> None:
+    owner = await _register(client, "land8@example.com", "Land8")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    owner_headers = _headers(owner, tenant_id)
+    shared = (
+        await client.post("/dashboards", json={"name": "Plant"}, headers=owner_headers)
+    ).json()
+    viewer = await _register(client, "land8v@example.com", "Land8V")
+    await client.post(
+        "/tenants/members",
+        json={"email": "land8v@example.com", "role": "viewer"},
+        headers=owner_headers,
+    )
+    # Dashboards are shared: no Welcome, straight to the workspace's dashboard.
+    body = await _landing(client, _headers(viewer, tenant_id))
+    assert body["target"] == "dashboard"
+    assert body["dashboard_ids"] == [shared["id"]]

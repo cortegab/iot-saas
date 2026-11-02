@@ -104,9 +104,7 @@ async def get_nav_counts(
         devices=await devices_service.count_devices(session, ctx.tenant_id),
         rules=await rules_service.count_rules(session, ctx.tenant_id),
         templates=await catalog_service.count_catalog_entries(session, ctx.tenant_id),
-        dashboards=await dashboards_service.count_my_dashboards(
-            session, ctx.tenant_id, ctx.user_id
-        ),
+        dashboards=await dashboards_service.count_dashboards(session, ctx.tenant_id),
         zones=await zones_service.count_zones(session, ctx.tenant_id),
         members=await service.count_members(session, ctx.tenant_id) if admin else None,
         api_keys=await api_keys_service.count_active_api_keys(session, ctx.tenant_id)

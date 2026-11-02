@@ -189,9 +189,9 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
 - **Landing:** every entry point (sign in, register, an accepted invite, the landing page's
   "Open console", switching or creating a workspace) goes to `/home`, which asks the API once
   (`GET /tenants/current/landing`) and replaces itself with, in order: **Get started** for an
-  owner or admin while setup is unfinished and not dismissed; the one-time **Welcome** for
-  someone with no dashboard here yet; their **default dashboard** (§8); the dashboard they
-  opened last on this browser; their most recently changed one; else **Devices**. A `?next=`
+  owner or admin while setup is unfinished and not dismissed; the one-time **Welcome** while
+  the workspace has no dashboard; their **default dashboard** (§8); the dashboard they opened
+  last on this browser; the workspace's most recently changed one; else **Devices**. A `?next=`
   link (an invite, a deep link) skips it. Get started is §10.1 and Welcome §10.2.
 
 ---
@@ -452,7 +452,10 @@ edits a whole record, and there is no "Expand" toggle.
   - The list shows Zone / Devices / Status.
   - Delete is blocked while devices are assigned.
   - The Devices list can filter by zone.
-- **Dashboards** are per user. They are edited **in place on the grid** (Edit layout): drag and
+- **Dashboards** are shared by everyone in the workspace (user decision 2026-11-02); until
+  permissions by role are decided, any member may edit, rename, duplicate and delete them. Who
+  made one is recorded but filters nothing; leaving a workspace leaves your dashboards with it.
+  They are edited **in place on the grid** (Edit layout): drag and
   resize as before, and **click a widget** to open its item sheet: Type, Device, Reading (or
   Actuator), Title (optional, once §13 lands) and Size (S · M · L · Full = 3 · 4 · 8 · 12 columns),
   applied as you change them, with **Remove widget** in the sheet. **Add a widget** is a sheet with
@@ -738,12 +741,13 @@ path (CLAUDE.md §9.1).
 
 ### 10.2 Welcome (new to a workspace)
 
-- **Who and when:** once, for someone with no dashboard in this workspace who hasn't answered it
+- **Who and when:** once, while the workspace has no dashboard and this person hasn't answered it
   yet (usually just invited; also an owner who dismissed Get started before making one).
+  Dashboards are shared, so someone joining a workspace that has them lands on one instead.
 - **Content:** "Welcome to {workspace}", "You're in as {Role}.", then what's here as one line of
   facts ("3 devices · 0 rules · 2 alerts need attention"). A viewer in an unfinished workspace
   also sees an info callout "Your workspace is being set up".
-- **Your own dashboard** card: **Build my dashboard** (primary) makes "{Workspace} overview", a
+- **A first dashboard** card: **Build my dashboard** (primary) makes "{Workspace} overview", a
   trend chart of each device's first numeric reading, else its status card, two per row, up to 8
   devices, and sets it as their default (§8); **Look around first** goes to Devices. Either answer
   ends the Welcome. With no devices yet there's nothing to chart, so only Look around first shows.
@@ -971,3 +975,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-30 | §10.1 Get started: `/start` for a new workspace's owners and admins (four steps read from data plus an optional invite, the next one highlighted, a live first reading, "I'll set it up myself" for the whole workspace, a Setup guide link in Workspace settings; viewers see "being set up"). Third of the landing / onboarding plan. |
 | 2026-10-30 | §10.2 Welcome: a one-time `/welcome` for someone with no dashboard in the workspace (facts, a "being set up" note for viewers, **Build my dashboard**: a starter dashboard from the devices set as their default, or **Look around first**); Get started's dashboard step offers the same build. `POST /tenants/current/welcome`. Fourth of the landing / onboarding plan. |
 | 2026-10-30 | §8 attention strip above every dashboard: unread critical alerts, offline devices, latched rules and rules that can't evaluate, only when non-zero, each linking to its filtered list (`GET /tenants/current/attention`). Last of the landing / onboarding plan. |
+| 2026-11-02 | §8, §4, §10.2 dashboards are shared by the workspace instead of per person: everyone sees every dashboard and, until permissions by role are decided, anyone may change them. The default dashboard stays per person and may be any of them. Landing and Welcome follow: Welcome only while the workspace has no dashboard; otherwise newcomers land on the most recently changed one. Leaving a workspace keeps the dashboards you made. |

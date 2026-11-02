@@ -107,7 +107,7 @@ export default function WorkspaceSettingsPage() {
 
   async function leave() {
     if (!ws) return;
-    const ok = await confirm("You lose access immediately and your personal dashboards here are deleted. An admin has to invite you again.", {
+    const ok = await confirm("You lose access immediately. Dashboards you made stay with the workspace. An admin has to invite you again.", {
       title: `Leave ${ws.name}?`,
       confirmLabel: "Leave workspace",
     });
@@ -278,8 +278,8 @@ export default function WorkspaceSettingsPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="min-w-0 flex-1 text-meta text-ink-muted">
               {role === "owner"
-                ? "An owner can leave once another owner exists. Your personal dashboards here are deleted."
-                : "You lose access. Your personal dashboards here are deleted."}
+                ? "An owner can leave once another owner exists. Dashboards you made stay with the workspace."
+                : "You lose access. Dashboards you made stay with the workspace."}
             </p>
             <Button variant="secondary-danger" onClick={() => void leave()}>
               <LogOut aria-hidden size={14} />

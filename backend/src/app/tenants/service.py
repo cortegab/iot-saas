@@ -310,8 +310,8 @@ async def setup_status(
     session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
 ) -> SetupStatus:
     """Get started's steps, each read from data, never ticked by hand: a
-    template, a device that has sent something, a rule, a dashboard of this
-    person's, and (optional) someone else invited. Imported here: dashboards,
+    template, a device that has sent something, a rule, a dashboard (shared by
+    the workspace), and (optional) someone else invited. Imported here: dashboards,
     devices and rules import this module."""
     from app.dashboards import service as dashboards_service
     from app.devices import service as devices_service
@@ -323,7 +323,7 @@ async def setup_status(
         template=await catalog_service.count_catalog_entries(session, tenant_id) > 0,
         device=seen is not None,
         rule=await rules_service.count_rules(session, tenant_id) > 0,
-        dashboard=await dashboards_service.count_my_dashboards(session, tenant_id, user_id) > 0,
+        dashboard=await dashboards_service.count_dashboards(session, tenant_id) > 0,
         invite=await count_members(session, tenant_id) > 1
         or len(await list_invitations(session, tenant_id)) > 0,
         dismissed=tenant.setup_dismissed_at is not None,
@@ -383,13 +383,14 @@ async def landing(
 ) -> Landing:
     """Where this person lands after signing in, in order: Get started for an
     owner or admin while setup is unfinished and not dismissed; the one-time
-    Welcome for someone with no dashboard here yet; their dashboards (the
-    default, else the page's last opened); else Devices."""
+    Welcome while the workspace has no dashboard; the workspace's dashboards
+    (their default, else the page's last opened, else the most recently
+    changed); else Devices."""
     from app.dashboards import service as dashboards_service
 
     setup = await setup_status(session, tenant_id, user_id)
     membership = await _membership(session, tenant_id, user_id)
-    ids = await dashboards_service.list_my_dashboard_ids(session, tenant_id, user_id)
+    ids = await dashboards_service.list_dashboard_ids(session, tenant_id)
     manages = role in (TenantRole.OWNER.value, TenantRole.ADMIN.value)
     target: LandingTarget
     if manages and not setup.complete and not setup.dismissed:

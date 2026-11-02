@@ -164,7 +164,7 @@ export default function GetStartedPage() {
       <h2 className="pt-2 text-meta font-medium text-ink-muted">Optional</h2>
       <ol aria-label="Optional steps" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
         <StepRow
-          step={{ key: "invite", title: "Invite your team", why: "They get their own dashboards and the alerts you share.", href: "/members/invite", action: "Invite" }}
+          step={{ key: "invite", title: "Invite your team", why: "They see the same devices, dashboards and alerts, with their own role.", href: "/members/invite", action: "Invite" }}
           done={setup.invite}
           current={false}
         />
