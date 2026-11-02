@@ -332,6 +332,14 @@ async def setup_status(
     )
 
 
+async def mark_welcomed(session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    """The one-time Welcome was answered (built a dashboard or looked around)."""
+    membership = await _membership(session, tenant_id, user_id)
+    if membership.welcomed_at is None:
+        membership.welcomed_at = datetime.now(UTC)
+        await session.flush()
+
+
 async def dismiss_setup(session: AsyncSession, tenant_id: uuid.UUID) -> None:
     """Get started stops taking over sign-in, for everyone in the workspace."""
     tenant = await get_tenant(session, tenant_id)

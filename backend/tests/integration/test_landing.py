@@ -176,3 +176,23 @@ async def test_dismissing_setup_stops_the_landing_for_the_workspace(
     assert setup["invite"] is True
     # No dashboard yet: the owner gets the one-time Welcome instead.
     assert (await _landing(client, headers))["target"] == "welcome"
+
+
+async def test_after_the_welcome_someone_without_dashboards_lands_on_devices(
+    client: httpx.AsyncClient,
+) -> None:
+    owner = await _register(client, "land7@example.com", "Land7")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    viewer = await _register(client, "land7v@example.com", "Land7V")
+    await client.post(
+        "/tenants/members",
+        json={"email": "land7v@example.com", "role": "viewer"},
+        headers=_headers(owner, tenant_id),
+    )
+    headers = _headers(viewer, tenant_id)
+    assert (await _landing(client, headers))["target"] == "welcome"
+
+    assert (await client.post("/tenants/current/welcome", headers=headers)).status_code == 204
+    assert (await _landing(client, headers))["target"] == "devices"
+    # Per person: the owner's own landing is unchanged.
+    assert (await _landing(client, _headers(owner, tenant_id)))["target"] == "setup"

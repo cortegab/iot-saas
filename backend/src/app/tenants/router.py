@@ -144,6 +144,16 @@ async def dismiss_setup(
     await service.dismiss_setup(session, ctx.tenant_id)
 
 
+@router.post("/current/welcome", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_welcomed(
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> None:
+    """The one-time Welcome was answered: sign-in stops landing on it."""
+    assert ctx.user_id is not None  # people_only
+    await service.mark_welcomed(session, ctx.tenant_id, ctx.user_id)
+
+
 @router.get("/current/landing", response_model=LandingResponse)
 async def get_landing(
     ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
