@@ -242,6 +242,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tenants/current/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Setup
+         * @description Get started's steps (DESIGN.md §10.x), read from data.
+         */
+        get: operations["get_setup_tenants_current_setup_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tenants/current/setup/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Dismiss Setup
+         * @description Get started's "I'll set it up myself": sign-in stops landing on it.
+         */
+        post: operations["dismiss_setup_tenants_current_setup_dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/current/landing": {
         parameters: {
             query?: never;
@@ -2646,6 +2686,30 @@ export interface components {
             /** Values */
             values: number[];
         };
+        /**
+         * SetupStatusResponse
+         * @description Get started (DESIGN.md §10.x), each step read from data, never ticked.
+         */
+        SetupStatusResponse: {
+            /** Template */
+            template: boolean;
+            /** Device */
+            device: boolean;
+            /** Rule */
+            rule: boolean;
+            /** Dashboard */
+            dashboard: boolean;
+            /** Invite */
+            invite: boolean;
+            /** Complete */
+            complete: boolean;
+            /** Dismissed */
+            dismissed: boolean;
+            /** First Device Id */
+            first_device_id?: string | null;
+            /** First Device Name */
+            first_device_name?: string | null;
+        };
         /** SignalOverride */
         SignalOverride: {
             /**
@@ -3448,6 +3512,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["NavCountsResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_setup_tenants_current_setup_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_setup_tenants_current_setup_dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

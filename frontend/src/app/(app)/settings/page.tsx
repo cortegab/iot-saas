@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useState, type KeyboardEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { mutate as revalidate } from "swr";
 import { LogOut, Mail, Plus, X } from "lucide-react";
@@ -9,7 +10,7 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuth } from "@/hooks/useAuth";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useWorkspace } from "@/hooks/useWorkspace";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClassName } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Field } from "@/components/ui/Field";
@@ -156,6 +157,7 @@ export default function WorkspaceSettingsPage() {
           { id: "workspace", label: "Workspace" },
           { id: "alerts", label: "Alerts", count: d.recipients.length },
           { id: "time", label: "Time and region" },
+          ...(canEdit ? [{ id: "setup", label: "Setup guide" }] : []),
           { id: "account", label: "You" },
           { id: "leave", label: "Leave workspace" },
         ]}
@@ -249,6 +251,16 @@ export default function WorkspaceSettingsPage() {
             <TimezoneSelect value={d.timezone} disabled={!canEdit} onChange={(tz) => editor.set({ ...d, timezone: tz })} className="max-w-sm" />
           </Field>
         </EditorSection>
+
+        {canEdit && (
+          <EditorSection id="setup" title="Setup guide" lead="The Get started steps: a template, a connected device, a rule and a dashboard.">
+            <div>
+              <Link href="/start" className={buttonClassName({ variant: "secondary" })}>
+                Open Get started
+              </Link>
+            </div>
+          </EditorSection>
+        )}
 
         <EditorSection id="account" title="You" lead={`Signed in as ${me?.email ?? ""}. Your name shows to the people you work with.`}>
           <Field label="Your name" optional error={editor.errorFor("me.name")}>

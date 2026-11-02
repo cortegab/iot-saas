@@ -40,4 +40,4 @@ export function landingPath(landing: LandingResponse, lastOpened: string | null)
 }
 
 /** Targets with a page of their own; the others land on dashboards. */
-const PAGES: Partial<Record<LandingResponse["target"], string>> = {};
+const PAGES: Partial<Record<LandingResponse["target"], string>> = { setup: "/start" };

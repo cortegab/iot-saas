@@ -297,6 +297,8 @@ class SetupStatus(NamedTuple):
     dashboard: bool
     invite: bool
     dismissed: bool
+    first_device_id: uuid.UUID | None = None
+    first_device_name: str | None = None
 
     @property
     def complete(self) -> bool:
@@ -316,15 +318,26 @@ async def setup_status(
     from app.rules import service as rules_service
 
     tenant = await get_tenant(session, tenant_id)
+    seen = await devices_service.first_seen_device(session, tenant_id)
     return SetupStatus(
         template=await catalog_service.count_catalog_entries(session, tenant_id) > 0,
-        device=await devices_service.first_seen_device(session, tenant_id) is not None,
+        device=seen is not None,
         rule=await rules_service.count_rules(session, tenant_id) > 0,
         dashboard=await dashboards_service.count_my_dashboards(session, tenant_id, user_id) > 0,
         invite=await count_members(session, tenant_id) > 1
         or len(await list_invitations(session, tenant_id)) > 0,
         dismissed=tenant.setup_dismissed_at is not None,
+        first_device_id=seen.id if seen else None,
+        first_device_name=seen.name if seen else None,
     )
+
+
+async def dismiss_setup(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+    """Get started stops taking over sign-in, for everyone in the workspace."""
+    tenant = await get_tenant(session, tenant_id)
+    if tenant.setup_dismissed_at is None:
+        tenant.setup_dismissed_at = datetime.now(UTC)
+        await session.flush()
 
 
 class Landing(NamedTuple):

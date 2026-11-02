@@ -4,8 +4,8 @@ import { landingPath } from "./landing";
 const base = { target: "dashboard" as const, dashboard_id: null, dashboard_ids: ["a", "b"], setup_complete: true, role: "viewer" };
 
 describe("landingPath", () => {
-  it("lands setup and welcome on dashboards until their pages exist", () => {
-    expect(landingPath({ ...base, target: "setup" }, null)).toBe("/dashboards/a");
+  it("sends setup to Get started; welcome lands on dashboards until its page exists", () => {
+    expect(landingPath({ ...base, target: "setup" }, null)).toBe("/start");
     expect(landingPath({ ...base, target: "welcome", dashboard_ids: [] }, null)).toBe("/devices");
   });
 
