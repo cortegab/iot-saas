@@ -16,6 +16,9 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /** A history feed and every page of it the screen has loaded (`${path}?limit=…`,
  * components/list/useServerPager.ts). */
+/** The attention strip's counts (components/dashboards/AttentionStrip). */
+const ATTENTION_KEY = "/tenants/current/attention";
+
 function revalidateFeed(path: string): void {
   void mutate((key) => typeof key === "string" && (key === path || key.startsWith(`${path}?`)));
 }
@@ -113,6 +116,7 @@ export function useRealtime(): RealtimeStatus {
         typeof message.online === "boolean"
       ) {
         const deviceKey = `/devices/${message.device_id}`;
+        void mutate(ATTENTION_KEY);
         if (hasData(deviceKey)) {
           void mutate<DeviceResponse>(
             deviceKey,
@@ -130,12 +134,14 @@ export function useRealtime(): RealtimeStatus {
         revalidateFeed(`/devices/${message.device_id}/commands`);
       } else if (message.type === "notification") {
         revalidateFeed("/notifications");
+        void mutate(ATTENTION_KEY);
       } else if (message.type === "rule_execution" && message.rule_id) {
         revalidateFeed(`/rules/${message.rule_id}/executions`);
         void mutate("/rules/activity");
       } else if ((message.type === "rule_health" || message.type === "rule_latched") && message.rule_id) {
         void mutate("/rules");
         void mutate(`/rules/${message.rule_id}`);
+        void mutate(ATTENTION_KEY);
       }
     }
 

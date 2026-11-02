@@ -1668,6 +1668,24 @@ async def request_latch_reset(tenant_id: uuid.UUID, rule_id: uuid.UUID) -> None:
     )
 
 
+async def count_needing_attention(session: AsyncSession, tenant_id: uuid.UUID) -> tuple[int, int]:
+    """Enabled rules that are latched, and those that can't evaluate now
+    (missing or stale inputs): the attention strip's rule counts."""
+    from app.rules.schemas import ExecutionPolicy
+
+    rules = [r for r in await list_all_rules(session, tenant_id) if r.enabled]
+    latched_ids = await latched_rule_ids()
+    latched = sum(
+        1
+        for r in rules
+        if r.id in latched_ids
+        and ExecutionPolicy.model_validate(r.execution_policy).strategy == "latch"
+    )
+    health = await compute_rule_health(session, tenant_id, rules)
+    unhealthy = sum(1 for r in rules if r.id in health and not health[r.id].evaluatable)
+    return latched, unhealthy
+
+
 async def latched_rule_ids() -> set[uuid.UUID]:
     """Rules currently latched (API side — RuleResponse.latched). A Redis
     outage reads as "none latched" rather than failing the rules list."""

@@ -282,6 +282,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tenants/current/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attention
+         * @description What needs someone now: the strip above every dashboard.
+         */
+        get: operations["get_attention_tenants_current_attention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tenants/current/welcome": {
         parameters: {
             query?: never;
@@ -1447,6 +1467,21 @@ export interface components {
             revoked_at: string | null;
             /** Expires At */
             expires_at: string | null;
+        };
+        /**
+         * AttentionResponse
+         * @description What needs someone now, for the strip above dashboards (DESIGN.md §8).
+         *     Alerts count rows of repeats, as the notifications page does.
+         */
+        AttentionResponse: {
+            /** Critical Alerts */
+            critical_alerts: number;
+            /** Offline Devices */
+            offline_devices: number;
+            /** Latched Rules */
+            latched_rules: number;
+            /** Unhealthy Rules */
+            unhealthy_rules: number;
         };
         /** CatalogActuator */
         CatalogActuator: {
@@ -3594,6 +3629,38 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attention_tenants_current_attention_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttentionResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
