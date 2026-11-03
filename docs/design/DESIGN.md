@@ -142,7 +142,7 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
 | Width | Navigation |
 |---|---|
 | **≥ 1440 px** | The full **sidebar**, 256 px, always open. |
-| **641–1439 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. |
+| **641–1439 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. When the nav doesn't fit the height (short laptop screens) it scrolls **without a visible scrollbar**, so its icons stay centred under the logo, with a soft fade on the edge that has more; the sidebar's nav does the same. |
 | **≤ 640 px** | A **top bar** (logo, app name, the live indicator only while reconnecting, search) and a **bottom tab bar**: Dashboards · Devices · **Alerts** (with the active-alert count) · Rules · **More**. More opens a bottom sheet with the user, the theme toggle, the live indicator and the rest of the nav. |
 
 - **Sidebar** (full form) is 256 px wide and sticky. From top to bottom:
@@ -458,7 +458,9 @@ edits a whole record, and there is no "Expand" toggle.
   They are edited **in place on the grid** (Edit layout): drag and
   resize as before, and **click a widget** to open its item sheet: Type, Device, Reading (or
   Actuator), Title (optional, once §13 lands) and Size (S · M · L · Full = 3 · 4 · 8 · 12 columns),
-  applied as you change them, with **Remove widget** in the sheet. **Add a widget** is a sheet with
+  applied as you change them, with **Remove widget** in the sheet. **Add widget** is a header button
+  in Edit layout (an empty dashboard's empty state has it too); the grid holds widgets only, with
+  no add tile. **Add a widget** is a sheet with
   three steps: Type → Source → Size. On phones, Edit layout shows a **reorderable list** of the
   widgets (open, remove, move up / down) instead of the grid. Moving a widget swaps its grid place
   with its neighbour's in reading order, so the desktop layout stays intact apart from that swap.
@@ -976,3 +978,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-30 | §10.2 Welcome: a one-time `/welcome` for someone with no dashboard in the workspace (facts, a "being set up" note for viewers, **Build my dashboard**: a starter dashboard from the devices set as their default, or **Look around first**); Get started's dashboard step offers the same build. `POST /tenants/current/welcome`. Fourth of the landing / onboarding plan. |
 | 2026-10-30 | §8 attention strip above every dashboard: unread critical alerts, offline devices, latched rules and rules that can't evaluate, only when non-zero, each linking to its filtered list (`GET /tenants/current/attention`). Last of the landing / onboarding plan. |
 | 2026-11-02 | §8, §4, §10.2 dashboards are shared by the workspace instead of per person: everyone sees every dashboard and, until permissions by role are decided, anyone may change them. The default dashboard stays per person and may be any of them. Landing and Welcome follow: Welcome only while the workspace has no dashboard; otherwise newcomers land on the most recently changed one. Leaving a workspace keeps the dashboards you made. |
+| 2026-11-03 | §4, §8 (user decisions): the rail and sidebar nav scroll without a visible scrollbar, with an edge fade, so a scrollbar never pushes the rail's icons off centre on short laptop screens. The dashboard's *Add widget* tile is removed (superseding 2026-10-28's first-row tile): it took a fixed place in the grid, even while viewing. Adding stays in Edit layout's header and the empty state. |
