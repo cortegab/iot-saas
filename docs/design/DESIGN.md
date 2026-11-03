@@ -142,7 +142,7 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
 | Width | Navigation |
 |---|---|
 | **≥ 1440 px** | The full **sidebar**, 256 px, always open. |
-| **641–1439 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. |
+| **641–1439 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. When the nav doesn't fit the height (short laptop screens) it scrolls **without a visible scrollbar**, so its icons stay centred under the logo, with a soft fade on the edge that has more; the sidebar's nav does the same. |
 | **≤ 640 px** | A **top bar** (logo, app name, the live indicator only while reconnecting, search) and a **bottom tab bar**: Dashboards · Devices · **Alerts** (with the active-alert count) · Rules · **More**. More opens a bottom sheet with the user, the theme toggle, the live indicator and the rest of the nav. |
 
 - **Sidebar** (full form) is 256 px wide and sticky. From top to bottom:
@@ -209,7 +209,7 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | Combobox | existing | For long lists with search (units, devices). |
 | SegmentedControl | existing | Mutually exclusive modes (Form / Ladder, schedule repeat mode). `role="radiogroup"` or pressed buttons. Always the 36 px control height (30 px segments in a 3 px inset), 44 px on touch; `md` / `sm` set only the text size. |
 | **ChoiceCards** | NEW | Radio cards for a choice whose options each need a line of explanation (Add device's start, Runs on). Two across, one across from 560 px down; a radiogroup with arrow keys. Not wrapped in a Field label, which would name the first card. |
-| **Switch** | NEW | Every on/off **setting that is saved with a record** (`SwitchField`): a label naming the setting above, the switch beside a **state word**, and a hint below that changes with it. State words: **Enabled / Disabled** for a record's own status (label "Status": rule, device, template), **On / Off** for an option inside a record (e.g. "Turn it back when the condition clears", "Send a notification when it clears"). A **checkbox** is only for picking items in a list (bulk select) or for a one-time choice that belongs to a single submit and isn't stored as a setting ("I've stored it", "Keep me signed in on this device"). List row menus use the verbs **Enable / Disable**. |
+| **Switch** | NEW | Every on/off **setting that is saved with a record** (`SwitchField`): a label naming the setting above, the switch beside a **state word**, and a hint below that changes with it. State words: **Enabled / Disabled** for a record's own status (label "Status": rule, device, template), **On / Off** for an option inside a record (e.g. "Turn it back when the condition clears", "Send a notification when it clears"). It is also the control for an **on/off actuator** (Controls, §8): its state is the value requested, and turning it asks first like every command. A **checkbox** is only for picking items in a list (bulk select) or for a one-time choice that belongs to a single submit and isn't stored as a setting ("I've stored it", "Keep me signed in on this device"). List row menus use the verbs **Enable / Disable**. |
 | Tabs | existing | Underline style, the control height (36 px). **Never wrap**: when the tabs don't fit (phones), they stay on one row that scrolls sideways with an edge fade and no visible scrollbar, and the active tab scrolls into view. Editor tabs carry the section's red problem count or amber "!", live in the URL (`?tab=`), and move with the arrow keys. |
 | Badge / Tag | existing | Pills with a status dot. `tag--warn` (pending surface) for conflicts ("shares fan1"). `tag--sm` for qualifiers ("expert"). |
 | Callout | existing | `info` (accent-muted), `warning` (pending surface), `error` (error surface). Dismissible for tips only. **A record's lasting state is not a callout** unless it holds the action that resolves it (Latched + Reset latch, a restored version + Discard, Waiting for its first message + Connect): otherwise it is a **state chip** in the header's meta row (amber, with the detail in a popover on click or focus), and never repeats what the header already says ("Offline · last message …"). |
@@ -424,7 +424,12 @@ edits a whole record, and there is no "Expand" toggle.
     (never stored in the browser): a reload or leaving drops it, and the next visit creates or
     rotates again. Leaving or reloading before it is stored asks first ("Leave before storing the
     password? It's shown only once…").
-  - **Controls** (device Controls tab and the actuator widget) show what was **requested** and what
+  - **Controls** (device Controls tab and the actuator widget) send with the control that fits the
+    actuator: a **Switch** for On / Off, a segmented control for a fixed list of values, and for a
+    number or text a value box with **Set** (a number shows the range its wiring gives it, e.g.
+    PWM 0–100, servo 0–180°, and says "Between 0 and 100." outside it). None of them sends the value
+    already requested: the selected segment does nothing and Set waits for another value; **Retry**
+    after No response is the only resend. They show what was **requested** and what
     happened: *Waiting for the device… {n} s* (counting down the command's TTL), then
     **Acknowledged**, or **No response within {ttl} s** with **Retry**. A command sent to an offline
     device says so before it is sent. Below the controls, the **command timeline**: time, actuator,
@@ -458,7 +463,9 @@ edits a whole record, and there is no "Expand" toggle.
   They are edited **in place on the grid** (Edit layout): drag and
   resize as before, and **click a widget** to open its item sheet: Type, Device, Reading (or
   Actuator), Title (optional, once §13 lands) and Size (S · M · L · Full = 3 · 4 · 8 · 12 columns),
-  applied as you change them, with **Remove widget** in the sheet. **Add a widget** is a sheet with
+  applied as you change them, with **Remove widget** in the sheet. **Add widget** is a header button
+  in Edit layout (an empty dashboard's empty state has it too); the grid holds widgets only, with
+  no add tile. **Add a widget** is a sheet with
   three steps: Type → Source → Size. On phones, Edit layout shows a **reorderable list** of the
   widgets (open, remove, move up / down) instead of the grid. Moving a widget swaps its grid place
   with its neighbour's in reading order, so the desktop layout stays intact apart from that swap.
@@ -976,3 +983,5 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-10-30 | §10.2 Welcome: a one-time `/welcome` for someone with no dashboard in the workspace (facts, a "being set up" note for viewers, **Build my dashboard**: a starter dashboard from the devices set as their default, or **Look around first**); Get started's dashboard step offers the same build. `POST /tenants/current/welcome`. Fourth of the landing / onboarding plan. |
 | 2026-10-30 | §8 attention strip above every dashboard: unread critical alerts, offline devices, latched rules and rules that can't evaluate, only when non-zero, each linking to its filtered list (`GET /tenants/current/attention`). Last of the landing / onboarding plan. |
 | 2026-11-02 | §8, §4, §10.2 dashboards are shared by the workspace instead of per person: everyone sees every dashboard and, until permissions by role are decided, anyone may change them. The default dashboard stays per person and may be any of them. Landing and Welcome follow: Welcome only while the workspace has no dashboard; otherwise newcomers land on the most recently changed one. Leaving a workspace keeps the dashboards you made. |
+| 2026-11-03 | §4, §8 (user decisions): the rail and sidebar nav scroll without a visible scrollbar, with an edge fade, so a scrollbar never pushes the rail's icons off centre on short laptop screens. The dashboard's *Add widget* tile is removed (superseding 2026-10-28's first-row tile): it took a fixed place in the grid, even while viewing. Adding stays in Edit layout's header and the empty state. |
+| 2026-11-03 | §5 Switch, §8 Controls: an on/off actuator is a Switch (was an On / Off segmented control); a number or text actuator is a value box with Set, ranged by its wiring (it used to fall back to On / Off and send true/false); a fixed list stays segmented. The value already requested is never sent again from the control; Retry is the only resend. |

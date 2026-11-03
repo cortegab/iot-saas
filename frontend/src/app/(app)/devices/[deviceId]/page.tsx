@@ -303,7 +303,7 @@ export default function DeviceDetailPage() {
                 : `The device is ${st.label.toLowerCase()}. Commands wait in its desired state and apply when it reconnects, if still within their time limit.`}
             </Callout>
           )}
-          <ActuatorControl deviceId={deviceId} deviceOnline={online} deviceDisabled={disabled} catalogEntryId={device.catalog_entry_id} />
+          <ActuatorControl deviceId={deviceId} deviceOnline={online} deviceDisabled={disabled} catalogEntryId={device.catalog_entry_id} wiring={device.hardware} />
           <CommandHistory deviceId={deviceId} labels={actuatorNames} />
         </div>
       </TabPanel>

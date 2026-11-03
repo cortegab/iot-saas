@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useApi } from "@/hooks/useApi";
@@ -9,8 +9,11 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Affix, Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { Switch } from "@/components/ui/Switch";
+import { commandRange, controlKind, isRequested, parseCommand, type CommandRange, type CommandValue } from "@/lib/actuator-command";
 import { ApiRequestError } from "@/lib/api-client";
 import { commandStatus, commandStatusLabel, commandStatusTone, msUntilCommandDeadline } from "@/lib/command-status";
 import { getDeviceActuators } from "@/lib/device-actuators";
@@ -22,18 +25,80 @@ type RuleResponse = components["schemas"]["RuleResponse"];
 type CommandResponse = components["schemas"]["CommandResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogActuator = components["schemas"]["CatalogActuator"];
-type Value = boolean | number | string;
+type HardwareConfig = components["schemas"]["HardwareConfig"];
 
-function formatValue(value: unknown): string {
+function formatValue(value: unknown, unit?: string): string {
   if (typeof value === "boolean") return value ? "On" : "Off";
-  return String(value);
+  return typeof value === "number" && unit ? `${value}${unit === "°" ? "" : " "}${unit}` : String(value);
 }
 
-/** What the control offers: On | Off for an on/off actuator (and for one a
- * rule drives that the template doesn't declare), else its allowed values. */
-function choices(def: CatalogActuator | undefined): Value[] {
-  if (def && def.value_type !== "bool" && def.allowed_values?.length) return def.allowed_values;
-  return [true, false];
+/** A number or text actuator: type a value, Set sends it. Set waits while the
+ * box holds the value already requested (DESIGN.md §8). */
+function ValueField({
+  label,
+  kind,
+  range,
+  requested,
+  disabled,
+  onSet,
+}: {
+  label: string;
+  kind: "number" | "text";
+  range: CommandRange | null;
+  requested: unknown;
+  disabled: boolean;
+  onSet: (value: CommandValue) => void;
+}) {
+  const hintId = useId();
+  const shown = requested == null || typeof requested === "boolean" ? "" : String(requested);
+  const [text, setText] = useState(shown);
+  const [touched, setTouched] = useState(false);
+  // A new request (from a rule, another person, or this Set) refills the box
+  // unless someone is typing in it.
+  useEffect(() => {
+    if (!touched) setText(shown);
+  }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const parsed = parseCommand(text, kind, range);
+  const error = touched && "error" in parsed ? parsed.error : null;
+  const same = "value" in parsed && isRequested(parsed.value, requested);
+
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    setTouched(true);
+    if (!("value" in parsed) || same || disabled) return;
+    setTouched(false);
+    onSet(parsed.value);
+  }
+
+  const input = (
+    <Input
+      aria-label={label}
+      aria-describedby={hintId}
+      aria-invalid={error ? true : undefined}
+      inputMode={kind === "number" ? "decimal" : undefined}
+      value={text}
+      disabled={disabled}
+      onChange={(e) => {
+        setText(e.target.value);
+        setTouched(true);
+      }}
+      className={kind === "number" ? "w-24 tabular-nums" : "w-40"}
+    />
+  );
+  return (
+    <form onSubmit={submit} noValidate className="flex flex-col items-end gap-1">
+      <div className="flex items-center gap-2">
+        {range?.unit ? <Affix suffix={range.unit}>{input}</Affix> : input}
+        <Button type="submit" variant="secondary" disabled={disabled || same || "error" in parsed}>
+          Set
+        </Button>
+      </div>
+      <span id={hintId} className={error ? "text-xs text-status-error" : "text-xs text-ink-muted tabular-nums"}>
+        {error ?? (range ? `${range.min}–${range.max}${range.unit ?? ""}` : null)}
+      </span>
+    </form>
+  );
 }
 
 function ActuatorRow({
@@ -41,6 +106,7 @@ function ActuatorRow({
   actuatorId,
   actuatorLabel,
   def,
+  range,
   deviceOnline,
   deviceDisabled,
   isAdmin,
@@ -54,6 +120,8 @@ function ActuatorRow({
   /** The pretty catalog display name shown to the user. */
   actuatorLabel: string;
   def: CatalogActuator | undefined;
+  /** A number actuator's span, from its wiring. */
+  range: CommandRange | null;
   deviceOnline: boolean;
   deviceDisabled: boolean;
   isAdmin: boolean;
@@ -67,7 +135,7 @@ function ActuatorRow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Accepted (202), not yet a command row: the worker writes it a moment later.
-  const [sending, setSending] = useState<Value | null>(null);
+  const [sending, setSending] = useState<CommandValue | null>(null);
 
   // While a command waits, tick every second: the countdown (DESIGN.md §8)
   // runs live, and "Waiting" flips to "No response" at the TTL deadline
@@ -82,11 +150,13 @@ function ActuatorRow({
   }, [waitingMs == null, latest?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const status = latest ? commandStatus(latest) : null;
-  const options = choices(def);
+  const kind = controlKind(def);
   const requested: unknown = sending ?? latest?.value;
 
-  async function send(next: Value, retry = false) {
-    const words = formatValue(next);
+  async function send(next: CommandValue, retry = false) {
+    // The value already requested isn't sent again; Retry is the only resend.
+    if (!retry && isRequested(next, requested)) return;
+    const words = formatValue(next, range?.unit);
     const verb = typeof next === "boolean" ? `Turn ${words}` : `Set to ${words}`;
     const what = typeof next === "boolean" ? `turn ${actuatorLabel} ${words}` : `set ${actuatorLabel} to ${words}`;
     // DESIGN.md §8: a command to an offline device says so before it's sent.
@@ -128,7 +198,7 @@ function ActuatorRow({
         <b className="font-medium text-ink">{actuatorLabel}</b>
         <span className="text-xs text-ink-muted">
           Requested{" "}
-          {requested == null ? <span>unknown</span> : <b className="font-medium text-ink">{formatValue(requested)}</b>}
+          {requested == null ? <span>unknown</span> : <b className="font-medium text-ink">{formatValue(requested, range?.unit)}</b>}
         </span>
         {/* What happened, then who sent it (DESIGN.md §8). "Device reports"
             waits for reported state (§13, deferred). */}
@@ -145,7 +215,7 @@ function ActuatorRow({
                 <>
                   <span className="text-status-offline">No response within {latest.ttl_seconds} s.</span>
                   {isAdmin && !deviceDisabled && (
-                    <Button variant="link" className="text-xs" disabled={busy} onClick={() => void send(latest.value as Value, true)}>
+                    <Button variant="link" className="text-xs" disabled={busy} onClick={() => void send(latest.value as CommandValue, true)}>
                       Retry
                     </Button>
                   )}
@@ -174,37 +244,58 @@ function ActuatorRow({
         </span>
         {error && <span className="text-xs text-status-error">{error}</span>}
       </div>
-      {isAdmin && (
-        <SegmentedControl
-          ariaLabel={`Set ${actuatorLabel}`}
-          size="md"
-          value={requested == null ? "" : JSON.stringify(requested)}
-          onChange={(v) => {
-            if (!busy) void send(JSON.parse(v) as Value);
-          }}
-          options={options.map((o) => ({ value: JSON.stringify(o), label: formatValue(o), disabled: deviceDisabled || busy }))}
-        />
-      )}
+      {isAdmin &&
+        (kind === "switch" ? (
+          <Switch
+            ariaLabel={actuatorLabel}
+            checked={requested === true}
+            disabled={deviceDisabled || busy}
+            onChange={(on) => void send(on)}
+          />
+        ) : kind === "choices" ? (
+          <SegmentedControl
+            ariaLabel={`Set ${actuatorLabel}`}
+            size="md"
+            value={requested == null ? "" : JSON.stringify(requested)}
+            onChange={(v) => {
+              if (!busy) void send(JSON.parse(v) as CommandValue);
+            }}
+            options={(def?.allowed_values ?? []).map((o) => ({ value: JSON.stringify(o), label: formatValue(o, range?.unit), disabled: deviceDisabled || busy }))}
+          />
+        ) : (
+          <ValueField
+            label={`Set ${actuatorLabel}`}
+            kind={kind}
+            range={range}
+            requested={requested}
+            disabled={deviceDisabled || busy}
+            onSet={(v) => void send(v)}
+          />
+        ))}
       {dialog}
     </div>
   );
 }
 
 /** The device's actuators as Line rows (demo H Controls): what was
- * requested, what happened, who sent it, and an On | Off segmented control
- * whose pressed segment is the requested value. Offline is said once, above
- * the rows, by the page. */
+ * requested, what happened, who sent it, and the control that sends a new
+ * value: a Switch for On / Off, a segmented control for a fixed list, a value
+ * and Set for a number or text. Offline is said once, above the rows, by the
+ * page. */
 export function ActuatorControl({
   deviceId,
   deviceOnline,
   deviceDisabled = false,
   catalogEntryId,
+  wiring,
 }: {
   deviceId: string;
   deviceOnline: boolean;
   /** A disabled device can't connect: its controls are off. */
   deviceDisabled?: boolean;
   catalogEntryId: string;
+  /** The device's own wiring; its template's when unset. */
+  wiring?: HardwareConfig | null;
 }) {
   const isAdmin = useIsAdmin();
   const { data: rules, isLoading: rulesLoading } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
@@ -238,6 +329,7 @@ export function ActuatorControl({
           actuatorId={id}
           actuatorLabel={label}
           def={catalogEntry?.actuators.find((a) => wireId(a) === id)}
+          range={commandRange(wiring ?? catalogEntry?.hardware, id)}
           deviceOnline={deviceOnline}
           deviceDisabled={deviceDisabled}
           isAdmin={isAdmin}
