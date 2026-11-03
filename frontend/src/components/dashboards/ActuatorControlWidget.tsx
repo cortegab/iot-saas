@@ -23,6 +23,7 @@ export function ActuatorControlWidget({ deviceId }: { deviceId: string }) {
             deviceOnline={online}
             deviceDisabled={device.status !== "active"}
             catalogEntryId={device.catalog_entry_id}
+            wiring={device.hardware}
           />
         </div>
       )}
