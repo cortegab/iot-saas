@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   Check,
@@ -155,6 +155,41 @@ export interface AppSidebarProps {
 /** DESIGN.md §4 sidebar: workspace switcher, ⌘K trigger, grouped nav with
  * counts, and the footer (user, live-connection indicator, theme toggle).
  * `compact` draws the same thing as the icon rail. */
+/** The nav's scroll area on a short screen (DESIGN.md §4): no scrollbar, so
+ * a scrollbar's width never pushes the rail's icons off centre, and a soft
+ * fade on the edge that has more to scroll to. Still scrolls with the wheel,
+ * touch and keyboard (Tab moves focus into view). */
+function useScrollFade() {
+  const ref = useRef<HTMLElement>(null);
+  const [edges, setEdges] = useState({ above: false, below: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const update = () =>
+      setEdges((prev) => {
+        const above = el.scrollTop > 1;
+        const below = el.scrollTop + el.clientHeight < el.scrollHeight - 1;
+        return prev.above === above && prev.below === below ? prev : { above, below };
+      });
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    for (const child of Array.from(el.children)) observer.observe(child);
+    return () => {
+      el.removeEventListener("scroll", update);
+      observer.disconnect();
+    };
+  }, []);
+  const fade = 24;
+  const mask =
+    edges.above || edges.below
+      ? `linear-gradient(to bottom, ${edges.above ? "transparent" : "#000"}, #000 ${fade}px, #000 calc(100% - ${fade}px), ${edges.below ? "transparent" : "#000"})`
+      : undefined;
+  const style: CSSProperties | undefined = mask ? { maskImage: mask, WebkitMaskImage: mask } : undefined;
+  return { ref, style };
+}
+
 export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSidebarProps) {
   const pathname = usePathname();
   const active = activeHref(pathname);
@@ -162,6 +197,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
   const { openPalette } = useShell();
   const { counts, unreadCount } = useNavCounts();
   const tips = useRailTips(compact);
+  const scroll = useScrollFade();
 
   const pin = onTogglePin && (
     <button
@@ -209,9 +245,11 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
       </button>
 
       <nav
+        ref={scroll.ref}
+        style={scroll.style}
         aria-label="Main"
         className={cn(
-          "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-width:thin]",
+          "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           compact ? "w-full items-center" : "-mx-1 gap-3.5 px-1",
         )}
       >

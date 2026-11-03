@@ -3,14 +3,13 @@
 import { useMemo, useState } from "react";
 import { Responsive, WidthProvider, type Layout } from "react-grid-layout/legacy";
 import "react-grid-layout/css/styles.css";
-import { AlertTriangle, GripVertical, Plus } from "lucide-react";
+import { AlertTriangle, GripVertical } from "lucide-react";
 import { ValueCardWidget } from "@/components/dashboards/ValueCardWidget";
 import { TrendChartWidget } from "@/components/dashboards/TrendChartWidget";
 import { DeviceStatusWidget } from "@/components/dashboards/DeviceStatusWidget";
 import { ActuatorControlWidget } from "@/components/dashboards/ActuatorControlWidget";
 import { GaugeWidget } from "@/components/dashboards/GaugeWidget";
 import { WidgetCard } from "@/components/dashboards/WidgetCard";
-import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { cn } from "@/lib/cn";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
@@ -26,7 +25,6 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 // phone neither squeezes twelve columns nor rewrites the desktop layout.
 const BREAKPOINTS = { lg: 640, sm: 0 };
 const COLS = { lg: 12, sm: 1 };
-const ADD_TILE = "__add-widget";
 export const WIDGET_LABEL: Record<Widget["type"], string> = {
   value_card: "Value card",
   trend_chart: "Trend chart",
@@ -62,7 +60,6 @@ export function DashboardGrid({
   templates,
   onLayoutChange,
   onOpenWidget,
-  onAddWidget,
 }: {
   widgets: Widget[];
   /** Edit-layout mode: drag and resize, and a click opens the widget's
@@ -72,30 +69,12 @@ export function DashboardGrid({
   templates?: CatalogEntryResponse[];
   onLayoutChange: (updated: Widget[]) => void;
   onOpenWidget: (id: string) => void;
-  /** Shows an "Add widget" tile in the first row's free columns. */
-  onAddWidget?: () => void;
 }) {
   const [breakpoint, setBreakpoint] = useState("lg");
-  // The add tile belongs to the desktop grid only. Decided from the window
-  // (not the grid's breakpoint, which starts as "lg" on every first render),
-  // and the grid remounts when it flips: otherwise a phone's first frame
-  // seeds the tile into the stacked layout, whose pinned items then never
-  // move up into the gap it leaves.
-  const wide = useMediaQuery("(min-width: 640px)");
   const deviceName = (w: Widget) => devices?.find((d) => d.id === w.device_id)?.name;
-  // The first row's free columns hold an "Add widget" tile instead of blank
-  // space (at least 3 columns, and only where no widget reaches into them).
-  const addTile = useMemo(() => {
-    if (!onAddWidget || !wide || widgets.length === 0) return null;
-    const x = Math.max(...widgets.filter((w) => w.y === 0).map((w) => w.x + w.w), 0);
-    const tile = { i: ADD_TILE, x, y: 0, w: Math.min(COLS.lg - x, 4), h: 2, static: true };
-    if (tile.w < 3) return null;
-    const hits = widgets.some((w) => w.x < tile.x + tile.w && w.x + w.w > tile.x && w.y < tile.h);
-    return hits ? null : tile;
-  }, [widgets, onAddWidget, wide]);
   const layout = useMemo<Layout>(
-    () => [...widgets.map((w) => ({ i: w.id, x: w.x, y: w.y, w: w.w, h: w.h })), ...(addTile ? [addTile] : [])],
-    [widgets, addTile],
+    () => widgets.map((w) => ({ i: w.id, x: w.x, y: w.y, w: w.w, h: w.h })),
+    [widgets],
   );
   const stacked = useMemo<Layout>(() => {
     let y = 0;
@@ -121,7 +100,6 @@ export function DashboardGrid({
 
   return (
     <ResponsiveGridLayout
-      key={wide ? "wide" : "narrow"}
       layouts={{ lg: layout, sm: stacked }}
       breakpoints={BREAKPOINTS}
       cols={COLS}
@@ -135,18 +113,6 @@ export function DashboardGrid({
       onDragStop={handleStop}
       onResizeStop={handleStop}
     >
-      {addTile && (
-        <div key={ADD_TILE}>
-          <button
-            type="button"
-            onClick={onAddWidget}
-            className="flex h-full w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border text-sm text-ink-muted transition-colors duration-150 hover:border-accent hover:text-accent"
-          >
-            <Plus aria-hidden size={15} />
-            Add widget
-          </button>
-        </div>
-      )}
       {widgets.map((widget) => {
         const broken = brokenReason(widget, devices, templates);
         return (
