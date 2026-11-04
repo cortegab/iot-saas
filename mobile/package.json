@@ -12,7 +12,10 @@
     "typecheck": "tsc --noEmit",
     "lint": "expo lint",
     "test": "jest",
-    "doctor": "expo-doctor"
+    "doctor": "expo-doctor",
+    "build:apk": "CI=1 expo prebuild -p android --clean --no-install && cd android && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a,armeabi-v7a && echo \"APK: mobile/android/app/build/outputs/apk/release/app-release.apk\"",
+    "build:aab": "CI=1 expo prebuild -p android --clean --no-install && cd android && ./gradlew bundleRelease && echo \"AAB: mobile/android/app/build/outputs/bundle/release/app-release.aab\"",
+    "upload-key": "bash scripts/create-upload-key.sh"
   },
   "dependencies": {
     "@expo-google-fonts/geist": "0.4.2",

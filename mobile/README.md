@@ -6,57 +6,97 @@ Design rules: `docs/design/DESIGN.md` §15. Shared API types and helpers: `packa
 **Status:** Phase 0 (scaffold). The one screen checks that the build reaches its API. Sign-in,
 devices and dashboards come in Phase 1.
 
-## Requirements
+Builds run **on this machine** with Gradle; no Expo account is needed. (`eas.json` is kept for the
+option of Expo's cloud builds later, for example for iOS without a Mac.)
 
-- **Node ≥ 22.13** (Expo SDK 58). The web app still runs on Node 20 in Docker; only the mobile
-  tooling needs 22.
-- pnpm 9 (the repo's workspace: run `pnpm install` from the repo root or any package).
-- To run on a phone: a **development build** of the app installed on it (below). Expo Go can't
-  load this app, because it carries native modules from Phase 2 on.
+## One-time setup (Linux / WSL, no root needed)
+
+| Tool | Where | Notes |
+|---|---|---|
+| Node ≥ 22.13 | nvm (`~/.nvm`), default `22` | Expo SDK 58 needs it; the web's Docker images keep Node 20 |
+| pnpm 9 | corepack | The repo's workspace: `pnpm install` from any package |
+| JDK 17 | Eclipse Temurin in `~/.local/share/jdk-17` | `JAVA_HOME` |
+| Android SDK | `~/Android/Sdk` (`ANDROID_HOME`) | cmdline-tools, platform-tools, `platforms/android-37.0`, `build-tools/37.0.0`, `ndk/27.1.12297006`; versions come from React Native (`node_modules/react-native/gradle/libs.versions.toml`) |
+| Gradle memory | `~/.gradle/gradle.properties` | `org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g` |
+
+`~/.bashrc` sets `JAVA_HOME`, `ANDROID_HOME` and adds the JDK, `cmdline-tools/latest/bin` and
+`platform-tools` to `PATH`. Install a missing SDK package with `sdkmanager --install "<name>"`
+(this cmdline-tools version names packages with `/`, e.g. `platforms/android-37.0`).
 
 ## Configuration
 
-`EXPO_PUBLIC_API_URL` is the API the app talks to, inlined at build time:
+`EXPO_PUBLIC_API_URL` is the API the app talks to, inlined into the JavaScript bundle:
 
-| Where | Value |
-|---|---|
-| `mobile/.env` (local runs; copy `.env.example`) | `http://localhost:8000` |
-| `eas.json` → `development` | `http://localhost:8000` |
-| `eas.json` → `preview`, `production` | `https://api.iodriven.tech` |
+| Build | File | Value |
+|---|---|---|
+| Local development (`pnpm start`) | `mobile/.env` (copy `.env.example`; git-ignored) | `http://localhost:8000` |
+| Release builds (`build:apk`, `build:aab`) | `mobile/.env.production` (committed) | `https://api.iodriven.tech` |
 
-With a phone on USB, forward the API port so `localhost` on the phone reaches this computer:
+To build a release against another API, set it for that run:
+`EXPO_PUBLIC_API_URL=http://10.0.0.5:8000 pnpm build:apk`.
+
+## Build
 
 ```bash
-adb reverse tcp:8000 tcp:8000
+cd mobile
+pnpm build:apk      # installable APK (arm64 + armv7 phones)
+pnpm build:aab      # Play Store bundle (every architecture; Play delivers the right one)
 ```
 
-## Builds (EAS)
+Each runs `expo prebuild --clean` (regenerating `android/` from `app.config.ts`, git-ignored),
+then Gradle. Outputs:
 
-Builds run on Expo's servers (EAS Build), so no Android SDK is needed here. They need an Expo
-account, logged in with `npx eas-cli login`.
+- `android/app/build/outputs/apk/release/app-release.apk`
+- `android/app/build/outputs/bundle/release/app-release.aab`
 
-| Profile | What it is | Command |
-|---|---|---|
-| `development` | Dev client: loads the JavaScript from `pnpm start` on this computer, with live reload | `npx eas-cli build -p android --profile development` |
-| `preview` | The standalone app against production, as an installable APK | `npx eas-cli build -p android --profile preview` |
-| `production` | Play Store bundle (AAB), version auto-incremented | `npx eas-cli build -p android --profile production` |
+The first build takes about half an hour (downloads and native compiles); later ones reuse the
+caches.
 
-EAS gives a link and QR to download the APK; on the phone, allow installs from that source once.
-EAS creates and keeps the Android signing key; the Play Store uses the same one later.
+### Signing
+
+Release builds sign with the **Play upload key** when `mobile/credentials/` holds it, and with the
+debug key otherwise (fine for test APKs, refused by the Play Store). Create it once:
+
+```bash
+pnpm upload-key     # scripts/create-upload-key.sh
+```
+
+It writes `credentials/upload.keystore` and `credentials/upload-key.properties`, with a generated
+password that is never printed. The folder is git-ignored. **Back up both files** (a password
+manager's attachments work): with Play App Signing, Google holds the app's signing key, and a lost
+upload key can be reset through Play Console, but only after a wait. The signing is added by
+`plugins/with-upload-signing.js`, because `android/` is regenerated on every build.
+
+## Install on a phone
+
+WSL doesn't see USB devices by default. Either:
+
+- **Copy the APK** to the phone (Drive, USB file transfer, email) and open it; allow installs from
+  that source once. Installing a newer APK over it keeps the app's data.
+- **Wireless debugging** (Android 11+): Developer options → Wireless debugging → Pair device with
+  pairing code, then from WSL `adb pair <ip>:<port>` and `adb connect <ip>:<port>`, and
+  `adb install -r android/app/build/outputs/apk/release/app-release.apk`.
+
+An APK signed with one key can't be updated by an APK signed with another: after switching from the
+debug key to the upload key, uninstall the test app first.
 
 ## Develop
 
 ```bash
 cd mobile
-pnpm start          # Metro for the development build (scan its QR in the dev client)
+pnpm start          # Metro for a development build (expo run:android installs one over adb)
 pnpm typecheck
 pnpm lint
 pnpm test           # Jest (jest-expo); also checks tokens against the web's globals.css
 pnpm doctor         # expo-doctor: SDK and config checks
 ```
 
-`android/` and `ios/` are generated (Continuous Native Generation) and git-ignored:
-`app.config.ts` is the source of truth.
+## Publishing (later)
+
+- **Play Store:** a Google Play Console developer account; upload the AAB to the internal testing
+  track first.
+- **App Store:** iOS builds need a Mac with Xcode (or a cloud build service), and an Apple
+  Developer Program membership.
 
 ## iOS-readiness rules
 
