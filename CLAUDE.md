@@ -30,6 +30,7 @@ can operate and debug at 3am.
 | Layer | Choice |
 |---|---|
 | Frontend | Next.js + React + Tailwind CSS (+ uPlot for high-frequency charts) |
+| Mobile app | Expo + React Native + TypeScript, `expo-router` (Android first, iOS-ready); EAS Build |
 | Backend | Python 3.12 + FastAPI (async), Pydantic v2 |
 | Hot path / worker | asyncio + `aiomqtt`, separate process |
 | ORM / migrations | SQLAlchemy 2.0 (async) + Alembic |
@@ -318,6 +319,7 @@ iot-saas/
 ├─ package.json, pnpm-workspace.yaml, pnpm-lock.yaml   # pnpm workspace for the TypeScript clients
 ├─ frontend/                 # Next.js + Tailwind (workspace package; Docker builds from the repo root)
 │  └─ src/types/api.ts       # re-exports @iodriven/shared/api
+├─ mobile/                   # Expo app (workspace package; DESIGN.md §15; README.md for running it)
 ├─ packages/shared/          # @iodriven/shared: what the web and mobile apps share (TS source, no DOM)
 │  └─ src/api.ts             # GENERATED from OpenAPI — never edit by hand
 ├─ infra/                    # docker-compose.yml, nginx/, emqx/, backups/
@@ -470,6 +472,8 @@ pnpm --filter @iodriven/shared codegen
 
 `packages/shared` also holds pure helpers both apps use. Its `tsc` runs without the DOM library,
 so check it after moving or changing one: `pnpm --filter @iodriven/shared typecheck && pnpm --filter @iodriven/shared test`.
+
+The mobile app (optional; Node ≥ 22.13): see `mobile/README.md`.
 
 Dashboard on `http://localhost:3000`, API docs on `http://localhost:8000/docs`, EMQX dashboard on
 `http://localhost:18083`.
