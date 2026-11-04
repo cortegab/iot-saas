@@ -164,8 +164,10 @@ services:
 
   frontend:
     build:
-      context: ../frontend
-      dockerfile: Dockerfile.prod
+      # The repo root: the web app is part of the pnpm workspace (root
+      # .dockerignore keeps the context to the workspace files).
+      context: ..
+      dockerfile: frontend/Dockerfile.prod
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     restart: always

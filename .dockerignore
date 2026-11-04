@@ -1,0 +1,21 @@
+# Build context for the frontend images (frontend/Dockerfile*), which build
+# from the repo root because the web app is part of the pnpm workspace. Only
+# the workspace files go in: never the backend, firmware, infra or secrets.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!frontend/
+!packages/
+
+**/node_modules
+**/.next
+**/.env*
+!**/.env.example
+**/.pnpm-store
+**/*.tsbuildinfo
+frontend/e2e
+frontend/playwright-report
+frontend/test-results
+frontend/next-build-tmp-verify*
+frontend/.*.mjs
