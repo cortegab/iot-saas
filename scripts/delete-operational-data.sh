@@ -159,8 +159,12 @@ fi
 echo "==> Deleting from the database"
 # action_executions go with their rule_executions (ON DELETE CASCADE); one that
 # points at a deleted command keeps its row with command_id set to NULL.
+# Deleting from compressed chunks decompresses them first, and TimescaleDB
+# refuses more than 100,000 decompressed rows per transaction by default:
+# lift that for this transaction only.
 qs <<SQL
 BEGIN;
+SET LOCAL timescaledb.max_tuples_decompressed_per_dml_transaction = 0;
 DELETE FROM telemetry WHERE $FILTER;
 DELETE FROM device_metric_health WHERE $FILTER;
 DELETE FROM notifications WHERE $FILTER;
