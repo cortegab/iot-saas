@@ -18,7 +18,7 @@ const config: ExpoConfig = {
     bundleIdentifier: "tech.iodriven.app",
     supportsTablet: false,
   },
-  plugins: ["expo-router", "expo-font"],
+  plugins: ["expo-router", "expo-font", "./plugins/with-upload-signing"],
   experiments: {
     typedRoutes: true,
   },
