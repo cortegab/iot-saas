@@ -11,3 +11,5 @@ ios/
 .env.local
 *.jks
 *.keystore
+# The Play upload key (scripts/create-upload-key.sh); back it up, never commit it.
+credentials/
