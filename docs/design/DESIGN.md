@@ -851,7 +851,7 @@ interim is in the last column.
 | Widget titles | An optional `title` on each dashboard widget. | The generated title (reading · device). |
 | Reported actuator state | Devices report their real state and whether a command was applied: an additive change to the device contract (CLAUDE.md §4), made in both deployment variants, plus firmware. **Deferred by decision (2026-10-20).** | Requested state and Acknowledged / No response only. |
 
-Regenerate `frontend/src/types/api.ts` after every schema change (CLAUDE.md §9.8).
+Regenerate the API types (`pnpm --filter @iodriven/shared codegen`, writing `packages/shared/src/api.ts`) after every schema change (CLAUDE.md §9.8).
 
 ---
 

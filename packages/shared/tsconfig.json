@@ -1,0 +1,18 @@
+{
+  // No "dom" lib: code here runs on the web and in React Native, so a helper
+  // that reaches for window, document or fetch fails this check.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "ES2023.Array"],
+    "types": [],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

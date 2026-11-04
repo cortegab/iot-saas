@@ -317,7 +317,9 @@ iot-saas/
 │     └─ ml/                 # FUTURE — detectors implementing Evaluator
 ├─ package.json, pnpm-workspace.yaml, pnpm-lock.yaml   # pnpm workspace for the TypeScript clients
 ├─ frontend/                 # Next.js + Tailwind (workspace package; Docker builds from the repo root)
-│  └─ src/types/api.ts       # GENERATED from OpenAPI — never edit by hand
+│  └─ src/types/api.ts       # re-exports @iodriven/shared/api
+├─ packages/shared/          # @iodriven/shared: what the web and mobile apps share (TS source, no DOM)
+│  └─ src/api.ts             # GENERATED from OpenAPI — never edit by hand
 ├─ infra/                    # docker-compose.yml, nginx/, emqx/, backups/
 └─ docs/                     # firmware quickstart, API reference
    └─ design/                # DESIGN.md (frontend design directives) + redesign/ reference demos
@@ -371,7 +373,8 @@ context. A single bad message is dropped and logged; it never stops the stream.
 files on the frontend and for MQTT topic segments.
 
 **Frontend types are generated.** Run the OpenAPI codegen after any schema change; treat
-`frontend/src/types/api.ts` as a build artifact. A hand-edited API type is a bug waiting to happen —
+`packages/shared/src/api.ts` as a build artifact (the web imports it through
+`frontend/src/types/api.ts`). A hand-edited API type is a bug waiting to happen —
 this codegen step is what replaces the type safety a single-language stack would have given you.
 
 **Frontend design** — `docs/design/DESIGN.md` is binding for the frontend's look, layout,
@@ -458,11 +461,15 @@ If lint fails with "Failed to patch ESLint" after switching to the workspace lay
 `frontend/node_modules/.pnpm` from the old single-package install is shadowing the workspace's:
 remove `frontend/node_modules` and run `pnpm install` again.
 
-Regenerate the API client whenever backend schemas change:
+Regenerate the API client whenever backend schemas change (writes
+`packages/shared/src/api.ts`, used by the web app and the mobile app):
 
 ```bash
-npx openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts
+pnpm --filter @iodriven/shared codegen
 ```
+
+`packages/shared` also holds pure helpers both apps use. Its `tsc` runs without the DOM library,
+so check it after moving or changing one: `pnpm --filter @iodriven/shared typecheck && pnpm --filter @iodriven/shared test`.
 
 Dashboard on `http://localhost:3000`, API docs on `http://localhost:8000/docs`, EMQX dashboard on
 `http://localhost:18083`.
