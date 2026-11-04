@@ -10,9 +10,12 @@ WORKDIR /repo
 # packageManager field — corepack's default pnpm is incompatible with Node 20.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend/package.json frontend/
+# One line per workspace package the web app uses (COPY globs flatten paths).
+COPY packages/shared/package.json packages/shared/
 RUN corepack enable && corepack prepare pnpm@9.15.9 --activate \
     && pnpm install --frozen-lockfile --filter "iot-saas-frontend..."
 
+COPY packages packages
 COPY frontend frontend
 WORKDIR /repo/frontend
 

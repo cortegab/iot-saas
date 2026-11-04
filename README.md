@@ -79,8 +79,8 @@ never serves HTTP.
 | Infrastructure | Docker Compose, NGINX, Let's Encrypt, single Linux VPS |
 
 Backend and frontend are separate languages by design. The seam is mediated by codegen: FastAPI emits
-an OpenAPI schema and the frontend's API client is generated from it. **`frontend/src/types/api.ts` is
-a build artifact — never edit it by hand.**
+an OpenAPI schema and the frontend's API client is generated from it. **`packages/shared/src/api.ts`
+(re-exported by `frontend/src/types/api.ts`) is a build artifact — never edit it by hand.**
 
 ---
 
@@ -132,7 +132,7 @@ cd frontend && pnpm install && pnpm dev
 Regenerate the frontend API client after any backend schema change:
 
 ```bash
-npx openapi-typescript http://localhost:8000/openapi.json -o src/types/api.ts
+pnpm --filter @iodriven/shared codegen
 ```
 
 ---

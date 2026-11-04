@@ -14,6 +14,8 @@ const nextConfig = {
   // mirrors the repo: .next/standalone/frontend/server.js.
   output: "standalone",
   outputFileTracingRoot: workspaceRoot,
+  // packages/shared ships TypeScript source (no build step).
+  transpilePackages: ["@iodriven/shared"],
   // Dev only: the static-route badge sits bottom-left, over the phone tab bar
   // (DESIGN.md §12: nothing floating covers content), so it's off.
   devIndicators: { appIsrStatus: false },
