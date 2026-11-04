@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 #
-# delete-telemetry.sh — delete one tenant's metric data (telemetry), LOCAL or PRODUCTION.
+# delete-telemetry.sh — delete one tenant's metric data (telemetry) and its
+# notifications, LOCAL or PRODUCTION.
 #
 # Deletes the tenant's rows from the `telemetry` hypertable (compressed chunks
-# included) and its per-sensor latest values (`device_metric_health`, which the
-# next reading recreates), then refreshes the telemetry_1m / telemetry_1h
-# rollups over the deleted time range, since their refresh policy only revisits
-# a recent window and older buckets would keep showing the deleted data.
+# included), its per-sensor latest values (`device_metric_health`, which the
+# next reading recreates) and its `notifications` (read, unread and dismissed),
+# then refreshes the telemetry_1m / telemetry_1h rollups over the deleted time
+# range, since their refresh policy only revisits a recent window and older
+# buckets would keep showing the deleted data.
 #
-# Devices, templates, rules, commands, notifications and everything else are
-# KEPT. Nothing is restarted: the worker's in-memory rule state is untouched.
+# Devices, templates, rules, commands and everything else are KEPT. Nothing is restarted: the worker's in-memory rule state is untouched.
 #
 #   bash scripts/delete-telemetry.sh local <tenant>                  # prompts
 #   bash scripts/delete-telemetry.sh local <tenant> --device <device>
 #   bash scripts/delete-telemetry.sh prod  <tenant> --yes            # skip the prompt
 #
 # <tenant> is the tenant's id (uuid) or slug; <device> is a device id or slug
-# within that tenant (only that device's data is deleted).
+# within that tenant (only that device's data and notifications are deleted;
+# notifications about no device, such as template ones, are kept).
 #
 # `prod` runs on the VPS, from the repo root, as the `deploy` user (like
 # scripts/wipe-prod.sh):  ssh deploy@<VPS> 'cd ~/iot-saas && bash scripts/delete-telemetry.sh prod <tenant>'
@@ -78,9 +80,10 @@ fi
 FILTER="tenant_id = :'tid' AND (:'did' = '' OR device_id::text = :'did')"
 qs() { q -v tid="$TENANT_ID" -v did="$DEVICE_ID" "$@"; }
 
-IFS='|' read -r ROWS FIRST LAST DEVICES HEALTH < <(qs <<SQL
+IFS='|' read -r ROWS FIRST LAST DEVICES HEALTH NOTIFS < <(qs <<SQL
 SELECT count(*), coalesce(min(time)::text, ''), coalesce(max(time)::text, ''), count(DISTINCT device_id),
-       (SELECT count(*) FROM device_metric_health WHERE $FILTER)
+       (SELECT count(*) FROM device_metric_health WHERE $FILTER),
+       (SELECT count(*) FROM notifications WHERE $FILTER)
   FROM telemetry WHERE $FILTER;
 SQL
 )
@@ -88,9 +91,9 @@ SQL
 echo "Target:  $WHERE"
 echo "Tenant:  $TENANT_NAME ($TENANT_SLUG, $TENANT_ID)"
 echo "Scope:   $SCOPE"
-echo "Deletes: $ROWS telemetry rows from $DEVICES device(s)${FIRST:+, $FIRST → $LAST}; $HEALTH latest-value rows"
+echo "Deletes: $ROWS telemetry rows from $DEVICES device(s)${FIRST:+, $FIRST → $LAST}; $HEALTH latest-value rows; $NOTIFS notifications"
 
-if [ "$ROWS" = "0" ] && [ "$HEALTH" = "0" ]; then echo "Nothing to delete."; exit 0; fi
+if [ "$ROWS" = "0" ] && [ "$HEALTH" = "0" ] && [ "$NOTIFS" = "0" ]; then echo "Nothing to delete."; exit 0; fi
 
 if [ -z "$YES" ]; then
   PHRASE="delete $TENANT_SLUG"
@@ -104,6 +107,7 @@ qs <<SQL
 BEGIN;
 DELETE FROM telemetry WHERE $FILTER;
 DELETE FROM device_metric_health WHERE $FILTER;
+DELETE FROM notifications WHERE $FILTER;
 COMMIT;
 SQL
 
@@ -118,8 +122,8 @@ SQL
   done
 fi
 
-LEFT=$(qs <<SQL
-SELECT count(*) FROM telemetry WHERE $FILTER;
+IFS='|' read -r LEFT NOTIFS_LEFT < <(qs <<SQL
+SELECT (SELECT count(*) FROM telemetry WHERE $FILTER), (SELECT count(*) FROM notifications WHERE $FILTER);
 SQL
 )
-echo "Done. Telemetry rows left for this scope: $LEFT"
+echo "Done. Left for this scope: $LEFT telemetry rows, $NOTIFS_LEFT notifications"
