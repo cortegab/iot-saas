@@ -22,6 +22,7 @@ import { EditorFrame, EditorSection } from "@/components/editor/EditorFrame";
 import { useRecordEditor, type Validation } from "@/components/editor/useRecordEditor";
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { WiringSection } from "@/components/catalog/WiringSection";
+import { DeviceLabel } from "@/components/devices/DeviceLabel";
 import { templateGivesFacts } from "@/components/catalog/template-facts";
 import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
@@ -393,6 +394,7 @@ export function DeviceEditor({
                     )}
                   </span>,
                 ],
+                ["Label", <DeviceLabel key="label" device={device} />],
                 [
                   "Topics",
                   <details key="topics" className="group">

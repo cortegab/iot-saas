@@ -50,6 +50,22 @@ Provisioning reuses the device's **own MQTT credential**. No separate secret exi
 - A device renamed after flashing keeps advertising the name it was flashed with; the QR generated
   with that sketch carries the same name.
 
+## Device label
+
+A second, **secret-free** QR identifies a device without provisioning it. Device → Settings →
+Connection → Label prints or downloads it.
+
+- **Content:** a link, `https://iodriven.tech/d/<device id>` (`deviceLink()`, `packages/shared`).
+  It names the device and holds no password, so it can stay stuck on the enclosure.
+- **The web** redirects `/d/<id>` to the device page, after sign-in if needed. A phone camera
+  without the app lands there.
+- **The iodriven app** opens the same link itself (an Android App Link). Android verifies it
+  against `/.well-known/assetlinks.json`, which lists the fingerprints in
+  `ANDROID_APP_CERT_SHA256` (`infra/.env.example`). Until they are set, Android opens the link in
+  the browser. The app's own scanner reads both QR kinds either way.
+
+The label is not part of the device contract: firmware never sees it.
+
 ## Security levels
 
 > **Security 2 is off for now (2026-10-15).** The connect flow offers Security 1 (PoP) only. Both

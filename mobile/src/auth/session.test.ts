@@ -1,5 +1,5 @@
 import { ApiRequestError } from "@iodriven/shared/api-client";
-import { isRejection, pickTenant, signInError } from "./session";
+import { isRejection, pickTenant, safeNext, signInError } from "./session";
 
 const m = (tenant_id: string) => ({ tenant_id, tenant_name: tenant_id, tenant_slug: tenant_id, role: "admin" });
 
@@ -31,5 +31,14 @@ describe("signInError", () => {
     expect(signInError(new ApiRequestError(401, "Invalid email or password"))).toMatch(/don't match/);
     expect(signInError(new ApiRequestError(502, "Bad Gateway"))).toMatch(/Try again in a moment/);
     expect(signInError(new TypeError("Network request failed"))).toMatch(/Check your connection/);
+  });
+});
+
+describe("safeNext", () => {
+  it("keeps an in-app path and drops anything else", () => {
+    expect(safeNext("/devices/abc")).toBe("/devices/abc");
+    expect(safeNext("//evil.example")).toBeNull();
+    expect(safeNext("https://evil.example")).toBeNull();
+    expect(safeNext(undefined)).toBeNull();
   });
 });
