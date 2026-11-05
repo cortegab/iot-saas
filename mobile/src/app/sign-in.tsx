@@ -1,10 +1,10 @@
-import { Redirect } from "expo-router";
+import { Redirect, useLocalSearchParams, type Href } from "expo-router";
 import * as Linking from "expo-linking";
 import { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/auth/AuthProvider";
-import { signInError } from "@/auth/session";
+import { safeNext, signInError } from "@/auth/session";
 import { webUrl } from "@/lib/config";
 import { useTheme } from "@/theme/useTheme";
 import { Button } from "@/ui/Button";
@@ -16,13 +16,15 @@ import { TextField, type TextInputRef } from "@/ui/TextField";
 export default function SignIn() {
   const theme = useTheme();
   const { status, login } = useAuth();
+  // Where a label link (or any deep link) was going before sign-in.
+  const { next } = useLocalSearchParams<{ next?: string }>();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const passwordRef = useRef<TextInputRef>(null);
 
-  if (status === "authenticated") return <Redirect href="/dashboards" />;
+  if (status === "authenticated") return <Redirect href={(safeNext(next) ?? "/dashboards") as Href} />;
 
   async function submit() {
     if (!email.trim() || !password) {

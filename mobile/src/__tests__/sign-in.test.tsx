@@ -12,7 +12,10 @@ jest.mock("expo-secure-store", () => ({
 // The router: a Redirect just says where it would go.
 jest.mock("expo-router", () => {
   const { Text: MockText } = jest.requireActual<typeof import("react-native")>("react-native");
-  return { Redirect: ({ href }: { href: string }) => <MockText>redirect:{href}</MockText> };
+  return {
+    Redirect: ({ href }: { href: string }) => <MockText>redirect:{href}</MockText>,
+    useLocalSearchParams: () => ({}),
+  };
 });
 jest.mock("expo-linking", () => ({ openURL: jest.fn() }));
 

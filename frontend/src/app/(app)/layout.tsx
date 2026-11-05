@@ -26,7 +26,8 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const mainRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    if (status === "unauthenticated") router.replace("/login");
+    // Back to this page after signing in (a device label's link lands here).
+    if (status === "unauthenticated") router.replace(`/login?next=${encodeURIComponent(location.pathname + location.search)}`);
   }, [status, router]);
 
   // ⌘K / Ctrl+K anywhere opens the palette.

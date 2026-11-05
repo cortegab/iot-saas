@@ -915,6 +915,10 @@ restyled.
   zone · last message. Each reading card shows the name with Live / Stale at the top right, the
   value, then when it arrived. The Trend card picks its reading with the web's **metric chips**;
   tapping a reading card picks it too. Charts follow §5, including the shorter on/off chart.
+- **Device label:** device Settings → Connection has a **Label** row: "A QR that opens this device.
+  It holds no password." with **Print label** and **Download** (the same label layout as the
+  provisioning QR's: QR, name, one caption line). Its link, `/d/<id>`, opens the device in the
+  app, or on the web, after sign-in if needed.
 
 ## 16. Reference and changelog
 
@@ -1012,3 +1016,4 @@ restyled.
 | 2026-11-04 | §15 Mobile app (new; Reference and changelog becomes §16): the app follows this document with the same tokens (mirrored in `mobile/src/theme/tokens.ts`, checked against `globals.css` by a test), the web's phone shape (bottom tabs, sheets, Line rows), 44 px targets, and a split of what lives in the app (field work) vs the web (creating and editing records). |
 | 2026-11-05 | §5 Trend chart, §8 dashboards, from the user's review of the mobile app beside the web: an on/off chart is 140 px tall (a number keeps 260); on phones the chart drops its inner frame; viewing a dashboard on a phone stacks the widgets at their content height instead of their grid height (the desktop grid is unchanged). |
 | 2026-11-05 | §15 device screen, from the user's review of the app beside the web: the status on its own line, reading cards laid out like the web's Overview (freshness top right, time under the value), and metric chips in the Trend card (picking a reading used to be possible only by tapping its card, with nothing saying so). |
+| 2026-11-05 | §15 **device label** (mobile plan M5): a secret-free QR of `/d/<id>` in device Settings → Connection → Label (Print label · Download). The web redirects the link to the device page and back to it after sign-in; the app opens it as an App Link. |
