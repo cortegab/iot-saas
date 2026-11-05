@@ -7,7 +7,7 @@ const config: ExpoConfig = {
   name: "iodriven",
   slug: "iodriven",
   scheme: "iodriven",
-  version: "0.1.0",
+  version: "0.2.0",
   orientation: "portrait",
   userInterfaceStyle: "automatic",
   android: {
