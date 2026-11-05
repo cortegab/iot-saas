@@ -22,6 +22,7 @@
 
 import { wireId, type WireNamed } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { provName } from "@iodriven/shared/provisioning-qr";
 
 type CatalogMetric = components["schemas"]["CatalogMetric"];
 type CatalogActuator = components["schemas"]["CatalogActuator"];
@@ -240,28 +241,8 @@ export function defaultPins(metrics: SketchMetric[], actuators: SketchActuator[]
   return out;
 }
 
-/** The name the phone app lists: the device name in printable ASCII (accents
- * dropped), at most 29 bytes — the BLE limit. The sketch's PROV_NAME and the
- * QR's "name" both come from here, so they always match. */
-export function provName(deviceName: string): string {
-  const ascii = deviceName
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^\x20-\x7e]/g, "-")
-    .replace(/\s+/g, " ")
-    .trim();
-  return (ascii || "iot-device").slice(0, 29).trim();
-}
-
-/** The QR payload the ESP BLE Provisioning app scans (docs/ble-provisioning.md).
- * `security` is always explicit: the app assumes 2 when it's missing. */
-export function provisioningPayload(p: { name: string; username: string; password: string; security: 1 | 2 }): string {
-  const body =
-    p.security === 2
-      ? { ver: "v1", name: p.name, username: p.username, pop: p.password, transport: "ble", network: "wifi", security: 2 }
-      : { ver: "v1", name: p.name, pop: p.password, transport: "ble", network: "wifi", security: 1 };
-  return JSON.stringify(body);
-}
+// provName and provisioningPayload moved to packages/shared (the app scans the QR).
+export { provisioningPayload, provName } from "@iodriven/shared/provisioning-qr";
 
 /** A byte array as a C initializer body, 16 per line. */
 function cBytes(bytes: Uint8Array): string {

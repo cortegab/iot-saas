@@ -157,7 +157,7 @@ function WifiOptions({ flow }: { flow: ConnectFlow }) {
                 [
                   "ble",
                   "Set up from a phone",
-                  "ESP BLE Provisioning app, Security 1 (PoP): the app proves it holds this device's password, then you pick the network. Nothing about your Wi-Fi in the firmware.",
+                  "The iodriven app or ESP BLE Provisioning, Security 1 (PoP): the app proves it holds this device's password, then you pick the network. Nothing about your Wi-Fi in the firmware.",
                 ],
                 flow.install
                   ? ["sketch", "Type it in", "Quick for a bench test. Readable from the board's flash."]

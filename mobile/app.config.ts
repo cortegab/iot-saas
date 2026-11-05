@@ -7,7 +7,7 @@ const config: ExpoConfig = {
   name: "iodriven",
   slug: "iodriven",
   scheme: "iodriven",
-  version: "0.2.1",
+  version: "0.3.0",
   orientation: "portrait",
   userInterfaceStyle: "automatic",
   android: {
@@ -29,7 +29,32 @@ const config: ExpoConfig = {
     bundleIdentifier: "tech.iodriven.app",
     supportsTablet: false,
   },
-  plugins: ["expo-router", "expo-font", "./plugins/with-upload-signing"],
+  plugins: [
+    "expo-router",
+    "expo-font",
+    // The scanner reads device labels and Wi-Fi setup QRs; no audio, no photos.
+    [
+      "expo-camera",
+      {
+        cameraPermission: "iodriven uses the camera to read a device's label or its Wi-Fi setup QR.",
+        microphonePermission: false,
+        recordAudioAndroid: false,
+      },
+    ],
+    // Wi-Fi setup over Bluetooth (docs/ble-provisioning.md). BLE only, and the
+    // scan never derives location, so Android 12+ asks for Nearby devices only.
+    [
+      "@orbital-systems/react-native-esp-idf-provisioning",
+      {
+        transport: "ble",
+        neverForLocation: true,
+        bluetoothAlwaysPermission: "iodriven uses Bluetooth to set up a board's Wi-Fi.",
+        locationWhenInUsePermission: false,
+        localNetworkPermission: false,
+      },
+    ],
+    "./plugins/with-upload-signing",
+  ],
   experiments: {
     typedRoutes: true,
   },
