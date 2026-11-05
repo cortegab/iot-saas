@@ -9,34 +9,32 @@ import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { useColorScheme } from "react-native";
-import { font, text } from "@/theme/tokens";
+import { AuthProvider, useAuth } from "@/auth/AuthProvider";
 import { useTheme } from "@/theme/useTheme";
 
 void SplashScreen.preventAutoHideAsync();
 
-export default function RootLayout() {
+/** Keeps the splash up until the fonts are in and the stored session has been
+ * resumed (or found missing), so nothing flashes the sign-in screen. */
+function Root({ fontsReady }: { fontsReady: boolean }) {
+  const { status } = useAuth();
   const theme = useTheme();
+  const ready = fontsReady && status !== "loading";
+  useEffect(() => {
+    if (ready) void SplashScreen.hideAsync();
+  }, [ready]);
+  if (!ready) return null;
+  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.canvas } }} />;
+}
+
+export default function RootLayout() {
   const scheme = useColorScheme();
   const [loaded, error] = useFonts({ Geist_400Regular, Geist_500Medium, Geist_600SemiBold });
-
-  // Fonts failing to load isn't fatal: the system face stands in.
-  useEffect(() => {
-    if (loaded || error) void SplashScreen.hideAsync();
-  }, [loaded, error]);
-  if (!loaded && !error) return null;
-
   return (
-    <>
+    <AuthProvider>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-      <Stack
-        screenOptions={{
-          headerStyle: { backgroundColor: theme.surface },
-          headerTintColor: theme.ink,
-          headerTitleStyle: { fontFamily: font.semibold, fontSize: text.section.fontSize },
-          headerShadowVisible: false,
-          contentStyle: { backgroundColor: theme.canvas },
-        }}
-      />
-    </>
+      {/* Fonts failing to load isn't fatal: the system face stands in. */}
+      <Root fontsReady={loaded || !!error} />
+    </AuthProvider>
   );
 }
