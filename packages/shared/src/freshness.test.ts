@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { liveWindowMs, readingFreshness } from "@/lib/freshness";
+import { liveWindowMs, readingFreshness } from "./freshness";
 
 const now = Date.parse("2026-10-21T12:00:00Z");
 const ago = (s: number) => new Date(now - s * 1000).toISOString();

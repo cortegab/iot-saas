@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { boolBuckets } from "@/lib/bool-series";
+import { boolBuckets } from "./bool-series";
 
 const sec = (min: number) => Date.UTC(2026, 9, 3, 21, min) / 1000;
 

@@ -3,6 +3,7 @@ import { Cpu, LayoutDashboard, Menu } from "lucide-react-native";
 import { AppState } from "react-native";
 import { SWRConfig } from "swr";
 import { useAuth } from "@/auth/AuthProvider";
+import { RealtimeProvider } from "@/realtime/RealtimeProvider";
 import { font, text } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
 
@@ -34,6 +35,7 @@ export default function AppLayout() {
     // One cache per workspace: switching workspace starts empty, so nothing
     // from the previous one shows (the web clears its cache the same way).
     <SWRConfig key={currentTenantId ?? "none"} value={swrConfig}>
+      <RealtimeProvider>
       <Tabs
         screenOptions={{
           headerStyle: { backgroundColor: theme.surface },
@@ -57,6 +59,7 @@ export default function AppLayout() {
         />
         <Tabs.Screen name="more" options={{ title: "More", tabBarIcon: ({ color, size }) => <Menu color={color} size={size} /> }} />
       </Tabs>
+      </RealtimeProvider>
     </SWRConfig>
   );
 }
