@@ -2,7 +2,7 @@ import type { components } from "@iodriven/shared/api";
 import { DEVICE_STATUS, deviceStatusKey, type DeviceStatusKey } from "@iodriven/shared/device-status";
 import { statusCounts, visibleDevices, type StatusFilter as Filter } from "@/devices/list";
 import { timeAgo } from "@iodriven/shared/time-ago";
-import { Stack, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
@@ -28,7 +28,13 @@ export default function Devices() {
   const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
+  // ?status=offline from the attention strip opens the list filtered, also
+  // when the tab is already open; a status picked here wins until the next link.
+  const { status } = useLocalSearchParams<{ status?: string }>();
+  const fromLink: Filter = status === "online" || status === "offline" || status === "never" || status === "disabled" ? status : "all";
+  const [picked, setPicked] = useState<{ link: string | undefined; value: Filter } | null>(null);
+  const filter = picked && picked.link === status ? picked.value : fromLink;
+  const setFilter = (value: Filter) => setPicked({ link: status, value });
   const [refreshing, setRefreshing] = useState(false);
 
   const templateName = useMemo(() => new Map((templates ?? []).map((t) => [t.id, t.name])), [templates]);

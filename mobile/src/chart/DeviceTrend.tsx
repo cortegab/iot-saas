@@ -19,10 +19,22 @@ const RESOLUTION_NOTE = { raw: null, "1m": "1-minute averages", "1h": "1-hour av
  * the API at the range's resolution (raw, then the 1-minute and 1-hour
  * rollups), live readings appended on the raw ranges, and the window sliding
  * with the clock. */
-export function DeviceTrend({ deviceId, metricKey, meta }: { deviceId: string; metricKey: string; meta: CatalogMetric | undefined }) {
+export function DeviceTrend({
+  deviceId,
+  metricKey,
+  meta,
+  rangeMs: fixedRange,
+}: {
+  deviceId: string;
+  metricKey: string;
+  meta: CatalogMetric | undefined;
+  /** A range set by the page (a dashboard's one range); hides the picker. */
+  rangeMs?: number;
+}) {
   const api = useApi();
   const { subscribe } = useRealtime();
-  const [rangeMs, setRangeMs] = useState(DEFAULT_RANGE_MS);
+  const [ownRange, setRangeMs] = useState(DEFAULT_RANGE_MS);
+  const rangeMs = fixedRange ?? ownRange;
   const resolution = resolutionFor(rangeMs);
   const [now, setNow] = useState(() => Date.now());
   // Live readings, tagged with the series they belong to, so a metric or
@@ -72,12 +84,14 @@ export function DeviceTrend({ deviceId, metricKey, meta }: { deviceId: string; m
 
   return (
     <View style={styles.box}>
-      <Segmented
-        accessibilityLabel="Time range"
-        options={RANGE_OPTIONS.map((o) => ({ value: String(o.ms), label: o.label }))}
-        value={String(rangeMs)}
-        onChange={(v) => setRangeMs(Number(v))}
-      />
+      {fixedRange == null && (
+        <Segmented
+          accessibilityLabel="Time range"
+          options={RANGE_OPTIONS.map((o) => ({ value: String(o.ms), label: o.label }))}
+          value={String(rangeMs)}
+          onChange={(v) => setRangeMs(Number(v))}
+        />
+      )}
       {error && !data ? (
         <Text size="meta" color="statusError">
           Couldn&apos;t load the history. It retries on its own.
