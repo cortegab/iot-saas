@@ -911,6 +911,10 @@ restyled.
   resetting a latch. Creating and editing records (templates, wiring, rules, dashboard layouts,
   members, keys, settings) stays on the web; the app links there with **Open on the web**.
 - **Wording:** §11 applies unchanged.
+- **Device screen:** the web's Overview on a phone. The status sits on its own line, then template ·
+  zone · last message. Each reading card shows the name with Live / Stale at the top right, the
+  value, then when it arrived. The Trend card picks its reading with the web's **metric chips**;
+  tapping a reading card picks it too. Charts follow §5, including the shorter on/off chart.
 
 ## 16. Reference and changelog
 
@@ -1006,3 +1010,4 @@ restyled.
 | 2026-11-03 | §4, §8 (user decisions): the rail and sidebar nav scroll without a visible scrollbar, with an edge fade, so a scrollbar never pushes the rail's icons off centre on short laptop screens. The dashboard's *Add widget* tile is removed (superseding 2026-10-28's first-row tile): it took a fixed place in the grid, even while viewing. Adding stays in Edit layout's header and the empty state. |
 | 2026-11-03 | §5 Switch, §8 Controls: an on/off actuator is a Switch (was an On / Off segmented control); a number or text actuator is a value box with Set, ranged by its wiring (it used to fall back to On / Off and send true/false); a fixed list stays segmented. The value already requested is never sent again from the control; Retry is the only resend. |
 | 2026-11-04 | §15 Mobile app (new; Reference and changelog becomes §16): the app follows this document with the same tokens (mirrored in `mobile/src/theme/tokens.ts`, checked against `globals.css` by a test), the web's phone shape (bottom tabs, sheets, Line rows), 44 px targets, and a split of what lives in the app (field work) vs the web (creating and editing records). |
+| 2026-11-05 | §15 device screen, from the user's review of the app beside the web: the status on its own line, reading cards laid out like the web's Overview (freshness top right, time under the value), and metric chips in the Trend card (picking a reading used to be possible only by tapping its card, with nothing saying so). |
