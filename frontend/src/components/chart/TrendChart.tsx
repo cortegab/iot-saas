@@ -10,7 +10,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
 import { boolBuckets } from "@/lib/bool-series";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, slideIntervalMs } from "@/lib/chart-range";
+import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, resolutionFor, slideIntervalMs, type Resolution } from "@/lib/chart-range";
 import { decimateMinMax } from "@/lib/chart-decimate";
 import { appendToWindow, liveBuffer, reseed, type Series } from "@/lib/live-buffer";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
@@ -18,17 +18,10 @@ import type { components } from "@/types/api";
 
 type TelemetryDataResponse = components["schemas"]["TelemetryDataResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
-type Resolution = "raw" | "1m" | "1h";
-
 // Every preset here ends at "now", so every fetch is inherently a live-window
 // fetch — polling is always appropriate. A fixed-in-the-past custom range
 // (not built in this pass) would need refreshInterval disabled instead
 // (UX_UI_Description.md §4: don't re-fetch a historical range that can't change).
-function resolutionFor(rangeMs: number): Resolution {
-  if (rangeMs <= HOUR) return "raw";
-  if (rangeMs <= 24 * HOUR) return "1m";
-  return "1h";
-}
 
 const RESOLUTION_LABEL: Record<Resolution, string | null> = {
   raw: null,

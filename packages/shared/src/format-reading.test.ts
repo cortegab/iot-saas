@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatReading, isBoolMetric } from "@/lib/format-reading";
+import { formatReading, isBoolMetric } from "./format-reading";
 
 describe("formatReading", () => {
   it("shows an on/off metric as On / Off, whatever its decimals", () => {
