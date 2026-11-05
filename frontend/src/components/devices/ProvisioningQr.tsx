@@ -9,7 +9,7 @@ import { provisioningPayload, provName } from "@/lib/firmware-sketch";
 import { downloadSvg, fileBase, labelSvg, printSvg, qrPath } from "@/lib/qr-svg";
 
 /**
- * The QR the ESP BLE Provisioning app scans (docs/ble-provisioning.md). Built
+ * The Wi-Fi setup QR the iodriven app and ESP BLE Provisioning scan (docs/ble-provisioning.md). Built
  * from the device's own credential: `name` is the BLE-safe device name (the
  * sketch's PROV_NAME), `pop` the MQTT password, plus `username` (the MQTT
  * username) for Security 2. A new credential means a new QR.
@@ -29,7 +29,7 @@ export function ProvisioningQr({
   const name = provName(deviceName);
   const payload = provisioningPayload({ name, username, password, security });
   const qr = useMemo(() => qrPath(payload), [payload]);
-  const label = () => labelSvg(name, `ESP BLE Provisioning · Security ${security}`, qr);
+  const label = () => labelSvg(name, `Wi-Fi setup · Security ${security}`, qr);
 
   function downloadLabel() {
     downloadSvg(label(), `${fileBase(name)}-provisioning.svg`);
