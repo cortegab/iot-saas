@@ -33,3 +33,8 @@ export function signInError(err: unknown): string {
   }
   return "Can't reach iodriven. Check your connection and try again.";
 }
+
+/** Only an in-app path may be a `?next=` target (as on the web). */
+export function safeNext(next: string | undefined): string | null {
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : null;
+}

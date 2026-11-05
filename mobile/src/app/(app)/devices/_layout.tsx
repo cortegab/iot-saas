@@ -2,6 +2,10 @@ import { Stack } from "expo-router";
 import { font, text } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
 
+// A link straight to an item (a label QR, a notification) keeps the list
+// behind it, so Back goes to the list.
+export const unstable_settings = { initialRouteName: "index" };
+
 /** Devices: the list, then each item's screen, in one stack under its tab. */
 export default function DevicesLayout() {
   const theme = useTheme();

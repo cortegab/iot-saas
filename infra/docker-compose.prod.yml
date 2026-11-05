@@ -171,6 +171,9 @@ services:
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     restart: always
+    environment:
+      # Android App Links for device labels (/.well-known/assetlinks.json).
+      ANDROID_APP_CERT_SHA256: ${ANDROID_APP_CERT_SHA256:-}
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
