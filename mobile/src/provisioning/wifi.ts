@@ -48,7 +48,7 @@ export function explainFailure(step: Step, error: unknown): { title: string; det
     return {
       title: "The board isn't nearby or isn't waiting for Wi-Fi",
       detail:
-        "Keep the phone within a few metres and turn Bluetooth on. If the board already has Wi-Fi, hold its reset button (GPIO 19 on an ESP32, BOOT on a C3) for 5 seconds while it runs, then try again.",
+        "Keep the phone within a few metres and turn Bluetooth on. If the board already has Wi-Fi, hold its BOOT button (or, with a generated sketch on an ESP32, the button on GPIO 19) for 5 seconds while it runs, then try again.",
     };
   }
   if (step === "connect") {
