@@ -911,6 +911,10 @@ restyled.
   resetting a latch. Creating and editing records (templates, wiring, rules, dashboard layouts,
   members, keys, settings) stays on the web; the app links there with **Open on the web**.
 - **Wording:** §11 applies unchanged.
+- **Device screen:** the web's Overview on a phone. The status sits on its own line, then template ·
+  zone · last message. Each reading card shows the name with Live / Stale at the top right, the
+  value, then when it arrived. The Trend card picks its reading with the web's **metric chips**;
+  tapping a reading card picks it too. Charts follow §5, including the shorter on/off chart.
 
 ## 16. Reference and changelog
 
@@ -1007,3 +1011,4 @@ restyled.
 | 2026-11-03 | §5 Switch, §8 Controls: an on/off actuator is a Switch (was an On / Off segmented control); a number or text actuator is a value box with Set, ranged by its wiring (it used to fall back to On / Off and send true/false); a fixed list stays segmented. The value already requested is never sent again from the control; Retry is the only resend. |
 | 2026-11-04 | §15 Mobile app (new; Reference and changelog becomes §16): the app follows this document with the same tokens (mirrored in `mobile/src/theme/tokens.ts`, checked against `globals.css` by a test), the web's phone shape (bottom tabs, sheets, Line rows), 44 px targets, and a split of what lives in the app (field work) vs the web (creating and editing records). |
 | 2026-11-05 | §5 Trend chart, §8 dashboards, from the user's review of the mobile app beside the web: an on/off chart is 140 px tall (a number keeps 260); on phones the chart drops its inner frame; viewing a dashboard on a phone stacks the widgets at their content height instead of their grid height (the desktop grid is unchanged). |
+| 2026-11-05 | §15 device screen, from the user's review of the app beside the web: the status on its own line, reading cards laid out like the web's Overview (freshness top right, time under the value), and metric chips in the Trend card (picking a reading used to be possible only by tapping its card, with nothing saying so). |

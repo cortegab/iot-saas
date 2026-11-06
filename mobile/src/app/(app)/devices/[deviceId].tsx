@@ -15,6 +15,7 @@ import { webUrl } from "@/lib/config";
 import { radius } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
 import { Lines, Row } from "@/ui/Row";
+import { Chips } from "@/ui/Chips";
 import { StatusDot } from "@/ui/StatusDot";
 import { Text } from "@/ui/Text";
 
@@ -87,13 +88,16 @@ export default function DeviceScreen() {
     >
       <Stack.Screen options={{ title: device.name }} />
 
-      <View style={styles.status}>
-        <StatusDot tone={status.tone} shape={status.shape} />
-        <Text size="meta" weight="medium" color={status.tone === "online" ? "statusOnline" : status.tone === "offline" ? "statusOffline" : "inkMuted"}>
-          {status.label}
-        </Text>
-        <Text size="meta" color="inkMuted" style={styles.flex} numberOfLines={2}>
-          {[template?.name, zone ?? "No zone", key === "never" ? null : `last message ${timeAgo(device.last_seen_at)}`].filter(Boolean).join(" · ")}
+      {/* The web's header: the state on its own line, then what and where. */}
+      <View style={styles.statusBlock}>
+        <View style={styles.status}>
+          <StatusDot tone={status.tone} shape={status.shape} />
+          <Text size="meta" weight="medium" color={status.tone === "online" ? "statusOnline" : status.tone === "offline" ? "statusOffline" : "inkMuted"}>
+            {status.label}
+          </Text>
+        </View>
+        <Text size="meta" color="inkMuted">
+          {[template?.name, zone ?? "No zone", `last message ${key === "never" ? "never" : timeAgo(device.last_seen_at)}`].filter(Boolean).join(" · ")}
         </Text>
       </View>
 
@@ -123,9 +127,16 @@ export default function DeviceScreen() {
                     { backgroundColor: theme.surface, borderColor: isSelected ? theme.accent : theme.border },
                   ]}
                 >
-                  <Text size="meta" color="inkMuted" numberOfLines={1}>
-                    {m.name}
-                  </Text>
+                  {/* As on the web's Overview: name and freshness, the value, then when. */}
+                  <View style={styles.readingHead}>
+                    <Text size="meta" color="inkMuted" numberOfLines={1} style={styles.flex}>
+                      {m.name}
+                    </Text>
+                    <StatusDot tone={fresh.tone} shape={fresh.tone === "online" ? "solid" : "hollow"} size={6} />
+                    <Text size="micro" color={fresh.tone === "online" ? "statusOnline" : "inkMuted"}>
+                      {fresh.label}
+                    </Text>
+                  </View>
                   <View style={styles.value}>
                     <Text size="title" weight="semibold" style={styles.tabular}>
                       {value}
@@ -136,13 +147,9 @@ export default function DeviceScreen() {
                       </Text>
                     ) : null}
                   </View>
-                  <View style={styles.fresh}>
-                    <StatusDot tone={fresh.tone} shape={fresh.tone === "online" ? "solid" : "hollow"} size={6} />
-                    <Text size="micro" color="inkMuted">
-                      {fresh.label}
-                      {reading && fresh.label !== "Live" ? ` · ${timeAgo(reading.time)}` : ""}
-                    </Text>
-                  </View>
+                  <Text size="micro" color="inkMuted">
+                    {reading ? timeAgo(reading.time) : "Nothing received yet"}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -153,9 +160,18 @@ export default function DeviceScreen() {
       {chartKey && (
         <View style={styles.section}>
           <Text size="section" weight="semibold" accessibilityRole="header">
-            Trend · {metrics.find((m) => wireId(m) === chartKey)?.name ?? chartKey}
+            Trend
           </Text>
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            {/* The web's metric chips: pick the reading to chart. */}
+            {metrics.length > 1 && (
+              <Chips
+                accessibilityLabel="Metric"
+                options={metrics.map((m) => ({ value: wireId(m), label: m.name }))}
+                value={chartKey}
+                onChange={setSelected}
+              />
+            )}
             <DeviceTrend deviceId={device.id} metricKey={chartKey} meta={metrics.find((m) => wireId(m) === chartKey)} />
           </View>
         </View>
@@ -181,13 +197,14 @@ export default function DeviceScreen() {
 
 const styles = StyleSheet.create({
   page: { padding: 16, gap: 20 },
+  statusBlock: { gap: 4 },
   status: { flexDirection: "row", alignItems: "center", gap: 8 },
+  readingHead: { flexDirection: "row", alignItems: "center", gap: 6 },
   flex: { flex: 1 },
   section: { gap: 10 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   reading: { flexGrow: 1, flexBasis: "45%", borderWidth: 1, borderRadius: radius.xl, padding: 12, gap: 4 },
   value: { flexDirection: "row", alignItems: "baseline", gap: 4 },
   tabular: { fontVariant: ["tabular-nums"] },
-  fresh: { flexDirection: "row", alignItems: "center", gap: 6 },
-  card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.xl, padding: 12 },
+  card: { borderWidth: StyleSheet.hairlineWidth, borderRadius: radius.xl, padding: 12, gap: 12 },
 });

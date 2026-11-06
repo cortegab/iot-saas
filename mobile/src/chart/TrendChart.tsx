@@ -12,7 +12,9 @@ export interface ChartPoint {
   v: number;
 }
 
+// DESIGN.md §5: an on/off metric needs half the height of a number.
 const HEIGHT = 200;
+const BOOL_HEIGHT = 120;
 const PAD = { top: 12, right: 12, bottom: 22, left: 44 };
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -45,7 +47,8 @@ export function TrendChart({
   const inWindow = points.filter((p) => p.t >= from && p.t <= to).sort((a, b) => a.t - b.t);
 
   const plotW = Math.max(0, width - PAD.left - PAD.right);
-  const plotH = HEIGHT - PAD.top - PAD.bottom;
+  const height = isBool ? BOOL_HEIGHT : HEIGHT;
+  const plotH = height - PAD.top - PAD.bottom;
 
   let lo = isBool ? 0 : Math.min(...inWindow.map((p) => p.v));
   let hi = isBool ? 1 : Math.max(...inWindow.map((p) => p.v));
@@ -81,9 +84,9 @@ export function TrendChart({
   const labelStyle = { fontFamily: font.regular, fontSize: text.micro.fontSize };
 
   return (
-    <View accessible accessibilityLabel={accessibilityLabel} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={styles.box}>
+    <View accessible accessibilityLabel={accessibilityLabel} onLayout={(e) => setWidth(e.nativeEvent.layout.width)} style={{ height }}>
       {width > 0 && (
-        <Svg width={width} height={HEIGHT}>
+        <Svg width={width} height={height}>
           <Defs>
             <LinearGradient id="fill" x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0" stopColor={theme.chart} stopOpacity={0.18} />
@@ -98,10 +101,10 @@ export function TrendChart({
               {isBool ? (v ? "On" : "Off") : format(v)}
             </SvgText>
           ))}
-          <SvgText x={PAD.left} y={HEIGHT - 6} fill={theme.inkMuted} textAnchor="start" {...labelStyle}>
+          <SvgText x={PAD.left} y={height - 6} fill={theme.inkMuted} textAnchor="start" {...labelStyle}>
             {timeLabel(from, to - from)}
           </SvgText>
-          <SvgText x={PAD.left + plotW} y={HEIGHT - 6} fill={theme.inkMuted} textAnchor="end" {...labelStyle}>
+          <SvgText x={PAD.left + plotW} y={height - 6} fill={theme.inkMuted} textAnchor="end" {...labelStyle}>
             {timeLabel(to, to - from)}
           </SvgText>
           {area ? <Path d={area} fill="url(#fill)" /> : null}
@@ -121,6 +124,5 @@ export function TrendChart({
 }
 
 const styles = StyleSheet.create({
-  box: { height: HEIGHT },
   empty: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
 });
