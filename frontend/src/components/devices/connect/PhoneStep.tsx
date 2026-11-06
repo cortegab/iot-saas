@@ -19,11 +19,11 @@ export function PhoneStep({ flow, credential }: { flow: ConnectFlow; credential:
       <p className="text-sm text-ink-muted">
         Once the {install ? "firmware" : "sketch"} is running, the board waits for Wi-Fi over Bluetooth as <b className="font-mono text-ink">{name}</b>
         {install ? " (its LED blinks slowly)" : ""}. Give it your network with
-        the iodriven app, or with Espressif&apos;s ESP BLE Provisioning app.
+        the IO Driven app, or with Espressif&apos;s ESP BLE Provisioning app.
       </p>
       <ProvisioningQr deviceName={device.name} username={credential.username} password={credential.password} security={security} />
       <div className="rounded-lg border border-border p-4">
-        <h3 className="mb-2 text-sm font-semibold text-ink">In the iodriven app</h3>
+        <h3 className="mb-2 text-sm font-semibold text-ink">In the IO Driven app</h3>
         <ol className="list-decimal space-y-1 pl-5 text-sm text-ink">
           <li>Open Devices, tap Scan, and scan this QR.</li>
           <li>Pick a 2.4 GHz network and enter its password.</li>

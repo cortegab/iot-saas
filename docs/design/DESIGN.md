@@ -62,6 +62,19 @@ Tokens live in `frontend/src/app/globals.css`, exposed to Tailwind v4 via `@them
 unchanged** from the current file; only the values change. **Never hard-code a colour, radius or
 font in a component.** If you need a value that has no token, add the token here first.
 
+### Brand
+
+- **Name:** **IO Driven**, two words with a capital IO, wherever the product is named in the
+  interface, emails and docs. Only the domain is lowercase (`iodriven.tech`), and technical
+  identifiers (`@iodriven/shared`, `tech.iodriven.app`) stay as they are.
+- **Mark:** `docs/design/io-driven-mark.png`, white I and O with a circling signal on the blue →
+  violet tile. It appears beside the name on the public pages (landing header, sign-in panel), as
+  the browser icon (`frontend/src/app/icon.png`, `apple-icon.png`, `favicon.ico`) and as the app's
+  icon and splash (`mobile/assets/`). In the signed-in shell it is the logo: the workspace
+  switcher (sidebar and icon rail) and the phone top bar show the mark beside the **workspace's**
+  name. Inside the switcher's list each workspace keeps its initial tile, so they stay apart.
+- Never recolour, outline or redraw the mark. Use the files as they are.
+
 ### Theme
 
 - **Light is the default.** It follows `prefers-color-scheme`, and the user can override it with the
@@ -894,7 +907,7 @@ The §13 "Demo H additions" follow as their own backend work.
 
 ## 15. Mobile app
 
-The iodriven app (`mobile/`, Expo / React Native; Android first, iOS from the same code) follows
+The IO Driven app (`mobile/`, Expo / React Native; Android first, iOS from the same code) follows
 this document like the web: the same tokens, wording and patterns, adapted to a phone, never
 restyled.
 
@@ -1026,3 +1039,5 @@ restyled.
 | 2026-11-05 | §15 device screen, from the user's review of the app beside the web: the status on its own line, reading cards laid out like the web's Overview (freshness top right, time under the value), and metric chips in the Trend card (picking a reading used to be possible only by tapping its card, with nothing saying so). |
 | 2026-11-05 | §15 **device label** (mobile plan M5): a secret-free QR of `/d/<id>` in device Settings → Connection → Label (Print label · Download). The web redirects the link to the device page and back to it after sign-in; the app opens it as an App Link. |
 | 2026-11-05 | §15 **Scan and Wi-Fi setup** (mobile plan M6): Scan in the Devices header reads a label (opens the device) or a Wi-Fi setup QR (Set up Wi-Fi: board → network → password → online). The web's Connect phone step names the iodriven app first, ESP BLE Provisioning second. |
+| 2026-11-05 | §3 **Brand** (new): the product is named **IO Driven**, and its mark (`docs/design/io-driven-mark.png`) replaces the gradient square beside the name on the landing header and sign-in panel; it is also the browser icon and the app's icon and splash. The app is named IO Driven on the phone. |
+| 2026-11-05 | §3 Brand, §4 shell: the IO Driven mark replaces the workspace initial tile as the shell's logo (workspace switcher in the sidebar and rail, phone top bar). The switcher's list keeps each workspace's initial tile. |

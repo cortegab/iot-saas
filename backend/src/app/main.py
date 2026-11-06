@@ -28,7 +28,7 @@ from app.zones.router import router as zones_router
 
 configure_logging()
 
-app = FastAPI(title="iot-saas API", version="0.0.1")
+app = FastAPI(title="IO Driven API", version="0.0.1")
 
 # Allowed browser origins come from settings.cors_allow_origins (CORS_ALLOW_ORIGINS
 # env var) — defaults to the local Next.js dev server, set to the real frontend

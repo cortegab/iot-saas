@@ -9,7 +9,7 @@ import { provisioningPayload, provName } from "@/lib/firmware-sketch";
 import { downloadSvg, fileBase, labelSvg, printSvg, qrPath } from "@/lib/qr-svg";
 
 /**
- * The Wi-Fi setup QR the iodriven app and ESP BLE Provisioning scan (docs/ble-provisioning.md). Built
+ * The Wi-Fi setup QR the IO Driven app and ESP BLE Provisioning scan (docs/ble-provisioning.md). Built
  * from the device's own credential: `name` is the BLE-safe device name (the
  * sketch's PROV_NAME), `pop` the MQTT password, plus `username` (the MQTT
  * username) for Security 2. A new credential means a new QR.

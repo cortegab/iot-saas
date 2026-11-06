@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { NetworkCanvas } from "@/components/marketing/NetworkCanvas";
 import { cn } from "@/lib/cn";
+import { BrandMark } from "@/components/brand/BrandMark";
 
 /** The sign-in card (demo G `.auth-card`) used by the account pages: login,
  * register, forgot/reset password, invitation. */
@@ -43,14 +44,14 @@ export function AuthScreen({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-screen lg:grid-cols-[minmax(0,1.15fr)_minmax(440px,1fr)]">
       <section
-        aria-label="About iodriven"
+        aria-label="About IO Driven"
         className="night-bg relative isolate flex flex-col justify-between gap-6 overflow-hidden px-5 pt-6 text-night-ink lg:min-h-screen lg:px-11 lg:py-9"
       >
         <NetworkCanvas className="relative -z-20 -mx-5 h-[140px] w-[calc(100%+40px)] max-lg:order-last lg:absolute lg:inset-0 lg:m-0 lg:h-full lg:w-full" />
         <div aria-hidden className="night-scrim-panel pointer-events-none absolute inset-0 -z-10" />
         <Link href="/" className="relative z-[2] flex w-fit items-center gap-2.5 text-[18px] font-bold tracking-[-0.01em] text-white">
-          <span aria-hidden className="h-[22px] w-[22px] rounded-[6px] bg-[linear-gradient(135deg,#818cf8,#22d3ee)] shadow-[0_0_22px_rgba(129,140,248,0.55)]" />
-          iodriven
+          <BrandMark />
+          IO Driven
         </Link>
         <div className="relative z-[2] mb-auto mt-6 max-w-[31rem] lg:mt-[8vh]">
           <p className="mb-3.5 font-mono text-xs uppercase tracking-[0.14em] text-night-sky">Telemetry · Rules · Control</p>
@@ -102,7 +103,7 @@ export function AuthScreen({ children }: { children: ReactNode }) {
           <Link href="/" className="hover:text-ink">
             iodriven.tech
           </Link>
-          <span>© 2026 iodriven</span>
+          <span>© 2026 IO Driven</span>
         </p>
       </main>
     </div>

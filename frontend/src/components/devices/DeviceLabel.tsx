@@ -6,11 +6,11 @@ import { deviceLink } from "@/lib/device-link";
 import { downloadSvg, fileBase, labelSvg, printSvg, qrPath } from "@/lib/qr-svg";
 
 /** A sticker for the device (docs/ble-provisioning.md, "Device label"): a QR
- * of its link, which the iodriven app opens on the device and a phone's camera
+ * of its link, which the IO Driven app opens on the device and a phone's camera
  * opens on the web. It carries no secret, unlike the provisioning QR. */
 export function DeviceLabel({ device }: { device: { id: string; name: string } }) {
   const toast = useToast();
-  const svg = () => labelSvg(device.name, "Scan to open in iodriven", qrPath(deviceLink(window.location.origin, device.id)));
+  const svg = () => labelSvg(device.name, "Scan to open in IO Driven", qrPath(deviceLink(window.location.origin, device.id)));
 
   return (
     <span className="flex flex-wrap items-center gap-x-2">
