@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { actionsText, conditionText, sharedActuators, triggerText } from "@/lib/rule-text";
-import type { components } from "@/types/api";
+import { actionsText, conditionText, sharedActuators, triggerText } from "./rule-text";
+import type { components } from "./api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 

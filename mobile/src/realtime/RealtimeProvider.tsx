@@ -93,6 +93,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         // A new alert: the list, its pages and the tab badge fetch again.
         void mutate(isNotificationsKey);
         void mutate("/tenants/current/attention");
+      } else if ((m.type === "rule_health" || m.type === "rule_latched") && m.rule_id) {
+        // A rule latched, or its inputs went stale or came back.
+        if (cached("/rules")) void mutate("/rules");
+        void mutate("/tenants/current/attention");
       } else if (m.type === "command_ack" && m.device_id) {
         // No payload worth applying: fetch the device's commands again.
         const key = `/devices/${m.device_id}/commands`;

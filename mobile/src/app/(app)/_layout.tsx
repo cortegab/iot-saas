@@ -1,5 +1,5 @@
 import { Redirect, Tabs } from "expo-router";
-import { Bell, Cpu, LayoutDashboard, Menu } from "lucide-react-native";
+import { Bell, Cpu, LayoutDashboard, ListChecks, Menu } from "lucide-react-native";
 import { AppState } from "react-native";
 import { SWRConfig } from "swr";
 import { useAuth } from "@/auth/AuthProvider";
@@ -26,7 +26,7 @@ const swrConfig = {
 };
 
 /** The signed-in app: its tabs (the web's phone tab bar, DESIGN.md §4 / §15).
- * Rules join in M9; a tab is never a dead link. */
+ * Dashboards · Devices · Alerts · Rules · More, like the web's phone tab bar. */
 export default function AppLayout() {
   const { status, currentTenantId } = useAuth();
   if (status !== "authenticated") return <Redirect href="/sign-in" />;
@@ -78,6 +78,10 @@ function AppTabs() {
             tabBarBadge: unread > 0 ? (unread > 99 ? "99+" : unread) : undefined,
             tabBarBadgeStyle: { backgroundColor: theme.statusError, color: theme.onAccent, fontFamily: font.semibold, fontSize: text.micro.fontSize },
           }}
+        />
+        <Tabs.Screen
+          name="rules"
+          options={{ title: "Rules", headerShown: false, tabBarIcon: ({ color, size }) => <ListChecks color={color} size={size} /> }}
         />
         <Tabs.Screen name="more" options={{ title: "More", tabBarIcon: ({ color, size }) => <Menu color={color} size={size} /> }} />
       </Tabs>

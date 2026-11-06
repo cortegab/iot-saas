@@ -915,7 +915,7 @@ restyled.
   scale, radii and Geist come from §3. `mobile/src/theme/tokens.ts` mirrors them, and a test fails
   when a colour drifts from `frontend/src/app/globals.css`. Change the web's token first.
 - **Shape:** the web's phone layout (§4, §12) is the model. That means a bottom tab bar
-  (Dashboards · Devices · Alerts · More), sheets for one item's detail or one action, and list rows
+  (Dashboards · Devices · Alerts · Rules · More), sheets for one item's detail or one action, and list rows
   as Line rows (§5).
 - **Touch:** every target is at least 44 px (§12). Controls are the web's components in native
   form (Switch, segmented control, value with Set), with the same confirms and states.
@@ -955,6 +955,13 @@ restyled.
   unread. Tapping a row marks it read and opens a sheet with the details and **Open device**,
   **Mark as unread** and **Dismiss**; Dismiss shows an Undo bar for six seconds. A failed delivery is
   read-only here; Retry stays on the web.
+- **Rules:** a tab with the web's rules list on a phone: sorted by name, the state filter (All ·
+  Armed · Latched · Can't evaluate · Disabled, with counts), and per rule its state dot and word,
+  "When {trigger} → {action}" in the web's words, then "fired N× in 24 h" or its schedule and
+  "can't evaluate". Admins have the rule's **Switch** on the row (On / Off, with Undo). A row opens a
+  sheet with the sentence, the Switch, its inputs (each with its last value and freshness,
+  opening the device) and **Reset latch** (confirmed) when latched; **Edit on the web** for
+  everything else. The attention strip's rule items open this list filtered.
 
 ## 16. Reference and changelog
 
@@ -1058,3 +1065,4 @@ restyled.
 | 2026-11-05 | §3 Brand, §4 shell: the IO Driven mark replaces the workspace initial tile as the shell's logo (workspace switcher in the sidebar and rail, phone top bar). The switcher's list keeps each workspace's initial tile. |
 | 2026-11-05 | §15 **Controls** (mobile plan M7): the device screen's Controls card and the dashboard actuator widget send commands like the web's §8 rows (Switch / segments / value + Set, confirm first, Retry the only resend, offline said once); viewers see the rows without controls. |
 | 2026-11-05 | §15 **Alerts** (mobile plan M8): Alerts tab with the unread badge, the web's grouped rows and state filter, paging as you scroll, a details sheet (Open device · Mark as unread · Dismiss with Undo), Mark all read in the header; failed deliveries read-only. |
+| 2026-11-05 | §15 **Rules** (mobile plan M9): a Rules tab (the tab bar is now Dashboards · Devices · Alerts · Rules · More, as on the web's phone layout) with the state filter, the rule sentence, 24 h activity, the on/off Switch with Undo, and a sheet with inputs and Reset latch; editing stays on the web. |
