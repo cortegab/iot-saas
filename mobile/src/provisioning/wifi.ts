@@ -31,8 +31,8 @@ export function explainFailure(step: Step, error: unknown): { title: string; det
   const message = error instanceof Error ? error.message : String(error);
   if (step === "permission" || /permission/i.test(message)) {
     return {
-      title: "iodriven needs Bluetooth access",
-      detail: "Allow Nearby devices (or Location on older Android) for iodriven in the phone's Settings, then try again.",
+      title: "IO Driven needs Bluetooth access",
+      detail: "Allow Nearby devices (or Location on older Android) for IO Driven in the phone's Settings, then try again.",
     };
   }
   if (/AUTH_FAILED|auth/i.test(message)) {

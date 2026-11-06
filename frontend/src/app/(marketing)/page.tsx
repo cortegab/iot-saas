@@ -10,6 +10,7 @@ import { ProductTour } from "@/components/marketing/ProductTour";
 import { Steps } from "@/components/marketing/Steps";
 import { nightButtonClassName } from "@/components/marketing/night";
 import { cn } from "@/lib/cn";
+import { BrandMark } from "@/components/brand/BrandMark";
 
 /* iodriven.tech landing (DESIGN.md §10, demo G): a night nav and hero over
  * the network · product tour · how it works (with the control-loop log) ·
@@ -117,8 +118,8 @@ export default function LandingPage() {
       <header className="sticky top-0 z-40 border-b border-[rgba(148,163,184,0.14)] bg-[rgba(9,13,27,0.82)] backdrop-blur-md">
         <div className={cn(INNER, "flex h-[62px] items-center gap-5")}>
           <Link href="/" className="flex items-center gap-2.5 text-[18px] font-bold tracking-[-0.01em] text-white">
-            <span aria-hidden className="h-[22px] w-[22px] rounded-[6px] bg-[linear-gradient(135deg,#818cf8,#22d3ee)] shadow-[0_0_22px_rgba(129,140,248,0.55)]" />
-            iodriven<span className="font-medium text-night-sky">.tech</span>
+            <BrandMark />
+            IO Driven
           </Link>
           <nav aria-label="Page sections" className="ml-3 hidden items-center gap-0.5 lg:flex">
             {NAV.map(([id, label]) => (
@@ -152,7 +153,7 @@ export default function LandingPage() {
                 <span className="text-[#93a4bd]">Your actuators move.</span>
               </h1>
               <p className="mkt-fade mkt-fade-3 mt-5 max-w-[52ch] text-[17px] leading-[1.6] text-night-muted">
-                iodriven takes telemetry over MQTT, checks every rule <b className="font-semibold text-white">in memory, the moment a reading arrives</b>, and sends the
+                IO Driven takes telemetry over MQTT, checks every rule <b className="font-semibold text-white">in memory, the moment a reading arrives</b>, and sends the
                 response: an actuator command, an email, a notification or a webhook. Well inside two seconds.
               </p>
               <div className="mkt-fade mkt-fade-3 mt-7 flex flex-wrap gap-2.5">
@@ -349,7 +350,7 @@ export default function LandingPage() {
             iodriven.tech
           </span>
           <span>MQTT/TLS · FastAPI · TimescaleDB · EMQX · Docker Compose</span>
-          <span>© 2026 iodriven</span>
+          <span>© 2026 IO Driven</span>
         </div>
       </footer>
     </>

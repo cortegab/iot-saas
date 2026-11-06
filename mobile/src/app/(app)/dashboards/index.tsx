@@ -43,7 +43,7 @@ export default function Dashboards() {
       ) : list.length === 0 ? (
         <View style={styles.empty}>
           <Text weight="medium">No dashboards yet</Text>
-          <Text color="inkMuted">Make one on the web: More → Open iodriven on the web.</Text>
+          <Text color="inkMuted">Make one on the web: More → Open IO Driven on the web.</Text>
         </View>
       ) : (
         <Lines>

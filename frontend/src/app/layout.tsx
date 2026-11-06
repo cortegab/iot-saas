@@ -35,7 +35,7 @@ const GeistMono = localFont({
 const THEME_INIT = `(function(){try{var t=localStorage.getItem('iot-saas:theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;document.documentElement.classList.toggle('dark',d);}catch(e){}})();`;
 
 export const metadata = {
-  title: "iodriven",
+  title: "IO Driven",
   description: "IoT telemetry, rules, and actuator control",
 };
 

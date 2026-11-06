@@ -1,5 +1,5 @@
 /** Android App Links (docs/ble-provisioning.md, "Device label"): lets the
- * iodriven app open `/d/<id>` links itself. ANDROID_APP_CERT_SHA256 lists the
+ * IO Driven app open `/d/<id>` links itself. ANDROID_APP_CERT_SHA256 lists the
  * signing certificates' SHA-256 fingerprints, comma-separated (the Play app
  * signing key and, for sideloaded builds, the upload key). Unset, the list is
  * empty and links open in the browser. */

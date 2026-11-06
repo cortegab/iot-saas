@@ -31,7 +31,7 @@ export function signInError(err: unknown): string {
   if (err instanceof ApiRequestError) {
     return err.status === 401 ? "That email and password don't match. Check both and try again." : "Couldn't sign in right now. Try again in a moment.";
   }
-  return "Can't reach iodriven. Check your connection and try again.";
+  return "Can't reach IO Driven. Check your connection and try again.";
 }
 
 /** Only an in-app path may be a `?next=` target (as on the web). */

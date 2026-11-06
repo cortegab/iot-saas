@@ -1,7 +1,7 @@
 import { Redirect, useLocalSearchParams, type Href } from "expo-router";
 import * as Linking from "expo-linking";
 import { useRef, useState } from "react";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
+import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/auth/AuthProvider";
 import { safeNext, signInError } from "@/auth/session";
@@ -46,10 +46,16 @@ export default function SignIn() {
       <KeyboardAvoidingView style={styles.safe} behavior={Platform.OS === "ios" ? "padding" : undefined}>
         <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
           <View style={styles.head}>
+            <View style={styles.brand}>
+              <Image source={require("../../assets/mark.png")} style={styles.mark} accessibilityIgnoresInvertColors />
+              <Text size="section" weight="semibold">
+                IO Driven
+              </Text>
+            </View>
             <Text size="title" weight="semibold" accessibilityRole="header">
               Sign in
             </Text>
-            <Text color="inkMuted">Use your iodriven account.</Text>
+            <Text color="inkMuted">Use your IO Driven account.</Text>
           </View>
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <TextField
@@ -94,6 +100,8 @@ export default function SignIn() {
 }
 
 const styles = StyleSheet.create({
+  brand: { flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 12 },
+  mark: { width: 40, height: 40 },
   safe: { flex: 1 },
   page: { padding: 16, gap: 20, flexGrow: 1, justifyContent: "center" },
   head: { gap: 6 },

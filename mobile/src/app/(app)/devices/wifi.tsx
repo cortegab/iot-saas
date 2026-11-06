@@ -34,7 +34,7 @@ type Phase =
 const ONLINE_WAIT_MS = 90_000;
 
 /** Set up a board's Wi-Fi from its provisioning QR (docs/ble-provisioning.md;
- * the ESP BLE Provisioning app's job, in iodriven): find the board over
+ * the ESP BLE Provisioning app's job, in IO Driven): find the board over
  * Bluetooth, open a secure session with the QR's code, pick a network, send
  * its password, then wait for the device's first message, like the web's
  * live check. */
@@ -313,7 +313,7 @@ function Joined({ ssid, since, device, onDone }: { ssid: string; since: number; 
     return (
       <View style={styles.block}>
         <Text weight="semibold">The board joined {ssid}.</Text>
-        <Text color="inkMuted">It connects to iodriven next. Its device page shows when it&apos;s online.</Text>
+        <Text color="inkMuted">It connects to IO Driven next. Its device page shows when it&apos;s online.</Text>
         <Button label="Done" onPress={onDone} />
       </View>
     );
@@ -337,7 +337,7 @@ function Joined({ ssid, since, device, onDone }: { ssid: string; since: number; 
       {timedOut ? (
         <>
           <Text color="inkMuted">
-            It hasn&apos;t reached iodriven yet. Check that this Wi-Fi has internet access, then restart the board. The device page turns online as soon as it
+            It hasn&apos;t reached IO Driven yet. Check that this Wi-Fi has internet access, then restart the board. The device page turns online as soon as it
             connects.
           </Text>
           <Button label="Open device" onPress={open} />

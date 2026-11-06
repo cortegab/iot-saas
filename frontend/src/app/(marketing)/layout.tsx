@@ -6,7 +6,7 @@ import "./marketing.css";
  * the entrance motion (marketing.css). */
 
 export const metadata = {
-  title: "iodriven — sensors in, decisions in memory, actuators out",
+  title: "IO Driven — sensors in, decisions in memory, actuators out",
   description:
     "An IoT platform for MQTT devices: every rule is checked in memory the moment a reading arrives, and drives actuators, email, notifications or webhooks well inside two seconds. Cloud, dedicated or on-premise.",
 };

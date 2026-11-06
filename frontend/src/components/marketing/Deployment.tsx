@@ -11,7 +11,7 @@ const OPTIONS: { kind: DeploymentKind; name: string; big: string; sub: string; p
     kind: "cloud",
     name: "Cloud",
     big: "Shared",
-    sub: "hosted by iodriven",
+    sub: "hosted by IO Driven",
     points: ["Sign up and connect devices the same day", "Updates, backups and monitoring handled for you", "Every workspace isolated by Postgres row-level security"],
     highlight: true,
   },
@@ -19,7 +19,7 @@ const OPTIONS: { kind: DeploymentKind; name: string; big: string; sub: string; p
     kind: "dedicated",
     name: "Dedicated cloud",
     big: "Single-tenant",
-    sub: "operated by iodriven",
+    sub: "operated by IO Driven",
     points: ["Your own instance: database and MQTT broker not shared with anyone", "Upgrades scheduled with you", "For security reviews and compliance requirements"],
   },
   {
@@ -32,8 +32,8 @@ const OPTIONS: { kind: DeploymentKind; name: string; big: string; sub: string; p
 ];
 
 const COMPARE: [string, string, string, string][] = [
-  ["Operated by", "iodriven", "iodriven", "Your team"],
-  ["Where data lives", "iodriven cloud", "Your own instance in iodriven's cloud", "Your hardware, your network"],
+  ["Operated by", "IO Driven", "IO Driven", "Your team"],
+  ["Where data lives", "IO Driven cloud", "Your own instance in IO Driven's cloud", "Your hardware, your network"],
   ["Isolation", "Row-level security per workspace", "Separate database and broker", "Separate everything"],
   ["Updates", "Continuous", "Scheduled with you", "You apply them"],
   ["Best for", "Getting started, many small sites", "Compliance and security reviews", "Sites that must keep data on-site"],
