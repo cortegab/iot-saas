@@ -70,8 +70,9 @@ font in a component.** If you need a value that has no token, add the token here
 - **Mark:** `docs/design/io-driven-mark.png`, white I and O with a circling signal on the blue →
   violet tile. It appears beside the name on the public pages (landing header, sign-in panel), as
   the browser icon (`frontend/src/app/icon.png`, `apple-icon.png`, `favicon.ico`) and as the app's
-  icon and splash (`mobile/assets/`). Inside the signed-in app the sidebar keeps the
-  **workspace's** logo tile; the product mark doesn't repeat there.
+  icon and splash (`mobile/assets/`). In the signed-in shell it is the logo: the workspace
+  switcher (sidebar and icon rail) and the phone top bar show the mark beside the **workspace's**
+  name. Inside the switcher's list each workspace keeps its initial tile, so they stay apart.
 - Never recolour, outline or redraw the mark. Use the files as they are.
 
 ### Theme
@@ -1039,3 +1040,4 @@ restyled.
 | 2026-11-05 | §15 **device label** (mobile plan M5): a secret-free QR of `/d/<id>` in device Settings → Connection → Label (Print label · Download). The web redirects the link to the device page and back to it after sign-in; the app opens it as an App Link. |
 | 2026-11-05 | §15 **Scan and Wi-Fi setup** (mobile plan M6): Scan in the Devices header reads a label (opens the device) or a Wi-Fi setup QR (Set up Wi-Fi: board → network → password → online). The web's Connect phone step names the iodriven app first, ESP BLE Provisioning second. |
 | 2026-11-05 | §3 **Brand** (new): the product is named **IO Driven**, and its mark (`docs/design/io-driven-mark.png`) replaces the gradient square beside the name on the landing header and sign-in panel; it is also the browser icon and the app's icon and splash. The app is named IO Driven on the phone. |
+| 2026-11-05 | §3 Brand, §4 shell: the IO Driven mark replaces the workspace initial tile as the shell's logo (workspace switcher in the sidebar and rail, phone top bar). The switcher's list keeps each workspace's initial tile. |
