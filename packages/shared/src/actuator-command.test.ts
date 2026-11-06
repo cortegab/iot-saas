@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { commandRange, controlKind, isRequested, parseCommand } from "./actuator-command";
-import type { components } from "@/types/api";
+import type { components } from "./api";
 
 type CatalogActuator = components["schemas"]["CatalogActuator"];
 type HardwareConfig = components["schemas"]["HardwareConfig"];

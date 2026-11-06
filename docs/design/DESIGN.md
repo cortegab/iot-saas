@@ -940,6 +940,13 @@ restyled.
   Hide and **Join**; then "Waiting for {device} to come online" until its first message, and
   **Open device**. Each failure is a red title, the fix in one or two sentences, **Try again** and
   **Cancel**.
+- **Controls:** the device screen has a **Controls** card after Trend, and a dashboard's actuator
+  widget shows the same rows. Each row is the web's (§8): the name, *Requested {value}*, then what
+  happened (Sending… · Waiting for the device… N s · Acknowledged · No response within N s) and who
+  sent it. Admins get a **Switch** for On / Off, segments for a fixed list, or a value with **Set**;
+  **Retry** under a row with no response is the only resend. Every send asks first in a native
+  dialog ("Turn Fan On?"), and an offline device's dialog says the command waits as desired state.
+  Offline, disabled and viewer notes are said once, above the rows.
 
 ## 16. Reference and changelog
 
@@ -1041,3 +1048,4 @@ restyled.
 | 2026-11-05 | §15 **Scan and Wi-Fi setup** (mobile plan M6): Scan in the Devices header reads a label (opens the device) or a Wi-Fi setup QR (Set up Wi-Fi: board → network → password → online). The web's Connect phone step names the iodriven app first, ESP BLE Provisioning second. |
 | 2026-11-05 | §3 **Brand** (new): the product is named **IO Driven**, and its mark (`docs/design/io-driven-mark.png`) replaces the gradient square beside the name on the landing header and sign-in panel; it is also the browser icon and the app's icon and splash. The app is named IO Driven on the phone. |
 | 2026-11-05 | §3 Brand, §4 shell: the IO Driven mark replaces the workspace initial tile as the shell's logo (workspace switcher in the sidebar and rail, phone top bar). The switcher's list keeps each workspace's initial tile. |
+| 2026-11-05 | §15 **Controls** (mobile plan M7): the device screen's Controls card and the dashboard actuator widget send commands like the web's §8 rows (Switch / segments / value + Set, confirm first, Retry the only resend, offline said once); viewers see the rows without controls. |
