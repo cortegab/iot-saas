@@ -13,6 +13,17 @@ const config: ExpoConfig = {
   android: {
     package: "tech.iodriven.app",
     predictiveBackGestureEnabled: false,
+    // Device labels (docs/ble-provisioning.md): https://iodriven.tech/d/<id>
+    // opens here once the site's assetlinks.json lists the signing key
+    // (ANDROID_APP_CERT_SHA256); until then Android asks, or opens the browser.
+    intentFilters: [
+      {
+        action: "VIEW",
+        autoVerify: true,
+        data: [{ scheme: "https", host: "iodriven.tech", pathPrefix: "/d/" }],
+        category: ["BROWSABLE", "DEFAULT"],
+      },
+    ],
   },
   ios: {
     bundleIdentifier: "tech.iodriven.app",
