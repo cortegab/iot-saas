@@ -947,6 +947,14 @@ restyled.
   **Retry** under a row with no response is the only resend. Every send asks first in a native
   dialog ("Turn Fan On?"), and an offline device's dialog says the command waits as desired state.
   Offline, disabled and viewer notes are said once, above the rows.
+- **Alerts:** a tab with the unread count as its badge. The web's list on a phone: one row per
+  alert with repeats grouped (×N), unread as the accent bar on the left edge and a bold title, the
+  severity icon (a failed delivery shows the mail icon), then the detail and "since …, last … ·
+  device · rule". The web's state filter as a segmented control (All · Unread · each type with
+  unread alerts). Pages load as you scroll. **Mark all read** sits in the header while anything is
+  unread. Tapping a row marks it read and opens a sheet with the details and **Open device**,
+  **Mark as unread** and **Dismiss**; Dismiss shows an Undo bar for six seconds. A failed delivery is
+  read-only here; Retry stays on the web.
 
 ## 16. Reference and changelog
 
@@ -1049,3 +1057,4 @@ restyled.
 | 2026-11-05 | §3 **Brand** (new): the product is named **IO Driven**, and its mark (`docs/design/io-driven-mark.png`) replaces the gradient square beside the name on the landing header and sign-in panel; it is also the browser icon and the app's icon and splash. The app is named IO Driven on the phone. |
 | 2026-11-05 | §3 Brand, §4 shell: the IO Driven mark replaces the workspace initial tile as the shell's logo (workspace switcher in the sidebar and rail, phone top bar). The switcher's list keeps each workspace's initial tile. |
 | 2026-11-05 | §15 **Controls** (mobile plan M7): the device screen's Controls card and the dashboard actuator widget send commands like the web's §8 rows (Switch / segments / value + Set, confirm first, Retry the only resend, offline said once); viewers see the rows without controls. |
+| 2026-11-05 | §15 **Alerts** (mobile plan M8): Alerts tab with the unread badge, the web's grouped rows and state filter, paging as you scroll, a details sheet (Open device · Mark as unread · Dismiss with Undo), Mark all read in the header; failed deliveries read-only. |
