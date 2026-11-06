@@ -3,8 +3,8 @@
 Expo + React Native + TypeScript, built for Android first; iOS builds from the same code later.
 Design rules: `docs/design/DESIGN.md` §15. Shared API types and helpers: `packages/shared`.
 
-**Status:** Phase 0 (scaffold). The one screen checks that the build reaches its API. Sign-in,
-devices and dashboards come in Phase 1.
+**Status:** Phase 1 (0.2.0): sign-in, workspaces, devices with live readings and trends, and
+dashboards. Wi-Fi onboarding and QR come in Phase 2.
 
 Builds run **on this machine** with Gradle; no Expo account is needed. (`eas.json` is kept for the
 option of Expo's cloud builds later, for example for iOS without a Mac.)
