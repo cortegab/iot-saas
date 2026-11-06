@@ -315,7 +315,8 @@ iot-saas/
 │     ├─ billing/            # plan quotas
 │     ├─ realtime/           # WebSocket endpoints, Redis pub/sub
 │     └─ ml/                 # FUTURE — detectors implementing Evaluator
-├─ frontend/                 # Next.js + Tailwind
+├─ package.json, pnpm-workspace.yaml, pnpm-lock.yaml   # pnpm workspace for the TypeScript clients
+├─ frontend/                 # Next.js + Tailwind (workspace package; Docker builds from the repo root)
 │  └─ src/types/api.ts       # GENERATED from OpenAPI — never edit by hand
 ├─ infra/                    # docker-compose.yml, nginx/, emqx/, backups/
 └─ docs/                     # firmware quickstart, API reference
@@ -445,11 +446,17 @@ The hot-path worker, in a second terminal — **the API alone will not process t
 cd backend && uv run python -m app.worker
 ```
 
-Frontend, in a third:
+Frontend, in a third (`frontend/` is a package of the root pnpm workspace: one lockfile at the
+repo root, dependencies installed in the root `node_modules`; `pnpm install` works from either
+folder):
 
 ```bash
 cd frontend && pnpm install && pnpm dev
 ```
+
+If lint fails with "Failed to patch ESLint" after switching to the workspace layout, a leftover
+`frontend/node_modules/.pnpm` from the old single-package install is shadowing the workspace's:
+remove `frontend/node_modules` and run `pnpm install` again.
 
 Regenerate the API client whenever backend schemas change:
 
