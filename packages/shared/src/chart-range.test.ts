@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_RANGE_MS, RANGE_OPTIONS, pinnedWindow, slideIntervalMs } from "@/lib/chart-range";
+import { DEFAULT_RANGE_MS, RANGE_OPTIONS, pinnedWindow, resolutionFor, slideIntervalMs } from "./chart-range";
 
 describe("RANGE_OPTIONS", () => {
   it("starts with 1m and opens on 10m", () => {
@@ -21,5 +21,13 @@ describe("slideIntervalMs", () => {
 describe("pinnedWindow", () => {
   it("spans the whole range in seconds, ending now", () => {
     expect(pinnedWindow(60_000, 1_770_000_000_000)).toEqual([1_769_999_940, 1_770_000_000]);
+  });
+});
+
+describe("resolutionFor", () => {
+  it("reads raw up to an hour, then the 1-minute and 1-hour rollups", () => {
+    expect(resolutionFor(60 * 60 * 1000)).toBe("raw");
+    expect(resolutionFor(6 * 60 * 60 * 1000)).toBe("1m");
+    expect(resolutionFor(7 * 24 * 60 * 60 * 1000)).toBe("1h");
   });
 });

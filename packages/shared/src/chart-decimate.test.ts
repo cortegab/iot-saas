@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decimateMinMax } from "@/lib/chart-decimate";
+import { decimateMinMax } from "./chart-decimate";
 
 describe("decimateMinMax", () => {
   it("leaves a sparse series untouched", () => {
