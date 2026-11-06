@@ -54,7 +54,7 @@ export default function More() {
 
       <Lines label="On the web">
         <Row
-          title="Open iodriven on the web"
+          title="Open IO Driven on the web"
           detail="Rules, templates, wiring, dashboard layouts, members and settings are edited there."
           onPress={() => void Linking.openURL(webUrl())}
           right={<ExternalLink size={18} color={theme.inkMuted} />}
@@ -64,7 +64,7 @@ export default function More() {
       <Button variant="secondary" label="Sign out" onPress={confirmSignOut} />
 
       <Text size="micro" color="inkMuted" style={styles.version}>
-        iodriven {Constants.expoConfig?.version ?? ""} · {apiUrl().replace(/^https?:\/\//, "")}
+        IO Driven {Constants.expoConfig?.version ?? ""} · {apiUrl().replace(/^https?:\/\//, "")}
       </Text>
     </ScrollView>
   );

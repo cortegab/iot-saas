@@ -1,17 +1,26 @@
 import type { ExpoConfig } from "expo/config";
 
-// The iodriven app (Android first; iOS builds from the same code later).
+// The IO Driven app (Android first; iOS builds from the same code later).
 // EXPO_PUBLIC_API_URL is set per build profile in eas.json, or in mobile/.env
 // for a local run (see README.md).
 const config: ExpoConfig = {
-  name: "iodriven",
+  name: "IO Driven",
   slug: "iodriven",
   scheme: "iodriven",
-  version: "0.3.0",
+  version: "0.3.1",
   orientation: "portrait",
+  // The IO Driven mark (docs/design/io-driven-mark.png): full-bleed for iOS
+  // and older Android, adaptive layers (and a monochrome one for themed icons)
+  // for Android 8+.
+  icon: "./assets/icon.png",
   userInterfaceStyle: "automatic",
   android: {
     package: "tech.iodriven.app",
+    adaptiveIcon: {
+      foregroundImage: "./assets/adaptive-foreground.png",
+      backgroundImage: "./assets/adaptive-background.png",
+      monochromeImage: "./assets/adaptive-monochrome.png",
+    },
     predictiveBackGestureEnabled: false,
     // Device labels (docs/ble-provisioning.md): https://iodriven.tech/d/<id>
     // opens here once the site's assetlinks.json lists the signing key
@@ -32,11 +41,16 @@ const config: ExpoConfig = {
   plugins: [
     "expo-router",
     "expo-font",
+    // The mark on the canvas colour, light or dark (DESIGN.md §3).
+    [
+      "expo-splash-screen",
+      { image: "./assets/splash-icon.png", imageWidth: 120, backgroundColor: "#f7f7f8", dark: { backgroundColor: "#0f1014" } },
+    ],
     // The scanner reads device labels and Wi-Fi setup QRs; no audio, no photos.
     [
       "expo-camera",
       {
-        cameraPermission: "iodriven uses the camera to read a device's label or its Wi-Fi setup QR.",
+        cameraPermission: "IO Driven uses the camera to read a device's label or its Wi-Fi setup QR.",
         microphonePermission: false,
         recordAudioAndroid: false,
       },
@@ -48,7 +62,7 @@ const config: ExpoConfig = {
       {
         transport: "ble",
         neverForLocation: true,
-        bluetoothAlwaysPermission: "iodriven uses Bluetooth to set up a board's Wi-Fi.",
+        bluetoothAlwaysPermission: "IO Driven uses Bluetooth to set up a board's Wi-Fi.",
         locationWhenInUsePermission: false,
         localNetworkPermission: false,
       },

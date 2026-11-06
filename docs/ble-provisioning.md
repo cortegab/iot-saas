@@ -7,7 +7,7 @@ already-flashed boards in mind.
 
 Provisioning is **Espressif's unified provisioning** (protocomm over BLE), driven on the board by
 the Arduino core's `WiFiProv` library (ESP32 board package 3.x, `NETWORK_PROV_*` API). Any client
-that speaks it works: the **iodriven app** (Devices → Scan; it embeds Espressif's provisioning
+that speaks it works: the **IO Driven app** (Devices → Scan; it embeds Espressif's provisioning
 libraries), the **ESP BLE Provisioning** app (Android / iOS) and Espressif's `esp_prov.py`.
 
 The **generic firmware** (`firmware/`, installed from the dashboard) speaks the same protocol
@@ -50,7 +50,7 @@ Provisioning reuses the device's **own MQTT credential**. No separate secret exi
 - A device renamed after flashing keeps advertising the name it was flashed with; the QR generated
   with that sketch carries the same name.
 
-## The iodriven app
+## The IO Driven app
 
 The app (`mobile/`) provisions with Espressif's own Android library (`esp-idf-provisioning-android`,
 through `@orbital-systems/react-native-esp-idf-provisioning`), so the protocol and the QR are
@@ -80,7 +80,7 @@ Connection → Label prints or downloads it.
   It names the device and holds no password, so it can stay stuck on the enclosure.
 - **The web** redirects `/d/<id>` to the device page, after sign-in if needed. A phone camera
   without the app lands there.
-- **The iodriven app** opens the same link itself (an Android App Link). Android verifies it
+- **The IO Driven app** opens the same link itself (an Android App Link). Android verifies it
   against `/.well-known/assetlinks.json`, which lists the fingerprints in
   `ANDROID_APP_CERT_SHA256` (`infra/.env.example`). Until they are set, Android opens the link in
   the browser. The app's own scanner reads both QR kinds either way.

@@ -59,7 +59,7 @@ export default function Devices() {
   ) : error && !devices ? (
     <Text color="statusError">Couldn&apos;t load devices. Pull down to try again.</Text>
   ) : (devices?.length ?? 0) === 0 ? (
-    <Text color="inkMuted">No devices yet. Add one on the web: More → Open iodriven on the web.</Text>
+    <Text color="inkMuted">No devices yet. Add one on the web: More → Open IO Driven on the web.</Text>
   ) : (
     <Text color="inkMuted">No devices match. Clear the search or pick another status.</Text>
   );

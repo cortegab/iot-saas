@@ -56,13 +56,13 @@ export default function Scan() {
           Scan with the camera
         </Text>
         <Text color="inkMuted">
-          iodriven uses the camera only to read a device&apos;s label or its Wi-Fi setup QR. Nothing is recorded.
+          IO Driven uses the camera only to read a device&apos;s label or its Wi-Fi setup QR. Nothing is recorded.
         </Text>
         {permission.canAskAgain ? (
           <Button label="Allow camera" onPress={() => void requestPermission()} />
         ) : (
           <>
-            <Text color="inkMuted">Camera access is off for iodriven. Turn it on in the phone&apos;s Settings.</Text>
+            <Text color="inkMuted">Camera access is off for IO Driven. Turn it on in the phone&apos;s Settings.</Text>
             <Button label="Open Settings" onPress={() => void Linking.openSettings()} />
           </>
         )}
@@ -80,7 +80,7 @@ export default function Scan() {
       <SafeAreaView edges={["bottom"]} style={styles.bottom} pointerEvents="none">
         <View style={[styles.note, { backgroundColor: theme.surface }]}>
           {unknown ? (
-            <Text weight="medium">This QR isn&apos;t an iodriven label or a Wi-Fi setup QR.</Text>
+            <Text weight="medium">This QR isn&apos;t an IO Driven label or a Wi-Fi setup QR.</Text>
           ) : (
             <Text weight="medium">Point at a device&apos;s label or its Wi-Fi setup QR</Text>
           )}
