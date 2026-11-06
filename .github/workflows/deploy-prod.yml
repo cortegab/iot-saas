@@ -77,6 +77,20 @@ jobs:
           path: ~/.platformio
           key: platformio-${{ hashFiles('firmware/platformio.ini') }}
 
+      - name: Pin the ESP32 platform's own PlatformIO
+        if: steps.version.outputs.needed == 'true'
+        # The pioarduino platform builds Arduino in a child `pio run` from its
+        # own venv (~/.platformio/penv), installing pioarduino ">=6.2.0" when
+        # it's missing. Unpinned, a fresh runner gets 6.2.0.post1, which
+        # reports "6.2.0-post.1" and fails the platform's own ">=6.2.0" check
+        # (IncompatiblePlatform) mid-build. The platform only installs what's
+        # missing, so a penv with 6.2.0 already in it is kept as is.
+        run: |
+          pip install uv==0.12.0
+          PENV=~/.platformio/penv
+          [ -x "$PENV/bin/python" ] || uv venv "$PENV" --python python3.12
+          uv pip install --python "$PENV/bin/python" "pioarduino==6.2.0" "uv==0.12.0"
+
       - name: Build the release
         if: steps.version.outputs.needed == 'true'
         run: |
