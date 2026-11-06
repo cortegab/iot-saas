@@ -10,7 +10,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
 import { boolBuckets } from "@/lib/bool-series";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
-import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, slideIntervalMs } from "@/lib/chart-range";
+import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, resolutionFor, slideIntervalMs, type Resolution } from "@/lib/chart-range";
 import { decimateMinMax } from "@/lib/chart-decimate";
 import { appendToWindow, liveBuffer, reseed, type Series } from "@/lib/live-buffer";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
@@ -18,17 +18,10 @@ import type { components } from "@/types/api";
 
 type TelemetryDataResponse = components["schemas"]["TelemetryDataResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
-type Resolution = "raw" | "1m" | "1h";
-
 // Every preset here ends at "now", so every fetch is inherently a live-window
 // fetch — polling is always appropriate. A fixed-in-the-past custom range
 // (not built in this pass) would need refreshInterval disabled instead
 // (UX_UI_Description.md §4: don't re-fetch a historical range that can't change).
-function resolutionFor(rangeMs: number): Resolution {
-  if (rangeMs <= HOUR) return "raw";
-  if (rangeMs <= 24 * HOUR) return "1m";
-  return "1h";
-}
 
 const RESOLUTION_LABEL: Record<Resolution, string | null> = {
   raw: null,
@@ -114,7 +107,7 @@ export function TrendChart({
    * the axis already says what the rule compares against. */
   meta?: CatalogMetric;
   thresholds?: ChartThreshold[];
-  /** Default: a fixed 260px, matching every existing usage. When true, the
+  /** Default: a fixed 260px (140px for an on/off metric). When true, the
    * container fills its parent's height instead (dashboard widgets, where a
    * react-grid-layout cell already provides a real pixel height ancestor)
    * and the chart resizes with it via the ResizeObserver below. */
@@ -129,6 +122,9 @@ export function TrendChart({
   const resolution = resolutionFor(rangeMs);
   const colors = useThemeColors();
   const isBool = isBoolMetric(meta);
+  // An on/off metric has two levels: half the height carries it (DESIGN.md
+  // §5 Trend chart).
+  const plotHeight = isBool ? 140 : 260;
   // Aggregated on/off data: On if any reading in the bucket was On.
   const anyOn = isBool && resolution !== "raw";
 
@@ -283,7 +279,7 @@ export function TrendChart({
 
     const opts: uPlot.Options = {
       width: containerRef.current.clientWidth,
-      height: fillHeight ? containerRef.current.clientHeight || 200 : 260,
+      height: fillHeight ? containerRef.current.clientHeight || 200 : plotHeight,
       padding: [16, 8, 0, 0],
       cursor: { drag: { x: true, y: false } },
       scales: {
@@ -385,13 +381,13 @@ export function TrendChart({
       if (plotRef.current && containerRef.current) {
         plotRef.current.setSize({
           width: containerRef.current.clientWidth,
-          height: fillHeight ? containerRef.current.clientHeight : 260,
+          height: fillHeight ? containerRef.current.clientHeight : plotHeight,
         });
       }
     });
     observer.observe(containerRef.current);
     return () => observer.disconnect();
-  }, [fillHeight]);
+  }, [fillHeight, plotHeight]);
 
   const aggregatedLabel = (isBool ? BOOL_RESOLUTION_LABEL : RESOLUTION_LABEL)[resolution];
 
@@ -416,7 +412,7 @@ export function TrendChart({
         )}
       </div>
 
-      {isLoading && <LoadingSkeleton rows={1} rowClassName="h-[260px]" />}
+      {isLoading && <LoadingSkeleton rows={1} rowClassName={isBool ? "h-[140px]" : "h-[260px]"} />}
 
       {error && (
         <ErrorState
@@ -437,7 +433,9 @@ export function TrendChart({
         className={
           isLoading || error
             ? "hidden"
-            : `relative min-w-0 overflow-hidden rounded-xl border border-border shadow-card bg-surface p-2 ${
+            : // On phones the frame goes: the chart already sits in a card, and
+              // a second border and padding cost width a phone doesn't have.
+              `relative min-w-0 overflow-hidden rounded-xl border border-border shadow-card bg-surface p-2 max-sm:rounded-none max-sm:border-0 max-sm:p-0 max-sm:shadow-none ${
                 fillHeight ? "min-h-0 flex-1" : ""
               }`
         }

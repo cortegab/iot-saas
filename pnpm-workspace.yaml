@@ -1,0 +1,6 @@
+# The TypeScript clients and what they share (CLAUDE.md §6). The backend
+# (Python, uv) and firmware (ESP-IDF) are not pnpm packages.
+packages:
+  - frontend
+  - mobile
+  - packages/*

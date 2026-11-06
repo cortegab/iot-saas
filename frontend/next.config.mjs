@@ -1,10 +1,21 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** The pnpm workspace root (pnpm-workspace.yaml): dependencies are installed
+ * there and shared code lives in packages/, both outside frontend/. */
+const workspaceRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   // Self-contained build (server + only the node_modules it actually needs)
   // for the production Docker image — see frontend/Dockerfile.prod. Has no
-  // effect on `next dev`.
+  // effect on `next dev`. Traced from the workspace root, so the output
+  // mirrors the repo: .next/standalone/frontend/server.js.
   output: "standalone",
+  outputFileTracingRoot: workspaceRoot,
+  // packages/shared ships TypeScript source (no build step).
+  transpilePackages: ["@iodriven/shared"],
   // Dev only: the static-route badge sits bottom-left, over the phone tab bar
   // (DESIGN.md §12: nothing floating covers content), so it's off.
   devIndicators: { appIsrStatus: false },

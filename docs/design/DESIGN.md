@@ -38,7 +38,7 @@ Read it before building or changing any page or component.
   the condition tree, latch, `clear_actions` and "stale = unknown". This file owns only how the
   rule editor presents them.
 
-**Changing a directive:** edit this file first and add a changelog entry (§15), then change the code.
+**Changing a directive:** edit this file first and add a changelog entry (§16), then change the code.
 One-off styles, palettes or component variants are not allowed (CLAUDE.md §9.14).
 
 ---
@@ -61,6 +61,19 @@ One-off styles, palettes or component variants are not allowed (CLAUDE.md §9.14
 Tokens live in `frontend/src/app/globals.css`, exposed to Tailwind v4 via `@theme`. The **names are
 unchanged** from the current file; only the values change. **Never hard-code a colour, radius or
 font in a component.** If you need a value that has no token, add the token here first.
+
+### Brand
+
+- **Name:** **IO Driven**, two words with a capital IO, wherever the product is named in the
+  interface, emails and docs. Only the domain is lowercase (`iodriven.tech`), and technical
+  identifiers (`@iodriven/shared`, `tech.iodriven.app`) stay as they are.
+- **Mark:** `docs/design/io-driven-mark.png`, white I and O with a circling signal on the blue →
+  violet tile. It appears beside the name on the public pages (landing header, sign-in panel), as
+  the browser icon (`frontend/src/app/icon.png`, `apple-icon.png`, `favicon.ico`) and as the app's
+  icon and splash (`mobile/assets/`). In the signed-in shell it is the logo: the workspace
+  switcher (sidebar and icon rail) and the phone top bar show the mark beside the **workspace's**
+  name. Inside the switcher's list each workspace keeps its initial tile, so they stay apart.
+- Never recolour, outline or redraw the mark. Use the files as they are.
 
 ### Theme
 
@@ -227,7 +240,7 @@ gets restyled to the tokens. **NEW** means it has to be created.
 | **KPI strip** | retired | No page uses it: every list, the alerts inbox included, filters by state from the toolbar's status filter (§6). |
 | **Mini strip / sparkline** | NEW | 48-cell 24 h strip (true / unknown-hatched / fired) for rules. Sparkline for readings. Uses `--color-chart`, with accent for fire marks. |
 | Readout / Metric | existing | Live values in Geist, tabular-nums, unit in muted. Stale values dim. A metric is named by its template **name** everywhere (readouts, chart pickers, legends, widget titles), with its wire key only when undeclared. Every surface formats a value the same way (`formatReading`): an on/off metric reads **On / Off** (capitalised, no unit), a number uses the template's decimals. |
-| **Trend chart** | existing | One component for the device page and the dashboard widget. A number is a line with a faint `--color-chart` gradient under it (about 18% at the top, fading to nothing at the bottom of the plot), with dashed rule thresholds. No reading markers on any metric: the line is the reading. An **on/off metric** is a **step line** on an **Off / On** axis with a light wash under On, and has no threshold line. Once aggregated it stays on Off / On: a minute or hour shows On if the metric was On at any point in it. The state is carried forward only from a bucket that held one state, otherwise the line breaks until the next reading. Never ramps, never a "% of readings". Gauges take numbers only. Ranges **1m · 10m · 1h · 6h · 24h · 7d**, opening on 10m. The time axis always spans the whole window ending at now and **slides forward live**, so gaps show as empty space; a drag-zoom pauses the slide and a double-click resumes it. A window with no readings keeps the empty frame with a muted "No readings in the last {range}", so the next reading appears in place. |
+| **Trend chart** | existing | One component for the device page and the dashboard widget. A number is a line with a faint `--color-chart` gradient under it (about 18% at the top, fading to nothing at the bottom of the plot), with dashed rule thresholds. No reading markers on any metric: the line is the reading. An **on/off metric** is a **step line** on an **Off / On** axis with a light wash under On, and has no threshold line. Once aggregated it stays on Off / On: a minute or hour shows On if the metric was On at any point in it. The state is carried forward only from a bucket that held one state, otherwise the line breaks until the next reading. Never ramps, never a "% of readings". Gauges take numbers only. Ranges **1m · 10m · 1h · 6h · 24h · 7d**, opening on 10m. The time axis always spans the whole window ending at now and **slides forward live**, so gaps show as empty space; a drag-zoom pauses the slide and a double-click resumes it. A window with no readings keeps the empty frame with a muted "No readings in the last {range}", so the next reading appears in place. **Height:** 260 px for a number and **140 px for an on/off metric** (two levels need half the height); a dashboard widget fills its cell instead. **On phones** (≤ 640 px) the chart drops its own bordered frame: it already sits in a card, and the second border and padding cost width. |
 
 ---
 
@@ -466,7 +479,7 @@ edits a whole record, and there is no "Expand" toggle.
   applied as you change them, with **Remove widget** in the sheet. **Add widget** is a header button
   in Edit layout (an empty dashboard's empty state has it too); the grid holds widgets only, with
   no add tile. **Add a widget** is a sheet with
-  three steps: Type → Source → Size. On phones, Edit layout shows a **reorderable list** of the
+  three steps: Type → Source → Size. **Viewing on phones** (≤ 640 px), the widgets stack one per row in reading order, each **as tall as its content** (a trend at its chart height), not at its grid height, so no card shows empty space under its content. On phones, Edit layout shows a **reorderable list** of the
   widgets (open, remove, move up / down) instead of the grid. Moving a widget swaps its grid place
   with its neighbour's in reading order, so the desktop layout stays intact apart from that swap.
   **Default dashboard:** each person may mark one of their dashboards **Set as default** (row
@@ -851,7 +864,7 @@ interim is in the last column.
 | Widget titles | An optional `title` on each dashboard widget. | The generated title (reading · device). |
 | Reported actuator state | Devices report their real state and whether a command was applied: an additive change to the device contract (CLAUDE.md §4), made in both deployment variants, plus firmware. **Deferred by decision (2026-10-20).** | Requested state and Acknowledged / No response only. |
 
-Regenerate `frontend/src/types/api.ts` after every schema change (CLAUDE.md §9.8).
+Regenerate the API types (`pnpm --filter @iodriven/shared codegen`, writing `packages/shared/src/api.ts`) after every schema change (CLAUDE.md §9.8).
 
 ---
 
@@ -892,7 +905,43 @@ The §13 "Demo H additions" follow as their own backend work.
 
 ---
 
-## 15. Reference and changelog
+## 15. Mobile app
+
+The IO Driven app (`mobile/`, Expo / React Native; Android first, iOS from the same code) follows
+this document like the web: the same tokens, wording and patterns, adapted to a phone, never
+restyled.
+
+- **Tokens:** the palette (light and dark, following the phone's setting), the five-step type
+  scale, radii and Geist come from §3. `mobile/src/theme/tokens.ts` mirrors them, and a test fails
+  when a colour drifts from `frontend/src/app/globals.css`. Change the web's token first.
+- **Shape:** the web's phone layout (§4, §12) is the model. That means a bottom tab bar
+  (Dashboards · Devices · Alerts · More), sheets for one item's detail or one action, and list rows
+  as Line rows (§5).
+- **Touch:** every target is at least 44 px (§12). Controls are the web's components in native
+  form (Switch, segmented control, value with Set), with the same confirms and states.
+- **What lives where:** the app is for being next to the equipment: watching, finding a device,
+  setting up its Wi-Fi, switching an actuator, handling alerts, turning a rule on or off and
+  resetting a latch. Creating and editing records (templates, wiring, rules, dashboard layouts,
+  members, keys, settings) stays on the web; the app links there with **Open on the web**.
+- **Wording:** §11 applies unchanged.
+- **Device screen:** the web's Overview on a phone. The status sits on its own line, then template ·
+  zone · last message. Each reading card shows the name with Live / Stale at the top right, the
+  value, then when it arrived. The Trend card picks its reading with the web's **metric chips**;
+  tapping a reading card picks it too. Charts follow §5, including the shorter on/off chart.
+- **Device label:** device Settings → Connection has a **Label** row: "A QR that opens this device.
+  It holds no password." with **Print label** and **Download** (the same label layout as the
+  provisioning QR's: QR, name, one caption line). Its link, `/d/<id>`, opens the device in the
+  app, or on the web, after sign-in if needed.
+- **Scan and Wi-Fi setup:** Devices has **Scan** in its header. The scanner says what it reads
+  ("Point at a device's label or its Wi-Fi setup QR") and names anything else it can't use. A Wi-Fi
+  setup QR opens **Set up Wi-Fi**, one step at a time on one screen: a spinner line for each wait
+  (Bluetooth access, looking for the board, its networks, sending); the networks as Line rows
+  (name; signal in words · Open / Secured) with **Other network** last; the password with Show /
+  Hide and **Join**; then "Waiting for {device} to come online" until its first message, and
+  **Open device**. Each failure is a red title, the fix in one or two sentences, **Try again** and
+  **Cancel**.
+
+## 16. Reference and changelog
 
 **Reference demos** (open locally in a browser; no build needed):
 - `docs/design/redesign/demo-h-guided.html`: **the reference** for the shell, responsive layout and
@@ -985,3 +1034,10 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-11-02 | §8, §4, §10.2 dashboards are shared by the workspace instead of per person: everyone sees every dashboard and, until permissions by role are decided, anyone may change them. The default dashboard stays per person and may be any of them. Landing and Welcome follow: Welcome only while the workspace has no dashboard; otherwise newcomers land on the most recently changed one. Leaving a workspace keeps the dashboards you made. |
 | 2026-11-03 | §4, §8 (user decisions): the rail and sidebar nav scroll without a visible scrollbar, with an edge fade, so a scrollbar never pushes the rail's icons off centre on short laptop screens. The dashboard's *Add widget* tile is removed (superseding 2026-10-28's first-row tile): it took a fixed place in the grid, even while viewing. Adding stays in Edit layout's header and the empty state. |
 | 2026-11-03 | §5 Switch, §8 Controls: an on/off actuator is a Switch (was an On / Off segmented control); a number or text actuator is a value box with Set, ranged by its wiring (it used to fall back to On / Off and send true/false); a fixed list stays segmented. The value already requested is never sent again from the control; Retry is the only resend. |
+| 2026-11-04 | §15 Mobile app (new; Reference and changelog becomes §16): the app follows this document with the same tokens (mirrored in `mobile/src/theme/tokens.ts`, checked against `globals.css` by a test), the web's phone shape (bottom tabs, sheets, Line rows), 44 px targets, and a split of what lives in the app (field work) vs the web (creating and editing records). |
+| 2026-11-05 | §5 Trend chart, §8 dashboards, from the user's review of the mobile app beside the web: an on/off chart is 140 px tall (a number keeps 260); on phones the chart drops its inner frame; viewing a dashboard on a phone stacks the widgets at their content height instead of their grid height (the desktop grid is unchanged). |
+| 2026-11-05 | §15 device screen, from the user's review of the app beside the web: the status on its own line, reading cards laid out like the web's Overview (freshness top right, time under the value), and metric chips in the Trend card (picking a reading used to be possible only by tapping its card, with nothing saying so). |
+| 2026-11-05 | §15 **device label** (mobile plan M5): a secret-free QR of `/d/<id>` in device Settings → Connection → Label (Print label · Download). The web redirects the link to the device page and back to it after sign-in; the app opens it as an App Link. |
+| 2026-11-05 | §15 **Scan and Wi-Fi setup** (mobile plan M6): Scan in the Devices header reads a label (opens the device) or a Wi-Fi setup QR (Set up Wi-Fi: board → network → password → online). The web's Connect phone step names the iodriven app first, ESP BLE Provisioning second. |
+| 2026-11-05 | §3 **Brand** (new): the product is named **IO Driven**, and its mark (`docs/design/io-driven-mark.png`) replaces the gradient square beside the name on the landing header and sign-in panel; it is also the browser icon and the app's icon and splash. The app is named IO Driven on the phone. |
+| 2026-11-05 | §3 Brand, §4 shell: the IO Driven mark replaces the workspace initial tile as the shell's logo (workspace switcher in the sidebar and rail, phone top bar). The switcher's list keeps each workspace's initial tile. |

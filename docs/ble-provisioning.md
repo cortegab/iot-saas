@@ -7,8 +7,8 @@ already-flashed boards in mind.
 
 Provisioning is **Espressif's unified provisioning** (protocomm over BLE), driven on the board by
 the Arduino core's `WiFiProv` library (ESP32 board package 3.x, `NETWORK_PROV_*` API). Any client
-that speaks it works: today the **ESP BLE Provisioning** app (Android / iOS) and Espressif's
-`esp_prov.py`; the future iodriven app embeds Espressif's provisioning libraries.
+that speaks it works: the **IO Driven app** (Devices → Scan; it embeds Espressif's provisioning
+libraries), the **ESP BLE Provisioning** app (Android / iOS) and Espressif's `esp_prov.py`.
 
 The **generic firmware** (`firmware/`, installed from the dashboard) speaks the same protocol
 without `WiFiProv`. It calls ESP-IDF's `network_provisioning` directly (`firmware/src/provisioning.cpp`),
@@ -49,6 +49,43 @@ Provisioning reuses the device's **own MQTT credential**. No separate secret exi
 - The QR, and any printed label, contains the device's broker password: keep it like a key.
 - A device renamed after flashing keeps advertising the name it was flashed with; the QR generated
   with that sketch carries the same name.
+
+## The IO Driven app
+
+The app (`mobile/`) provisions with Espressif's own Android library (`esp-idf-provisioning-android`,
+through `@orbital-systems/react-native-esp-idf-provisioning`), so the protocol and the QR are
+exactly the ones above.
+
+1. **Scan** (Devices → Scan) reads either QR. A device label opens the device. A provisioning QR is
+   held in memory only, never stored, and opens **Set up Wi-Fi**.
+2. **Which device:** the QR's `name` is compared with `provName()` of each device's name in the
+   workspace (Security 2: its `username`, the device id). When several match, the person picks
+   one. When none match, Wi-Fi setup still works; only the final online check is skipped.
+3. **Connect:** a Bluetooth scan for that exact name, then the Security 1 handshake with `pop`.
+   Android 12+ asks for *Nearby devices* only (the scan is declared `neverForLocation`); Android 11
+   and older ask for location, which their Bluetooth scan needs.
+4. **Network:** the board's own Wi-Fi scan, one row per name, strongest first, plus *Other
+   network* for a hidden one. Then the password (Show / Hide).
+5. **Result:** the board's report. `AUTH_FAILED` means a wrong password and `NETWORK_NOT_FOUND`
+   means the network isn't there (e.g. 5 GHz only); either returns to the password form.
+6. **Online:** the app polls the device until its first message after setup, like the web's live
+   check, then offers **Open device**.
+
+## Device label
+
+A second, **secret-free** QR identifies a device without provisioning it. Device → Settings →
+Connection → Label prints or downloads it.
+
+- **Content:** a link, `https://iodriven.tech/d/<device id>` (`deviceLink()`, `packages/shared`).
+  It names the device and holds no password, so it can stay stuck on the enclosure.
+- **The web** redirects `/d/<id>` to the device page, after sign-in if needed. A phone camera
+  without the app lands there.
+- **The IO Driven app** opens the same link itself (an Android App Link). Android verifies it
+  against `/.well-known/assetlinks.json`, which lists the fingerprints in
+  `ANDROID_APP_CERT_SHA256` (`infra/.env.example`). Until they are set, Android opens the link in
+  the browser. The app's own scanner reads both QR kinds either way.
+
+The label is not part of the device contract: firmware never sees it.
 
 ## Security levels
 

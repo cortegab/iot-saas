@@ -1,42 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import qrcode from "qrcode-generator";
 import { Copy, Download, Printer } from "lucide-react";
 import { Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { useToast } from "@/components/ui/Toast";
 import { provisioningPayload, provName } from "@/lib/firmware-sketch";
-
-const QUIET = 2; // modules of white border around the code
-
-/** The QR modules as one SVG path, in module units. */
-function qrPath(payload: string): { size: number; d: string } {
-  const qr = qrcode(0, "M");
-  qr.addData(payload);
-  qr.make();
-  const n = qr.getModuleCount();
-  let d = "";
-  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) d += `M${c + QUIET},${r + QUIET}h1v1h-1z`;
-  return { size: n + QUIET * 2, d };
-}
-
-const xml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-
-/** A printable label: the QR with the device name under it. */
-function labelSvg(name: string, security: 1 | 2, qr: { size: number; d: string }): string {
-  const W = 320;
-  const H = 372;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
-<rect width="${W}" height="${H}" fill="#fff"/>
-<svg x="20" y="16" width="280" height="280" viewBox="0 0 ${qr.size} ${qr.size}" shape-rendering="crispEdges"><path d="${qr.d}" fill="#000"/></svg>
-<text x="${W / 2}" y="322" text-anchor="middle" font-family="ui-monospace, Menlo, monospace" font-size="18" font-weight="600" fill="#111">${xml(name)}</text>
-<text x="${W / 2}" y="348" text-anchor="middle" font-family="system-ui, sans-serif" font-size="12" fill="#555">ESP BLE Provisioning · Security ${security}</text>
-</svg>`;
-}
+import { downloadSvg, fileBase, labelSvg, printSvg, qrPath } from "@/lib/qr-svg";
 
 /**
- * The QR the ESP BLE Provisioning app scans (docs/ble-provisioning.md). Built
+ * The Wi-Fi setup QR the IO Driven app and ESP BLE Provisioning scan (docs/ble-provisioning.md). Built
  * from the device's own credential: `name` is the BLE-safe device name (the
  * sketch's PROV_NAME), `pop` the MQTT password, plus `username` (the MQTT
  * username) for Security 2. A new credential means a new QR.
@@ -56,27 +29,16 @@ export function ProvisioningQr({
   const name = provName(deviceName);
   const payload = provisioningPayload({ name, username, password, security });
   const qr = useMemo(() => qrPath(payload), [payload]);
-  const fileBase = name.replace(/[^a-zA-Z0-9_-]+/g, "_");
+  const label = () => labelSvg(name, `Wi-Fi setup · Security ${security}`, qr);
 
   function downloadLabel() {
-    const blob = new Blob([labelSvg(name, security, qr)], { type: "image/svg+xml" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${fileBase}-provisioning.svg`;
-    a.click();
-    URL.revokeObjectURL(a.href);
+    downloadSvg(label(), `${fileBase(name)}-provisioning.svg`);
   }
 
   function printLabel() {
-    const w = window.open("", "_blank", "width=420,height=520");
-    if (!w) {
+    if (!printSvg(label(), name)) {
       toast({ tone: "error", title: "The print window was blocked", detail: "Download the label and print it instead." });
-      return;
     }
-    w.document.write(`<!doctype html><title>${xml(name)}</title><body style="margin:24px">${labelSvg(name, security, qr)}</body>`);
-    w.document.close();
-    w.focus();
-    w.print();
   }
 
   async function copyPayload() {
