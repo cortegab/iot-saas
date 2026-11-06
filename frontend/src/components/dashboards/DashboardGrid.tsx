@@ -60,8 +60,12 @@ export function DashboardGrid({
   templates,
   onLayoutChange,
   onOpenWidget,
+  phone = false,
 }: {
   widgets: Widget[];
+  /** Below 640 px: viewing stacks the widgets in one column, each as tall as
+   * its content (a chart at its own height), not at its grid height. */
+  phone?: boolean;
   /** Edit-layout mode: drag and resize, and a click opens the widget's
    * sheet (DESIGN.md §8). Viewing never moves anything by accident. */
   editing: boolean;
@@ -98,6 +102,41 @@ export function DashboardGrid({
     }
   }
 
+  // One widget's content, the same in the grid and in the phone column.
+  function renderWidget(widget: Widget, fill: boolean) {
+    const broken = brokenReason(widget, devices, templates);
+    return broken ? (
+      <WidgetCard title={WIDGET_LABEL[widget.type]}>
+        <p className="flex gap-2.5 rounded-md bg-status-error-surface p-3 text-meta text-ink">
+          <AlertTriangle aria-hidden size={16} className="mt-0.5 shrink-0 text-status-error" />
+          {broken}
+        </p>
+      </WidgetCard>
+    ) : widget.type === "value_card" ? (
+      <ValueCardWidget deviceId={widget.device_id} metric={widget.metric ?? null} />
+    ) : widget.type === "trend_chart" ? (
+      <TrendChartWidget deviceId={widget.device_id} metric={widget.metric ?? null} fill={fill} />
+    ) : widget.type === "device_status" ? (
+      <DeviceStatusWidget deviceId={widget.device_id} />
+    ) : widget.type === "actuator_control" ? (
+      <ActuatorControlWidget deviceId={widget.device_id} />
+    ) : (
+      <GaugeWidget deviceId={widget.device_id} metric={widget.metric ?? null} min={widget.min ?? null} max={widget.max ?? null} />
+    );
+  }
+
+  if (phone && !editing) {
+    return (
+      <div className="flex flex-col gap-3">
+        {[...widgets]
+          .sort((a, b) => a.y - b.y || a.x - b.x)
+          .map((widget) => (
+            <div key={widget.id}>{renderWidget(widget, false)}</div>
+          ))}
+      </div>
+    );
+  }
+
   return (
     <ResponsiveGridLayout
       layouts={{ lg: layout, sm: stacked }}
@@ -114,27 +153,9 @@ export function DashboardGrid({
       onResizeStop={handleStop}
     >
       {widgets.map((widget) => {
-        const broken = brokenReason(widget, devices, templates);
         return (
           <div key={widget.id} className={cn("group relative", editing && "rounded-xl outline-dashed outline-1 outline-offset-2 outline-accent/50 [&_.widget-title]:pr-12")}>
-            {broken ? (
-              <WidgetCard title={WIDGET_LABEL[widget.type]}>
-                <p className="flex gap-2.5 rounded-md bg-status-error-surface p-3 text-meta text-ink">
-                  <AlertTriangle aria-hidden size={16} className="mt-0.5 shrink-0 text-status-error" />
-                  {broken}
-                </p>
-              </WidgetCard>
-            ) : widget.type === "value_card" ? (
-              <ValueCardWidget deviceId={widget.device_id} metric={widget.metric ?? null} />
-            ) : widget.type === "trend_chart" ? (
-              <TrendChartWidget deviceId={widget.device_id} metric={widget.metric ?? null} />
-            ) : widget.type === "device_status" ? (
-              <DeviceStatusWidget deviceId={widget.device_id} />
-            ) : widget.type === "actuator_control" ? (
-              <ActuatorControlWidget deviceId={widget.device_id} />
-            ) : (
-              <GaugeWidget deviceId={widget.device_id} metric={widget.metric ?? null} min={widget.min ?? null} max={widget.max ?? null} />
-            )}
+            {renderWidget(widget, true)}
             {editing && (
               <>
                 {/* The whole widget opens its sheet (DESIGN.md §8); only the handle drags. */}

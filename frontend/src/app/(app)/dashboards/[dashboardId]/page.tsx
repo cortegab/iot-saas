@@ -316,6 +316,7 @@ export default function DashboardDetailPage() {
           templates={templates}
           onLayoutChange={(updated) => void saveLayout(updated)}
           onOpenWidget={setOpenId}
+          phone={phone}
         />
         </DashboardRange.Provider>
       )}
