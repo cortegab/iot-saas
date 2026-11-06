@@ -919,6 +919,14 @@ restyled.
   It holds no password." with **Print label** and **Download** (the same label layout as the
   provisioning QR's: QR, name, one caption line). Its link, `/d/<id>`, opens the device in the
   app, or on the web, after sign-in if needed.
+- **Scan and Wi-Fi setup:** Devices has **Scan** in its header. The scanner says what it reads
+  ("Point at a device's label or its Wi-Fi setup QR") and names anything else it can't use. A Wi-Fi
+  setup QR opens **Set up Wi-Fi**, one step at a time on one screen: a spinner line for each wait
+  (Bluetooth access, looking for the board, its networks, sending); the networks as Line rows
+  (name; signal in words · Open / Secured) with **Other network** last; the password with Show /
+  Hide and **Join**; then "Waiting for {device} to come online" until its first message, and
+  **Open device**. Each failure is a red title, the fix in one or two sentences, **Try again** and
+  **Cancel**.
 
 ## 16. Reference and changelog
 
@@ -1017,3 +1025,4 @@ restyled.
 | 2026-11-05 | §5 Trend chart, §8 dashboards, from the user's review of the mobile app beside the web: an on/off chart is 140 px tall (a number keeps 260); on phones the chart drops its inner frame; viewing a dashboard on a phone stacks the widgets at their content height instead of their grid height (the desktop grid is unchanged). |
 | 2026-11-05 | §15 device screen, from the user's review of the app beside the web: the status on its own line, reading cards laid out like the web's Overview (freshness top right, time under the value), and metric chips in the Trend card (picking a reading used to be possible only by tapping its card, with nothing saying so). |
 | 2026-11-05 | §15 **device label** (mobile plan M5): a secret-free QR of `/d/<id>` in device Settings → Connection → Label (Print label · Download). The web redirects the link to the device page and back to it after sign-in; the app opens it as an App Link. |
+| 2026-11-05 | §15 **Scan and Wi-Fi setup** (mobile plan M6): Scan in the Devices header reads a label (opens the device) or a Wi-Fi setup QR (Set up Wi-Fi: board → network → password → online). The web's Connect phone step names the iodriven app first, ESP BLE Provisioning second. |
