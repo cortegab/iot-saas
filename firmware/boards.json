@@ -9,7 +9,7 @@
       "pins": [4, 13, 14, 16, 17, 18, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39],
       "pin_labels": { "36": "VP", "39": "VN", "16": "RX2", "17": "TX2" },
       "i2c": { "sda": 21, "scl": 22 },
-      "reset": { "pin": 19, "label": "a button between GPIO 19 (D19) and GND" },
+      "reset": { "pin": 0, "label": "the BOOT button" },
       "led": { "type": "gpio", "pin": 2, "active_low": false },
       "capabilities": ["ble"],
       "notes": ["Header labels like D13 mean GPIO 13."]
@@ -22,7 +22,7 @@
       "pins": [4, 13, 14, 16, 17, 18, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39],
       "pin_labels": { "36": "VP", "39": "VN" },
       "i2c": { "sda": 21, "scl": 22 },
-      "reset": { "pin": 19, "label": "a button between GPIO 19 and GND" },
+      "reset": { "pin": 0, "label": "the BOOT button" },
       "led": { "type": "gpio", "pin": 2, "active_low": false },
       "capabilities": ["ble"],
       "notes": ["The extra pins on this board (GPIO 0 and 6–11) are BOOT and the flash chip's: never wire them."]

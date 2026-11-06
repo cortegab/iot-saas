@@ -281,7 +281,7 @@ describe("wiringGuide", () => {
     const guide = wiringGuide(h, rows, CATALOG);
     expect(guide.pins.find((p) => p.pin === 36)?.name).toBe("GPIO 36 (VP)");
     expect(guide.board?.label).toBe("ESP32 DevKit (30-pin)");
-    expect(guide.board?.lines.at(-1)).toMatch(/hold a button between GPIO 19 \(D19\) and GND for 5 seconds/);
+    expect(guide.board?.lines.at(-1)).toMatch(/hold the BOOT button for 5 seconds/);
   });
 });
 

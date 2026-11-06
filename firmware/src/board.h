@@ -20,9 +20,11 @@
 #define BLE_HANDLER NETWORK_PROV_SCHEME_BLE_EVENT_HANDLER_FREE_BLE
 #elif CONFIG_IDF_TARGET_ESP32
 #define BOARD_ID "esp32"
-// A button between GPIO 19 and GND: on the header of both the 30- and 38-pin
-// DevKit (GPIO 0, the BOOT button, isn't on the 30-pin header).
-#define DEFAULT_RESET_PIN 19
+// The on-board BOOT button (GPIO 0, with its own pull-up): every DevKit has
+// it and it takes no header pin, so a shield wired to the header can't hold it
+// down (GPIO 19 was the reset pin until 0.11.1; a shield's output driver held
+// it low and the board restarted every 5 s). Configs carry boards.json's pin.
+#define DEFAULT_RESET_PIN 0
 #define DEFAULT_LED_TYPE LedType::Gpio
 #define DEFAULT_LED_PIN 2
 #define DEFAULT_LED_ACTIVE_LOW false
