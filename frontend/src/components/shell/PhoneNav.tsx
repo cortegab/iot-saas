@@ -12,7 +12,6 @@ import {
   AlertCount,
   LiveIndicator,
   ThemeButton,
-  WorkspaceLogo,
   WorkspaceMenu,
   initialsFor,
 } from "@/components/shell/AppSidebar";
@@ -23,6 +22,7 @@ import { useNavCounts } from "@/components/shell/useShellData";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import type { RealtimeStatus } from "@/lib/realtime";
 import { cn } from "@/lib/cn";
+import { BrandMark } from "@/components/brand/BrandMark";
 
 const isDown = (realtime: RealtimeStatus) => realtime === "reconnecting" || realtime === "closed";
 
@@ -41,7 +41,7 @@ function useDown(realtime: RealtimeStatus): boolean {
   return down;
 }
 
-/** Phone top bar (DESIGN.md §4, ≤ 640px): logo to Dashboards, the workspace
+/** Phone top bar (DESIGN.md §4, ≤ 640px): the IO Driven mark to Dashboards, the workspace
  * name, the live indicator only while reconnecting, and search. */
 export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
   const { memberships, currentTenantId } = useAuth();
@@ -51,7 +51,7 @@ export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
   return (
     <header className="sticky top-0 z-20 flex h-[calc(52px+env(safe-area-inset-top,0px))] items-center gap-2.5 border-b border-border bg-surface pl-3.5 pr-1.5 pt-[env(safe-area-inset-top,0px)] rail:hidden">
       <Link href="/dashboards" aria-label={`${name}, go to dashboards`} className="rounded-[9px]">
-        <WorkspaceLogo name={name} />
+        <BrandMark size={32} />
       </Link>
       <strong className="min-w-0 flex-1 truncate text-section font-semibold text-ink">{name}</strong>
       {down && <LiveIndicator realtime={realtime} />}

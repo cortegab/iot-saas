@@ -29,6 +29,7 @@ import { CreateWorkspaceDialog } from "@/components/shell/CreateWorkspaceDialog"
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import type { RealtimeStatus } from "@/lib/realtime";
 import { cn } from "@/lib/cn";
+import { BrandMark } from "@/components/brand/BrandMark";
 import { HOME } from "@/lib/landing";
 
 export function initialsFor(name: string | null | undefined, email: string): string {
@@ -350,11 +351,13 @@ function WorkspaceSwitcher({
             compact ? "p-1" : "w-full gap-2.5 p-2",
           )}
           trigger={
+            // The product mark heads the shell (DESIGN.md §3 Brand); the
+            // list inside keeps each workspace's initial to tell them apart.
             compact ? (
-              <WorkspaceLogo name={current?.tenant_name ?? ""} />
+              <BrandMark size={32} />
             ) : (
               <>
-                <WorkspaceLogo name={current?.tenant_name ?? ""} />
+                <BrandMark size={32} />
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
                   <strong className="truncate text-sm font-semibold text-ink">{name}</strong>
                   <span className="truncate text-xs text-ink-muted">{sub}</span>
