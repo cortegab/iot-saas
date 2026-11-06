@@ -88,6 +88,10 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         const entry = pending.current.get(key) ?? { deviceId: m.device_id, metric: m.metric, points: [] };
         entry.points.push({ t: m.time ?? Date.now() / 1000, v: m.value });
         pending.current.set(key, entry);
+      } else if (m.type === "command_ack" && m.device_id) {
+        // No payload worth applying: fetch the device's commands again.
+        const key = `/devices/${m.device_id}/commands`;
+        if (cached(key)) void mutate(key);
       } else if (m.type === "device_health" && m.device_id && typeof m.online === "boolean") {
         patchDevice(
           m.device_id,
