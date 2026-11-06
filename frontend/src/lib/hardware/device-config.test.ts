@@ -38,7 +38,7 @@ describe("buildFirmwareConfig", () => {
       device: { tenant: "io-driven", device: "test-device" },
       mqtt: { host: "192.168.1.82", port: 1883, tls: false, username: "b9691bcb-ffdb-47bf-ae27-992f68ddb7eb", password: "secret" },
       prov: { name: "Test-Device", security: 1 },
-      board_io: { reset_pin: 19, led: { type: "gpio", pin: 2, active_low: false } },
+      board_io: { reset_pin: 0, led: { type: "gpio", pin: 2, active_low: false } },
       metrics: [
         { key: "door", bool: true, publish: "on_change" },
         { key: "water-level", publish: "periodic", interval_s: 10 },

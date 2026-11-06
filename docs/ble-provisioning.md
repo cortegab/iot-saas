@@ -27,9 +27,14 @@ QR are unchanged. On the ESP32 that lets it use NimBLE instead of Bluedroid, whi
   is none, starts advertising for provisioning. `reset_provisioned` is `false`.
 - **Provision again:** hold the reset button for 5 seconds **while the board is running**. The
   sketch erases the stored network and restarts into provisioning.
-  - **ESP32:** a push button between **GPIO 19** and **GND** (`RESET_PIN`, internal pull-up). GPIO 19
-    is on the header of both the 30- and 38-pin DevKits; GPIO 0 (the BOOT button) isn't on the
-    30-pin header. GPIO 19 is never handed out to a sensor or relay.
+  - **ESP32, generic firmware (0.11.1 and later):** the on-board **BOOT** button (GPIO 0). It has
+    its own pull-up and takes no header pin, so a shield on the header can't hold it down. Holding it
+    while powering up starts the bootloader instead, hence "while running". Firmware 0.11.0 and
+    older used GPIO 19 here: a 6-in / 6-out control shield's output driver held GPIO 19 low and the
+    board restarted every 5 seconds, dropping each phone that connected. Reinstalling moves an older
+    board to BOOT.
+  - **ESP32, generated sketch:** a push button between **GPIO 19** and **GND** (`RESET_PIN`,
+    internal pull-up), unchanged. GPIO 19 is never handed out to a sensor or relay.
   - **ESP32-C3:** the on-board **BOOT** button (GPIO 9). Holding it while powering up starts the
     bootloader instead, hence "while running".
 

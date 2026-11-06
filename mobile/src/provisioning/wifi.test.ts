@@ -25,7 +25,7 @@ describe("explainFailure", () => {
   it("gives the fix for each known failure", () => {
     expect(explainFailure("provision", new Error("AUTH_FAILED")).title).toBe("The Wi-Fi password is wrong");
     expect(explainFailure("provision", new Error("NETWORK_NOT_FOUND")).detail).toMatch(/2\.4 GHz/);
-    expect(explainFailure("connect", new Error("Device not found.")).detail).toMatch(/reset button/);
+    expect(explainFailure("connect", new Error("Device not found.")).detail).toMatch(/BOOT button/);
     expect(explainFailure("connect", new Error("Failed to create session")).title).toBe("The board didn't accept this QR");
     expect(explainFailure("permission", new Error("x")).title).toMatch(/Bluetooth access/);
   });
