@@ -12,15 +12,15 @@ type AttentionResponse = components["schemas"]["AttentionResponse"];
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** "Needs attention:" above a dashboard (DESIGN.md §8), only what's non-zero.
- * Offline devices open the device list filtered to them; the rest are on
- * the web until the app has Alerts and Rules (Phase 3). */
+ * Critical alerts open Alerts; offline devices open the device list filtered
+ * to them. The rule items link once the app has Rules (M9). */
 export function AttentionStrip() {
   const theme = useTheme();
   const router = useRouter();
   const { data } = useApiSWR<AttentionResponse>("/tenants/current/attention", { refreshInterval: 30_000 });
   if (!data) return null;
   const items = [
-    data.critical_alerts ? { label: plural(data.critical_alerts, "critical alert", "critical alerts") } : null,
+    data.critical_alerts ? { label: plural(data.critical_alerts, "critical alert", "critical alerts"), onPress: () => router.push("/alerts") } : null,
     data.offline_devices
       ? { label: plural(data.offline_devices, "device offline", "devices offline"), onPress: () => router.push("/devices?status=offline") }
       : null,
