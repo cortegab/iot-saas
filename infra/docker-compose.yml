@@ -144,7 +144,11 @@ services:
       dockerfile: frontend/Dockerfile
     restart: unless-stopped
     working_dir: /repo/frontend
-    command: ["pnpm", "dev"]
+    # Install first: the node_modules volumes outlive image rebuilds (Docker
+    # fills a named volume only while it is empty), so a dependency or
+    # workspace-package change would otherwise never reach them. Takes about
+    # a second when nothing changed.
+    command: ["sh", "-c", "pnpm install --frozen-lockfile --config.confirmModulesPurge=false --filter 'iot-saas-frontend...' && exec pnpm dev"]
     environment:
       # Browser-side calls go to the host-published API port, not the compose network.
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
@@ -152,6 +156,14 @@ services:
       - "127.0.0.1:3000:3000"
     volumes:
       - ../frontend:/repo/frontend
+      # Shared TypeScript (API types, pure helpers) the web app imports.
+      - ../packages:/repo/packages
+      # The workspace's own files, current rather than the image's copies,
+      # so the install on start never checks a changed package.json against
+      # a stale lockfile (and crash-loops on ERR_PNPM_OUTDATED_LOCKFILE).
+      - ../package.json:/repo/package.json:ro
+      - ../pnpm-lock.yaml:/repo/pnpm-lock.yaml:ro
+      - ../pnpm-workspace.yaml:/repo/pnpm-workspace.yaml:ro
       # Both node_modules folders of the workspace (the root's, holding the
       # packages, and frontend's links into it) as volumes, so the bind mount
       # doesn't shadow what the image installed. Named per layout: the volume
