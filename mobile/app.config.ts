@@ -7,7 +7,7 @@ const config: ExpoConfig = {
   name: "IO Driven",
   slug: "iodriven",
   scheme: "iodriven",
-  version: "0.3.1",
+  version: "0.4.0",
   orientation: "portrait",
   // The IO Driven mark (docs/design/io-driven-mark.png): full-bleed for iOS
   // and older Android, adaptive layers (and a monochrome one for themed icons)

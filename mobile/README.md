@@ -5,7 +5,7 @@ Design rules: `docs/design/DESIGN.md` §15. Shared API types and helpers: `packa
 
 **Status:** Phase 2 (0.3.0): sign-in, workspaces, devices with live readings and trends,
 dashboards, **Scan** (device labels and Wi-Fi setup QRs) and **Wi-Fi setup over Bluetooth**
-(`docs/ble-provisioning.md`, "The IO Driven app"). Phase 3 adds actuator controls and alerts (0.4.0); rules follow.
+(`docs/ble-provisioning.md`, "The IO Driven app"). Phase 3 (0.4.0) adds actuator controls, alerts and rules on/off with Reset latch.
 
 Bluetooth and the camera need a real phone: there's no BLE in an emulator.
 
