@@ -38,7 +38,7 @@ Read it before building or changing any page or component.
   the condition tree, latch, `clear_actions` and "stale = unknown". This file owns only how the
   rule editor presents them.
 
-**Changing a directive:** edit this file first and add a changelog entry (§15), then change the code.
+**Changing a directive:** edit this file first and add a changelog entry (§16), then change the code.
 One-off styles, palettes or component variants are not allowed (CLAUDE.md §9.14).
 
 ---
@@ -892,7 +892,27 @@ The §13 "Demo H additions" follow as their own backend work.
 
 ---
 
-## 15. Reference and changelog
+## 15. Mobile app
+
+The iodriven app (`mobile/`, Expo / React Native; Android first, iOS from the same code) follows
+this document like the web: the same tokens, wording and patterns, adapted to a phone, never
+restyled.
+
+- **Tokens:** the palette (light and dark, following the phone's setting), the five-step type
+  scale, radii and Geist come from §3. `mobile/src/theme/tokens.ts` mirrors them, and a test fails
+  when a colour drifts from `frontend/src/app/globals.css`. Change the web's token first.
+- **Shape:** the web's phone layout (§4, §12) is the model. That means a bottom tab bar
+  (Dashboards · Devices · Alerts · More), sheets for one item's detail or one action, and list rows
+  as Line rows (§5).
+- **Touch:** every target is at least 44 px (§12). Controls are the web's components in native
+  form (Switch, segmented control, value with Set), with the same confirms and states.
+- **What lives where:** the app is for being next to the equipment: watching, finding a device,
+  setting up its Wi-Fi, switching an actuator, handling alerts, turning a rule on or off and
+  resetting a latch. Creating and editing records (templates, wiring, rules, dashboard layouts,
+  members, keys, settings) stays on the web; the app links there with **Open on the web**.
+- **Wording:** §11 applies unchanged.
+
+## 16. Reference and changelog
 
 **Reference demos** (open locally in a browser; no build needed):
 - `docs/design/redesign/demo-h-guided.html`: **the reference** for the shell, responsive layout and
@@ -985,3 +1005,4 @@ The §13 "Demo H additions" follow as their own backend work.
 | 2026-11-02 | §8, §4, §10.2 dashboards are shared by the workspace instead of per person: everyone sees every dashboard and, until permissions by role are decided, anyone may change them. The default dashboard stays per person and may be any of them. Landing and Welcome follow: Welcome only while the workspace has no dashboard; otherwise newcomers land on the most recently changed one. Leaving a workspace keeps the dashboards you made. |
 | 2026-11-03 | §4, §8 (user decisions): the rail and sidebar nav scroll without a visible scrollbar, with an edge fade, so a scrollbar never pushes the rail's icons off centre on short laptop screens. The dashboard's *Add widget* tile is removed (superseding 2026-10-28's first-row tile): it took a fixed place in the grid, even while viewing. Adding stays in Edit layout's header and the empty state. |
 | 2026-11-03 | §5 Switch, §8 Controls: an on/off actuator is a Switch (was an On / Off segmented control); a number or text actuator is a value box with Set, ranged by its wiring (it used to fall back to On / Off and send true/false); a fixed list stays segmented. The value already requested is never sent again from the control; Retry is the only resend. |
+| 2026-11-04 | §15 Mobile app (new; Reference and changelog becomes §16): the app follows this document with the same tokens (mirrored in `mobile/src/theme/tokens.ts`, checked against `globals.css` by a test), the web's phone shape (bottom tabs, sheets, Line rows), 44 px targets, and a split of what lives in the app (field work) vs the web (creating and editing records). |
