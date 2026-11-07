@@ -346,11 +346,16 @@ export default function LandingPage() {
       <footer className="bg-night-deep text-[13px] text-night-faint">
         <div className={cn(INNER, "flex flex-wrap items-center justify-between gap-4 py-7")}>
           <span className="flex items-center gap-2 font-semibold text-night-ink">
-            <span aria-hidden className="h-4 w-4 rounded-[4px] bg-[linear-gradient(135deg,#818cf8,#22d3ee)] shadow-[0_0_22px_rgba(129,140,248,0.55)]" />
+            <BrandMark size={18} />
             iodriven.tech
           </span>
           <span>MQTT/TLS · FastAPI · TimescaleDB · EMQX · Docker Compose</span>
-          <span>© 2026 IO Driven</span>
+          <span className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:text-night-ink hover:underline">
+              Privacy
+            </Link>
+            <span>© 2026 IO Driven</span>
+          </span>
         </div>
       </footer>
     </>

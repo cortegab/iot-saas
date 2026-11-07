@@ -738,6 +738,10 @@ path (CLAUDE.md §9.1).
   - An **in-page contact form**.
   - Contract terms and data retention are answered in the **FAQ**.
   - **No plan tiers.**
+- **Privacy** (`/privacy`): a plain document page on the canvas, a night header bar with the mark
+  linking home, one column of about 70 characters, section headings, last-updated date. Linked
+  from the landing footer and the sign-in footer, and used as the app's privacy policy on the
+  Play Store listing.
 
 ### 10.1 Get started (first run)
 
@@ -1066,3 +1070,4 @@ restyled.
 | 2026-11-05 | §15 **Controls** (mobile plan M7): the device screen's Controls card and the dashboard actuator widget send commands like the web's §8 rows (Switch / segments / value + Set, confirm first, Retry the only resend, offline said once); viewers see the rows without controls. |
 | 2026-11-05 | §15 **Alerts** (mobile plan M8): Alerts tab with the unread badge, the web's grouped rows and state filter, paging as you scroll, a details sheet (Open device · Mark as unread · Dismiss with Undo), Mark all read in the header; failed deliveries read-only. |
 | 2026-11-05 | §15 **Rules** (mobile plan M9): a Rules tab (the tab bar is now Dashboards · Devices · Alerts · Rules · More, as on the web's phone layout) with the state filter, the rule sentence, 24 h activity, the on/off Switch with Undo, and a sheet with inputs and Reset latch; editing stays on the web. |
+| 2026-11-07 | §10 **Privacy** page (`/privacy`, mobile plan Phase 5): document layout on the canvas with a night header bar; linked from the landing and sign-in footers. The landing footer gets the IO Driven mark (it still had the old gradient square). |
