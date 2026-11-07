@@ -1,6 +1,6 @@
 {
   "name": "iodriven-mobile",
-  "version": "0.4.1",
+  "version": "0.4.3",
   "private": true,
   "main": "expo-router/entry",
   "engines": {

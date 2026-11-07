@@ -1,4 +1,4 @@
-import { ESPDevice, ESPSecurity, ESPTransport } from "@orbital-systems/react-native-esp-idf-provisioning";
+import { ESPProvisionManager, ESPSecurity, ESPTransport, type ESPDevice } from "@orbital-systems/react-native-esp-idf-provisioning";
 import type { ProvisioningQr } from "@iodriven/shared/provisioning-qr";
 import { PermissionsAndroid, Platform } from "react-native";
 
@@ -13,12 +13,16 @@ export async function requestBlePermissions(): Promise<boolean> {
   return wanted.every((p) => result[p] === PermissionsAndroid.RESULTS.GRANTED);
 }
 
-/** Opens the board's provisioning session: finds it over Bluetooth by its
- * advertised name, then the secure handshake with the QR's code. */
+/** Opens the board's provisioning session: a fresh Bluetooth search for the
+ * board by its advertised name, then the secure handshake with the QR's code.
+ * The search also clears the native module's list of boards: without it, a
+ * second attempt reconnects to the board remembered from the first one, and
+ * waits 30 s on a board that may no longer be advertising. */
 export async function connectBoard(qr: ProvisioningQr): Promise<ESPDevice> {
   const security = qr.security === 2 ? ESPSecurity.secure2 : qr.security === 1 ? ESPSecurity.secure : ESPSecurity.unsecure;
-  const device = new ESPDevice({ name: qr.name, transport: ESPTransport.ble, security });
+  const found = await ESPProvisionManager.searchESPDevices(qr.name, ESPTransport.ble, security);
+  const device = found.find((d) => d.name === qr.name);
+  if (!device) throw new Error("Device not found.");
   await device.connect(qr.pop, null, qr.username);
   return device;
 }
-

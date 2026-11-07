@@ -26,7 +26,12 @@ describe("explainFailure", () => {
     expect(explainFailure("provision", new Error("AUTH_FAILED")).title).toBe("The Wi-Fi password is wrong");
     expect(explainFailure("provision", new Error("NETWORK_NOT_FOUND")).detail).toMatch(/2\.4 GHz/);
     expect(explainFailure("connect", new Error("Device not found.")).detail).toMatch(/BOOT button/);
-    expect(explainFailure("connect", new Error("Failed to create session")).title).toBe("The board didn't accept this QR");
+    expect(explainFailure("scan", new Error("Failed to create session")).title).toBe("The board didn't accept this QR");
+    // A timeout is a board that isn't advertising, not a wrong QR (seen on a Redmi Note 12S).
+    expect(explainFailure("connect", new Error("Device connection timed out.")).title).toBe("The board isn't nearby or isn't waiting for Wi-Fi");
+    expect(explainFailure("connect", new Error("No bluetooth device found with given prefix")).title).toBe("The board isn't nearby or isn't waiting for Wi-Fi");
+    expect(explainFailure("connect", new Error("Security mismatch. The configured security type does not match the device.")).title).toMatch(/security doesn't match/);
+    expect(explainFailure("connect", new Error("something else")).title).toBe("Couldn't connect to the board");
     expect(explainFailure("permission", new Error("x")).title).toMatch(/Bluetooth access/);
   });
 });
