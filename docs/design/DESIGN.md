@@ -966,6 +966,14 @@ restyled.
   sheet with the sentence, the Switch, its inputs (each with its last value and freshness,
   opening the device) and **Reset latch** (confirmed) when latched; **Edit on the web** for
   everything else. The attention strip's rule items open this list filtered.
+- **Push notifications:** asked for once, after sign-in, in a sheet that says why first ("Get alerts
+  on this phone?": what it sends, that it carries names only) with **Turn on alerts** and **Not now**;
+  Android's own permission prompt follows only after Turn on. **More → Notifications** has the
+  per-workspace **Alerts on this phone** Switch and, while on, **Critical only | Warnings and
+  critical**. When the phone's settings block notifications, the row says so and offers **Open the
+  phone's settings**. A notification's title is names only ("Greenhouse fan fired", "Bay 1 went
+  offline"); tapping it opens the device (offline) or Alerts, switching workspace if needed. Android
+  channels: *Critical alerts* (high importance) and *Alerts*.
 
 ## 16. Reference and changelog
 
@@ -1071,3 +1079,4 @@ restyled.
 | 2026-11-05 | §15 **Alerts** (mobile plan M8): Alerts tab with the unread badge, the web's grouped rows and state filter, paging as you scroll, a details sheet (Open device · Mark as unread · Dismiss with Undo), Mark all read in the header; failed deliveries read-only. |
 | 2026-11-05 | §15 **Rules** (mobile plan M9): a Rules tab (the tab bar is now Dashboards · Devices · Alerts · Rules · More, as on the web's phone layout) with the state filter, the rule sentence, 24 h activity, the on/off Switch with Undo, and a sheet with inputs and Reset latch; editing stays on the web. |
 | 2026-11-07 | §10 **Privacy** page (`/privacy`, mobile plan Phase 5): document layout on the canvas with a night header bar; linked from the landing and sign-in footers. The landing footer gets the IO Driven mark (it still had the old gradient square). |
+| 2026-11-07 | §15 **Push notifications** (mobile plan Phase 4): a one-time explainer sheet before the system prompt, More → Notifications (per-workspace Switch, Critical only \| Warnings and critical, Open the phone's settings when blocked), names-only titles, taps open the device or Alerts, two Android channels. |

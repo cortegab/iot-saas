@@ -4,6 +4,7 @@ import { AppState } from "react-native";
 import { SWRConfig } from "swr";
 import { useAuth } from "@/auth/AuthProvider";
 import { useNotificationSummary } from "@/alerts/notifications";
+import { PushProvider } from "@/push/PushProvider";
 import { RealtimeProvider } from "@/realtime/RealtimeProvider";
 import { font, text } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
@@ -36,7 +37,9 @@ export default function AppLayout() {
     // from the previous one shows (the web clears its cache the same way).
     <SWRConfig key={currentTenantId ?? "none"} value={swrConfig}>
       <RealtimeProvider>
-        <AppTabs />
+        <PushProvider>
+          <AppTabs />
+        </PushProvider>
       </RealtimeProvider>
     </SWRConfig>
   );
