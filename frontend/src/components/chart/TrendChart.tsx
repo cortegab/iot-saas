@@ -12,6 +12,7 @@ import { boolBuckets } from "@/lib/bool-series";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DEFAULT_RANGE_MS, HOUR, RANGE_OPTIONS, pinnedWindow, slideIntervalMs } from "@/lib/chart-range";
 import { decimateMinMax } from "@/lib/chart-decimate";
+import { axisIncrs, axisLabels } from "@/lib/chart-axis";
 import { appendToWindow, liveBuffer, reseed, type Series } from "@/lib/live-buffer";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import type { components } from "@/types/api";
@@ -292,7 +293,15 @@ export function TrendChart({
       },
       axes: [
         axis,
-        isBool ? { ...axis, splits: () => [0, 1], values: (_u, vs) => vs.map((v) => (v ? "On" : "Off")) } : axis,
+        isBool
+          ? { ...axis, splits: () => [0, 1], values: (_u, vs) => vs.map((v) => (v ? "On" : "Off")) }
+          : {
+              ...axis,
+              // No gridline finer than the metric's decimals, and labels with
+              // as many decimals as the step (lib/chart-axis).
+              incrs: axisIncrs(meta?.decimals),
+              values: (_u, splits, _axisIdx, _space, incr) => axisLabels(splits, incr),
+            },
       ],
       series: [
         {},
