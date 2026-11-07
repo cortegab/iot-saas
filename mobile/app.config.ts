@@ -7,7 +7,7 @@ const config: ExpoConfig = {
   name: "IO Driven",
   slug: "iodriven",
   scheme: "iodriven",
-  version: "0.3.1",
+  version: "0.4.3",
   orientation: "portrait",
   // The IO Driven mark (docs/design/io-driven-mark.png): full-bleed for iOS
   // and older Android, adaptive layers (and a monochrome one for themed icons)
@@ -68,6 +68,8 @@ const config: ExpoConfig = {
       },
     ],
     "./plugins/with-upload-signing",
+    // R8 keep rules for code found by name: the QR scanner and Bluetooth setup.
+    "./plugins/with-proguard-rules",
   ],
   experiments: {
     typedRoutes: true,

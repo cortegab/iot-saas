@@ -9,6 +9,7 @@ import { connectRealtime, type RealtimeMessage, type RealtimeStatus, type Socket
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
 import { useSWRConfig } from "swr";
+import { isNotificationsKey } from "@/alerts/notifications";
 import { useAuth } from "@/auth/AuthProvider";
 import { apiUrl } from "@/lib/config";
 
@@ -88,6 +89,18 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
         const entry = pending.current.get(key) ?? { deviceId: m.device_id, metric: m.metric, points: [] };
         entry.points.push({ t: m.time ?? Date.now() / 1000, v: m.value });
         pending.current.set(key, entry);
+      } else if (m.type === "notification") {
+        // A new alert: the list, its pages and the tab badge fetch again.
+        void mutate(isNotificationsKey);
+        void mutate("/tenants/current/attention");
+      } else if ((m.type === "rule_health" || m.type === "rule_latched") && m.rule_id) {
+        // A rule latched, or its inputs went stale or came back.
+        if (cached("/rules")) void mutate("/rules");
+        void mutate("/tenants/current/attention");
+      } else if (m.type === "command_ack" && m.device_id) {
+        // No payload worth applying: fetch the device's commands again.
+        const key = `/devices/${m.device_id}/commands`;
+        if (cached(key)) void mutate(key);
       } else if (m.type === "device_health" && m.device_id && typeof m.online === "boolean") {
         patchDevice(
           m.device_id,

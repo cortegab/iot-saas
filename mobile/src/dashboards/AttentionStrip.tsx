@@ -12,21 +12,25 @@ type AttentionResponse = components["schemas"]["AttentionResponse"];
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 /** "Needs attention:" above a dashboard (DESIGN.md §8), only what's non-zero.
- * Offline devices open the device list filtered to them; the rest are on
- * the web until the app has Alerts and Rules (Phase 3). */
+ * Each item opens its list, filtered: Alerts, offline devices, latched rules,
+ * rules that can't evaluate. */
 export function AttentionStrip() {
   const theme = useTheme();
   const router = useRouter();
   const { data } = useApiSWR<AttentionResponse>("/tenants/current/attention", { refreshInterval: 30_000 });
   if (!data) return null;
   const items = [
-    data.critical_alerts ? { label: plural(data.critical_alerts, "critical alert", "critical alerts") } : null,
+    data.critical_alerts ? { label: plural(data.critical_alerts, "critical alert", "critical alerts"), onPress: () => router.push("/alerts") } : null,
     data.offline_devices
       ? { label: plural(data.offline_devices, "device offline", "devices offline"), onPress: () => router.push("/devices?status=offline") }
       : null,
-    data.latched_rules ? { label: plural(data.latched_rules, "rule latched", "rules latched") } : null,
-    data.unhealthy_rules ? { label: plural(data.unhealthy_rules, "rule can't evaluate", "rules can't evaluate") } : null,
-  ].filter((i): i is { label: string; onPress?: () => void } => i !== null);
+    data.latched_rules
+      ? { label: plural(data.latched_rules, "rule latched", "rules latched"), onPress: () => router.push("/rules?state=latched") }
+      : null,
+    data.unhealthy_rules
+      ? { label: plural(data.unhealthy_rules, "rule can't evaluate", "rules can't evaluate"), onPress: () => router.push("/rules?state=stale") }
+      : null,
+  ].filter((i): i is { label: string; onPress: () => void } => i !== null);
   if (items.length === 0) return null;
 
   return (

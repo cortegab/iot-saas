@@ -5,7 +5,7 @@ Design rules: `docs/design/DESIGN.md` §15. Shared API types and helpers: `packa
 
 **Status:** Phase 2 (0.3.0): sign-in, workspaces, devices with live readings and trends,
 dashboards, **Scan** (device labels and Wi-Fi setup QRs) and **Wi-Fi setup over Bluetooth**
-(`docs/ble-provisioning.md`, "The IO Driven app"). Actuators, alerts and rules come in Phase 3.
+(`docs/ble-provisioning.md`, "The IO Driven app"). Phase 3 (0.4.0) adds actuator controls, alerts and rules on/off with Reset latch.
 
 Bluetooth and the camera need a real phone: there's no BLE in an emulator.
 
@@ -51,6 +51,13 @@ then Gradle. Outputs:
 
 - `android/app/build/outputs/apk/release/app-release.apk`
 - `android/app/build/outputs/bundle/release/app-release.aab`
+
+Release builds are minified by R8 (`android.enableMinifyInReleaseBuilds`). A library that finds
+code by name at run time needs a keep rule in `plugins/with-proguard-rules.js`: today the QR
+scanner (expo-camera checks for ML Kit by class name; without the rule 0.4.0 never read a QR) and
+Bluetooth setup (EventBus `@Subscribe`, kept as a precaution).
+A missing rule fails silently in the release APK only, so test a release build on a phone after
+adding a native library.
 
 The first build takes about half an hour (downloads and native compiles); later ones reuse the
 caches.
