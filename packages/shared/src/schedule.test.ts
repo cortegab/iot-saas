@@ -9,8 +9,8 @@ import {
   scheduleFromCron,
   validateCron,
   type ScheduleModel,
-} from "@/lib/schedule";
-import { offsetMinutes, timezoneOptions, tzLabel, tzOffset } from "@/lib/timezones";
+} from "./schedule";
+import { offsetMinutes, timezoneOptions, tzLabel, tzOffset } from "./timezones";
 
 const model = (m: Partial<ScheduleModel>): ScheduleModel => ({ ...DEFAULT_SCHEDULE, ...m });
 

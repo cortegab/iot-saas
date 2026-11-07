@@ -9,6 +9,7 @@ import { Stack, useLocalSearchParams } from "expo-router";
 import { ExternalLink } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from "react-native";
+import { ActuatorControl } from "@/actuators/ActuatorControl";
 import { DeviceTrend } from "@/chart/DeviceTrend";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { webUrl } from "@/lib/config";
@@ -177,6 +178,15 @@ export default function DeviceScreen() {
         </View>
       )}
 
+      <View style={styles.section}>
+        <Text size="section" weight="semibold" accessibilityRole="header">
+          Controls
+        </Text>
+        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+          <ActuatorControl device={device} />
+        </View>
+      </View>
+
       <Lines label="Health">
         {health.map(([label, value]) => (
           <Row key={label} title={label} right={<Text color="inkMuted">{value}</Text>} />
@@ -186,7 +196,7 @@ export default function DeviceScreen() {
       <Lines>
         <Row
           title="Open on the web"
-          detail="Settings, wiring, rules and controls."
+          detail="Settings, wiring, rules and the command timeline."
           onPress={() => void Linking.openURL(`${webUrl()}/devices/${device.id}`)}
           right={<ExternalLink size={18} color={theme.inkMuted} />}
         />

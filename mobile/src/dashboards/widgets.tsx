@@ -6,15 +6,14 @@ import { DEVICE_STATUS, deviceStatusKey } from "@iodriven/shared/device-status";
 import { formatReading, isBoolMetric } from "@iodriven/shared/format-reading";
 import { timeAgo } from "@iodriven/shared/time-ago";
 import { wireId } from "@iodriven/shared/wire-id";
-import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import { AlertTriangle } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Path, Text as SvgText } from "react-native-svg";
+import { ActuatorControl } from "@/actuators/ActuatorControl";
 import { DeviceTrend } from "@/chart/DeviceTrend";
 import { useApiSWR } from "@/hooks/useApiSWR";
-import { webUrl } from "@/lib/config";
 import { font, radius } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
 import { StatusDot } from "@/ui/StatusDot";
@@ -24,7 +23,6 @@ type Widget = components["schemas"]["Widget"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
-type CommandResponse = components["schemas"]["CommandResponse"];
 
 /** The device a widget reads and its template's definition of the metric.
  * The SWR keys are the device screen's, so live updates reach both. */
@@ -191,42 +189,18 @@ function DeviceStatus({ w }: { w: Widget }) {
   );
 }
 
-const commandWords = (v: unknown) => (typeof v === "boolean" ? (v ? "On" : "Off") : String(v));
-
-/** Read-only in this version: what each actuator was last asked to do. */
+/** The device's actuators, as on its Controls (Admins switch them here). */
 function Actuators({ w }: { w: Widget }) {
-  const theme = useTheme();
-  const { device, template } = useWidgetDevice(w.device_id);
-  const { data: commands } = useApiSWR<CommandResponse[]>(`/devices/${w.device_id}/commands`, { refreshInterval: 20_000 });
-  const actuators = template?.actuators ?? [];
+  const { device } = useWidgetDevice(w.device_id);
   return (
     <WidgetCard title="Controls" device={device}>
-      {actuators.length === 0 ? (
-        <Text size="meta" color="inkMuted">
-          No actuators on this device.
-        </Text>
-      ) : (
-        actuators.map((a) => {
-          const latest = commands?.find((c) => c.actuator === wireId(a));
-          return (
-            <View key={wireId(a)} style={[styles.actuator, { borderTopColor: theme.borderSoft }]}>
-              <Text weight="medium" style={styles.flex}>
-                {a.name}
-              </Text>
-              <Text size="meta" color="inkMuted">
-                {latest ? `Requested ${commandWords(latest.value)}${latest.acked_at ? " · Acknowledged" : ""}` : "Nothing sent yet"}
-              </Text>
-            </View>
-          );
-        })
-      )}
       {device ? (
-        <Pressable accessibilityRole="link" onPress={() => void Linking.openURL(`${webUrl()}/devices/${device.id}?tab=controls`)}>
-          <Text size="meta" color="accent">
-            Switch on the web
-          </Text>
-        </Pressable>
-      ) : null}
+        <ActuatorControl device={device} />
+      ) : (
+        <Text size="meta" color="inkMuted">
+          Loading…
+        </Text>
+      )}
     </WidgetCard>
   );
 }
@@ -257,5 +231,4 @@ const styles = StyleSheet.create({
   tabular: { fontVariant: ["tabular-nums"] },
   gauge: { alignItems: "center" },
   scale: { flexDirection: "row", justifyContent: "space-between", width: "100%", maxWidth: 220 },
-  actuator: { flexDirection: "row", alignItems: "center", gap: 8, paddingVertical: 8, borderTopWidth: StyleSheet.hairlineWidth },
 });
