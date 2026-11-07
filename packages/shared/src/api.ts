@@ -1325,6 +1325,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/push-devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Register */
+        put: operations["register_me_push_devices_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/push-devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unregister */
+        delete: operations["unregister_me_push_devices__device_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update */
+        patch: operations["update_me_push_devices__device_id__patch"];
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -2417,6 +2452,62 @@ export interface components {
             device_ids: string[];
             /** Rule Ids */
             rule_ids: string[];
+        };
+        /**
+         * PushDeviceRegisterRequest
+         * @description Called by the app after sign-in and whenever FCM hands it a new token.
+         *     Registering the same token again updates it (and its owner) instead of
+         *     adding a row.
+         */
+        PushDeviceRegisterRequest: {
+            /** Token */
+            token: string;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "android" | "ios";
+            /** Min Severity */
+            min_severity?: ("critical" | "warning") | null;
+            /** Enabled */
+            enabled?: boolean | null;
+        };
+        /** PushDeviceResponse */
+        PushDeviceResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "android" | "ios";
+            /**
+             * Min Severity
+             * @enum {string}
+             */
+            min_severity: "critical" | "warning";
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+        };
+        /** PushDeviceUpdateRequest */
+        PushDeviceUpdateRequest: {
+            /** Min Severity */
+            min_severity?: ("critical" | "warning") | null;
+            /** Enabled */
+            enabled?: boolean | null;
         };
         /**
          * RangeRhs
@@ -6291,6 +6382,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ContactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_me_push_devices_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushDeviceRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushDeviceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unregister_me_push_devices__device_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_me_push_devices__device_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushDeviceUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushDeviceResponse"];
                 };
             };
             /** @description Validation Error */
