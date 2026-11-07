@@ -48,7 +48,13 @@ void onWifiEvent(arduino_event_t* e) {
       Serial.println("[PROV] Wi-Fi received from the app");
       break;
     case ARDUINO_EVENT_PROV_CRED_FAIL:
-      Serial.println("[PROV] couldn't join that network; check the password and send it again");
+      // Forget the network that failed, so it isn't retried after a restart,
+      // and accept the next try from the app in the same session.
+      if (provisioningRetryAfterFailure()) {
+        Serial.println("[PROV] couldn't join that network; forgot it, waiting for the app to send it again");
+      } else {
+        Serial.println("[PROV] couldn't join that network; hold the reset button 5 s to set it up again");
+      }
       break;
     case ARDUINO_EVENT_PROV_CRED_SUCCESS:
       provisioning = false;
