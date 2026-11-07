@@ -78,4 +78,15 @@ bool provisioningBegin(const DeviceConfig& cfg, String& err) {
   return true;
 }
 
+bool provisioningRetryAfterFailure() {
+  // Clears the saved station config and returns the manager to "started"
+  // (network_provisioning 1.0.2, manager.h). Runs on Arduino's event task,
+  // outside the manager's lock.
+  return network_prov_mgr_reset_wifi_sm_state_on_failure() == ESP_OK;
+}
+
 #endif  // SOC_BT_SUPPORTED
+
+#if !SOC_BT_SUPPORTED
+bool provisioningRetryAfterFailure() { return false; }
+#endif

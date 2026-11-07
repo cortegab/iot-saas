@@ -16,3 +16,10 @@
 // ARDUINO_EVENT_PROV_* / WIFI_* events report what happens next. False, with
 // `err`, if provisioning couldn't start.
 bool provisioningBegin(const DeviceConfig& cfg, String& err);
+
+// After the app's Wi-Fi failed (wrong password, network not there): forget it
+// and let the same Bluetooth session take new credentials. Without this the
+// manager has already saved the bad network to flash, refuses a second try in
+// that session, and after a restart the board retries it forever instead of
+// advertising for setup. True if the board is ready for another try.
+bool provisioningRetryAfterFailure();

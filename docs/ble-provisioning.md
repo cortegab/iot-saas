@@ -154,6 +154,13 @@ app                                         board
  |                                           |  → MQTT: retained status, live check turns green
 ```
 
+**A failed join** (wrong password, network not in range): the board reports the failure, **forgets
+that network** and keeps the same Bluetooth session open, so the app can send corrected credentials
+straight away (`network_prov_mgr_reset_wifi_sm_state_on_failure()`, generic firmware 0.11.2+).
+Before 0.11.2 the provisioning manager had already saved the failed network to flash: a second try
+in that session failed, and after a restart the board kept retrying the bad network instead of
+advertising, until the reset button was held.
+
 ## Testing without the app
 
 Espressif's `esp_prov.py` (package `esp-idf-provisioning`, or ESP-IDF's tools) plays the app's role
