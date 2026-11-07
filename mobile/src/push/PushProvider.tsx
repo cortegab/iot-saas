@@ -116,8 +116,9 @@ export function PushProvider({ children }: { children: ReactNode }) {
         try {
           const next = await register(currentTenantId, stored);
           if (!cancelled) await save(currentTenantId, next);
-        } catch {
+        } catch (err) {
           // Offline, or push not configured on this build: try again next time.
+          console.warn("push registration failed:", err instanceof Error ? err.message : String(err));
         }
       } else if (perm === "undetermined" && !(await SecureStore.getItemAsync(ASKED))) {
         if (!cancelled) setExplain(true);

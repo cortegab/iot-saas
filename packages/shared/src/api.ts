@@ -1360,6 +1360,27 @@ export interface paths {
         patch: operations["update_me_push_devices__device_id__patch"];
         trace?: never;
     };
+    "/meta/client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Client Info
+         * @description The oldest mobile app version the API still serves. The API changes
+         *     additively, so this only rises when an old app would break.
+         */
+        get: operations["client_info_meta_client_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -1653,6 +1674,18 @@ export interface components {
         /** ChangeRoleRequest */
         ChangeRoleRequest: {
             role: components["schemas"]["TenantRole"];
+        };
+        /**
+         * ClientInfoResponse
+         * @description What the mobile app checks at start (docs/mobile-release.md).
+         */
+        ClientInfoResponse: {
+            /** Min Mobile Version */
+            min_mobile_version: string;
+            /** Latest Mobile Version */
+            latest_mobile_version: string;
+            /** Mobile Update Url */
+            mobile_update_url: string;
         };
         /** CommandResponse */
         CommandResponse: {
@@ -6497,6 +6530,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_info_meta_client_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientInfoResponse"];
                 };
             };
         };

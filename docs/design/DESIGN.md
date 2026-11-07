@@ -974,6 +974,10 @@ restyled.
   phone's settings**. A notification's title is names only ("Greenhouse fan fired", "Bay 1 went
   offline"); tapping it opens the device (offline) or Alerts, switching workspace if needed. Android
   channels: *Critical alerts* (high importance) and *Alerts*.
+- **Update required:** when the API says this app version is too old (`/meta/client`), the app
+  shows only a full screen: "Update required", one sentence naming the installed and the latest
+  version, and **Get the update** (the Play listing, or the test releases until then). A failed
+  check never blocks; the app opens as usual.
 
 ## 16. Reference and changelog
 
@@ -1080,3 +1084,4 @@ restyled.
 | 2026-11-05 | §15 **Rules** (mobile plan M9): a Rules tab (the tab bar is now Dashboards · Devices · Alerts · Rules · More, as on the web's phone layout) with the state filter, the rule sentence, 24 h activity, the on/off Switch with Undo, and a sheet with inputs and Reset latch; editing stays on the web. |
 | 2026-11-07 | §10 **Privacy** page (`/privacy`, mobile plan Phase 5): document layout on the canvas with a night header bar; linked from the landing and sign-in footers. The landing footer gets the IO Driven mark (it still had the old gradient square). |
 | 2026-11-07 | §15 **Push notifications** (mobile plan Phase 4): a one-time explainer sheet before the system prompt, More → Notifications (per-workspace Switch, Critical only \| Warnings and critical, Open the phone's settings when blocked), names-only titles, taps open the device or Alerts, two Android channels. |
+| 2026-11-07 | §15 **Update required** (mobile plan Phase 5): a full-screen stop with Get the update when the app is older than the API's minimum; a failed check never blocks. |
