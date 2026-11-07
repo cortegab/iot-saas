@@ -44,18 +44,31 @@ export function explainFailure(step: Step, error: unknown): { title: string; det
       detail: "The board only joins 2.4 GHz Wi-Fi. Check the network's name, move the board closer to the router, or pick another network.",
     };
   }
-  if (step === "connect" && /not found|scan/i.test(message)) {
+  // The native module's texts: "Device not found.", "No bluetooth device found
+  // with given prefix", "Device connection timed out.", "Device connection failed."
+  if (step === "connect" && /not found|no bluetooth device|timed out|connection failed|scan could not/i.test(message)) {
     return {
       title: "The board isn't nearby or isn't waiting for Wi-Fi",
       detail:
-        "Keep the phone within a few metres and turn Bluetooth on. If the board already has Wi-Fi, hold its BOOT button (or, with a generated sketch on an ESP32, the button on GPIO 19) for 5 seconds while it runs, then try again.",
+        "Keep the phone within a few metres and turn Bluetooth on. If the board already has a Wi-Fi network saved (even one with a wrong password), hold its BOOT button (or, with a generated sketch on an ESP32, the button on GPIO 19) for 5 seconds while it runs, then try again.",
+    };
+  }
+  if (/security mismatch/i.test(message)) {
+    return {
+      title: "This QR's security doesn't match the board",
+      detail: "The board was installed with a different security level. Scan the QR shown with its current firmware, or install it again.",
+    };
+  }
+  // A wrong proof of possession fails the secure session, which the module
+  // opens on the first request (the network list).
+  if (/session|decrypt|proof of possession|pop|security/i.test(message)) {
+    return {
+      title: "The board didn't accept this QR",
+      detail: "The QR is probably from an older credential. Scan the QR shown with the board's current firmware or sketch.",
     };
   }
   if (step === "connect") {
-    return {
-      title: "The board didn't accept this QR",
-      detail: "The QR is probably from an older credential. Scan the QR printed with the board's current sketch or firmware.",
-    };
+    return { title: "Couldn't connect to the board", detail: "Keep the phone close to the board and try again." };
   }
   if (step === "scan") {
     return { title: "Couldn't list Wi-Fi networks", detail: "Try again, or type the network's name under Other network." };
