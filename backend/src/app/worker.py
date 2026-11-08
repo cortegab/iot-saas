@@ -82,6 +82,7 @@ from app.ingestion import service as ingestion_service
 from app.ingestion.schemas import StatusPayload, TelemetryPayload
 from app.logging_config import configure_logging
 from app.notifications import service as notifications_service
+from app.push import sender as push_sender
 from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules import service as rules_service
@@ -716,6 +717,7 @@ async def run() -> None:
             schedule_loop(session_factory),
             rules_maintenance_loop(session_factory),
             pending_timer_loop(session_factory),
+            push_sender.push_loop(session_factory),
         )
     finally:
         # Best-effort drain of in-flight webhook/email deliveries on shutdown.

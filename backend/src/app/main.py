@@ -20,6 +20,7 @@ from app.ingestion.router import router as ingestion_router
 from app.logging_config import configure_logging
 from app.notifications.router import router as notifications_router
 from app.paging import TOTAL_HEADER
+from app.push.router import router as push_router
 from app.realtime.router import router as realtime_router
 from app.rules.router import router as rules_router
 from app.telemetry.router import router as telemetry_router
@@ -61,6 +62,7 @@ app.include_router(realtime_router)
 app.include_router(notifications_router)
 app.include_router(zones_router)
 app.include_router(contact_router)
+app.include_router(push_router)
 
 
 @app.get("/")

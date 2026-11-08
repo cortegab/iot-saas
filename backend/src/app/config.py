@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # Where the public contact form (POST /public/contact) sends enquiries.
     # Empty = the form still answers, and the enquiry is only logged.
     contact_email_to: str = ""
+    # Push notifications (app.push): path to the Firebase service-account
+    # JSON. Empty: push is off and the worker's push loop does nothing.
+    fcm_service_account_file: str = ""
     email_provider: Literal["console", "smtp"] = "console"
     email_from: str = "alerts@example.com"
     # Display name shown beside EMAIL_FROM in the recipient's inbox

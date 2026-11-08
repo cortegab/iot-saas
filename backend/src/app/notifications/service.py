@@ -161,6 +161,13 @@ async def _get(
     return notification
 
 
+async def get_notification(
+    session: AsyncSession, tenant_id: uuid.UUID, notification_id: uuid.UUID
+) -> Notification:
+    """One notification of the tenant in context (the push sender's lookup)."""
+    return await _get(session, tenant_id, notification_id)
+
+
 async def mark_read(
     session: AsyncSession, tenant_id: uuid.UUID, notification_id: uuid.UUID
 ) -> Notification:
