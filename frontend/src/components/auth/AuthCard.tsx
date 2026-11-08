@@ -103,6 +103,9 @@ export function AuthScreen({ children }: { children: ReactNode }) {
           <Link href="/" className="hover:text-ink">
             iodriven.tech
           </Link>
+          <Link href="/privacy" className="hover:text-ink">
+            Privacy
+          </Link>
           <span>© 2026 IO Driven</span>
         </p>
       </main>
