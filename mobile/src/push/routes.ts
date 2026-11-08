@@ -1,0 +1,41 @@
+/** Where tapping a push notification goes (docs/mobile-push.md): a device
+ * that went offline opens the device; everything else opens Alerts. The
+ * workspace comes with it, so a tap from another workspace switches first. */
+export interface PushTarget {
+  tenantId: string | null;
+  href: string;
+}
+
+export function routeFor(data: Record<string, unknown> | null | undefined): PushTarget {
+  const str = (k: string) => (typeof data?.[k] === "string" && data[k] ? (data[k] as string) : null);
+  const tenantId = str("tenant_id");
+  const deviceId = str("device_id");
+  if (str("kind") === "device_offline" && deviceId) return { tenantId, href: `/devices/${deviceId}` };
+  return { tenantId, href: "/alerts" };
+}
+
+export type MinSeverity = "critical" | "warning";
+
+/** The phone's choice, per workspace, as the More screen shows it. */
+export interface PushSettings {
+  /** The registration's id on the platform, once registered. */
+  id: string | null;
+  enabled: boolean;
+  minSeverity: MinSeverity;
+}
+
+export const DEFAULT_SETTINGS: PushSettings = { id: null, enabled: true, minSeverity: "warning" };
+
+export function parseSettings(raw: string | null): PushSettings {
+  if (!raw) return DEFAULT_SETTINGS;
+  try {
+    const v = JSON.parse(raw) as Partial<PushSettings>;
+    return {
+      id: typeof v.id === "string" ? v.id : null,
+      enabled: v.enabled !== false,
+      minSeverity: v.minSeverity === "critical" ? "critical" : "warning",
+    };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
