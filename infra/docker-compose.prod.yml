@@ -113,6 +113,10 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+      # Mobile app releases (docs/mobile-release.md): /meta/client.
+      MIN_MOBILE_VERSION: ${MIN_MOBILE_VERSION:-0.0.0}
+      LATEST_MOBILE_VERSION: ${LATEST_MOBILE_VERSION:-}
+      MOBILE_UPDATE_URL: ${MOBILE_UPDATE_URL:-https://github.com/cortegab/iot-saas/releases}
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:

@@ -103,10 +103,13 @@ pnpm test           # Jest (jest-expo); also checks tokens against the web's glo
 pnpm doctor         # expo-doctor: SDK and config checks
 ```
 
-## Publishing (later)
+## Publishing
 
-- **Play Store:** a Google Play Console developer account; upload the AAB to the internal testing
-  track first.
+`docs/mobile-release.md`: the checklist for every release, the one-time Play Console setup (upload
+key, Play App Signing, store listing, Data safety answers, internal testing) and test releases on
+GitHub. Store images are in `store/` (`icon-512.png`, `feature-graphic.png`). The privacy policy is
+https://iodriven.tech/privacy.
+
 - **App Store:** iOS builds need a Mac with Xcode (or a cloud build service), and an Apple
   Developer Program membership.
 

@@ -3,6 +3,13 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { ExpoConfig } from "expo/config";
 
+// The app's version; Android's versionCode and iOS's buildNumber follow it
+// (1.2.3 → 10203, src/lib/version.ts), so every release increases them as the
+// stores require. Bump this, never the codes.
+const VERSION = "0.5.0";
+const [major, minor, patch] = VERSION.split(".").map(Number);
+const BUILD = major * 10000 + minor * 100 + patch;
+
 // Firebase config for push (docs/mobile-push.md), kept outside the repo:
 // GOOGLE_SERVICES_JSON, else ~/.config/iodriven/google-services.json. Without
 // it the app builds and runs, with push notifications off.
@@ -17,7 +24,7 @@ const config: ExpoConfig = {
   name: "IO Driven",
   slug: "iodriven",
   scheme: "iodriven",
-  version: "0.5.0",
+  version: VERSION,
   orientation: "portrait",
   // The IO Driven mark (docs/design/io-driven-mark.png): full-bleed for iOS
   // and older Android, adaptive layers (and a monochrome one for themed icons)
@@ -26,6 +33,7 @@ const config: ExpoConfig = {
   userInterfaceStyle: "automatic",
   android: {
     package: "tech.iodriven.app",
+    versionCode: BUILD,
     ...(googleServicesFile ? { googleServicesFile } : {}),
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-foreground.png",
@@ -47,6 +55,7 @@ const config: ExpoConfig = {
   },
   ios: {
     bundleIdentifier: "tech.iodriven.app",
+    buildNumber: String(BUILD),
     supportsTablet: false,
   },
   plugins: [
