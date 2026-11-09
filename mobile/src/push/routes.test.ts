@@ -3,6 +3,7 @@ import { parseSettings, routeFor } from "./routes";
 describe("push notification taps", () => {
   it("opens the device that went offline, in its workspace", () => {
     expect(routeFor({ kind: "device_offline", device_id: "d1", tenant_id: "t1" })).toEqual({ tenantId: "t1", href: "/devices/d1" });
+    expect(routeFor({ kind: "device_health", device_id: "d1", tenant_id: "t1" })).toEqual({ tenantId: "t1", href: "/devices/d1" });
   });
 
   it("opens Alerts for everything else, or for anything malformed", () => {

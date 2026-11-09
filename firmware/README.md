@@ -170,6 +170,12 @@ The board gets itself back online without anyone unplugging it (0.12.0):
 | A sensor stops answering (0.12.1) | Logs it once (`[SENSOR] mpu6050@0x68: stopped answering`), reads unknown, retries, and logs when it answers again. An I2C part that left SDA held low gets the bus freed: up to 9 clock pulses, a STOP and a restart of the I2C peripheral, at most every 30 s |
 | The reset button reads pressed at boot (bad wiring) | Ignores it until it has read released once, so it can't wipe the Wi-Fi on every restart |
 
+The status message (every minute, and within 5 s when the list of faulty sensors changes) carries
+diagnostics from 0.14.0: why the board last restarted, how many times it has booted since it was
+installed (kept in NVS), free memory and its lowest point, Wi-Fi rejoins and the sensors not
+answering. The device page's Health shows them, and a crash or a sensor that stops answering
+raises a *device health* alert.
+
 Every boot logs why the board last restarted (`[BOOT] last restart: brown-out …`). The Arduino core
 alone retried a failed join once and then only for some reasons, so a board could blink "joining"
 forever after a power cut until it was unplugged.

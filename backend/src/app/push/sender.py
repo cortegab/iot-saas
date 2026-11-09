@@ -54,6 +54,7 @@ def compose(
     titles = {
         "rule_fired": f"{rule} fired",
         "device_offline": f"{device} went offline",
+        "device_health": f"{device} needs a look",
         "rule_health": f"{rule} can't evaluate",
         "delivery_failed": f"A delivery failed for {rule}",
     }

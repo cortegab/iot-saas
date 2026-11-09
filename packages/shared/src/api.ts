@@ -1914,6 +1914,18 @@ export interface components {
             uptime_s: number | null;
             /** Fw Version */
             fw_version: string | null;
+            /** Reset Reason */
+            reset_reason?: string | null;
+            /** Boot Count */
+            boot_count?: number | null;
+            /** Heap Free */
+            heap_free?: number | null;
+            /** Heap Min */
+            heap_min?: number | null;
+            /** Wifi Reconnects */
+            wifi_reconnects?: number | null;
+            /** Faults */
+            faults?: string[] | null;
             /** Metrics Health */
             metrics_health?: components["schemas"]["MetricHealthResponse"][];
         };
@@ -2456,7 +2468,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "rule_fired" | "rule_cleared" | "rule_health" | "device_offline" | "delivery_failed" | "template_changed";
+            kind: "rule_fired" | "rule_cleared" | "rule_health" | "device_offline" | "device_health" | "delivery_failed" | "template_changed";
             /**
              * Created At
              * Format: date-time
@@ -5816,7 +5828,7 @@ export interface operations {
                 limit?: number;
                 /** @description Rows to skip, newest first. */
                 offset?: number;
-                type?: ("rules" | "rule_health" | "device_offline" | "delivery_failed" | "template_changed") | null;
+                type?: ("rules" | "rule_health" | "device_offline" | "device_health" | "delivery_failed" | "template_changed") | null;
                 severity?: ("info" | "warning" | "critical") | null;
                 device_id?: string | null;
                 rule_id?: string | null;

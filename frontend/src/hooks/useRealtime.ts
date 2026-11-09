@@ -6,7 +6,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { connectRealtime, type RealtimeMessage, type RealtimeStatus } from "@/lib/realtime";
 import { emitRealtime } from "@/lib/realtime-bus";
 import { liveBuffer, type LatestBatch } from "@/lib/live-buffer";
-import { applyDeviceHealth, markOnline, mergeLatest } from "@/lib/live-telemetry";
+import { applyDeviceHealth, frameDiagnostics, markOnline, mergeLatest } from "@/lib/live-telemetry";
 import type { components } from "@/types/api";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
@@ -126,6 +126,7 @@ export function useRealtime(): RealtimeStatus {
               battery_pct: message.battery_pct ?? null,
               uptime_s: message.uptime_s ?? null,
               fw_version: message.fw_version ?? null,
+              diagnostics: frameDiagnostics(message),
             }),
             { revalidate: false },
           );

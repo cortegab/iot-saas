@@ -110,6 +110,123 @@ async def test_status_offline_is_authoritative_even_with_no_prior_telemetry(
     assert resp.json()["connection_state"] == "offline"
 
 
+async def test_status_diagnostics_are_stored_and_kept_through_a_last_will(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    owner = await _register(client, "owner-health-diag1@example.com", "AcmeHealthDiag1")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    device_id = device["device"]["id"]
+    parsed = ParsedTopic(
+        tenant_slug=device["tenant_slug"], device_slug=device["device"]["slug"], metric="status"
+    )
+    report = {
+        "online": True,
+        "fw_version": "0.14.0",
+        "reset_reason": "power_on",
+        "boot_count": 3,
+        "heap_free": 120000,
+        "heap_min": 90000,
+        "wifi_reconnects": 2,
+        "faults": ["mpu6050@0x68: stopped answering"],
+    }
+    await worker._handle_status(
+        app_session_factory, mock_mqtt_client, parsed, json.dumps(report).encode()
+    )
+    body = (await client.get(f"/devices/{device_id}", headers=headers)).json()
+    assert body["reset_reason"] == "power_on"
+    assert body["boot_count"] == 3
+    assert body["heap_free"] == 120000
+    assert body["heap_min"] == 90000
+    assert body["wifi_reconnects"] == 2
+    assert body["faults"] == ["mpu6050@0x68: stopped answering"]
+
+    # A Last-Will carries no diagnostics: the last known ones stay.
+    await worker._handle_status(
+        app_session_factory, mock_mqtt_client, parsed, json.dumps({"online": False}).encode()
+    )
+    body = (await client.get(f"/devices/{device_id}", headers=headers)).json()
+    assert body["connection_state"] == "offline"
+    assert body["boot_count"] == 3
+    assert body["faults"] == ["mpu6050@0x68: stopped answering"]
+
+
+async def test_odd_diagnostics_are_trimmed_not_a_reason_to_drop_the_status(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    owner = await _register(client, "owner-health-diag2@example.com", "AcmeHealthDiag2")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    device_id = device["device"]["id"]
+    parsed = ParsedTopic(
+        tenant_slug=device["tenant_slug"], device_slug=device["device"]["slug"], metric="status"
+    )
+    report = {
+        "online": True,
+        "reset_reason": "x" * 500,
+        "boot_count": 4,
+        "heap_free": -5,
+        "heap_min": "lots",
+        "faults": ["a" * 300, 7, ""] + [f"f{i}" for i in range(20)],
+    }
+    await worker._handle_status(
+        app_session_factory, mock_mqtt_client, parsed, json.dumps(report).encode()
+    )
+    body = (await client.get(f"/devices/{device_id}", headers=headers)).json()
+    assert body["connection_state"] == "online"
+    assert len(body["reset_reason"]) == 32
+    assert body["heap_free"] is None
+    assert body["heap_min"] is None
+    assert len(body["faults"]) == 8
+    assert body["faults"][0] == "a" * 80
+
+
+async def test_crash_restart_and_new_sensor_fault_raise_device_health_alerts(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    owner = await _register(client, "owner-health-diag3@example.com", "AcmeHealthDiag3")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    slug = device["device"]["slug"]
+    parsed = ParsedTopic(tenant_slug=device["tenant_slug"], device_slug=slug, metric="status")
+
+    async def report(**fields: object) -> None:
+        payload = {"online": True, "fw_version": "0.14.0", "faults": [], **fields}
+        await worker._handle_status(
+            app_session_factory, mock_mqtt_client, parsed, json.dumps(payload).encode()
+        )
+
+    async def health_alerts() -> list[str]:
+        resp = await client.get("/notifications", headers=headers)
+        return [n["message"] for n in resp.json() if n["kind"] == "device_health"]
+
+    # The first report sets the baseline: no alert, even after a crash.
+    await report(reset_reason="crash", boot_count=5)
+    # A power cycle is not news.
+    await report(reset_reason="power_on", boot_count=6)
+    assert await health_alerts() == []
+    # A brown-out restart is.
+    await report(reset_reason="brownout", boot_count=7)
+    # The same boot reporting again doesn't repeat it.
+    await report(reset_reason="brownout", boot_count=7)
+    # A sensor that stops answering: one alert, not one per report.
+    await report(reset_reason="brownout", boot_count=7, faults=["dht22@GPIO4: not answering"])
+    await report(reset_reason="brownout", boot_count=7, faults=["dht22@GPIO4: not answering"])
+    alerts = await health_alerts()
+    assert sorted(alerts) == sorted(
+        [f"{slug} restarted after a power dip (brown-out)", f"{slug}: dht22@GPIO4: not answering"]
+    )
+
+
 async def test_malformed_status_payload_is_dropped_not_raised(
     app_session_factory: async_sessionmaker[AsyncSession], mock_mqtt_client: AsyncMock
 ) -> None:

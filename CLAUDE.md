@@ -202,8 +202,17 @@ threshold rule fires: at 3 decimals 0.0492 arrives as 0.049, at 4 it arrives as 
 **Status payload** (retained; also the device's Last-Will payload with `online: false` on ungraceful
 disconnect)
 ```json
-{ "online": true, "rssi": -63, "battery_pct": 87, "uptime_s": 1234, "fw_version": "1.2.0", "timestamp": 1770001111 }
+{ "online": true, "rssi": -63, "battery_pct": 87, "uptime_s": 1234, "fw_version": "1.2.0", "timestamp": 1770001111,
+  "reset_reason": "brownout", "boot_count": 7, "heap_free": 118000, "heap_min": 91000, "wifi_reconnects": 2,
+  "faults": ["mpu6050@0x68: stopped answering"] }
 ```
+Every field but `online` is optional. The diagnostics (generic firmware 0.14.0+) are why the chip
+last restarted (`power_on`, `reset_pin`, `software`, `crash`, `task_wdt`, `interrupt_wdt`,
+`other_wdt`, `brownout`, …; `firmware/src/diag.h`), boots since install, free heap and its
+low-water mark (bytes), Wi-Fi rejoins since boot, and the parts not answering right now. The
+platform keeps the last online report's diagnostics through a Last-Will, trims odd values instead
+of dropping the message, and raises a *device health* alert for a new boot after a crash, watchdog
+or brown-out, and for each newly listed fault.
 The platform stamps its own receive time for staleness math and never trusts this payload's own
 `timestamp` — a Last-Will fires at an unpredictable moment its payload can't reflect.
 

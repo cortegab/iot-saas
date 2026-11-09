@@ -61,6 +61,9 @@ export function applyDeviceHealth(fields: {
   battery_pct: number | null;
   uptime_s: number | null;
   fw_version: string | null;
+  /** The status message's diagnostics, when it carried them (firmware
+   * 0.14.0+). A Last-Will doesn't: the last known ones stay, as the API keeps them. */
+  diagnostics?: Pick<DeviceResponse, "reset_reason" | "boot_count" | "heap_free" | "heap_min" | "wifi_reconnects" | "faults">;
 }) {
   return (current: DeviceResponse | undefined): DeviceResponse | undefined => {
     if (!current) return current;
@@ -71,6 +74,27 @@ export function applyDeviceHealth(fields: {
       battery_pct: fields.battery_pct,
       uptime_s: fields.uptime_s,
       fw_version: fields.fw_version,
+      ...(fields.online && fields.diagnostics ? fields.diagnostics : {}),
     };
+  };
+}
+
+/** A device_health frame's diagnostics, or undefined when it has none. */
+export function frameDiagnostics(message: {
+  boot_count?: number | null;
+  reset_reason?: string | null;
+  heap_free?: number | null;
+  heap_min?: number | null;
+  wifi_reconnects?: number | null;
+  faults?: string[] | null;
+}): Pick<DeviceResponse, "reset_reason" | "boot_count" | "heap_free" | "heap_min" | "wifi_reconnects" | "faults"> | undefined {
+  if (message.boot_count == null) return undefined;
+  return {
+    reset_reason: message.reset_reason ?? null,
+    boot_count: message.boot_count,
+    heap_free: message.heap_free ?? null,
+    heap_min: message.heap_min ?? null,
+    wifi_reconnects: message.wifi_reconnects ?? null,
+    faults: message.faults ?? null,
   };
 }

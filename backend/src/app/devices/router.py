@@ -51,6 +51,12 @@ def _to_response(
         battery_pct=device.battery_pct,
         uptime_s=device.uptime_s,
         fw_version=device.fw_version,
+        reset_reason=device.reset_reason,
+        boot_count=device.boot_count,
+        heap_free=device.heap_free,
+        heap_min=device.heap_min,
+        wifi_reconnects=device.wifi_reconnects,
+        faults=device.faults,
         metrics_health=[
             MetricHealthResponse(
                 metric=h.metric, last_value=h.last_value, last_seen_at=h.last_seen_at

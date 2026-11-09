@@ -48,6 +48,7 @@ const SEVERITY_ORDER: Severity[] = ["critical", "warning", "info"];
  * firing and its clearing are both "Rules". */
 const TYPES: { value: NotificationType; label: string; hint: string; tone: QuickFilterOption["tone"]; alert?: boolean }[] = [
   { value: "device_offline", label: "Offline", hint: "Devices that went offline, not read yet", tone: "offline", alert: true },
+  { value: "device_health", label: "Device health", hint: "Devices that restarted after a crash or have a sensor not answering, not read yet", tone: "error", alert: true },
   { value: "rules", label: "Rules", hint: "Rules that fired or cleared, not read yet", tone: "pending" },
   { value: "rule_health", label: "Rule health", hint: "Rules that stopped working, not read yet", tone: "error", alert: true },
   { value: "delivery_failed", label: "Failed deliveries", hint: "Emails and webhooks that failed, not read yet", tone: "error", alert: true },

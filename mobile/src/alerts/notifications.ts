@@ -25,6 +25,7 @@ export const isNotificationsKey = (key: unknown) => {
  * alerts. A rule firing and its clearing are both "Rules". */
 export const TYPES: { value: NotificationType; label: string }[] = [
   { value: "device_offline", label: "Offline" },
+  { value: "device_health", label: "Device health" },
   { value: "rules", label: "Rules" },
   { value: "rule_health", label: "Rule health" },
   { value: "delivery_failed", label: "Failed deliveries" },
