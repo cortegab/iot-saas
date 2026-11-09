@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { chipForName, explainFlashError, FlashError, nextAttempt, nextSlower, overallFraction } from "./flasher";
+import { validateCustomResetStringSequence } from "esptool-js";
+import { chipForName, explainFlashError, FlashError, nextAttempt, nextSlower, overallFraction, restartSequence } from "./flasher";
 
 describe("explainFlashError", () => {
   it("names a busy COM port, the bench's most common failure", () => {
@@ -86,5 +87,25 @@ describe("chipForName", () => {
     const manifest = { boards: { esp32: { chip: "ESP32" }, esp32c3: { chip: "ESP32-C3" } } } as never;
     expect(chipForName(manifest, "ESP32-C3")).toBe("esp32c3");
     expect(chipForName(manifest, "ESP32-S3")).toBeNull();
+  });
+});
+
+describe("restartSequence", () => {
+  it.each([false, true])("is a sequence esptool-js accepts (native USB: %s)", (nativeUsb) => {
+    expect(validateCustomResetStringSequence(restartSequence(nativeUsb))).toBe(true);
+  });
+
+  it("pulls EN low before releasing it, with IO0 released (a real reset, not just RTS off)", () => {
+    for (const seq of [restartSequence(false), restartSequence(true)]) {
+      const steps = seq.split("|");
+      expect(steps[0]).toBe("D0");
+      expect(steps.indexOf("R1")).toBeGreaterThan(-1);
+      expect(steps.indexOf("R0")).toBeGreaterThan(steps.indexOf("R1"));
+    }
+  });
+
+  it("holds reset longer on the chip's own USB", () => {
+    expect(restartSequence(false)).toContain("W100");
+    expect(restartSequence(true)).toContain("W200");
   });
 });
