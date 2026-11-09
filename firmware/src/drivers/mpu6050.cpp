@@ -4,7 +4,8 @@
 //   vibration_rms   (g, RMS of |a| - 1 g over window_ms)
 //   temperature     (°C, the chip's own; runs warm)
 //   accel_x/y/z (g), gyro_x/y/z (°/s): raw axes, for a `streaming` metric
-// If the chip doesn't answer, every channel is unknown and it's retried every 5 s.
+// If the chip doesn't answer, every channel is unknown and it's retried every
+// 5 s, after freeing the I2C bus in case the chip left it held low.
 #include <Wire.h>
 
 #include "driver.h"
@@ -34,12 +35,13 @@ class Mpu6050 : public InputDriver {
     if (!intParam(binding, "sample_hz", 50, 10, 200, hz, err)) return false;
     if (!intParam(binding, "window_ms", 1000, 200, 10000, window, err)) return false;
     addr_ = strtol(address, nullptr, 16);
+    snprintf(who_, sizeof(who_), "mpu6050@0x%02X", addr_);
     rangeG_ = atoi(range);
     periodMs_ = 1000 / hz;
     windowMs_ = window;
     for (float& v : values_) v = NAN;
     ok_ = init();  // a missing chip isn't a config error: it's retried
-    if (!ok_) Serial.printf("[MPU6050] no answer at 0x%02X; retrying every 5 s\n", addr_);
+    if (!ok_) sensorFault(who_, "not answering; retrying every 5 s");
     return true;
   }
 
@@ -47,8 +49,10 @@ class Mpu6050 : public InputDriver {
     if (!ok_) {
       if (nowMs - triedMs_ < RETRY_MS) return;
       triedMs_ = nowMs;
+      i2cRecover();  // no-op if another driver just did it
       ok_ = init();
       if (!ok_) return;
+      sensorOk(who_);
       windowStartMs_ = nowMs;
     }
     if (nowMs - sampledMs_ >= periodMs_) {
@@ -93,6 +97,7 @@ class Mpu6050 : public InputDriver {
       // Gone (unplugged, bus fault): unknown until it answers again.
       ok_ = false;
       triedMs_ = millis();
+      sensorFault(who_, "stopped answering");
       for (float& v : values_) v = NAN;
       rms_.take();
       return;
@@ -113,6 +118,7 @@ class Mpu6050 : public InputDriver {
   }
 
   uint8_t addr_ = 0x68;
+  char who_[16] = "mpu6050";
   uint8_t rangeG_ = 4;
   uint32_t periodMs_ = 20, windowMs_ = 1000;
   bool ok_ = false;

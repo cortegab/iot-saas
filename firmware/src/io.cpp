@@ -206,10 +206,68 @@ void handleState(Actuator& a, const uint8_t* payload, unsigned int length) {
 }
 
 bool i2cReady = false;
+int i2cSda = -1, i2cScl = -1;
+uint32_t i2cRecoveredMs = 0;
+bool i2cRecoveredOnce = false;
+// A bus recovery restarts the I2C peripheral for every sensor on it, so at
+// most this often, however many drivers ask.
+constexpr uint32_t I2C_RECOVER_MIN_GAP_MS = 30000;
+constexpr uint32_t I2C_HALF_CLOCK_US = 5;  // ~100 kHz
 
 }  // namespace
 
 bool i2cBusReady() { return i2cReady; }
+
+// A sensor that lost power or was unplugged mid-transfer can hold SDA low
+// forever, waiting for clocks that never come, and then nothing on the bus
+// answers again until a power cycle. The standard way out (I2C spec, 3.1.16):
+// clock SCL up to 9 times until the part lets go of SDA, send a STOP, and
+// restart the peripheral, which also clears an ESP32 I2C controller stuck on a
+// timeout.
+bool i2cRecover() {
+  if (i2cSda < 0 || i2cScl < 0) return false;
+  uint32_t now = millis();
+  if (i2cRecoveredOnce && now - i2cRecoveredMs < I2C_RECOVER_MIN_GAP_MS) return false;
+  i2cRecoveredOnce = true;
+  i2cRecoveredMs = now;
+
+  Wire.end();
+  // OUTPUT_OPEN_DRAIN keeps the input enabled, so digitalRead sees the line.
+  pinMode(i2cSda, INPUT_PULLUP);
+  pinMode(i2cScl, OUTPUT_OPEN_DRAIN);
+  digitalWrite(i2cScl, HIGH);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  bool wasHeld = digitalRead(i2cSda) == LOW;
+  int pulses = 0;
+  for (; pulses < 9 && digitalRead(i2cSda) == LOW; pulses++) {
+    digitalWrite(i2cScl, LOW);
+    delayMicroseconds(I2C_HALF_CLOCK_US);
+    digitalWrite(i2cScl, HIGH);
+    delayMicroseconds(I2C_HALF_CLOCK_US);
+  }
+  // STOP: SDA rises while SCL is high (SDA goes low first with SCL low, or
+  // that would be a START).
+  digitalWrite(i2cScl, LOW);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  pinMode(i2cSda, OUTPUT_OPEN_DRAIN);
+  digitalWrite(i2cSda, LOW);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  digitalWrite(i2cScl, HIGH);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  digitalWrite(i2cSda, HIGH);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  bool released = digitalRead(i2cSda) == HIGH;
+
+  i2cReady = Wire.begin(i2cSda, i2cScl);
+  if (wasHeld) {
+    Serial.printf("[I2C] SDA was held low: %d clock pulse(s), %s; bus %s\n", pulses,
+                  released ? "released" : "still held (check the wiring and the sensor's power)",
+                  i2cReady ? "restarted" : "didn't restart");
+  } else {
+    Serial.printf("[I2C] bus restarted (%s)\n", i2cReady ? "ok" : "failed");
+  }
+  return i2cReady;
+}
 
 bool ioBegin(const DeviceConfig& cfg, String& err) {
   String prefix = String(cfg.tenant) + "/" + cfg.device + "/";
@@ -220,6 +278,8 @@ bool ioBegin(const DeviceConfig& cfg, String& err) {
   if (cfg.i2cSda >= 0 || cfg.i2cScl >= 0) {
     if (!claimRawPin(cfg.i2cSda, PinUse::Bus, "i2c.sda", err)) return false;
     if (!claimRawPin(cfg.i2cScl, PinUse::Bus, "i2c.scl", err)) return false;
+    i2cSda = cfg.i2cSda;
+    i2cScl = cfg.i2cScl;
     i2cReady = Wire.begin(cfg.i2cSda, cfg.i2cScl);
     if (!i2cReady) {
       err = String("couldn't start the I2C bus on GPIO ") + cfg.i2cSda + "/" + cfg.i2cScl;

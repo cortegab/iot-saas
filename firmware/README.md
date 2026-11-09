@@ -154,6 +154,7 @@ The board gets itself back online without anyone unplugging it (0.12.0):
 | The main loop freezes | The loop watchdog restarts it after 30 s |
 | Wi-Fi doesn't join, or drops | Logs the reason (`[WIFI] disconnected: AUTH_FAIL (202)`), joins again after 30 s, 60 s, then every 2 min, and restarts after 5 min without Wi-Fi |
 | Wi-Fi is up but the broker isn't | Retries after 2 s, 4 s, 8 s … up to every minute, and restarts after 15 min |
+| A sensor stops answering (0.12.1) | Logs it once (`[SENSOR] mpu6050@0x68: stopped answering`), reads unknown, retries, and logs when it answers again. An I2C part that left SDA held low gets the bus freed: up to 9 clock pulses, a STOP and a restart of the I2C peripheral, at most every 30 s |
 | The reset button reads pressed at boot (bad wiring) | Ignores it until it has read released once, so it can't wipe the Wi-Fi on every restart |
 
 Every boot logs why the board last restarted (`[BOOT] last restart: brown-out …`). The Arduino core

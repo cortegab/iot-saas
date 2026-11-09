@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
+#include "../health.h"
 #include "../pins.h"
 
 // Every sensor and actuator the firmware supports is a driver behind one of
@@ -119,6 +120,11 @@ inline bool numeric(JsonVariantConst value, float& out) {
 // Whether the config set the I2C bus pins and io.cpp started the bus. I2C
 // drivers check it in begin(): without it every read would just fail.
 bool i2cBusReady();
+
+// Frees a stuck I2C bus (clock pulses, STOP, peripheral restart). An I2C
+// driver calls it before retrying a part that stopped answering; it runs at
+// most every 30 s for the whole bus and returns whether it ran and the bus is up.
+bool i2cRecover();
 
 // A command value read as on/off: true/false, a number (non-zero = on), or the
 // strings "on"/"off", "true"/"false", "1"/"0" in any case.
