@@ -20,6 +20,7 @@ class Dht22 : public InputDriver {
     if (!claimPin(binding, "pin", PinUse::Bus, pin_, err)) return false;
     if (!intParam(binding, "interval_ms", 2500, 2000, 60000, interval, err)) return false;
     intervalMs_ = interval;
+    snprintf(who_, sizeof(who_), "dht22@GPIO%d", pin_);
     pinMode(pin_, INPUT_PULLUP);
     lastMs_ = millis();  // the sensor needs ~1 s after power-up
     return true;
@@ -32,10 +33,12 @@ class Dht22 : public InputDriver {
     if (readSensor(t, h)) {
       temp_ = t;
       humidity_ = h;
+      if (failures_ >= 2) sensorOk(who_);
       failures_ = 0;
     } else if (++failures_ >= 2) {
       // One glitch is common; two in a row means the sensor isn't answering.
       temp_ = humidity_ = NAN;
+      if (failures_ == 2) sensorFault(who_, "not answering");
     }
   }
 
@@ -88,6 +91,7 @@ class Dht22 : public InputDriver {
   int pin_ = -1;
   uint32_t intervalMs_ = 2500, lastMs_ = 0;
   int failures_ = 0;
+  char who_[16] = "dht22";
   float temp_ = NAN, humidity_ = NAN;
 };
 

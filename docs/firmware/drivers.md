@@ -92,6 +92,12 @@ need attribution plus relinking terms; GPL ones are refused (write the driver in
      interval.
    - `read()` returns `NAN` when there's no fresh reading. The platform treats that as unknown,
      never as a value.
+   - A part that stops answering is reported with `sensorFault(who, what)` and, once it
+     answers again, `sensorOk(who)` (`src/health.h`). `who` names the part and where it is
+     (`"bme280@0x76"`). Only changes are logged, and the current faults are listed on the device's
+     Health.
+   - An I2C driver calls `i2cRecover()` before retrying a part that stopped answering: it frees a
+     bus a half-finished transfer left held low (at most every 30 s for the whole bus).
    - `channels()` lists the channel names a template can map.
    - Outputs apply their safe boot state in `begin()`, before Wi-Fi comes up.
    - Allocate in `begin()`, never per loop.
