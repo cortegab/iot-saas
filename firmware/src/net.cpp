@@ -9,6 +9,7 @@
 #include <ArduinoJson.h>
 
 #include "board.h"
+#include "command_math.h"
 #include "diag.h"
 #include "health.h"
 #include "io.h"
@@ -46,6 +47,10 @@ constexpr unsigned long WIFI_RESTART_MS = 5UL * 60 * 1000;
 // Wi-Fi up but no broker for this long: restart, in case the network stack is
 // what's stuck. Longer than Wi-Fi's, since this is usually the server.
 constexpr unsigned long MQTT_RESTART_MS = 15UL * 60 * 1000;
+// Network time (SNTP), started once Wi-Fi is up: lets a command's TTL be
+// checked (io.cpp). Several servers, so one being unreachable doesn't matter.
+constexpr const char* NTP_SERVERS[] = {"pool.ntp.org", "time.google.com", "time.cloudflare.com"};
+
 // Don't repeat the same disconnect reason more often than this.
 constexpr unsigned long WIFI_LOG_REPEAT_MS = 30000;
 
@@ -64,6 +69,8 @@ unsigned long resetDownSince = 0;
 // Set once the reset button has read released: a pin held low from boot (bad
 // wiring, a jumper) must not wipe the Wi-Fi again on every restart.
 bool resetArmed = false;
+bool sntpStarted = false;
+bool clockLogged = false;
 unsigned long wifiDownSince = 0;  // 0 = connected
 unsigned long wifiRetryMs = WIFI_RETRY_FIRST_MS;
 unsigned long nextWifiRetryAt = 0;
@@ -239,6 +246,23 @@ void tryConnectMqtt() {
   }
 }
 
+// SNTP once Wi-Fi is up (it keeps itself in sync from then on, every hour);
+// says once when the time is known. UTC: the device contract's times are Unix.
+void watchClock() {
+  if (!sntpStarted) {
+    configTime(0, 0, NTP_SERVERS[0], NTP_SERVERS[1], NTP_SERVERS[2]);
+    sntpStarted = true;
+  }
+  if (clockLogged) return;
+  time_t now = time(nullptr);
+  if ((int64_t)now < CLOCK_VALID_AFTER) return;
+  struct tm t;
+  gmtime_r(&now, &t);
+  Serial.printf("[TIME] synced: %04d-%02d-%02d %02d:%02d:%02d UTC\n", t.tm_year + 1900, t.tm_mon + 1, t.tm_mday, t.tm_hour,
+                t.tm_min, t.tm_sec);
+  clockLogged = true;
+}
+
 // MQTT (re)connects with back-off, and a restart if the broker stays out of
 // reach for MQTT_RESTART_MS while Wi-Fi is up.
 void superviseMqtt() {
@@ -312,6 +336,7 @@ void netLoop() {
     mqttDownSince = 0;  // the broker's clock runs only while Wi-Fi is up
     return;              // provisioning, or (re)joining
   }
+  watchClock();
 
   if (!mqtt.connected()) {
     superviseMqtt();

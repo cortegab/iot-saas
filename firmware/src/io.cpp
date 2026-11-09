@@ -2,6 +2,7 @@
 
 #include <Wire.h>
 
+#include "command_math.h"
 #include "publish_math.h"
 
 #include <vector>
@@ -197,13 +198,24 @@ void applyProfile(const uint8_t* payload, unsigned int length) {
   }
 }
 
-// Command: {"value":..., "issued_at":..., "ttl":..., "command_id":...}. No RTC
-// here, so issued_at/ttl aren't checked against wall-clock time (same as the
-// generated sketch).
+// Command: {"value":..., "issued_at":..., "ttl":..., "command_id":...}.
+// issued_at + ttl is checked once SNTP has set the clock (0.15.1); the
+// generated sketch has no clock and doesn't check it.
 void handleCommand(PubSubClient& mqtt, Actuator& a, const uint8_t* payload, unsigned int length) {
   JsonDocument doc;
   if (deserializeJson(doc, payload, length)) {
     Serial.printf("[CMD] %s: malformed payload, dropping\n", a.key);
+    return;
+  }
+  // Too old to act on (the board was offline, the broker held it): dropped,
+  // not acked, so the platform's timeline shows it as No response. Needs the
+  // clock (net.cpp syncs it over SNTP); until then commands act as before.
+  int64_t now = (int64_t)time(nullptr);
+  int64_t issuedAt = doc["issued_at"] | (int64_t)0;
+  int64_t ttl = doc["ttl"] | (int64_t)0;
+  if (commandExpired(now, issuedAt, ttl)) {
+    Serial.printf("[CMD] %s: expired (issued %llds ago, good for %llds), not applied\n", a.key, (long long)(now - issuedAt),
+                  (long long)ttl);
     return;
   }
   String err;
