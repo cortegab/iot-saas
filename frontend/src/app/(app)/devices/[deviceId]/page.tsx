@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus, Wrench, Zap } from "lucide-react";
@@ -28,6 +28,7 @@ import { CommandHistory } from "@/components/actuators/CommandHistory";
 import { leafPredicates } from "@/components/rules/RuleSummary";
 import { ApiRequestError } from "@/lib/api-client";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
+import { webSerialSupported } from "@/lib/hardware/flasher";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { getDeviceActuators } from "@/lib/device-actuators";
 import { readingFreshness } from "@/lib/freshness";
@@ -41,7 +42,6 @@ type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
-type ZoneResponse = components["schemas"]["ZoneResponse"];
 
 const TABS = ["overview", "controls", "rules", "settings"] as const;
 type DeviceTab = (typeof TABS)[number];
@@ -116,9 +116,9 @@ export default function DeviceDetailPage() {
   const { data: rules } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
   const { data: latest, isLoading: latestLoading } = useApiSWR<TelemetryLatestResponse[]>(`/devices/${deviceId}/latest`);
   const { data: template } = useApiSWR<CatalogEntryResponse>(device ? `/catalog/${device.catalog_entry_id}` : null);
-  const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
   const actuators = useMemo(() => getDeviceActuators(template, rules, deviceId), [template, rules, deviceId]);
   // The ⋯ menu, rotate and delete: the same actions and confirmations as the devices list.
+  const installHere = useSyncExternalStore(noSubscribe, canInstallHere, () => false);
   const actions = useDeviceActions({ onChanged: () => mutate(), ruleCount: () => rules?.length ?? 0 });
 
   const thresholdsByMetric = useMemo(() => {
@@ -168,7 +168,6 @@ export default function DeviceDetailPage() {
   if (!device) return null;
 
   const st = DEVICE_STATUS[deviceStatusKey(device)];
-  const zone = zones?.find((z) => z.id === device.zone_id);
   const neverConnected = device.connection_state === "never_connected";
   const online = device.connection_state === "online";
   const disabled = device.status !== "active";
@@ -189,29 +188,14 @@ export default function DeviceDetailPage() {
     <div className="-mb-[110px] flex flex-1 flex-col gap-4 pb-6">
       <PageHeader
         breadcrumbs={[{ href: "/devices", label: "Devices" }]}
-        status={<Badge tone={st.tone} shape={st.shape} label={st.label} />}
-        eyebrow={
-          <span>
-            {template ? (
-              <Link href={`/templates?peek=${template.id}`} className="hover:text-accent hover:underline">
-                {template.name}
-              </Link>
-            ) : (
-              "Device"
-            )}
-            {" · "}
-            {zone ? (
-              <Link href={`/zones?peek=${zone.id}`} className="hover:text-accent hover:underline">
-                {zone.name}
-              </Link>
-            ) : (
-              "No zone"
-            )}
-            {" · last message "}
-            {device.last_seen_at ? timeAgo(device.last_seen_at) : "never"}
-          </span>
+        // The status beside the name (DESIGN.md §8 device page); template and
+        // zone are in Settings, the last message in Health.
+        title={
+          <>
+            {device.name}
+            <Badge tone={st.tone} shape={st.shape} label={st.label} />
+          </>
         }
-        title={device.name}
         actions={
           <>
             {canWrite &&
@@ -221,10 +205,14 @@ export default function DeviceDetailPage() {
                   Connect
                 </Link>
               ) : (
-                <Link href={`/devices/${deviceId}/connect`} className={buttonClassName({ variant: "secondary" })}>
-                  <Wrench aria-hidden size={15} />
-                  Install
-                </Link>
+                // Installing needs USB from a computer's Chrome or Edge: the
+                // button shows only there; ⋯ always has "Install or reconnect…".
+                installHere && (
+                  <Link href={`/devices/${deviceId}/connect`} className={buttonClassName({ variant: "secondary" })}>
+                    <Wrench aria-hidden size={15} />
+                    Install
+                  </Link>
+                )
               ))}
             <DropdownMenu label="More actions" groups={actions.menu(device, { where: "page", onDeleted: () => router.push("/devices") })} />
           </>
@@ -237,7 +225,7 @@ export default function DeviceDetailPage() {
 
       <TabPanel id="overview" active={tab}>
         <div className="flex flex-col gap-5">
-          {/* Offline is said once, in the header ("Offline · last message …"),
+          {/* Offline is said once, beside the name (and Health has the last message),
               and each readout is marked Stale; only waiting, which has a next
               step, is a callout here (DESIGN.md §5). */}
           {neverConnected && !disabled ? (
@@ -357,9 +345,17 @@ const RESTART_REASON: Record<string, string> = {
   deep_sleep: "Woke from sleep",
 };
 
+/** Whether this browser can install firmware over USB: Web Serial on a
+ * computer (a fine pointer), so a phone browser never offers it. */
+function canInstallHere(): boolean {
+  return webSerialSupported() && typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
+}
+const noSubscribe = () => () => undefined;
+
 const kb = (bytes: number) => `${Math.round(bytes / 1024)} KB`;
 
-/** The device's own report (demo H Health): signal, power, firmware, uptime,
+/** The device's own report (demo H Health): when it last sent anything, then
+ * signal, power, firmware, uptime,
  * its diagnostics (generic firmware 0.14.0+) and the id it uses in MQTT topics. */
 function Health({ device }: { device: DeviceResponse }) {
   // Only what the device has reported; one line when it hasn't reported yet.
@@ -368,6 +364,7 @@ function Health({ device }: { device: DeviceResponse }) {
   return (
     <FactList
       facts={[
+        ["Last message", device.last_seen_at ? timeAgo(device.last_seen_at) : "Never"],
         !reported && ["Report", <span key="r" className="text-ink-muted">Not reported yet</span>],
         device.rssi != null && ["Signal", `${device.rssi} dBm`],
         reported && ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : "Mains"],

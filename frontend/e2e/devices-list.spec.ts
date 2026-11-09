@@ -16,10 +16,12 @@ test("a device peeks from the list and is edited in its Settings tab", async ({ 
 
   await peek.getByRole("link", { name: "Open device" }).click();
   await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}$/);
-  // The header: template · zone overline, status and last message, Connect or Install, ⋯.
-  await expect(page.getByText(/· last message /)).toBeVisible();
+  // The header: the name with its status beside it, Connect or Install (a
+  // computer's Chrome has Web Serial), ⋯. The last message is in Health.
+  await expect(page.getByRole("heading", { level: 1, name: /(Online|Offline|Never connected|Disabled)/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /^(Connect|Install)$/ })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Health" })).toBeVisible();
+  await expect(page.getByText("Last message", { exact: true })).toBeVisible();
 
   await page.getByRole("tab", { name: "Settings" }).click();
   await expect(page).toHaveURL(/\?tab=settings$/);

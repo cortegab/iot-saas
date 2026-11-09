@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy import delete, select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.push.models import PushDevice
@@ -45,14 +46,20 @@ async def register(
     enabled: bool | None = None,
 ) -> PushDevice:
     """Adds the phone, or refreshes it: same token → same row, now owned by
-    this user (a shared phone signed in by someone else)."""
-    result = await session.execute(
-        select(PushDevice).where(PushDevice.tenant_id == tenant_id, PushDevice.token == token)
-    )
-    device = result.scalar_one_or_none()
+    this user (a shared phone signed in by someone else).
+
+    One atomic upsert on (tenant_id, token): the app can register the same
+    token twice at once (startup and a token refresh), and a select-then-
+    insert let the second request fail on the unique constraint."""
     now = datetime.now(UTC)
-    if device is None:
-        device = PushDevice(
+    updates: dict[str, object] = {"user_id": user_id, "platform": platform, "last_seen_at": now}
+    if min_severity is not None:
+        updates["min_severity"] = min_severity
+    if enabled is not None:
+        updates["enabled"] = enabled
+    stmt = (
+        pg_insert(PushDevice)
+        .values(
             id=uuid.uuid4(),
             tenant_id=tenant_id,
             user_id=user_id,
@@ -62,17 +69,11 @@ async def register(
             enabled=True if enabled is None else enabled,
             last_seen_at=now,
         )
-        session.add(device)
-    else:
-        device.user_id = user_id
-        device.platform = platform
-        device.last_seen_at = now
-        if min_severity is not None:
-            device.min_severity = min_severity
-        if enabled is not None:
-            device.enabled = enabled
-    await session.flush()
-    await session.refresh(device)
+        .on_conflict_do_update(constraint="uq_push_devices_tenant_token", set_=updates)
+        .returning(PushDevice)
+        .execution_options(populate_existing=True)
+    )
+    device = (await session.execute(stmt)).scalar_one()
     return device
 
 

@@ -185,7 +185,9 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
   the current page); the overline carries **status and meta only**, never the record kind (the
   breadcrumb says it); the description never restates the overline. **Creating** a named record
   (a device template, a device), the H1 is the name as it's typed, and "New device template" /
-  "Add device" while the box is empty.
+  "Add device" while the box is empty. **Device page exception:** the status sits **beside the
+  name** in the H1 ("axioma ● Online"), with no overline: its live state is what a device page is
+  opened for. Template and zone are in Settings, the last message in Health.
 - **Content column**: max 1120 px on every page (the 1520 px wide view is gone; nothing used it once
   the rule editor joined the standard layout). Every editor, wizard
   and settings page, the rule editor included, holds to a **760 px column** inside the 1120 px page,
@@ -424,6 +426,11 @@ edits a whole record, and there is no "Expand" toggle.
     keeps the wiring and flags each pin the new board lacks; the guide adds the board's own notes
     and how to set up its Wi-Fi again.
 - **Devices**
+  - **Header:** the name with its status badge beside it (§4), then **Connect** (never connected,
+    for whoever can edit) or **Install**, and ⋯. Install is a button only where it can work, a
+    computer's Chrome or Edge (Web Serial and a fine pointer); everywhere else it is the ⋯ menu's
+    **Install or reconnect…**. No template · zone · last message line: the last message opens the
+    Overview's Health list.
   - Zone is set and changed **only in the device's own settings**.
   - The one-time credential is shown as read-only fields with Copy (Connect's Store its credential).
   - The connect / firmware-sketch flow is part of the device page, and is a step-by-step wizard
@@ -928,8 +935,8 @@ restyled.
   resetting a latch. Creating and editing records (templates, wiring, rules, dashboard layouts,
   members, keys, settings) stays on the web; the app links there with **Open on the web**.
 - **Wording:** §11 applies unchanged.
-- **Device screen:** the web's Overview on a phone. The status sits on its own line, then template ·
-  zone · last message. Each reading card shows the name with Live / Stale at the top right, the
+- **Device screen:** the web's Overview on a phone. The top bar has the name with the status beside
+  it (dot and word); **Details** (Template, Zone, Last message) comes before **Health**. Each reading card shows the name with Live / Stale at the top right, the
   value, then when it arrived. The Trend card picks its reading with the web's **metric chips**;
   tapping a reading card picks it too. Charts follow §5, including the shorter on/off chart.
 - **Device label:** device Settings → Connection has a **Label** row: "A QR that opens this device.
@@ -956,9 +963,12 @@ restyled.
   severity icon (a failed delivery shows the mail icon), then the detail and "since …, last … ·
   device · rule". The web's state filter as a segmented control (All · Unread · each type with
   unread alerts). Pages load as you scroll. **Mark all read** sits in the header while anything is
-  unread. Tapping a row marks it read and opens a sheet with the details and **Open device**,
-  **Mark as unread** and **Dismiss**; Dismiss shows an Undo bar for six seconds. A failed delivery is
-  read-only here; Retry stays on the web.
+  unread. Each row has the web's **⋯** (a long press opens it too): **Mark as read** or **Mark as
+  unread**, and **Dismiss**. Tapping a row marks it read and opens a sheet with the details (the
+  device and rule as links), **Each time** for a repeated alert, and the web's buttons: **Done**,
+  **Mark as unread** and **Dismiss**; Dismiss shows an Undo bar for six seconds. Any change, here or
+  elsewhere (a push opened, a live alert), updates the rows at once. A failed delivery is read-only
+  here; Retry stays on the web.
 - **Rules:** a tab with the web's rules list on a phone: sorted by name, the state filter (All ·
   Armed · Latched · Can't evaluate · Disabled, with counts), and per rule its state dot and word,
   "When {trigger} → {action}" in the web's words, then "fired N× in 24 h" or its schedule and
@@ -972,7 +982,8 @@ restyled.
   per-workspace **Alerts on this phone** Switch and, while on, **Critical only | Warnings and
   critical**. When the phone's settings block notifications, the row says so and offers **Open the
   phone's settings**. A notification's title is names only ("Greenhouse fan fired", "Bay 1 went
-  offline"); tapping it opens the device (offline) or Alerts, switching workspace if needed. Android
+  offline"); tapping it marks its alert read and opens the device (offline) or Alerts, switching
+  workspace if needed. Android
   channels: *Critical alerts* (high importance) and *Alerts*.
 - **Update required:** when the API says this app version is too old (`/meta/client`), the app
   shows only a full screen: "Update required", one sentence naming the installed and the latest
@@ -1087,3 +1098,5 @@ restyled.
 | 2026-11-07 | §15 **Update required** (mobile plan Phase 5): a full-screen stop with Get the update when the app is older than the API's minimum; a failed check never blocks. |
 | 2026-11-08 | §8 **Device health** (firmware stability plan F4): the device page's Health card adds, when the firmware reports them (0.14.0+), **Last restart** ("Crash · boot 7", the reason in words), **Sensors** ("All answering", or the parts not answering in the error colour), **Memory** (free · lowest) and **Wi-Fi rejoins**. A new notification kind, *device health* (warning), says a device restarted after a crash, watchdog or brown-out, or that a sensor stopped answering; it gets its own **Device health** state in the notifications filter, after Offline. |
 | 2026-11-08 | §8 device **Settings → Firmware** (firmware stability plan F7, generic-firmware devices only): a FactList with **Running**, **Latest release** with an **Update to …** link for admins (a confirm explains the download, the signature check, the restart and the 2-minute rollback), an **Update** line that follows it (*Downloading …*, *Restarting into …*, *Updated to …*, or why it failed, in the error colour), and **Over the air** saying why it can't update when it can't (offline, 0.x firmware, unsigned release). A failed or rolled-back update is a *device health* alert. |
+| 2026-11-09 | §15 **Alerts** matched to the web's Notifications: a **⋯** on each row (and a long press) with Mark as read / unread and Dismiss; the sheet's buttons are **Done**, **Mark as unread**, **Dismiss** (Open device moves to the details as a link, the rule too); **Each time** for repeats. Rows update at once after any change. Opening a push marks its alert read. |
+| 2026-11-09 | §4, §8, §15 **device header** (user review): on the web and in the app the status sits **beside the device name** ("axioma ● Online"), and the template · zone · last message line goes; template and zone are in Settings (web) or the app's new **Details** section, the last message in Health (web) or Details (app). Web **Install** is a header button only on a computer's Chrome or Edge, where installing over USB works; elsewhere it's the ⋯ menu's Install or reconnect…. A device-page exception to §4's status-in-the-overline. |

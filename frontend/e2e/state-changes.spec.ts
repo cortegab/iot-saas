@@ -39,9 +39,9 @@ test("a device going online and offline while its page is open: one toast each, 
     // Said once, in the header; no "Offline since …" callout on the Overview.
     await expect(page.getByText(/Offline since/)).toHaveCount(0);
 
-    // Reloaded while offline: the header says it, and no toast repeats it.
+    // Reloaded while offline: the header says it beside the name, and no toast repeats it.
     await page.reload();
-    await expect(page.getByText(/last message/)).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: new RegExp(`${name}.*Offline`) })).toBeVisible();
     await expect(page.getByText(`${name} went offline`)).toHaveCount(0);
   } finally {
     await request.delete(`${API_URL}/devices/${device.id}`, { headers });

@@ -19,9 +19,9 @@ from app.devices.router import router as devices_router
 from app.firmware.router import router as firmware_router
 from app.ingestion.router import router as ingestion_router
 from app.logging_config import configure_logging
+from app.meta.router import router as meta_router
 from app.notifications.router import router as notifications_router
 from app.paging import TOTAL_HEADER
-from app.meta.router import router as meta_router
 from app.push.router import router as push_router
 from app.realtime.router import router as realtime_router
 from app.rules.router import router as rules_router
