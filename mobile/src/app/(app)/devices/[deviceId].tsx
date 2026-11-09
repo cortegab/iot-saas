@@ -68,8 +68,12 @@ export default function DeviceScreen() {
   const metrics = template?.metrics ?? [];
   const chartKey = selected ?? (metrics[0] ? wireId(metrics[0]) : null);
   const zone = device.zone_id ? zones?.find((z) => z.id === device.zone_id)?.name : null;
-  const health: [string, string][] = [
+  const details: [string, string][] = [
+    ["Template", template?.name ?? "—"],
+    ["Zone", zone ?? "No zone"],
     ["Last message", device.last_seen_at ? timeAgo(device.last_seen_at) : "Never"],
+  ];
+  const health: [string, string][] = [
     ...(device.rssi != null ? [["Wi-Fi signal", `${device.rssi} dBm`] as [string, string]] : []),
     ...(device.battery_pct != null ? [["Battery", `${device.battery_pct} %`] as [string, string]] : []),
     ...(device.uptime_s != null ? [["Uptime", uptime(device.uptime_s)] as [string, string]] : []),
@@ -87,20 +91,26 @@ export default function DeviceScreen() {
       contentContainerStyle={styles.page}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={theme.inkMuted} />}
     >
-      <Stack.Screen options={{ title: device.name }} />
-
-      {/* The web's header: the state on its own line, then what and where. */}
-      <View style={styles.statusBlock}>
-        <View style={styles.status}>
-          <StatusDot tone={status.tone} shape={status.shape} />
-          <Text size="meta" weight="medium" color={status.tone === "online" ? "statusOnline" : status.tone === "offline" ? "statusOffline" : "inkMuted"}>
-            {status.label}
-          </Text>
-        </View>
-        <Text size="meta" color="inkMuted">
-          {[template?.name, zone ?? "No zone", `last message ${key === "never" ? "never" : timeAgo(device.last_seen_at)}`].filter(Boolean).join(" · ")}
-        </Text>
-      </View>
+      {/* The web's header: the name with its status beside it (DESIGN.md §15).
+          Template, zone and the last message are in Details. */}
+      <Stack.Screen
+        options={{
+          title: device.name,
+          headerTitle: () => (
+            <View style={styles.headerTitle} accessible accessibilityRole="header" accessibilityLabel={`${device.name}, ${status.label}`}>
+              <Text size="section" weight="semibold" numberOfLines={1} style={styles.headerName}>
+                {device.name}
+              </Text>
+              <View style={styles.status}>
+                <StatusDot tone={status.tone} shape={status.shape} />
+                <Text size="meta" weight="medium" color={status.tone === "online" ? "statusOnline" : status.tone === "offline" ? "statusOffline" : "inkMuted"}>
+                  {status.label}
+                </Text>
+              </View>
+            </View>
+          ),
+        }}
+      />
 
       <View style={styles.section}>
         <Text size="section" weight="semibold" accessibilityRole="header">
@@ -187,11 +197,19 @@ export default function DeviceScreen() {
         </View>
       </View>
 
-      <Lines label="Health">
-        {health.map(([label, value]) => (
+      <Lines label="Details">
+        {details.map(([label, value]) => (
           <Row key={label} title={label} right={<Text color="inkMuted">{value}</Text>} />
         ))}
       </Lines>
+
+      {health.length > 0 && (
+        <Lines label="Health">
+          {health.map(([label, value]) => (
+            <Row key={label} title={label} right={<Text color="inkMuted">{value}</Text>} />
+          ))}
+        </Lines>
+      )}
 
       <Lines>
         <Row
@@ -207,7 +225,8 @@ export default function DeviceScreen() {
 
 const styles = StyleSheet.create({
   page: { padding: 16, gap: 20 },
-  statusBlock: { gap: 4 },
+  headerTitle: { flexDirection: "row", alignItems: "center", gap: 10, maxWidth: "100%" },
+  headerName: { flexShrink: 1 },
   status: { flexDirection: "row", alignItems: "center", gap: 8 },
   readingHead: { flexDirection: "row", alignItems: "center", gap: 6 },
   flex: { flex: 1 },
