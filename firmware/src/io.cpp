@@ -92,7 +92,7 @@ bool beginMetrics(const DeviceConfig& cfg, const String& prefix, String& err) {
   for (JsonObjectConst item : cfg.metrics) {
     Metric m;
     m.key = item["key"] | "";
-    if (strlen(m.key) == 0 || !strcmp(m.key, "status") || !strcmp(m.key, "config")) {
+    if (strlen(m.key) == 0 || !strcmp(m.key, "status") || !strcmp(m.key, "config") || !strcmp(m.key, "ota")) {
       err = String("metric key \"") + m.key + "\" isn't allowed";
       return false;
     }

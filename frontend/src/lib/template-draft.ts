@@ -27,7 +27,7 @@ type Scalar = boolean | number | string;
 /** Mirrors backend catalog/service.py KEY_PATTERN: one MQTT topic segment. */
 export const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 /** Reserved device-contract segments (CLAUDE.md §4). */
-export const RESERVED_METRIC_KEYS = ["status", "config"];
+export const RESERVED_METRIC_KEYS = ["status", "config", "ota"];
 
 export interface MetricDraft {
   uid: string;

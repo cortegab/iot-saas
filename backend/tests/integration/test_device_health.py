@@ -301,12 +301,13 @@ async def test_catalog_rejects_reserved_metric_key(client: httpx.AsyncClient) ->
     tenant_id = owner["memberships"][0]["tenant_id"]
     headers = _auth_headers(owner, tenant_id)
 
-    resp = await client.post(
-        "/catalog",
-        json={"name": "Bad Type", "metrics": [{"name": "Status", "key": "status"}]},
-        headers=headers,
-    )
-    assert resp.status_code == 400
+    for key in ("status", "config", "ota"):
+        resp = await client.post(
+            "/catalog",
+            json={"name": f"Bad {key}", "metrics": [{"name": "X", "key": key}]},
+            headers=headers,
+        )
+        assert resp.status_code == 400, key
 
 
 # ---- Config-publish fan-out --------------------------------------------------

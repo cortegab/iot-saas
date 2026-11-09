@@ -558,6 +558,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices/{device_id}/firmware": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Firmware */
+        get: operations["get_firmware_devices__device_id__firmware_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/firmware/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update Firmware */
+        post: operations["update_firmware_devices__device_id__firmware_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api-keys": {
         parameters: {
             query?: never;
@@ -2137,6 +2171,33 @@ export interface components {
              */
             created_at: string;
         };
+        /**
+         * FirmwareStatusResponse
+         * @description What the device runs, the latest release, and whether it can update to
+         *     it over the air right now (`reason` says why not, in words).
+         */
+        FirmwareStatusResponse: {
+            /** Current */
+            current: string | null;
+            /** Latest */
+            latest: string | null;
+            /** Update Available */
+            update_available: boolean;
+            /** Can Update */
+            can_update: boolean;
+            /** Reason */
+            reason: string | null;
+            /** Target */
+            target: string | null;
+            /** Requested At */
+            requested_at: string | null;
+            state: components["schemas"]["OtaState"] | null;
+        };
+        /** FirmwareUpdateRequest */
+        FirmwareUpdateRequest: {
+            /** Version */
+            version: string;
+        };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
             /** Email */
@@ -2497,6 +2558,19 @@ export interface components {
             device_ids: string[];
             /** Rule Ids */
             rule_ids: string[];
+        };
+        /**
+         * OtaState
+         * @description An update's progress as the device last reported it in its status
+         *     message (firmware/src/ota.h).
+         */
+        OtaState: {
+            /** Version */
+            version: string;
+            /** State */
+            state: string;
+            /** Error */
+            error?: string | null;
         };
         /**
          * PushDeviceRegisterRequest
@@ -4572,6 +4646,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeviceCreateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_firmware_devices__device_id__firmware_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_firmware_devices__device_id__firmware_update_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirmwareUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareStatusResponse"];
                 };
             };
             /** @description Validation Error */

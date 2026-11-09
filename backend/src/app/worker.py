@@ -77,6 +77,7 @@ from app.config import settings
 from app.db import session_factory
 from app.devices import service as devices_service
 from app.devices.models import DeviceStatus
+from app.firmware import service as firmware_service
 from app.health import service as health_service
 from app.ingestion import service as ingestion_service
 from app.ingestion.schemas import StatusPayload, TelemetryPayload
@@ -127,6 +128,8 @@ async def handle_message(
     if parsed.metric == ingestion_service.RESERVED_METRIC_STATUS:
         await _handle_status(factory, client, parsed, payload)
         return
+    if parsed.metric in ingestion_service.PLATFORM_TO_DEVICE_SEGMENTS:
+        return  # our own publish to the device, echoed back
 
     try:
         data = TelemetryPayload.model_validate_json(payload)
@@ -213,6 +216,7 @@ async def _handle_status(
             heap_min=data.heap_min,
             wifi_reconnects=data.wifi_reconnects,
             faults=data.faults,
+            ota_state=data.ota,
         )
         if data.boot_count is not None
         else None
@@ -245,6 +249,7 @@ async def _handle_status(
             "heap_min": data.heap_min,
             "wifi_reconnects": data.wifi_reconnects,
             "faults": data.faults,
+            "ota": data.ota,
         },
     )
     if resolved.status != DeviceStatus.DISABLED:
@@ -307,6 +312,17 @@ async def _alert_device_health(
                     f"Boot {data.boot_count}. It came back on its own; if this repeats, check its "
                     "power supply and wiring, and its serial log."
                 ),
+            )
+        )
+    if change.ota_problem is not None:
+        version = change.ota_problem.get("version", "?")
+        failed = change.ota_problem.get("state") == "failed"
+        alerts.append(
+            (
+                f"{device_slug}: update to {version} "
+                + ("failed" if failed else "was rolled back"),
+                change.ota_problem.get("error")
+                or "It kept the version it had; see its Settings → Firmware.",
             )
         )
     for fault in change.new_faults:
@@ -523,6 +539,21 @@ async def _handle_rule_trigger(
     await rules_service.run_rule_out_of_band(client, factory, tenant_id, rule_id, trigger_source)
 
 
+async def _handle_ota_request(client: aiomqtt.Client, raw: str | bytes) -> None:
+    """An admin asked a device to update (app.firmware): publish the request
+    on {tenant}/{device}/ota. QoS 1, not retained: a device that's offline now
+    must not install it on some later reconnect without anyone asking."""
+    try:
+        data = json.loads(raw)
+        topic = f"{data['tenant_slug']}/{data['device_slug']}/ota"
+        payload = json.dumps(data["payload"])
+    except (KeyError, TypeError, ValueError) as exc:
+        log.warning("dropping malformed ota request: %s", exc)
+        return
+    await client.publish(topic, payload, qos=1)
+    log.info("ota request -> %s (version %s)", topic, data["payload"].get("version"))
+
+
 async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
     while True:
         try:
@@ -539,6 +570,7 @@ async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redi
                     commands_service.MANUAL_COMMAND_CHANNEL,
                     catalog_service.CONFIG_PUBLISH_CHANNEL,
                     rules_service.RULES_MANUAL_CHANNEL,
+                    firmware_service.OTA_CHANNEL,
                 )
                 async for message in pubsub.listen():
                     if message["type"] != "message":
@@ -547,6 +579,8 @@ async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redi
                         await _handle_config_publish(client, factory, message["data"])
                     elif message["channel"] == rules_service.RULES_MANUAL_CHANNEL:
                         await _handle_rule_trigger(client, factory, message["data"])
+                    elif message["channel"] == firmware_service.OTA_CHANNEL:
+                        await _handle_ota_request(client, message["data"])
                     else:
                         await _handle_manual_command(client, factory, message["data"])
         except (aiomqtt.MqttError, redis.RedisError) as exc:
