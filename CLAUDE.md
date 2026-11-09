@@ -173,8 +173,9 @@ considered.**
 {tenant}/{device}/ack/{actuator}           acknowledgement (device → platform)
 {tenant}/{device}/config                   telemetry profile (retained, platform → device)
 {tenant}/{device}/status                   health snapshot (retained, device → platform; Last-Will target)
+{tenant}/{device}/ota                      firmware update request (platform → device, QoS 1, not retained)
 ```
-`status` and `config` are reserved metric-key segments — a tenant-authored metric can never collide
+`status`, `config` and `ota` are reserved metric-key segments — a tenant-authored metric can never collide
 with them (enforced at catalog write time).
 
 **Telemetry payload**
@@ -212,7 +213,19 @@ last restarted (`power_on`, `reset_pin`, `software`, `crash`, `task_wdt`, `inter
 low-water mark (bytes), Wi-Fi rejoins since boot, and the parts not answering right now. The
 platform keeps the last online report's diagnostics through a Last-Will, trims odd values instead
 of dropping the message, and raises a *device health* alert for a new boot after a crash, watchdog
-or brown-out, and for each newly listed fault.
+or brown-out, and for each newly listed fault. Firmware 1.0.0+ also reports an over-the-air
+update's progress as `"ota": {"version": "1.0.1", "state": "downloading" | "restarting" | "failed" |
+"rolled_back", "error": "…"}`.
+
+**OTA request** (generic firmware 1.0.0+; `docs/firmware/ota.md`)
+```json
+{ "version": "1.0.1", "url": "https://…/firmware/1.0.1/esp32/firmware.bin", "size": 1441315,
+  "sha256": "<hex>", "signature": "<base64 DER ECDSA P-256 over the SHA-256>", "command_id": "uuid" }
+```
+The device installs it only if size, SHA-256 and signature check out against the public keys built
+into its firmware (`firmware/ota_keys/`), and keeps it only once it reaches the broker within 2
+minutes; otherwise the bootloader goes back to the previous version. The private signing key is a
+GitHub Actions secret plus an offline backup, never on the VPS.
 The platform stamps its own receive time for staleness math and never trusts this payload's own
 `timestamp` — a Last-Will fires at an unpredictable moment its payload can't reflect.
 

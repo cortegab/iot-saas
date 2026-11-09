@@ -16,6 +16,7 @@ from app.config import settings
 from app.contact.router import router as contact_router
 from app.dashboards.router import router as dashboards_router
 from app.devices.router import router as devices_router
+from app.firmware.router import router as firmware_router
 from app.ingestion.router import router as ingestion_router
 from app.logging_config import configure_logging
 from app.notifications.router import router as notifications_router
@@ -53,6 +54,7 @@ app.include_router(auth_router)
 app.include_router(tenants_router)
 app.include_router(catalog_router)
 app.include_router(devices_router)
+app.include_router(firmware_router)
 app.include_router(api_keys_router)
 app.include_router(telemetry_router)
 app.include_router(ingestion_router)

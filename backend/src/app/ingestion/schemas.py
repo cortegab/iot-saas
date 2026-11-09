@@ -11,6 +11,8 @@ from pydantic import BaseModel, Field, field_validator
 MAX_FAULTS = 8
 MAX_FAULT_LEN = 80
 MAX_REASON_LEN = 32
+OTA_STATES = {"downloading", "restarting", "failed", "rolled_back"}
+MAX_OTA_ERROR_LEN = 160
 
 
 class TelemetryPayload(BaseModel):
@@ -48,6 +50,23 @@ class StatusPayload(BaseModel):
     heap_min: int | None = None
     wifi_reconnects: int | None = None
     faults: list[str] | None = None
+    # An over-the-air update's progress (firmware 1.0.0+, firmware/src/ota.h):
+    # {"version", "state": downloading | restarting | failed | rolled_back,
+    # "error"}. Absent when there's nothing to say.
+    ota: dict[str, str] | None = None
+
+    @field_validator("ota", mode="before")
+    @classmethod
+    def _ota(cls, v: object) -> object:
+        if not isinstance(v, dict):
+            return None
+        version, state, error = v.get("version"), v.get("state"), v.get("error")
+        if not isinstance(version, str) or not isinstance(state, str) or state not in OTA_STATES:
+            return None
+        out = {"version": version[:MAX_REASON_LEN], "state": state}
+        if isinstance(error, str) and error:
+            out["error"] = error[:MAX_OTA_ERROR_LEN]
+        return out
 
     @field_validator("reset_reason", mode="before")
     @classmethod

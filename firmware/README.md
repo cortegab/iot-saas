@@ -145,6 +145,16 @@ blinks dim blue. It shows where the board is, so you don't need a serial monitor
 The patterns live in `src/led_pattern.h` and are host-tested (`test/test_led_pattern`). Keep this
 table in step with `src/led.h`.
 
+## Over-the-air updates
+
+From 1.0.0 a board updates itself: device → Settings → Firmware → **Update to …** (admins). It
+downloads into the other app slot, checks the SHA-256 and the release's **signature** against the
+public keys in `ota_keys/` (built in by `ota_keys.py`), and restarts into it on probation. If it
+doesn't reach the broker within 2 minutes, the bootloader goes back to the previous version.
+`release.py` signs each app (`--sign-key`, or `OTA_SIGNING_KEY_FILE`; the deploy passes the
+`OTA_SIGNING_KEY` secret) and refuses an unsigned release once `ota_keys/` has a key. Setup, key
+changes and bench testing: `docs/firmware/ota.md`. Boards on 0.x need one USB install of 1.0.0.
+
 ## Publishing
 
 Each metric is sent with its template's **Decimals** (0.13.0; older firmware always sent 3), and

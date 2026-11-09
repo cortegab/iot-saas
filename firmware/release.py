@@ -12,9 +12,11 @@ committed (gitignored); the deploy step syncs infra/firmware/ to the VPS.
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -202,12 +204,45 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def public_keys() -> list[Path]:
+    """The update keys built into the firmware (ota_keys.py reads the same)."""
+    return sorted((HERE / "ota_keys").glob("*.pem"))
+
+
+def sign(app: Path, key: Path, sig_out: Path) -> str:
+    """Signs firmware.bin for over-the-air updates: ECDSA P-256 over its
+    SHA-256, DER, base64 (src/ota.cpp checks it). Refuses a key whose
+    signature no built-in public key accepts: boards would reject the update."""
+    subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(key), "-out", str(sig_out), str(app)], check=True)
+    accepted = [
+        pub
+        for pub in public_keys()
+        if subprocess.run(
+            ["openssl", "dgst", "-sha256", "-verify", str(pub), "-signature", str(sig_out), str(app)],
+            capture_output=True,
+        ).returncode
+        == 0
+    ]
+    if not accepted:
+        fail(f"the signing key matches none of the public keys in ota_keys/ ({', '.join(p.name for p in public_keys())})")
+    return base64.b64encode(sig_out.read_bytes()).decode()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dev", action="store_true", help="also copy into frontend/public/firmware/")
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--out", type=Path, default=ROOT / "infra/firmware")
+    parser.add_argument(
+        "--sign-key",
+        type=Path,
+        default=Path(os.environ["OTA_SIGNING_KEY_FILE"]) if os.environ.get("OTA_SIGNING_KEY_FILE") else None,
+        help="private ECDSA P-256 key (PEM) that signs each app for OTA updates (or OTA_SIGNING_KEY_FILE)",
+    )
+    parser.add_argument("--unsigned", action="store_true", help="release without signatures: boards refuse it over the air")
     args = parser.parse_args()
+    if public_keys() and args.sign_key is None and not args.unsigned:
+        fail("ota_keys/ has update keys, so a release must be signed: pass --sign-key (or --unsigned for a USB-only build)")
 
     version = read_version()
     catalog = json.loads((HERE / "drivers.json").read_text())
@@ -263,7 +298,18 @@ def main() -> None:
         boards[board] = {
             "chip": chip,
             "parts": parts,
-            "app": {"offset": app_offset, "size": app_size, "used": app_bytes},
+            "app": {
+                "offset": app_offset,
+                "size": app_size,
+                "used": app_bytes,
+                # Over-the-air updates (src/ota.cpp): what the platform sends.
+                # No signature: this release can only be installed over USB.
+                **(
+                    {"signature": sign(out_dir / board / "firmware.bin", args.sign_key, out_dir / board / "firmware.sig")}
+                    if args.sign_key is not None
+                    else {}
+                ),
+            },
             "cfg": {"offset": cfg_offset, "size": cfg_size},
             # Where saved Wi-Fi lives: a first-time install blanks it (0xFF is
             # an empty NVS), so a reused board starts at phone setup.

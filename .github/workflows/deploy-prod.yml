@@ -93,11 +93,25 @@ jobs:
 
       - name: Build the release
         if: steps.version.outputs.needed == 'true'
+        env:
+          # The private key that signs each app for over-the-air updates
+          # (docs/firmware/ota.md). A secret of the protected `production`
+          # environment; never on the VPS. release.py refuses to publish an
+          # unsigned release once firmware/ota_keys/ has a public key.
+          OTA_SIGNING_KEY: ${{ secrets.OTA_SIGNING_KEY }}
         run: |
           pip install platformio==6.2.0
-          # Builds both chips and fails on an oversized app or a catalog that
-          # disagrees with the firmware (drivers.json, boards.json).
+          if [ -n "$OTA_SIGNING_KEY" ]; then
+            umask 077
+            KEY_FILE="$RUNNER_TEMP/ota-signing.pem"
+            printf '%s\n' "$OTA_SIGNING_KEY" > "$KEY_FILE"
+            export OTA_SIGNING_KEY_FILE="$KEY_FILE"
+          fi
+          # Builds every chip and fails on an oversized app, a catalog that
+          # disagrees with the firmware (drivers.json, boards.json), or a
+          # signing key that matches none of the firmware's public keys.
           python3 firmware/release.py
+          rm -f "$RUNNER_TEMP/ota-signing.pem"
 
       - name: Publish to the VPS
         if: steps.version.outputs.needed == 'true'

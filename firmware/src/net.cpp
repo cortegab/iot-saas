@@ -12,6 +12,7 @@
 #include "command_math.h"
 #include "diag.h"
 #include "health.h"
+#include "ota.h"
 #include "io.h"
 #include "provisioning.h"
 #include "root_ca.h"
@@ -59,8 +60,10 @@ WiFiClient plainClient;
 WiFiClientSecure tlsClient;
 PubSubClient mqtt;
 String statusTopic;
+String otaTopic;
 unsigned long lastStatusMs = 0;
 uint32_t publishedFaultsVersion = 0;
+uint32_t publishedOtaVersion = 0;
 unsigned long lastMqttAttemptMs = 0;
 unsigned long mqttRetryMs = MQTT_RETRY_MIN_MS;
 bool mqttAttempted = false;
@@ -220,14 +223,23 @@ void publishStatus() {
   // At most 6 (of up to 8 kept): ~65 bytes each keeps the message inside
   // PubSubClient's 1024-byte buffer with the topic.
   for (size_t i = 0; i < sensorFaultCount() && i < 6; i++) faults.add(sensorFaultText(i));
+  JsonObject ota = doc["ota"].to<JsonObject>();
+  if (!otaReport(ota)) doc.remove("ota");
   char payload[800];
   size_t len = serializeJson(doc, payload, sizeof(payload));
   mqtt.publish(statusTopic.c_str(), (const uint8_t*)payload, len, true);
   lastStatusMs = millis();
   publishedFaultsVersion = sensorFaultsVersion();
+  publishedOtaVersion = otaReportVersion();
 }
 
-void onMessage(char* topic, uint8_t* payload, unsigned int length) { ioHandleMessage(mqtt, topic, payload, length); }
+void onMessage(char* topic, uint8_t* payload, unsigned int length) {
+  if (otaTopic == topic) {
+    otaRequest(payload, length);  // only queued: netLoop() runs it
+    return;
+  }
+  ioHandleMessage(mqtt, topic, payload, length);
+}
 
 void tryConnectMqtt() {
   mqttAttempted = true;
@@ -241,6 +253,7 @@ void tryConnectMqtt() {
     mqttDownSince = 0;
     publishStatus();
     ioSubscribe(mqtt);
+    mqtt.subscribe(otaTopic.c_str(), 1);
   } else {
     Serial.printf("failed, rc=%d, retrying in %lus\n", mqtt.state(), mqttRetryMs / 1000);
   }
@@ -287,6 +300,7 @@ void superviseMqtt() {
 void netBegin(const DeviceConfig& config) {
   cfg = &config;
   statusTopic = String(config.tenant) + "/" + config.device + "/status";
+  otaTopic = String(config.tenant) + "/" + config.device + "/ota";
 
   if (config.tls) {
     tlsClient.setCACert(ROOT_CA);
@@ -343,10 +357,18 @@ void netLoop() {
     return;
   }
   mqtt.loop();
+  if (otaPending()) {
+    // Say "downloading" first: the download blocks the loop for a while.
+    publishStatus();
+    mqtt.loop();
+    otaRun();  // restarts on success
+    publishStatus();  // why it failed
+    return;
+  }
   ioPublishMetrics(mqtt);
   unsigned long sinceStatus = millis() - lastStatusMs;
-  if (sinceStatus >= STATUS_INTERVAL_MS ||
-      (sensorFaultsVersion() != publishedFaultsVersion && sinceStatus >= STATUS_MIN_GAP_MS))
+  bool changed = sensorFaultsVersion() != publishedFaultsVersion || otaReportVersion() != publishedOtaVersion;
+  if (sinceStatus >= STATUS_INTERVAL_MS || (changed && sinceStatus >= STATUS_MIN_GAP_MS))
     publishStatus();
 }
 
