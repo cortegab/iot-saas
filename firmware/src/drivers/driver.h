@@ -35,6 +35,9 @@ class OutputDriver {
   // Applies a command's or desired state's value. False with `err` set if the
   // value doesn't make sense for this output.
   virtual bool apply(JsonVariantConst value, String& err) = 0;
+  // Back to the boot state begin() set: the fail-safe when the board has been
+  // out of touch with the platform (params when_offline / offline_after_s).
+  virtual void applyBootState() = 0;
 };
 
 // ---- param helpers: a missing param takes its default; a present but wrong

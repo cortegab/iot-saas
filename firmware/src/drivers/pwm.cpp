@@ -26,9 +26,12 @@ class Pwm : public OutputDriver {
       err = String("pwm: can't run ") + freq + " Hz at " + bits + " bits on GPIO " + pin_ + " (try a lower frequency)";
       return false;
     }
+    boot_ = boot;
     write(boot);
     return true;
   }
+
+  void applyBootState() override { write(boot_); }
 
   bool apply(JsonVariantConst value, String& err) override {
     float v;
@@ -49,6 +52,7 @@ class Pwm : public OutputDriver {
   uint8_t bits_ = 10;
   float inMin_ = 0, inMax_ = 100;
   bool invert_ = false;
+  float boot_ = 0;
 };
 
 }  // namespace

@@ -99,7 +99,10 @@ need attribution plus relinking terms; GPL ones are refused (write the driver in
    - An I2C driver calls `i2cRecover()` before retrying a part that stopped answering: it frees a
      bus a half-finished transfer left held low (at most every 30 s for the whole bus).
    - `channels()` lists the channel names a template can map.
-   - Outputs apply their safe boot state in `begin()`, before Wi-Fi comes up.
+   - Outputs apply their safe boot state in `begin()`, before Wi-Fi comes up, and again in
+     `applyBootState()`, the fail-safe `io.cpp` calls when the board has been out of touch with
+     the platform. Give every output driver the `when_offline` / `offline_after_s` params
+     (copy them from `relay` in `drivers.json`).
    - Allocate in `begin()`, never per loop.
 4. **Register it:** one entry in `firmware/src/drivers/registry.cpp` behind its own
    `#ifdef IOD_DRIVER_<ID>`, plus the `make…()` declaration above it. `driver_flags.py` defines

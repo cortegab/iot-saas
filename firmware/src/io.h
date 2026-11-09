@@ -20,5 +20,10 @@ void ioSubscribe(PubSubClient& mqtt);
 // Publishes the metrics due now, per their publish profile.
 void ioPublishMetrics(PubSubClient& mqtt);
 
+// Every loop: applies each output's fail-safe (when_offline = "Boot state")
+// once the board has been out of touch with the platform for its
+// offline_after_s, counted from boot or from the last disconnect.
+void ioWatchConnection(bool connected, uint32_t nowMs);
+
 // Routes an incoming message (config, cmd, state).
 void ioHandleMessage(PubSubClient& mqtt, const char* topic, const uint8_t* payload, unsigned int length);
