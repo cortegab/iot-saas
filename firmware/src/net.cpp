@@ -6,7 +6,11 @@
 #include <esp_wifi.h>
 #include <soc/soc_caps.h>
 
+#include <ArduinoJson.h>
+
 #include "board.h"
+#include "diag.h"
+#include "health.h"
 #include "io.h"
 #include "provisioning.h"
 #include "root_ca.h"
@@ -20,6 +24,8 @@ extern "C" bool btInUse() { return true; }
 namespace {
 
 constexpr unsigned long STATUS_INTERVAL_MS = 60000;
+// A changed fault list goes out at once, but not more often than this.
+constexpr unsigned long STATUS_MIN_GAP_MS = 5000;
 constexpr unsigned long RESET_HOLD_MS = 5000;
 
 // MQTT reconnects back off 2 s, 4 s, 8 s ... up to a minute, so a broker
@@ -49,6 +55,7 @@ WiFiClientSecure tlsClient;
 PubSubClient mqtt;
 String statusTopic;
 unsigned long lastStatusMs = 0;
+uint32_t publishedFaultsVersion = 0;
 unsigned long lastMqttAttemptMs = 0;
 unsigned long mqttRetryMs = MQTT_RETRY_MIN_MS;
 bool mqttAttempted = false;
@@ -94,6 +101,7 @@ void onWifiEvent(arduino_event_t* e) {
       break;
     case ARDUINO_EVENT_WIFI_STA_GOT_IP:
       provisioning = false;
+      diagNoteWifiConnected();
       Serial.print("[WIFI] connected, IP: ");
       Serial.println(WiFi.localIP());
       break;
@@ -187,14 +195,29 @@ bool superviseWifi() {
   return false;
 }
 
-// Retained health snapshot. The Last-Will set on connect replaces it with
-// {"online":false} if the board drops off.
+// Retained health snapshot (CLAUDE.md §4). The Last-Will set on connect
+// replaces it with {"online":false} if the board drops off. The diagnostics
+// (0.14.0) are optional fields: platforms before them ignore them.
 void publishStatus() {
-  char payload[160];
-  snprintf(payload, sizeof(payload), "{\"online\":true,\"rssi\":%d,\"uptime_s\":%lu,\"fw_version\":\"%s\"}",
-           (int)WiFi.RSSI(), millis() / 1000UL, FW_VERSION);
-  mqtt.publish(statusTopic.c_str(), payload, true);
+  JsonDocument doc;
+  doc["online"] = true;
+  doc["rssi"] = (int)WiFi.RSSI();
+  doc["uptime_s"] = millis() / 1000UL;
+  doc["fw_version"] = FW_VERSION;
+  doc["reset_reason"] = diagResetReason();
+  doc["boot_count"] = diagBootCount();
+  doc["heap_free"] = ESP.getFreeHeap();
+  doc["heap_min"] = ESP.getMinFreeHeap();
+  doc["wifi_reconnects"] = diagWifiReconnects();
+  JsonArray faults = doc["faults"].to<JsonArray>();
+  // At most 6 (of up to 8 kept): ~65 bytes each keeps the message inside
+  // PubSubClient's 1024-byte buffer with the topic.
+  for (size_t i = 0; i < sensorFaultCount() && i < 6; i++) faults.add(sensorFaultText(i));
+  char payload[800];
+  size_t len = serializeJson(doc, payload, sizeof(payload));
+  mqtt.publish(statusTopic.c_str(), (const uint8_t*)payload, len, true);
   lastStatusMs = millis();
+  publishedFaultsVersion = sensorFaultsVersion();
 }
 
 void onMessage(char* topic, uint8_t* payload, unsigned int length) { ioHandleMessage(mqtt, topic, payload, length); }
@@ -296,7 +319,10 @@ void netLoop() {
   }
   mqtt.loop();
   ioPublishMetrics(mqtt);
-  if (millis() - lastStatusMs >= STATUS_INTERVAL_MS) publishStatus();
+  unsigned long sinceStatus = millis() - lastStatusMs;
+  if (sinceStatus >= STATUS_INTERVAL_MS ||
+      (sensorFaultsVersion() != publishedFaultsVersion && sinceStatus >= STATUS_MIN_GAP_MS))
+    publishStatus();
 }
 
 NetState netState() {

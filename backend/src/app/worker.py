@@ -204,7 +204,20 @@ async def _handle_status(
         return
 
     received_at = datetime.now(UTC)
-    await devices_service.record_status_snapshot(
+    # Only firmware that reports diagnostics (0.14.0+) sends boot_count.
+    diagnostics = (
+        devices_service.StatusDiagnostics(
+            reset_reason=data.reset_reason,
+            boot_count=data.boot_count,
+            heap_free=data.heap_free,
+            heap_min=data.heap_min,
+            wifi_reconnects=data.wifi_reconnects,
+            faults=data.faults,
+        )
+        if data.boot_count is not None
+        else None
+    )
+    change = await devices_service.record_status_snapshot(
         factory,
         resolved.tenant_id,
         resolved.device_id,
@@ -214,6 +227,7 @@ async def _handle_status(
         uptime_s=data.uptime_s,
         fw_version=data.fw_version,
         received_at=received_at,
+        diagnostics=diagnostics,
     )
     await realtime_service.publish_event(
         resolved.tenant_id,
@@ -225,8 +239,18 @@ async def _handle_status(
             "battery_pct": data.battery_pct,
             "uptime_s": data.uptime_s,
             "fw_version": data.fw_version,
+            "reset_reason": data.reset_reason,
+            "boot_count": data.boot_count,
+            "heap_free": data.heap_free,
+            "heap_min": data.heap_min,
+            "wifi_reconnects": data.wifi_reconnects,
+            "faults": data.faults,
         },
     )
+    if resolved.status != DeviceStatus.DISABLED:
+        await _alert_device_health(
+            factory, resolved.tenant_id, resolved.device_id, parsed.device_slug, data, change
+        )
     log.info("status %s/%s -> online=%s", parsed.tenant_slug, parsed.device_slug, data.online)
 
     if rules_service.note_device_status(resolved.device_id, data.online):
@@ -249,6 +273,63 @@ async def _handle_status(
                 )
             except Exception:
                 log.exception("offline notification failed for %s", resolved.device_id)
+
+
+# Restarts worth an alert, as the firmware reports them (firmware/src/diag.h);
+# a power-on, the reset pin or the firmware's own restart are not news.
+ABNORMAL_RESTARTS = {
+    "crash": "a crash",
+    "task_wdt": "a frozen loop (watchdog)",
+    "interrupt_wdt": "a watchdog reset",
+    "other_wdt": "a watchdog reset",
+    "brownout": "a power dip (brown-out)",
+}
+
+
+async def _alert_device_health(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    device_slug: str,
+    data: StatusPayload,
+    change: devices_service.StatusChange,
+) -> None:
+    """Device-health alerts from the status diagnostics: a new boot after a
+    crash, watchdog or brown-out, and each sensor that newly stopped
+    answering. A failure here never drops the status message."""
+    alerts: list[tuple[str, str]] = []
+    cause = ABNORMAL_RESTARTS.get(data.reset_reason or "")
+    if change.restarted and cause:
+        alerts.append(
+            (
+                f"{device_slug} restarted after {cause}",
+                (
+                    f"Boot {data.boot_count}. It came back on its own; if this repeats, check its "
+                    "power supply and wiring, and its serial log."
+                ),
+            )
+        )
+    for fault in change.new_faults:
+        alerts.append(
+            (
+                f"{device_slug}: {fault}",
+                "The device reads it as unknown and keeps retrying; check the sensor's wiring and power.",
+            )
+        )
+    for message, detail in alerts:
+        try:
+            await notifications_service.create_notification(
+                factory,
+                tenant_id,
+                device_id,
+                None,
+                message,
+                severity="warning",
+                kind="device_health",
+                detail=detail,
+            )
+        except Exception:
+            log.exception("device-health notification failed for %s", device_id)
 
 
 async def _handle_ack(

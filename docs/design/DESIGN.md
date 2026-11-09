@@ -500,8 +500,8 @@ edits a whole record, and there is no "Expand" toggle.
   group into one row (**×4**, "since Fri 2 Oct 09:12, last 2 min ago"; dates in the one §11
   format, never the browser's language). The API groups, filters and pages, so the ×N counts and
   the numbered pager (§6, 25 / 50 / 100 alerts) cover the whole history. The status filter (§6)
-  is All · Unread, then unread alerts by type: **Offline · Rules** (fired or cleared) **· Rule
-  health · Failed deliveries · Templates**, counted per row of repeats, never per notification;
+  is All · Unread, then unread alerts by type: **Offline · Device health · Rules** (fired or
+  cleared) **· Rule health · Failed deliveries · Templates**, counted per row of repeats, never per notification;
   the nav badge counts the same unread alerts. **Mark all as read** is the toolbar action.
   Filters: severity, device, rule. The sheet lists each time the alert happened, paged.
   **Unread** is the 3 px accent bar and a bold title, nothing more: no Unread pill and no row
@@ -1085,3 +1085,4 @@ restyled.
 | 2026-11-07 | §10 **Privacy** page (`/privacy`, mobile plan Phase 5): document layout on the canvas with a night header bar; linked from the landing and sign-in footers. The landing footer gets the IO Driven mark (it still had the old gradient square). |
 | 2026-11-07 | §15 **Push notifications** (mobile plan Phase 4): a one-time explainer sheet before the system prompt, More → Notifications (per-workspace Switch, Critical only \| Warnings and critical, Open the phone's settings when blocked), names-only titles, taps open the device or Alerts, two Android channels. |
 | 2026-11-07 | §15 **Update required** (mobile plan Phase 5): a full-screen stop with Get the update when the app is older than the API's minimum; a failed check never blocks. |
+| 2026-11-08 | §8 **Device health** (firmware stability plan F4): the device page's Health card adds, when the firmware reports them (0.14.0+), **Last restart** ("Crash · boot 7", the reason in words), **Sensors** ("All answering", or the parts not answering in the error colour), **Memory** (free · lowest) and **Wi-Fi rejoins**. A new notification kind, *device health* (warning), says a device restarted after a crash, watchdog or brown-out, or that a sensor stopped answering; it gets its own **Device health** state in the notifications filter, after Offline. |

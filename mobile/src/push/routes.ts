@@ -1,5 +1,5 @@
 /** Where tapping a push notification goes (docs/mobile-push.md): a device
- * that went offline opens the device; everything else opens Alerts. The
+ * that went offline or needs a look opens the device; everything else opens Alerts. The
  * workspace comes with it, so a tap from another workspace switches first. */
 export interface PushTarget {
   tenantId: string | null;
@@ -10,7 +10,7 @@ export function routeFor(data: Record<string, unknown> | null | undefined): Push
   const str = (k: string) => (typeof data?.[k] === "string" && data[k] ? (data[k] as string) : null);
   const tenantId = str("tenant_id");
   const deviceId = str("device_id");
-  if (str("kind") === "device_offline" && deviceId) return { tenantId, href: `/devices/${deviceId}` };
+  if ((str("kind") === "device_offline" || str("kind") === "device_health") && deviceId) return { tenantId, href: `/devices/${deviceId}` };
   return { tenantId, href: "/alerts" };
 }
 

@@ -73,6 +73,16 @@ class DeviceResponse(BaseModel):
     battery_pct: int | None
     uptime_s: int | None
     fw_version: str | None
+    # Diagnostics from the last online status report (generic firmware
+    # 0.14.0+; null before): why it last restarted (firmware/src/diag.h's
+    # codes), boots since install, free heap now and its low-water mark
+    # (bytes), Wi-Fi rejoins since boot, sensors not answering.
+    reset_reason: str | None = None
+    boot_count: int | None = None
+    heap_free: int | None = None
+    heap_min: int | None = None
+    wifi_reconnects: int | None = None
+    faults: list[str] | None = None
     # Tier B per-metric freshness (app.health).
     metrics_health: list[MetricHealthResponse] = Field(default_factory=list)
 

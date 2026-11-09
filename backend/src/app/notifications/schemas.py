@@ -12,6 +12,7 @@ NotificationKind = Literal[
     "rule_cleared",
     "rule_health",
     "device_offline",
+    "device_health",
     "delivery_failed",
     "template_changed",
 ]
@@ -34,13 +35,14 @@ class NotificationResponse(BaseModel):
 # The summary's types: what a person scans for, so a rule firing and its
 # clearing count together as "rules".
 NotificationType = Literal[
-    "rules", "rule_health", "device_offline", "delivery_failed", "template_changed"
+    "rules", "rule_health", "device_offline", "device_health", "delivery_failed", "template_changed"
 ]
 KIND_TYPE: dict[str, NotificationType] = {
     "rule_fired": "rules",
     "rule_cleared": "rules",
     "rule_health": "rule_health",
     "device_offline": "device_offline",
+    "device_health": "device_health",
     "delivery_failed": "delivery_failed",
     "template_changed": "template_changed",
 }

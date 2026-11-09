@@ -17,3 +17,6 @@ void sensorOk(const char* who);
 // The current faults, oldest first: "mpu6050@0x68: not answering".
 size_t sensorFaultCount();
 String sensorFaultText(size_t i);
+
+// Goes up whenever the list changes, so the status message can go out at once.
+uint32_t sensorFaultsVersion();

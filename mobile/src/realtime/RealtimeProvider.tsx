@@ -4,7 +4,7 @@
  * applied to the cached latest values and device status in batches, and
  * new points handed to the charts that asked for them. */
 import type { components } from "@iodriven/shared/api";
-import { applyDeviceHealth, markOnline, mergeLatest } from "@iodriven/shared/live-telemetry";
+import { applyDeviceHealth, frameDiagnostics, markOnline, mergeLatest } from "@iodriven/shared/live-telemetry";
 import { connectRealtime, type RealtimeMessage, type RealtimeStatus, type SocketLike } from "@iodriven/shared/realtime";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AppState } from "react-native";
@@ -110,6 +110,7 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
             battery_pct: m.battery_pct ?? null,
             uptime_s: m.uptime_s ?? null,
             fw_version: m.fw_version ?? null,
+            diagnostics: frameDiagnostics(m),
           }),
         );
       }
