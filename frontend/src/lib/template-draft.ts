@@ -538,7 +538,17 @@ function rowForChannel(
     const free = rows.metrics.find((r) => r.key.trim() === p.key && r.data_type === type && !busy(r.uid));
     if (free) return { uid: free.uid };
     const key = freeKey(p.key, new Set(rows.metrics.map((r) => r.key.trim())));
-    const row: MetricDraft = { ...blankMetric(), name: name(key), key, keyAuto: false, data_type: type, unit: p.unit };
+    const row: MetricDraft = {
+      ...blankMetric(),
+      name: name(key),
+      key,
+      keyAuto: false,
+      data_type: type,
+      unit: p.unit,
+      // The reading's own resolution and noise (drivers.json), else the blank's.
+      ...(ch.decimals != null ? { decimals: String(ch.decimals) } : {}),
+      ...(ch.deadband != null ? { deadband: String(ch.deadband) } : {}),
+    };
     return { uid: row.uid, created: row };
   }
   const type = ch.value_type ?? "bool";

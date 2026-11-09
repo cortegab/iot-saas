@@ -49,6 +49,22 @@ describe("buildFirmwareConfig", () => {
     });
   });
 
+  it("carries a numeric metric's decimals, never an on/off one's", () => {
+    const cfg = buildFirmwareConfig({
+      ...base,
+      metrics: [
+        { name: "Door", key: "door", data_type: "bool", decimals: 2, publish: "periodic" },
+        { name: "Vibration", key: "vibration_rms", data_type: "float", decimals: 4, publish: "on_change", publish_deadband: 0.0005 },
+        { name: "Level", key: "level", data_type: "float", decimals: null, publish: "periodic" },
+      ],
+    });
+    expect(cfg.metrics).toEqual([
+      { key: "door", bool: true, publish: "periodic" },
+      { key: "vibration_rms", publish: "on_change", deadband: 0.0005, decimals: 4 },
+      { key: "level", publish: "periodic" },
+    ]);
+  });
+
   it("uses the TLS port with TLS", () => {
     expect(buildFirmwareConfig({ ...base, tls: true }).mqtt).toMatchObject({ port: 8883, tls: true });
   });

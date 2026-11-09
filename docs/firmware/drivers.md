@@ -109,7 +109,10 @@ need attribution plus relinking terms; GPL ones are refused (write the driver in
    - pins: each with a role and `needs` (`input`, `output`, `adc1`, or `bus`), or none plus
      `"bus": "i2c"` and `addresses` for an I2C part
    - params: type, default, range
-   - channels: with `data_type` (inputs) or `value_type` (outputs)
+   - channels: with `data_type` (inputs) or `value_type` (outputs). An input channel may also
+     suggest `decimals` and `deadband` (the "Change of at least"): a metric made for it starts
+     with them. Size them to the sensor's resolution and noise, so "on change" doesn't publish
+     every flicker of the last digit
    - wiring notes
    - `chips` (optional): the chips it works on, e.g. `["esp32", "esp32s3"]` for a part that needs
      a peripheral the others lack. Absent means every chip. Only those builds carry it, and the

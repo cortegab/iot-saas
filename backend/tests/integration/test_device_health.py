@@ -214,7 +214,9 @@ async def test_config_publish_request_publishes_retained_message_per_device(
                     "key": "temperature",
                     "publish": "periodic",
                     "publish_interval_seconds": 30,
-                }
+                    "decimals": 2,
+                },
+                {"name": "Pressure", "key": "pressure"},
             ]
         },
         headers=headers,
@@ -234,6 +236,9 @@ async def test_config_publish_request_publishes_retained_message_per_device(
     published_payload = json.loads(call.args[1])
     assert published_payload["metrics"][0]["key"] == "temperature"
     assert published_payload["metrics"][0]["interval_seconds"] == 30
+    assert published_payload["metrics"][0]["decimals"] == 2
+    # No decimals set: null, which the firmware reads as its default (3).
+    assert published_payload["metrics"][1]["decimals"] is None
 
 
 async def test_config_publish_malformed_request_is_dropped_not_raised(

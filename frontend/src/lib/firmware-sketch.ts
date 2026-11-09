@@ -189,7 +189,7 @@ export interface SketchCredential {
 }
 
 export type SketchMetric = WireNamed &
-  Partial<Pick<CatalogMetric, "data_type" | "publish" | "publish_interval_seconds" | "publish_deadband">>;
+  Partial<Pick<CatalogMetric, "data_type" | "publish" | "publish_interval_seconds" | "publish_deadband" | "decimals">>;
 export type SketchActuator = WireNamed & Partial<Pick<CatalogActuator, "value_type">>;
 
 export interface SketchInfo {
@@ -277,6 +277,20 @@ function toIdentifier(name: string): string {
 /** Safe inside a C string literal or a `//` comment. */
 function cText(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/[\r\n]+/g, " ");
+}
+
+/** A C float literal with every digit the template gave ("0.0005f", "1.0f",
+ * "1e-7f"): rounding it to 3 decimals turned a 0.0005 deadband into 0.001. */
+export function cFloat(n: number): string {
+  const text = String(Number.isFinite(n) ? n : 0);
+  return `${/[.e]/.test(text) ? text : `${text}.0`}f`;
+}
+
+/** A metric's decimals as the sketch sends them: the template's, else 3 (what
+ * sketches always sent), at most 6. */
+export function sketchDecimals(decimals: number | null | undefined): number {
+  if (decimals == null || !Number.isFinite(decimals)) return 3;
+  return Math.min(6, Math.max(0, Math.trunc(decimals)));
 }
 
 const MODE_ENUM: Record<string, string> = {
@@ -518,6 +532,7 @@ struct MetricProfile {
   uint8_t mode;
   unsigned long intervalMs;  // periodic: every; on_change: heartbeat; streaming: min gap
   float deadband;            // on_change, numeric: ignore changes up to this size
+  int decimals;              // what's sent, and what "changed" is measured on
   float lastValue;           // NAN = nothing sent yet
   unsigned long lastPublishMs;
   float candidate;           // bool debounce
@@ -526,6 +541,23 @@ struct MetricProfile {
 
 const unsigned long BOOL_DEBOUNCE_MS = 30;
 const unsigned long ON_CHANGE_MIN_GAP_MS = 100;
+const int DEFAULT_DECIMALS = 3;  // when the platform's config doesn't say
+const int MAX_DECIMALS = 6;      // a float has ~7 significant digits
+
+int clampDecimals(long d) { return d < 0 ? 0 : (d > MAX_DECIMALS ? MAX_DECIMALS : (int)d); }
+
+float roundToDecimals(float value, int decimals) {
+  float scale = powf(10.0f, (float)decimals);
+  return roundf(value * scale) / scale;
+}
+
+// Rounded values differ by a whole number of steps of the last decimal;
+// counting steps keeps float error from turning "up to 0.2" into "over 0.2".
+bool changedEnough(float rounded, float lastRounded, float deadband, int decimals) {
+  float step = 1.0f / powf(10.0f, (float)decimals);
+  long steps = lroundf(fabsf(rounded - lastRounded) / step);
+  return steps >= 1 && (float)steps * step > deadband + step * 1e-3f;
+}
 
 unsigned long defaultIntervalMs(uint8_t mode) {
   if (mode == MODE_ON_CHANGE) return 300000UL;  // heartbeat
@@ -540,8 +572,9 @@ ${metricRows
     const interval = m.publish_interval_seconds
       ? `${m.publish_interval_seconds * 1000}UL`
       : `defaultIntervalMs(${mode})`;
-    const deadband = `${Number(m.publish_deadband ?? 0).toFixed(3)}f`;
-    return `  {"${cText(wireId(m))}", "${subtree}/${wireId(m)}", ${isBool}, ${mode}, ${interval}, ${deadband}, NAN, 0, NAN, 0},`;
+    const deadband = cFloat(m.publish_deadband ?? 0);
+    const decimals = isBool ? 0 : sketchDecimals(m.decimals);
+    return `  {"${cText(wireId(m))}", "${subtree}/${wireId(m)}", ${isBool}, ${mode}, ${interval}, ${deadband}, ${decimals}, NAN, 0, NAN, 0},`;
   })
   .join("\n")}
 };
@@ -584,6 +617,7 @@ void applyConfig(const byte* payload, unsigned int length) {
       long interval = item["interval_seconds"] | 0L;
       metrics[i].intervalMs = interval > 0 ? (unsigned long)interval * 1000UL : defaultIntervalMs(metrics[i].mode);
       metrics[i].deadband = item["deadband"] | 0.0f;
+      if (!metrics[i].isBool) metrics[i].decimals = clampDecimals(item["decimals"] | (long)DEFAULT_DECIMALS);
       Serial.print("[CONFIG] ");
       Serial.print(key);
       Serial.print(" -> ");
@@ -611,6 +645,9 @@ void publishMetrics() {
       if (now - m.candidateSinceMs < BOOL_DEBOUNCE_MS) continue;
     }
 
+    // What's sent, and what "changed" is measured on: the template's decimals.
+    if (!m.isBool) value = roundToDecimals(value, m.decimals);
+
     bool first = isnan(m.lastValue);
     unsigned long sinceLast = now - m.lastPublishMs;
     bool send = false;
@@ -619,7 +656,7 @@ void publishMetrics() {
       send = true;
       reason = "initial";
     } else if (m.mode == MODE_ON_CHANGE) {
-      bool changed = m.isBool ? value != m.lastValue : fabsf(value - m.lastValue) > m.deadband;
+      bool changed = m.isBool ? value != m.lastValue : changedEnough(value, m.lastValue, m.deadband, m.decimals);
       if (changed && sinceLast >= ON_CHANGE_MIN_GAP_MS) {
         send = true;
         reason = "change";
@@ -632,8 +669,8 @@ void publishMetrics() {
     }
     if (!send) continue;
 
-    char payload[48];
-    snprintf(payload, sizeof(payload), "{\\"value\\": %.3f}", value);
+    char payload[64];
+    snprintf(payload, sizeof(payload), "{\\"value\\": %.*f}", m.decimals, value);
     bool ok = mqttClient.publish(m.topic, payload);
     // Only record success, so a failed publish is retried next loop.
     if (ok) {
@@ -643,7 +680,7 @@ void publishMetrics() {
     Serial.print("[TELEMETRY] ");
     Serial.print(m.key);
     Serial.print(" = ");
-    Serial.print(value);
+    Serial.print(value, m.decimals);
     Serial.print(" (");
     Serial.print(reason);
     Serial.println(ok ? ") ok" : ") FAILED");

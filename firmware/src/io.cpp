@@ -2,6 +2,8 @@
 
 #include <Wire.h>
 
+#include "publish_math.h"
+
 #include <vector>
 
 #include "drivers/registry.h"
@@ -14,6 +16,11 @@ constexpr uint8_t MODE_PERIODIC = 0;
 constexpr uint8_t MODE_ON_CHANGE = 1;
 constexpr uint8_t MODE_STREAMING = 2;
 constexpr unsigned long ON_CHANGE_MIN_GAP_MS = 100;
+// Telemetry messages a device may send per second, averaged (bursts up to
+// the same). Above it a due metric waits a pass and sends its latest value,
+// so a fast streaming metric can't flood the broker or starve the others.
+constexpr uint32_t MAX_MESSAGES_PER_S = 20;
+constexpr unsigned long HELD_BACK_LOG_MS = 10000;
 
 struct Metric {
   const char* key;
@@ -22,6 +29,7 @@ struct Metric {
   uint8_t mode;
   unsigned long intervalMs;  // periodic: every; on_change: heartbeat; streaming: min gap
   float deadband;            // on_change, numeric: ignore changes up to this size
+  int decimals = DEFAULT_DECIMALS;  // catalog `decimals`: what's sent, and what "changed" means
   InputDriver* source = nullptr;
   const char* channel = nullptr;
   float lastValue = NAN;  // NAN = nothing sent yet
@@ -39,6 +47,10 @@ struct Actuator {
 String configTopic;
 std::vector<InputDriver*> inputs;
 std::vector<Metric> metrics;
+size_t publishCursor = 0;
+RateLimiter publishLimiter(MAX_MESSAGES_PER_S);
+unsigned long heldBack = 0;
+unsigned long heldBackLoggedMs = 0;
 std::vector<Actuator> actuators;
 
 unsigned long defaultIntervalMs(uint8_t mode) {
@@ -89,6 +101,7 @@ bool beginMetrics(const DeviceConfig& cfg, const String& prefix, String& err) {
     long interval = item["interval_s"] | 0L;
     m.intervalMs = interval > 0 ? (unsigned long)interval * 1000UL : defaultIntervalMs(m.mode);
     m.deadband = item["deadband"] | 0.0f;
+    m.decimals = clampDecimals(item["decimals"] | (long)DEFAULT_DECIMALS);
     metrics.push_back(m);
   }
   return true;
@@ -167,7 +180,10 @@ void applyProfile(const uint8_t* payload, unsigned int length) {
     long interval = item["interval_seconds"] | 0L;
     m->intervalMs = interval > 0 ? (unsigned long)interval * 1000UL : defaultIntervalMs(m->mode);
     m->deadband = item["deadband"] | 0.0f;
-    Serial.printf("[CONFIG] %s -> %s, every %lus\n", m->key, item["publish"] | "periodic", m->intervalMs / 1000);
+    // Absent (a platform before this field) or null: what firmware always sent.
+    m->decimals = clampDecimals(item["decimals"] | (long)DEFAULT_DECIMALS);
+    Serial.printf("[CONFIG] %s -> %s, every %lus, %d decimals\n", m->key, item["publish"] | "periodic", m->intervalMs / 1000,
+                  m->decimals);
   }
 }
 
@@ -314,10 +330,17 @@ void ioSubscribe(PubSubClient& mqtt) {
 
 void ioPublishMetrics(PubSubClient& mqtt) {
   unsigned long now = millis();
-  for (Metric& m : metrics) {
+  size_t n = metrics.size();
+  // Start one further along each pass, so under the cap every metric gets its
+  // turn instead of the first ones taking every token.
+  if (n > 0) publishCursor = (publishCursor + 1) % n;
+  for (size_t k = 0; k < n; k++) {
+    Metric& m = metrics[(publishCursor + k) % n];
     if (m.source == nullptr) continue;
-    float value = m.source->read(m.channel);
-    if (isnan(value)) continue;
+    float raw = m.source->read(m.channel);
+    if (isnan(raw)) continue;
+    // What's sent, and what "changed" is measured on: the catalog's decimals.
+    float value = m.isBool ? raw : roundToDecimals(raw, m.decimals);
 
     bool first = isnan(m.lastValue);
     unsigned long sinceLast = now - m.lastPublishMs;
@@ -327,7 +350,7 @@ void ioPublishMetrics(PubSubClient& mqtt) {
       send = true;
       reason = "initial";
     } else if (m.mode == MODE_ON_CHANGE) {
-      bool changed = m.isBool ? value != m.lastValue : fabsf(value - m.lastValue) > m.deadband;
+      bool changed = m.isBool ? value != m.lastValue : changedEnough(value, m.lastValue, m.deadband, m.decimals);
       if (changed && sinceLast >= ON_CHANGE_MIN_GAP_MS) {
         send = true;
         reason = "change";
@@ -339,16 +362,28 @@ void ioPublishMetrics(PubSubClient& mqtt) {
       send = sinceLast >= m.intervalMs;
     }
     if (!send) continue;
+    // Over the device's cap: this metric stays due and goes on a later pass,
+    // with whatever its value is then.
+    if (!publishLimiter.take(now)) {
+      heldBack++;
+      continue;
+    }
 
-    char payload[48];
-    snprintf(payload, sizeof(payload), "{\"value\": %.3f}", value);
+    char payload[64];
+    snprintf(payload, sizeof(payload), "{\"value\": %.*f}", m.isBool ? 0 : m.decimals, value);
     bool ok = mqtt.publish(m.topic.c_str(), payload);
     // Only record success, so a failed publish is retried next loop.
     if (ok) {
       m.lastValue = value;
       m.lastPublishMs = now;
     }
-    Serial.printf("[TELEMETRY] %s = %.3f (%s) %s\n", m.key, value, reason, ok ? "ok" : "FAILED");
+    Serial.printf("[TELEMETRY] %s = %.*f (%s) %s\n", m.key, m.isBool ? 0 : m.decimals, value, reason, ok ? "ok" : "FAILED");
+  }
+  if (heldBack > 0 && now - heldBackLoggedMs >= HELD_BACK_LOG_MS) {
+    Serial.printf("[TELEMETRY] over %lu messages/s: %lu held back for a later pass in the last %lus\n", (unsigned long)MAX_MESSAGES_PER_S,
+                  heldBack, (now - heldBackLoggedMs) / 1000);
+    heldBack = 0;
+    heldBackLoggedMs = now;
   }
 }
 
