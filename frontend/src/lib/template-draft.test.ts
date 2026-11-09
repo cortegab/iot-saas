@@ -128,6 +128,19 @@ describe("reconcileParts", () => {
     expect(validateTemplate(d, { otherNames: [], catalog: CATALOG }).errors).toEqual({});
   });
 
+  it("a new metric starts with its reading's decimals and change threshold (drivers.json)", () => {
+    const d = add(empty(), "mpu6050");
+    const vib = d.metrics.find((m) => m.key === "vibration_rms")!;
+    expect([vib.decimals, vib.deadband]).toEqual(["3", "0.002"]);
+    const dht = add(empty(), "dht22");
+    expect(dht.metrics.map((m) => [m.key, m.decimals, m.deadband])).toEqual([
+      ["temperature", "1", "0.2"],
+      ["humidity", "1", "1"],
+    ]);
+    // A reading with no defaults keeps the blank metric's.
+    expect(add(empty(), "analog_in").metrics[0]).toMatchObject({ decimals: blankMetric().decimals, deadband: "" });
+  });
+
   it("an MPU-6050 brings only its common readings; the raw axes start not kept", () => {
     const d = add(empty(), "mpu6050");
     expect(d.metrics.map((m) => m.key)).toEqual(["tilt_x", "tilt_y", "vibration_rms"]);

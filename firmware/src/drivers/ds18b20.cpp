@@ -27,6 +27,7 @@ class Ds18b20 : public InputDriver {
     resolution_ = resolution;
     intervalMs_ = interval;
     convMs_ = ds18b20ConversionMs(resolution_) + 10;
+    snprintf(who_, sizeof(who_), "ds18b20@GPIO%d", pin_);
     wire_ = new OneWire(pin_);
     sensors_ = new DallasTemperature(wire_);
     sensors_->begin();
@@ -39,12 +40,21 @@ class Ds18b20 : public InputDriver {
     if (converting_) {
       if (nowMs - requestedMs_ < convMs_) return;
       converting_ = false;
+      int missing = 0;
       for (int i = 0; i < MAX_PROBES; i++) {
         float t = i < count_ ? sensors_->getTempC(addrs_[i]) : DEVICE_DISCONNECTED_C;
         // -127 means the probe didn't answer: unknown, never a reading.
         temps_[i] = (t == DEVICE_DISCONNECTED_C || (t == 85.0f && firstRead_)) ? NAN : t;
+        if (i < count_ && t == DEVICE_DISCONNECTED_C) missing++;
       }
       firstRead_ = false;
+      if (missing > 0) {
+        char what[40];
+        snprintf(what, sizeof(what), "%d of %d probe(s) not answering", missing, count_);
+        sensorFault(who_, what);
+      } else {
+        sensorOk(who_);
+      }
       return;
     }
     if (nowMs - requestedMs_ < intervalMs_ && requestedMs_ != 0) return;
@@ -83,6 +93,7 @@ class Ds18b20 : public InputDriver {
       }
     }
     if (found > 0) Serial.printf("[DS18B20] %d probe(s) on GPIO %d\n", count_, pin_);
+    else sensorFault(who_, "no probes found; looking every 5 s");
   }
 
   int pin_ = -1;
@@ -92,6 +103,7 @@ class Ds18b20 : public InputDriver {
   DallasTemperature* sensors_ = nullptr;
   DeviceAddress addrs_[MAX_PROBES];
   int count_ = 0;
+  char who_[18] = "ds18b20";
   float temps_[MAX_PROBES] = {NAN, NAN, NAN, NAN};
   bool converting_ = false;
   // 85 °C is the power-on value, read before the first conversion finishes.

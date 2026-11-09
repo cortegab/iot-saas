@@ -2,6 +2,9 @@
 
 #include <Wire.h>
 
+#include "command_math.h"
+#include "publish_math.h"
+
 #include <vector>
 
 #include "drivers/registry.h"
@@ -14,6 +17,11 @@ constexpr uint8_t MODE_PERIODIC = 0;
 constexpr uint8_t MODE_ON_CHANGE = 1;
 constexpr uint8_t MODE_STREAMING = 2;
 constexpr unsigned long ON_CHANGE_MIN_GAP_MS = 100;
+// Telemetry messages a device may send per second, averaged (bursts up to
+// the same). Above it a due metric waits a pass and sends its latest value,
+// so a fast streaming metric can't flood the broker or starve the others.
+constexpr uint32_t MAX_MESSAGES_PER_S = 20;
+constexpr unsigned long HELD_BACK_LOG_MS = 10000;
 
 struct Metric {
   const char* key;
@@ -22,6 +30,7 @@ struct Metric {
   uint8_t mode;
   unsigned long intervalMs;  // periodic: every; on_change: heartbeat; streaming: min gap
   float deadband;            // on_change, numeric: ignore changes up to this size
+  int decimals = DEFAULT_DECIMALS;  // catalog `decimals`: what's sent, and what "changed" means
   InputDriver* source = nullptr;
   const char* channel = nullptr;
   float lastValue = NAN;  // NAN = nothing sent yet
@@ -34,11 +43,19 @@ struct Actuator {
   String stateTopic;
   String ackTopic;
   OutputDriver* output;
+  // Fail-safe: back to the boot state after this long without the platform
+  // (0 = keep the last state). failedSafe: done, until the next reconnect.
+  uint32_t offlineAfterMs = 0;
+  bool failedSafe = false;
 };
 
 String configTopic;
 std::vector<InputDriver*> inputs;
 std::vector<Metric> metrics;
+size_t publishCursor = 0;
+RateLimiter publishLimiter(MAX_MESSAGES_PER_S);
+unsigned long heldBack = 0;
+unsigned long heldBackLoggedMs = 0;
 std::vector<Actuator> actuators;
 
 unsigned long defaultIntervalMs(uint8_t mode) {
@@ -75,7 +92,7 @@ bool beginMetrics(const DeviceConfig& cfg, const String& prefix, String& err) {
   for (JsonObjectConst item : cfg.metrics) {
     Metric m;
     m.key = item["key"] | "";
-    if (strlen(m.key) == 0 || !strcmp(m.key, "status") || !strcmp(m.key, "config")) {
+    if (strlen(m.key) == 0 || !strcmp(m.key, "status") || !strcmp(m.key, "config") || !strcmp(m.key, "ota")) {
       err = String("metric key \"") + m.key + "\" isn't allowed";
       return false;
     }
@@ -89,6 +106,7 @@ bool beginMetrics(const DeviceConfig& cfg, const String& prefix, String& err) {
     long interval = item["interval_s"] | 0L;
     m.intervalMs = interval > 0 ? (unsigned long)interval * 1000UL : defaultIntervalMs(m.mode);
     m.deadband = item["deadband"] | 0.0f;
+    m.decimals = clampDecimals(item["decimals"] | (long)DEFAULT_DECIMALS);
     metrics.push_back(m);
   }
   return true;
@@ -148,7 +166,13 @@ bool beginOutputs(const DeviceConfig& cfg, const String& prefix, String& err) {
       }
     }
     if (!driver->begin(binding, err)) return false;
-    actuators.push_back({key, prefix + "cmd/" + key, prefix + "state/" + key, prefix + "ack/" + key, driver});
+    const char* whenOffline;
+    long afterS;
+    if (!enumParam(binding, "when_offline", "Keep", {"Keep", "Boot state"}, whenOffline, err)) return false;
+    if (!intParam(binding, "offline_after_s", 60, 5, 86400, afterS, err)) return false;
+    Actuator a{key, prefix + "cmd/" + key, prefix + "state/" + key, prefix + "ack/" + key, driver};
+    if (strcmp(whenOffline, "Boot state") == 0) a.offlineAfterMs = (uint32_t)afterS * 1000UL;
+    actuators.push_back(a);
   }
   return true;
 }
@@ -167,17 +191,31 @@ void applyProfile(const uint8_t* payload, unsigned int length) {
     long interval = item["interval_seconds"] | 0L;
     m->intervalMs = interval > 0 ? (unsigned long)interval * 1000UL : defaultIntervalMs(m->mode);
     m->deadband = item["deadband"] | 0.0f;
-    Serial.printf("[CONFIG] %s -> %s, every %lus\n", m->key, item["publish"] | "periodic", m->intervalMs / 1000);
+    // Absent (a platform before this field) or null: what firmware always sent.
+    m->decimals = clampDecimals(item["decimals"] | (long)DEFAULT_DECIMALS);
+    Serial.printf("[CONFIG] %s -> %s, every %lus, %d decimals\n", m->key, item["publish"] | "periodic", m->intervalMs / 1000,
+                  m->decimals);
   }
 }
 
-// Command: {"value":..., "issued_at":..., "ttl":..., "command_id":...}. No RTC
-// here, so issued_at/ttl aren't checked against wall-clock time (same as the
-// generated sketch).
+// Command: {"value":..., "issued_at":..., "ttl":..., "command_id":...}.
+// issued_at + ttl is checked once SNTP has set the clock (0.15.1); the
+// generated sketch has no clock and doesn't check it.
 void handleCommand(PubSubClient& mqtt, Actuator& a, const uint8_t* payload, unsigned int length) {
   JsonDocument doc;
   if (deserializeJson(doc, payload, length)) {
     Serial.printf("[CMD] %s: malformed payload, dropping\n", a.key);
+    return;
+  }
+  // Too old to act on (the board was offline, the broker held it): dropped,
+  // not acked, so the platform's timeline shows it as No response. Needs the
+  // clock (net.cpp syncs it over SNTP); until then commands act as before.
+  int64_t now = (int64_t)time(nullptr);
+  int64_t issuedAt = doc["issued_at"] | (int64_t)0;
+  int64_t ttl = doc["ttl"] | (int64_t)0;
+  if (commandExpired(now, issuedAt, ttl)) {
+    Serial.printf("[CMD] %s: expired (issued %llds ago, good for %llds), not applied\n", a.key, (long long)(now - issuedAt),
+                  (long long)ttl);
     return;
   }
   String err;
@@ -206,10 +244,68 @@ void handleState(Actuator& a, const uint8_t* payload, unsigned int length) {
 }
 
 bool i2cReady = false;
+int i2cSda = -1, i2cScl = -1;
+uint32_t i2cRecoveredMs = 0;
+bool i2cRecoveredOnce = false;
+// A bus recovery restarts the I2C peripheral for every sensor on it, so at
+// most this often, however many drivers ask.
+constexpr uint32_t I2C_RECOVER_MIN_GAP_MS = 30000;
+constexpr uint32_t I2C_HALF_CLOCK_US = 5;  // ~100 kHz
 
 }  // namespace
 
 bool i2cBusReady() { return i2cReady; }
+
+// A sensor that lost power or was unplugged mid-transfer can hold SDA low
+// forever, waiting for clocks that never come, and then nothing on the bus
+// answers again until a power cycle. The standard way out (I2C spec, 3.1.16):
+// clock SCL up to 9 times until the part lets go of SDA, send a STOP, and
+// restart the peripheral, which also clears an ESP32 I2C controller stuck on a
+// timeout.
+bool i2cRecover() {
+  if (i2cSda < 0 || i2cScl < 0) return false;
+  uint32_t now = millis();
+  if (i2cRecoveredOnce && now - i2cRecoveredMs < I2C_RECOVER_MIN_GAP_MS) return false;
+  i2cRecoveredOnce = true;
+  i2cRecoveredMs = now;
+
+  Wire.end();
+  // OUTPUT_OPEN_DRAIN keeps the input enabled, so digitalRead sees the line.
+  pinMode(i2cSda, INPUT_PULLUP);
+  pinMode(i2cScl, OUTPUT_OPEN_DRAIN);
+  digitalWrite(i2cScl, HIGH);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  bool wasHeld = digitalRead(i2cSda) == LOW;
+  int pulses = 0;
+  for (; pulses < 9 && digitalRead(i2cSda) == LOW; pulses++) {
+    digitalWrite(i2cScl, LOW);
+    delayMicroseconds(I2C_HALF_CLOCK_US);
+    digitalWrite(i2cScl, HIGH);
+    delayMicroseconds(I2C_HALF_CLOCK_US);
+  }
+  // STOP: SDA rises while SCL is high (SDA goes low first with SCL low, or
+  // that would be a START).
+  digitalWrite(i2cScl, LOW);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  pinMode(i2cSda, OUTPUT_OPEN_DRAIN);
+  digitalWrite(i2cSda, LOW);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  digitalWrite(i2cScl, HIGH);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  digitalWrite(i2cSda, HIGH);
+  delayMicroseconds(I2C_HALF_CLOCK_US);
+  bool released = digitalRead(i2cSda) == HIGH;
+
+  i2cReady = Wire.begin(i2cSda, i2cScl);
+  if (wasHeld) {
+    Serial.printf("[I2C] SDA was held low: %d clock pulse(s), %s; bus %s\n", pulses,
+                  released ? "released" : "still held (check the wiring and the sensor's power)",
+                  i2cReady ? "restarted" : "didn't restart");
+  } else {
+    Serial.printf("[I2C] bus restarted (%s)\n", i2cReady ? "ok" : "failed");
+  }
+  return i2cReady;
+}
 
 bool ioBegin(const DeviceConfig& cfg, String& err) {
   String prefix = String(cfg.tenant) + "/" + cfg.device + "/";
@@ -220,6 +316,8 @@ bool ioBegin(const DeviceConfig& cfg, String& err) {
   if (cfg.i2cSda >= 0 || cfg.i2cScl >= 0) {
     if (!claimRawPin(cfg.i2cSda, PinUse::Bus, "i2c.sda", err)) return false;
     if (!claimRawPin(cfg.i2cScl, PinUse::Bus, "i2c.scl", err)) return false;
+    i2cSda = cfg.i2cSda;
+    i2cScl = cfg.i2cScl;
     i2cReady = Wire.begin(cfg.i2cSda, cfg.i2cScl);
     if (!i2cReady) {
       err = String("couldn't start the I2C bus on GPIO ") + cfg.i2cSda + "/" + cfg.i2cScl;
@@ -254,10 +352,17 @@ void ioSubscribe(PubSubClient& mqtt) {
 
 void ioPublishMetrics(PubSubClient& mqtt) {
   unsigned long now = millis();
-  for (Metric& m : metrics) {
+  size_t n = metrics.size();
+  // Start one further along each pass, so under the cap every metric gets its
+  // turn instead of the first ones taking every token.
+  if (n > 0) publishCursor = (publishCursor + 1) % n;
+  for (size_t k = 0; k < n; k++) {
+    Metric& m = metrics[(publishCursor + k) % n];
     if (m.source == nullptr) continue;
-    float value = m.source->read(m.channel);
-    if (isnan(value)) continue;
+    float raw = m.source->read(m.channel);
+    if (isnan(raw)) continue;
+    // What's sent, and what "changed" is measured on: the catalog's decimals.
+    float value = m.isBool ? raw : roundToDecimals(raw, m.decimals);
 
     bool first = isnan(m.lastValue);
     unsigned long sinceLast = now - m.lastPublishMs;
@@ -267,7 +372,7 @@ void ioPublishMetrics(PubSubClient& mqtt) {
       send = true;
       reason = "initial";
     } else if (m.mode == MODE_ON_CHANGE) {
-      bool changed = m.isBool ? value != m.lastValue : fabsf(value - m.lastValue) > m.deadband;
+      bool changed = m.isBool ? value != m.lastValue : changedEnough(value, m.lastValue, m.deadband, m.decimals);
       if (changed && sinceLast >= ON_CHANGE_MIN_GAP_MS) {
         send = true;
         reason = "change";
@@ -279,16 +384,28 @@ void ioPublishMetrics(PubSubClient& mqtt) {
       send = sinceLast >= m.intervalMs;
     }
     if (!send) continue;
+    // Over the device's cap: this metric stays due and goes on a later pass,
+    // with whatever its value is then.
+    if (!publishLimiter.take(now)) {
+      heldBack++;
+      continue;
+    }
 
-    char payload[48];
-    snprintf(payload, sizeof(payload), "{\"value\": %.3f}", value);
+    char payload[64];
+    snprintf(payload, sizeof(payload), "{\"value\": %.*f}", m.isBool ? 0 : m.decimals, value);
     bool ok = mqtt.publish(m.topic.c_str(), payload);
     // Only record success, so a failed publish is retried next loop.
     if (ok) {
       m.lastValue = value;
       m.lastPublishMs = now;
     }
-    Serial.printf("[TELEMETRY] %s = %.3f (%s) %s\n", m.key, value, reason, ok ? "ok" : "FAILED");
+    Serial.printf("[TELEMETRY] %s = %.*f (%s) %s\n", m.key, m.isBool ? 0 : m.decimals, value, reason, ok ? "ok" : "FAILED");
+  }
+  if (heldBack > 0 && now - heldBackLoggedMs >= HELD_BACK_LOG_MS) {
+    Serial.printf("[TELEMETRY] over %lu messages/s: %lu held back for a later pass in the last %lus\n", (unsigned long)MAX_MESSAGES_PER_S,
+                  heldBack, (now - heldBackLoggedMs) / 1000);
+    heldBack = 0;
+    heldBackLoggedMs = now;
   }
 }
 
@@ -300,5 +417,29 @@ void ioHandleMessage(PubSubClient& mqtt, const char* topic, const uint8_t* paylo
   for (Actuator& a : actuators) {
     if (a.cmdTopic == topic) return handleCommand(mqtt, a, payload, length);
     if (a.stateTopic == topic) return handleState(a, payload, length);
+  }
+}
+
+void ioWatchConnection(bool connected, uint32_t nowMs) {
+  // From boot, too: a board that never reaches the platform fails safe.
+  static uint32_t offlineSince = 0;
+  static bool wasConnected = false;
+  if (connected) {
+    if (!wasConnected) {
+      for (Actuator& a : actuators) {
+        if (a.failedSafe) Serial.printf("[FAILSAFE] %s: back online; the platform's desired state applies again\n", a.key);
+        a.failedSafe = false;
+      }
+    }
+    wasConnected = true;
+    return;
+  }
+  if (wasConnected || offlineSince == 0) offlineSince = nowMs == 0 ? 1 : nowMs;
+  wasConnected = false;
+  for (Actuator& a : actuators) {
+    if (a.offlineAfterMs == 0 || a.failedSafe || nowMs - offlineSince < a.offlineAfterMs) continue;
+    a.output->applyBootState();
+    a.failedSafe = true;
+    Serial.printf("[FAILSAFE] %s: out of touch for %lus; back to its boot state\n", a.key, (unsigned long)(a.offlineAfterMs / 1000));
   }
 }

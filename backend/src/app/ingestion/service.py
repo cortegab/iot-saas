@@ -37,6 +37,10 @@ ACK_TOPIC_FILTER = "+/+/ack/+"
 # catalog/service.py rejects a tenant-authored metric key that collides with
 # this (or "config") at write time.
 RESERVED_METRIC_STATUS = "status"
+# The platform's own 3-segment publishes to devices: the retained telemetry
+# profile and over-the-air update requests (CLAUDE.md §4). The worker's
+# telemetry subscription hears them too; they're not telemetry.
+PLATFORM_TO_DEVICE_SEGMENTS = frozenset({"config", "ota"})
 
 _DIRECTORY_CACHE_TTL_SECONDS = 300
 

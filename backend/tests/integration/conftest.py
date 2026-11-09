@@ -43,6 +43,7 @@ ALL_TABLES = (
     "tenant_memberships",
     "refresh_tokens",
     "devices",
+    "push_devices",
     "api_keys",
     "telemetry",
     "rules",

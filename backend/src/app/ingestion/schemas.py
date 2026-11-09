@@ -4,7 +4,15 @@ untrusted input (CLAUDE.md §7) — both are validated here before anything
 downstream sees them.
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Status diagnostics are best-effort: a too-long or odd value is trimmed or
+# dropped, never a reason to lose the message's `online` state.
+MAX_FAULTS = 8
+MAX_FAULT_LEN = 80
+MAX_REASON_LEN = 32
+OTA_STATES = {"downloading", "restarting", "failed", "rolled_back"}
+MAX_OTA_ERROR_LEN = 160
 
 
 class TelemetryPayload(BaseModel):
@@ -32,6 +40,50 @@ class StatusPayload(BaseModel):
     uptime_s: int | None = None
     fw_version: str | None = None
     timestamp: int | None = None
+    # Diagnostics (generic firmware 0.14.0+; all optional): why the chip last
+    # restarted ("crash", "task_wdt", "brownout", ... firmware/src/diag.h),
+    # boots since install, free heap now and its low-water mark (bytes),
+    # Wi-Fi rejoins since boot, and the sensors not answering right now.
+    reset_reason: str | None = None
+    boot_count: int | None = None
+    heap_free: int | None = None
+    heap_min: int | None = None
+    wifi_reconnects: int | None = None
+    faults: list[str] | None = None
+    # An over-the-air update's progress (firmware 1.0.0+, firmware/src/ota.h):
+    # {"version", "state": downloading | restarting | failed | rolled_back,
+    # "error"}. Absent when there's nothing to say.
+    ota: dict[str, str] | None = None
+
+    @field_validator("ota", mode="before")
+    @classmethod
+    def _ota(cls, v: object) -> object:
+        if not isinstance(v, dict):
+            return None
+        version, state, error = v.get("version"), v.get("state"), v.get("error")
+        if not isinstance(version, str) or not isinstance(state, str) or state not in OTA_STATES:
+            return None
+        out = {"version": version[:MAX_REASON_LEN], "state": state}
+        if isinstance(error, str) and error:
+            out["error"] = error[:MAX_OTA_ERROR_LEN]
+        return out
+
+    @field_validator("reset_reason", mode="before")
+    @classmethod
+    def _short_reason(cls, v: object) -> object:
+        return v[:MAX_REASON_LEN] if isinstance(v, str) else None
+
+    @field_validator("boot_count", "heap_free", "heap_min", "wifi_reconnects", mode="before")
+    @classmethod
+    def _count(cls, v: object) -> object:
+        return v if isinstance(v, int) and not isinstance(v, bool) and 0 <= v < 2**31 else None
+
+    @field_validator("faults", mode="before")
+    @classmethod
+    def _faults(cls, v: object) -> object:
+        if not isinstance(v, list):
+            return None
+        return [f[:MAX_FAULT_LEN] for f in v if isinstance(f, str) and f][:MAX_FAULTS]
 
 
 class IngestRequest(BaseModel):

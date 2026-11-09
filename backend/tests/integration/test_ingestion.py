@@ -286,6 +286,8 @@ async def test_emqx_authorize_worker_subscribe_only(client: httpx.AsyncClient) -
         # Regression: the retained telemetry profile (app/worker.py's
         # _handle_config_publish) was denied, so no device ever received it.
         ("acme/sensor-1/config", "allow"),
+        # Over-the-air update requests (app.firmware).
+        ("acme/sensor-1/ota", "allow"),
         ("acme/sensor-1/temperature", "deny"),
         ("acme/sensor-1/status", "deny"),
         ("acme//config", "deny"),

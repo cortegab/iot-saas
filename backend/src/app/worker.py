@@ -77,11 +77,13 @@ from app.config import settings
 from app.db import session_factory
 from app.devices import service as devices_service
 from app.devices.models import DeviceStatus
+from app.firmware import service as firmware_service
 from app.health import service as health_service
 from app.ingestion import service as ingestion_service
 from app.ingestion.schemas import StatusPayload, TelemetryPayload
 from app.logging_config import configure_logging
 from app.notifications import service as notifications_service
+from app.push import sender as push_sender
 from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules import service as rules_service
@@ -126,6 +128,8 @@ async def handle_message(
     if parsed.metric == ingestion_service.RESERVED_METRIC_STATUS:
         await _handle_status(factory, client, parsed, payload)
         return
+    if parsed.metric in ingestion_service.PLATFORM_TO_DEVICE_SEGMENTS:
+        return  # our own publish to the device, echoed back
 
     try:
         data = TelemetryPayload.model_validate_json(payload)
@@ -203,7 +207,21 @@ async def _handle_status(
         return
 
     received_at = datetime.now(UTC)
-    await devices_service.record_status_snapshot(
+    # Only firmware that reports diagnostics (0.14.0+) sends boot_count.
+    diagnostics = (
+        devices_service.StatusDiagnostics(
+            reset_reason=data.reset_reason,
+            boot_count=data.boot_count,
+            heap_free=data.heap_free,
+            heap_min=data.heap_min,
+            wifi_reconnects=data.wifi_reconnects,
+            faults=data.faults,
+            ota_state=data.ota,
+        )
+        if data.boot_count is not None
+        else None
+    )
+    change = await devices_service.record_status_snapshot(
         factory,
         resolved.tenant_id,
         resolved.device_id,
@@ -213,6 +231,7 @@ async def _handle_status(
         uptime_s=data.uptime_s,
         fw_version=data.fw_version,
         received_at=received_at,
+        diagnostics=diagnostics,
     )
     await realtime_service.publish_event(
         resolved.tenant_id,
@@ -224,8 +243,19 @@ async def _handle_status(
             "battery_pct": data.battery_pct,
             "uptime_s": data.uptime_s,
             "fw_version": data.fw_version,
+            "reset_reason": data.reset_reason,
+            "boot_count": data.boot_count,
+            "heap_free": data.heap_free,
+            "heap_min": data.heap_min,
+            "wifi_reconnects": data.wifi_reconnects,
+            "faults": data.faults,
+            "ota": data.ota,
         },
     )
+    if resolved.status != DeviceStatus.DISABLED:
+        await _alert_device_health(
+            factory, resolved.tenant_id, resolved.device_id, parsed.device_slug, data, change
+        )
     log.info("status %s/%s -> online=%s", parsed.tenant_slug, parsed.device_slug, data.online)
 
     if rules_service.note_device_status(resolved.device_id, data.online):
@@ -248,6 +278,74 @@ async def _handle_status(
                 )
             except Exception:
                 log.exception("offline notification failed for %s", resolved.device_id)
+
+
+# Restarts worth an alert, as the firmware reports them (firmware/src/diag.h);
+# a power-on, the reset pin or the firmware's own restart are not news.
+ABNORMAL_RESTARTS = {
+    "crash": "a crash",
+    "task_wdt": "a frozen loop (watchdog)",
+    "interrupt_wdt": "a watchdog reset",
+    "other_wdt": "a watchdog reset",
+    "brownout": "a power dip (brown-out)",
+}
+
+
+async def _alert_device_health(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    device_slug: str,
+    data: StatusPayload,
+    change: devices_service.StatusChange,
+) -> None:
+    """Device-health alerts from the status diagnostics: a new boot after a
+    crash, watchdog or brown-out, and each sensor that newly stopped
+    answering. A failure here never drops the status message."""
+    alerts: list[tuple[str, str]] = []
+    cause = ABNORMAL_RESTARTS.get(data.reset_reason or "")
+    if change.restarted and cause:
+        alerts.append(
+            (
+                f"{device_slug} restarted after {cause}",
+                (
+                    f"Boot {data.boot_count}. It came back on its own; if this repeats, check its "
+                    "power supply and wiring, and its serial log."
+                ),
+            )
+        )
+    if change.ota_problem is not None:
+        version = change.ota_problem.get("version", "?")
+        failed = change.ota_problem.get("state") == "failed"
+        alerts.append(
+            (
+                f"{device_slug}: update to {version} "
+                + ("failed" if failed else "was rolled back"),
+                change.ota_problem.get("error")
+                or "It kept the version it had; see its Settings → Firmware.",
+            )
+        )
+    for fault in change.new_faults:
+        alerts.append(
+            (
+                f"{device_slug}: {fault}",
+                "The device reads it as unknown and keeps retrying; check the sensor's wiring and power.",
+            )
+        )
+    for message, detail in alerts:
+        try:
+            await notifications_service.create_notification(
+                factory,
+                tenant_id,
+                device_id,
+                None,
+                message,
+                severity="warning",
+                kind="device_health",
+                detail=detail,
+            )
+        except Exception:
+            log.exception("device-health notification failed for %s", device_id)
 
 
 async def _handle_ack(
@@ -400,6 +498,10 @@ async def _handle_config_publish(
             "publish": m.get("publish", "periodic"),
             "interval_seconds": m.get("publish_interval_seconds"),
             "deadband": m.get("publish_deadband"),
+            # The firmware sends readings with these decimals and compares
+            # "on change" on the rounded value (FW 0.13.0+; older ignores it,
+            # and null/absent means 3, what every firmware sent before).
+            "decimals": m.get("decimals"),
         }
         for m in devices[0].metrics
         if m.get("key")
@@ -437,6 +539,21 @@ async def _handle_rule_trigger(
     await rules_service.run_rule_out_of_band(client, factory, tenant_id, rule_id, trigger_source)
 
 
+async def _handle_ota_request(client: aiomqtt.Client, raw: str | bytes) -> None:
+    """An admin asked a device to update (app.firmware): publish the request
+    on {tenant}/{device}/ota. QoS 1, not retained: a device that's offline now
+    must not install it on some later reconnect without anyone asking."""
+    try:
+        data = json.loads(raw)
+        topic = f"{data['tenant_slug']}/{data['device_slug']}/ota"
+        payload = json.dumps(data["payload"])
+    except (KeyError, TypeError, ValueError) as exc:
+        log.warning("dropping malformed ota request: %s", exc)
+        return
+    await client.publish(topic, payload, qos=1)
+    log.info("ota request -> %s (version %s)", topic, data["payload"].get("version"))
+
+
 async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
     while True:
         try:
@@ -453,6 +570,7 @@ async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redi
                     commands_service.MANUAL_COMMAND_CHANNEL,
                     catalog_service.CONFIG_PUBLISH_CHANNEL,
                     rules_service.RULES_MANUAL_CHANNEL,
+                    firmware_service.OTA_CHANNEL,
                 )
                 async for message in pubsub.listen():
                     if message["type"] != "message":
@@ -461,6 +579,8 @@ async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redi
                         await _handle_config_publish(client, factory, message["data"])
                     elif message["channel"] == rules_service.RULES_MANUAL_CHANNEL:
                         await _handle_rule_trigger(client, factory, message["data"])
+                    elif message["channel"] == firmware_service.OTA_CHANNEL:
+                        await _handle_ota_request(client, message["data"])
                     else:
                         await _handle_manual_command(client, factory, message["data"])
         except (aiomqtt.MqttError, redis.RedisError) as exc:
@@ -716,6 +836,7 @@ async def run() -> None:
             schedule_loop(session_factory),
             rules_maintenance_loop(session_factory),
             pending_timer_loop(session_factory),
+            push_sender.push_loop(session_factory),
         )
     finally:
         # Best-effort drain of in-flight webhook/email deliveries on shutdown.

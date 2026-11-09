@@ -349,6 +349,29 @@ async def touch_last_seen(
     )
 
 
+class StatusDiagnostics(NamedTuple):
+    """The status message's diagnostics (generic firmware 0.14.0+)."""
+
+    reset_reason: str | None
+    boot_count: int | None
+    heap_free: int | None
+    heap_min: int | None
+    wifi_reconnects: int | None
+    faults: list[str] | None
+    # An over-the-air update's progress (firmware 1.0.0+), or None.
+    ota_state: dict[str, str] | None = None
+
+
+class StatusChange(NamedTuple):
+    """What a status snapshot changed, for the worker's device-health alerts:
+    a new boot since the last report, sensors that newly stopped answering, and
+    an over-the-air update that newly failed or was rolled back."""
+
+    restarted: bool
+    new_faults: list[str]
+    ota_problem: dict[str, str] | None = None
+
+
 async def record_status_snapshot(
     factory: async_sessionmaker[AsyncSession],
     tenant_id: uuid.UUID,
@@ -360,7 +383,8 @@ async def record_status_snapshot(
     uptime_s: int | None,
     fw_version: str | None,
     received_at: datetime,
-) -> None:
+    diagnostics: StatusDiagnostics | None = None,
+) -> StatusChange:
     """Tier A device-health write — called once per retained
     {tenant}/{device}/status message (app.worker._handle_status), a single
     row, not batched like touch_last_seen above: a status message already
@@ -371,18 +395,65 @@ async def record_status_snapshot(
     `received_at` is the worker's own receive time, never the payload's own
     embedded timestamp (CLAUDE.md §4: an LWT's `online: false` fires at an
     unpredictable moment its payload can't reflect).
+
+    Diagnostics are written only from an online report: a Last-Will
+    (`online: false`) carries none, and the last known ones are what explain
+    why the device went quiet.
     """
     async with factory() as session, session.begin():
         await set_tenant_context(session, tenant_id)
+        values: dict[str, Any] = {
+            "last_status_at": received_at,
+            "last_status_online": online,
+            "rssi": rssi,
+            "battery_pct": battery_pct,
+            "uptime_s": uptime_s,
+            "fw_version": fw_version,
+        }
+        change = StatusChange(restarted=False, new_faults=[])
+        if online and diagnostics is not None:
+            before = (
+                await session.execute(
+                    select(Device.boot_count, Device.faults, Device.ota_state).where(
+                        Device.id == device_id, Device.tenant_id == tenant_id
+                    )
+                )
+            ).one_or_none()
+            old_boots, old_faults, old_ota = (
+                (before[0], before[1], before[2]) if before is not None else (None, None, None)
+            )
+            new_boot = diagnostics.boot_count
+            known = set(old_faults or [])
+            ota = diagnostics.ota_state
+            ota_problem = (
+                ota
+                if ota is not None
+                and ota.get("state") in ("failed", "rolled_back")
+                and ota != old_ota
+                else None
+            )
+            change = StatusChange(
+                restarted=old_boots is not None and new_boot is not None and new_boot > old_boots,
+                new_faults=[f for f in diagnostics.faults or [] if f not in known],
+                ota_problem=ota_problem,
+            )
+            values.update(diagnostics._asdict())
         await session.execute(
             update(Device)
             .where(Device.id == device_id, Device.tenant_id == tenant_id)
-            .values(
-                last_status_at=received_at,
-                last_status_online=online,
-                rssi=rssi,
-                battery_pct=battery_pct,
-                uptime_s=uptime_s,
-                fw_version=fw_version,
-            )
+            .values(**values)
         )
+    return change
+
+
+async def record_ota_request(
+    session: AsyncSession, tenant_id: uuid.UUID, device_id: uuid.UUID, version: str
+) -> None:
+    """An over-the-air update was requested (app.firmware): remembered so the
+    device page can say "Updating to …" until the device runs it."""
+    await session.execute(
+        update(Device)
+        .where(Device.id == device_id, Device.tenant_id == tenant_id)
+        .values(ota_target=version, ota_requested_at=datetime.now(UTC), ota_state=None)
+    )
+    await session.flush()

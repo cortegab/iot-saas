@@ -125,8 +125,12 @@ services:
       MQTT_WORKER_PASSWORD: ${MQTT_WORKER_PASSWORD}
       TELEMETRY_BATCH_SIZE: ${TELEMETRY_BATCH_SIZE}
       TELEMETRY_FLUSH_INTERVAL_MS: ${TELEMETRY_FLUSH_INTERVAL_MS}
+      # Push notifications: set FCM_SERVICE_ACCOUNT_FILE in infra/.env to the
+      # key's host path (e.g. ~/.config/iodriven/fcm-service-account.json).
+      FCM_SERVICE_ACCOUNT_FILE: ${FCM_SERVICE_ACCOUNT_FILE:+/run/secrets/fcm-service-account.json}
     volumes:
       - ../backend:/app
+      - ${FCM_SERVICE_ACCOUNT_FILE:-/dev/null}:/run/secrets/fcm-service-account.json:ro
     depends_on:
       timescaledb:
         condition: service_healthy

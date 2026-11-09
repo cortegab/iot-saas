@@ -25,9 +25,12 @@ class Servo : public OutputDriver {
       err = String("servo: can't drive GPIO ") + pin_;
       return false;
     }
+    boot_ = boot;
     write(boot);
     return true;
   }
+
+  void applyBootState() override { write(boot_); }
 
   bool apply(JsonVariantConst value, String& err) override {
     float angle;
@@ -46,6 +49,7 @@ class Servo : public OutputDriver {
 
   int pin_ = -1;
   float minUs_ = 500, maxUs_ = 2500, minAngle_ = 0, maxAngle_ = 180;
+  float boot_ = 90;
 };
 
 }  // namespace

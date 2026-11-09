@@ -173,8 +173,9 @@ considered.**
 {tenant}/{device}/ack/{actuator}           acknowledgement (device → platform)
 {tenant}/{device}/config                   telemetry profile (retained, platform → device)
 {tenant}/{device}/status                   health snapshot (retained, device → platform; Last-Will target)
+{tenant}/{device}/ota                      firmware update request (platform → device, QoS 1, not retained)
 ```
-`status` and `config` are reserved metric-key segments — a tenant-authored metric can never collide
+`status`, `config` and `ota` are reserved metric-key segments — a tenant-authored metric can never collide
 with them (enforced at catalog write time).
 
 **Telemetry payload**
@@ -190,16 +191,41 @@ with them (enforced at catalog write time).
 
 **Config payload** (retained; the device subscribes on connect, same as the desired-state topic)
 ```json
-{ "metrics": [{ "key": "temperature", "publish": "periodic", "interval_seconds": 30 }], "issued_at": 1770001111 }
+{ "metrics": [{ "key": "temperature", "publish": "on_change", "interval_seconds": 300, "deadband": 0.2, "decimals": 1 }], "issued_at": 1770001111 }
 ```
 `publish` is `"periodic"` (default) / `"on_change"` / `"streaming"` — the device enforces its own
-publish cadence locally; the platform only defines and distributes the profile.
+publish cadence locally; the platform only defines and distributes the profile. `deadband`
+(on_change: ignore changes up to this size; null = any change) and `decimals` (the device rounds to
+this before sending and before comparing for on_change; null or absent = 3, what firmware before
+0.13.0 always sent; at most 6) are optional. Raising a metric's `decimals` can change when a
+threshold rule fires: at 3 decimals 0.0492 arrives as 0.049, at 4 it arrives as 0.0492.
 
 **Status payload** (retained; also the device's Last-Will payload with `online: false` on ungraceful
 disconnect)
 ```json
-{ "online": true, "rssi": -63, "battery_pct": 87, "uptime_s": 1234, "fw_version": "1.2.0", "timestamp": 1770001111 }
+{ "online": true, "rssi": -63, "battery_pct": 87, "uptime_s": 1234, "fw_version": "1.2.0", "timestamp": 1770001111,
+  "reset_reason": "brownout", "boot_count": 7, "heap_free": 118000, "heap_min": 91000, "wifi_reconnects": 2,
+  "faults": ["mpu6050@0x68: stopped answering"] }
 ```
+Every field but `online` is optional. The diagnostics (generic firmware 0.14.0+) are why the chip
+last restarted (`power_on`, `reset_pin`, `software`, `crash`, `task_wdt`, `interrupt_wdt`,
+`other_wdt`, `brownout`, …; `firmware/src/diag.h`), boots since install, free heap and its
+low-water mark (bytes), Wi-Fi rejoins since boot, and the parts not answering right now. The
+platform keeps the last online report's diagnostics through a Last-Will, trims odd values instead
+of dropping the message, and raises a *device health* alert for a new boot after a crash, watchdog
+or brown-out, and for each newly listed fault. Firmware 1.0.0+ also reports an over-the-air
+update's progress as `"ota": {"version": "1.0.1", "state": "downloading" | "restarting" | "failed" |
+"rolled_back", "error": "…"}`.
+
+**OTA request** (generic firmware 1.0.0+; `docs/firmware/ota.md`)
+```json
+{ "version": "1.0.1", "url": "https://…/firmware/1.0.1/esp32/firmware.bin", "size": 1441315,
+  "sha256": "<hex>", "signature": "<base64 DER ECDSA P-256 over the SHA-256>", "command_id": "uuid" }
+```
+The device installs it only if size, SHA-256 and signature check out against the public keys built
+into its firmware (`firmware/ota_keys/`), and keeps it only once it reaches the broker within 2
+minutes; otherwise the bootloader goes back to the previous version. The private signing key is a
+GitHub Actions secret plus an offline backup, never on the VPS.
 The platform stamps its own receive time for staleness math and never trusts this payload's own
 `timestamp` — a Last-Will fires at an unpredictable moment its payload can't reflect.
 

@@ -558,6 +558,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/devices/{device_id}/firmware": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Firmware */
+        get: operations["get_firmware_devices__device_id__firmware_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/devices/{device_id}/firmware/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update Firmware */
+        post: operations["update_firmware_devices__device_id__firmware_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api-keys": {
         parameters: {
             query?: never;
@@ -1325,6 +1359,62 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/push-devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Register */
+        put: operations["register_me_push_devices_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/push-devices/{device_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Unregister */
+        delete: operations["unregister_me_push_devices__device_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update */
+        patch: operations["update_me_push_devices__device_id__patch"];
+        trace?: never;
+    };
+    "/meta/client": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Client Info
+         * @description The oldest mobile app version the API still serves. The API changes
+         *     additively, so this only rises when an old app would break.
+         */
+        get: operations["client_info_meta_client_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -1619,6 +1709,18 @@ export interface components {
         ChangeRoleRequest: {
             role: components["schemas"]["TenantRole"];
         };
+        /**
+         * ClientInfoResponse
+         * @description What the mobile app checks at start (docs/mobile-release.md).
+         */
+        ClientInfoResponse: {
+            /** Min Mobile Version */
+            min_mobile_version: string;
+            /** Latest Mobile Version */
+            latest_mobile_version: string;
+            /** Mobile Update Url */
+            mobile_update_url: string;
+        };
         /** CommandResponse */
         CommandResponse: {
             /**
@@ -1846,6 +1948,18 @@ export interface components {
             uptime_s: number | null;
             /** Fw Version */
             fw_version: string | null;
+            /** Reset Reason */
+            reset_reason?: string | null;
+            /** Boot Count */
+            boot_count?: number | null;
+            /** Heap Free */
+            heap_free?: number | null;
+            /** Heap Min */
+            heap_min?: number | null;
+            /** Wifi Reconnects */
+            wifi_reconnects?: number | null;
+            /** Faults */
+            faults?: string[] | null;
             /** Metrics Health */
             metrics_health?: components["schemas"]["MetricHealthResponse"][];
         };
@@ -2056,6 +2170,33 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /**
+         * FirmwareStatusResponse
+         * @description What the device runs, the latest release, and whether it can update to
+         *     it over the air right now (`reason` says why not, in words).
+         */
+        FirmwareStatusResponse: {
+            /** Current */
+            current: string | null;
+            /** Latest */
+            latest: string | null;
+            /** Update Available */
+            update_available: boolean;
+            /** Can Update */
+            can_update: boolean;
+            /** Reason */
+            reason: string | null;
+            /** Target */
+            target: string | null;
+            /** Requested At */
+            requested_at: string | null;
+            state: components["schemas"]["OtaState"] | null;
+        };
+        /** FirmwareUpdateRequest */
+        FirmwareUpdateRequest: {
+            /** Version */
+            version: string;
         };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
@@ -2388,7 +2529,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "rule_fired" | "rule_cleared" | "rule_health" | "device_offline" | "delivery_failed" | "template_changed";
+            kind: "rule_fired" | "rule_cleared" | "rule_health" | "device_offline" | "device_health" | "delivery_failed" | "template_changed";
             /**
              * Created At
              * Format: date-time
@@ -2417,6 +2558,75 @@ export interface components {
             device_ids: string[];
             /** Rule Ids */
             rule_ids: string[];
+        };
+        /**
+         * OtaState
+         * @description An update's progress as the device last reported it in its status
+         *     message (firmware/src/ota.h).
+         */
+        OtaState: {
+            /** Version */
+            version: string;
+            /** State */
+            state: string;
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * PushDeviceRegisterRequest
+         * @description Called by the app after sign-in and whenever FCM hands it a new token.
+         *     Registering the same token again updates it (and its owner) instead of
+         *     adding a row.
+         */
+        PushDeviceRegisterRequest: {
+            /** Token */
+            token: string;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "android" | "ios";
+            /** Min Severity */
+            min_severity?: ("critical" | "warning") | null;
+            /** Enabled */
+            enabled?: boolean | null;
+        };
+        /** PushDeviceResponse */
+        PushDeviceResponse: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Platform
+             * @enum {string}
+             */
+            platform: "android" | "ios";
+            /**
+             * Min Severity
+             * @enum {string}
+             */
+            min_severity: "critical" | "warning";
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Last Seen At
+             * Format: date-time
+             */
+            last_seen_at: string;
+        };
+        /** PushDeviceUpdateRequest */
+        PushDeviceUpdateRequest: {
+            /** Min Severity */
+            min_severity?: ("critical" | "warning") | null;
+            /** Enabled */
+            enabled?: boolean | null;
         };
         /**
          * RangeRhs
@@ -4449,6 +4659,78 @@ export interface operations {
             };
         };
     };
+    get_firmware_devices__device_id__firmware_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_firmware_devices__device_id__firmware_update_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FirmwareUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FirmwareStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_api_keys_api_keys_get: {
         parameters: {
             query?: never;
@@ -5692,7 +5974,7 @@ export interface operations {
                 limit?: number;
                 /** @description Rows to skip, newest first. */
                 offset?: number;
-                type?: ("rules" | "rule_health" | "device_offline" | "delivery_failed" | "template_changed") | null;
+                type?: ("rules" | "rule_health" | "device_offline" | "device_health" | "delivery_failed" | "template_changed") | null;
                 severity?: ("info" | "warning" | "critical") | null;
                 device_id?: string | null;
                 rule_id?: string | null;
@@ -6300,6 +6582,132 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    register_me_push_devices_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushDeviceRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushDeviceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unregister_me_push_devices__device_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_me_push_devices__device_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                device_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushDeviceUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PushDeviceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    client_info_meta_client_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientInfoResponse"];
                 };
             };
         };

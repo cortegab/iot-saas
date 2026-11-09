@@ -108,13 +108,14 @@ async def emqx_authenticate(
 def _is_worker_publish_topic(topic: str) -> bool:
     """The worker's own publish rights (CLAUDE.md §4):
     {tenant}/{device}/cmd/{actuator} and .../state/{actuator} for command
-    dispatch, and the retained {tenant}/{device}/config telemetry profile."""
+    dispatch, the retained {tenant}/{device}/config telemetry profile, and
+    {tenant}/{device}/ota update requests (app.firmware)."""
     parts = topic.split("/")
     if not all(parts):
         return False
     if len(parts) == 4:
         return parts[2] in ("cmd", "state")
-    return len(parts) == 3 and parts[2] == "config"
+    return len(parts) == 3 and parts[2] in ("config", "ota")
 
 
 @router.post(

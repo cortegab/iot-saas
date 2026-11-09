@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { useColorScheme } from "react-native";
 import { AuthProvider, useAuth } from "@/auth/AuthProvider";
 import { useTheme } from "@/theme/useTheme";
+import { UpdateGate } from "@/update/UpdateGate";
 
 void SplashScreen.preventAutoHideAsync();
 
@@ -24,7 +25,11 @@ function Root({ fontsReady }: { fontsReady: boolean }) {
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
   if (!ready) return null;
-  return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.canvas } }} />;
+  return (
+    <UpdateGate>
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: theme.canvas } }} />
+    </UpdateGate>
+  );
 }
 
 export default function RootLayout() {

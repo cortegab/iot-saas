@@ -57,3 +57,9 @@ Thumbs.db
 
 # Claude Code — local session state, agent worktrees, plans
 .claude/
+
+# Over-the-air signing keys: the private key lives in the GitHub secret and
+# offline backups only (docs/firmware/ota.md). Public keys go in
+# firmware/ota_keys/, which ota_keys.py checks are public.
+*signing-key*.pem
+*-signing.pem

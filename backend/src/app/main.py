@@ -16,10 +16,13 @@ from app.config import settings
 from app.contact.router import router as contact_router
 from app.dashboards.router import router as dashboards_router
 from app.devices.router import router as devices_router
+from app.firmware.router import router as firmware_router
 from app.ingestion.router import router as ingestion_router
 from app.logging_config import configure_logging
 from app.notifications.router import router as notifications_router
 from app.paging import TOTAL_HEADER
+from app.meta.router import router as meta_router
+from app.push.router import router as push_router
 from app.realtime.router import router as realtime_router
 from app.rules.router import router as rules_router
 from app.telemetry.router import router as telemetry_router
@@ -51,6 +54,7 @@ app.include_router(auth_router)
 app.include_router(tenants_router)
 app.include_router(catalog_router)
 app.include_router(devices_router)
+app.include_router(firmware_router)
 app.include_router(api_keys_router)
 app.include_router(telemetry_router)
 app.include_router(ingestion_router)
@@ -61,6 +65,8 @@ app.include_router(realtime_router)
 app.include_router(notifications_router)
 app.include_router(zones_router)
 app.include_router(contact_router)
+app.include_router(push_router)
+app.include_router(meta_router)
 
 
 @app.get("/")

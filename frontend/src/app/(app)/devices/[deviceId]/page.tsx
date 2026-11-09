@@ -344,11 +344,27 @@ function uptime(s: number): string {
   return h ? `${h} h ${m} min` : `${m} min`;
 }
 
-/** The device's own report (demo H Health): signal, power, firmware, uptime
- * and the id it uses in MQTT topics. */
+/** Why the board last restarted, from the firmware's code (firmware/src/diag.h). */
+const RESTART_REASON: Record<string, string> = {
+  power_on: "Power on",
+  reset_pin: "Reset button",
+  software: "Restarted itself",
+  crash: "Crash",
+  task_wdt: "Froze (watchdog)",
+  interrupt_wdt: "Watchdog",
+  other_wdt: "Watchdog",
+  brownout: "Power dip (brown-out)",
+  deep_sleep: "Woke from sleep",
+};
+
+const kb = (bytes: number) => `${Math.round(bytes / 1024)} KB`;
+
+/** The device's own report (demo H Health): signal, power, firmware, uptime,
+ * its diagnostics (generic firmware 0.14.0+) and the id it uses in MQTT topics. */
 function Health({ device }: { device: DeviceResponse }) {
   // Only what the device has reported; one line when it hasn't reported yet.
   const reported = device.last_status_at != null || device.rssi != null || device.fw_version != null || device.uptime_s != null;
+  const faults = device.faults ?? [];
   return (
     <FactList
       facts={[
@@ -357,6 +373,22 @@ function Health({ device }: { device: DeviceResponse }) {
         reported && ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : "Mains"],
         device.fw_version != null && ["Firmware", device.fw_version],
         device.uptime_s != null && ["Uptime", uptime(device.uptime_s)],
+        device.boot_count != null && [
+          "Last restart",
+          `${RESTART_REASON[device.reset_reason ?? ""] ?? "Unknown"} · boot ${device.boot_count}`,
+        ],
+        device.faults != null && [
+          "Sensors",
+          faults.length === 0 ? (
+            "All answering"
+          ) : (
+            <span key="f" className="text-status-error">
+              {faults.join("; ")}
+            </span>
+          ),
+        ],
+        device.heap_free != null && ["Memory", `${kb(device.heap_free)} free${device.heap_min != null ? ` · lowest ${kb(device.heap_min)}` : ""}`],
+        device.wifi_reconnects != null && ["Wi-Fi rejoins", `${device.wifi_reconnects} since it started`],
         ["MQTT id", <span key="id" className="font-mono">{device.slug}</span>],
       ]}
     />

@@ -38,6 +38,7 @@ import {
 } from "@/lib/hardware/hardware-draft";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { FirmwareSection } from "@/components/devices/FirmwareSection";
 import { DeviceTopics } from "./DeviceTopics";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
@@ -406,6 +407,12 @@ export function DeviceEditor({
                 ],
               ]}
             />
+          </EditorSection>
+        )}
+
+        {embedded && (template?.runs_on === "generic_firmware" || device.hardware != null) && (
+          <EditorSection id="firmware" title="Firmware" lead="Our firmware updates over the air from 1.0.0. The device checks each release's signature before it installs it.">
+            <FirmwareSection deviceId={device.id} readOnly={readOnly} />
           </EditorSection>
         )}
 

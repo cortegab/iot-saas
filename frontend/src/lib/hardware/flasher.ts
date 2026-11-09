@@ -5,6 +5,7 @@
  * bootloader + partition table + otadata + app + the device's config blob; a
  * config-only update rewrites just the `cfg` partition, keeping the app and the
  * Wi-Fi the board already has. Chrome/Edge on desktop only (Web Serial). */
+import type { ESPLoader } from "esptool-js";
 import type { SketchBoard } from "@/lib/firmware-sketch";
 import type { BoardModel, DriverSpec } from "@/lib/hardware/driver-catalog";
 
@@ -218,6 +219,24 @@ export function chipForName(manifest: Pick<FirmwareManifest, "boards">, chipName
   return hit ? (hit[0] as SketchBoard) : null;
 }
 
+/** Espressif's own USB vendor id: the chip's built-in USB (the C3 Super
+ * Mini's USB-Serial-JTAG, the S2's USB-OTG), not a CP210x/CH340 bridge. */
+const ESPRESSIF_USB_VENDOR_ID = 0x303a;
+
+/** The restart after flashing, as esptool's sequence for --after hard_reset:
+ * IO0 released (DTR off), EN held low (RTS on), then released. esptool-js's
+ * own "hard_reset" (0.6.1, still in 0.7) only releases RTS without pulling it
+ * first, so the board stayed in the flasher until it was unplugged. Boards on
+ * the chip's own USB get esptool's longer USB timing. */
+export function restartSequence(nativeUsb: boolean): string {
+  return nativeUsb ? "D0|R1|W200|R0|W200" : "D0|R1|W100|R0";
+}
+
+async function restartBoard(loader: ESPLoader, port: SerialPort) {
+  const nativeUsb = port.getInfo().usbVendorId === ESPRESSIF_USB_VENDOR_ID;
+  await loader.after("custom_reset", undefined, restartSequence(nativeUsb));
+}
+
 /** "Detect my board" (DESIGN.md §8): asks the board on `port` which chip it is
  * and restarts it, writing nothing. Returns esptool's chip name ("ESP32-C3").
  * Boards with the same chip look alike, so this narrows the model list; the
@@ -231,7 +250,7 @@ export async function detectChip(port: SerialPort): Promise<string> {
     loader = new ESPLoader({ transport, baudrate: 115200, terminal: quiet });
     await loader.main();
     const name = loader.chip.CHIP_NAME;
-    await loader.after("hard_reset");
+    await restartBoard(loader, port);
     return name;
   } catch (err) {
     throw explainFlashError(err, "connecting", loader?.chip != null);
@@ -318,7 +337,7 @@ export async function flashBoard(opts: FlashOptions): Promise<FlashTimings> {
       const t3 = performance.now();
 
       progress({ stage: "restarting" });
-      await loader.after("hard_reset");
+      await restartBoard(loader, port);
       progress({ stage: "done" });
       goodBaud.set(port, baud);
       return {

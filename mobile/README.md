@@ -5,7 +5,9 @@ Design rules: `docs/design/DESIGN.md` §15. Shared API types and helpers: `packa
 
 **Status:** Phase 2 (0.3.0): sign-in, workspaces, devices with live readings and trends,
 dashboards, **Scan** (device labels and Wi-Fi setup QRs) and **Wi-Fi setup over Bluetooth**
-(`docs/ble-provisioning.md`, "The IO Driven app"). Phase 3 (0.4.0) adds actuator controls, alerts and rules on/off with Reset latch.
+(`docs/ble-provisioning.md`, "The IO Driven app"). Phase 3 (0.4.0) adds actuator controls, alerts and rules on/off with Reset latch. Phase 4 (0.5.0)
+adds push notifications (`docs/mobile-push.md`): the build reads `google-services.json` from
+`GOOGLE_SERVICES_JSON` or `~/.config/iodriven/google-services.json`, never from the repo.
 
 Bluetooth and the camera need a real phone: there's no BLE in an emulator.
 
@@ -101,10 +103,13 @@ pnpm test           # Jest (jest-expo); also checks tokens against the web's glo
 pnpm doctor         # expo-doctor: SDK and config checks
 ```
 
-## Publishing (later)
+## Publishing
 
-- **Play Store:** a Google Play Console developer account; upload the AAB to the internal testing
-  track first.
+`docs/mobile-release.md`: the checklist for every release, the one-time Play Console setup (upload
+key, Play App Signing, store listing, Data safety answers, internal testing) and test releases on
+GitHub. Store images are in `store/` (`icon-512.png`, `feature-graphic.png`). The privacy policy is
+https://iodriven.tech/privacy.
+
 - **App Store:** iOS builds need a Mac with Xcode (or a cloud build service), and an Apple
   Developer Program membership.
 

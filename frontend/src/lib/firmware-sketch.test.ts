@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSketch, defaultPins, pinChoices, pinClashes, PIN_CHOICES, provisioningPayload, provName, type SketchInfo } from "./firmware-sketch";
+import { buildSketch, cFloat, defaultPins, sketchDecimals, pinChoices, pinClashes, PIN_CHOICES, provisioningPayload, provName, type SketchInfo } from "./firmware-sketch";
 
 const base: SketchInfo = {
   tenantSlug: "acme",
@@ -14,6 +14,31 @@ const base: SketchInfo = {
   actuators: [{ key: "fan1", name: "Fan", value_type: "bool" }],
   credential: { username: "u", password: "p" },
 };
+
+describe("decimals and deadband in the sketch", () => {
+  it("writes the deadband with every digit, as a C float", () => {
+    expect(cFloat(0.0005)).toBe("0.0005f");
+    expect(cFloat(1)).toBe("1.0f");
+    expect(cFloat(1e-7)).toBe("1e-7f");
+    expect(cFloat(0)).toBe("0.0f");
+  });
+
+  it("sends the template's decimals, 3 when unset, at most 6", () => {
+    expect([sketchDecimals(undefined), sketchDecimals(null), sketchDecimals(1), sketchDecimals(9), sketchDecimals(-1)]).toEqual([3, 3, 1, 6, 0]);
+  });
+
+  it("rounds before sending and before comparing", () => {
+    const sketch = buildSketch({
+      ...base,
+      metrics: [{ key: "vibration", name: "Vibration", data_type: "float", decimals: 4, publish: "on_change", publish_deadband: 0.0005 }],
+    });
+    expect(sketch).toContain('"acme/bay1/vibration", false, MODE_ON_CHANGE, defaultIntervalMs(MODE_ON_CHANGE), 0.0005f, 4, NAN');
+    expect(sketch).toContain("%.*f");
+    expect(sketch).not.toContain("%.3f");
+    expect(sketch).toContain("value = roundToDecimals(value, m.decimals)");
+    expect(sketch).toContain("changedEnough(value, m.lastValue, m.deadband, m.decimals)");
+  });
+});
 
 describe("defaultPins / pinClashes", () => {
   it("hands out distinct pins for bool inputs and outputs only", () => {

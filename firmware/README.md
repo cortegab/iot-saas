@@ -145,6 +145,56 @@ blinks dim blue. It shows where the board is, so you don't need a serial monitor
 The patterns live in `src/led_pattern.h` and are host-tested (`test/test_led_pattern`). Keep this
 table in step with `src/led.h`.
 
+## Over-the-air updates
+
+From 1.0.0 a board updates itself: device → Settings → Firmware → **Update to …** (admins). It
+downloads into the other app slot, checks the SHA-256 and the release's **signature** against the
+public keys in `ota_keys/` (built in by `ota_keys.py`), and restarts into it on probation. If it
+doesn't reach the broker within 2 minutes, the bootloader goes back to the previous version.
+`release.py` signs each app (`--sign-key`, or `OTA_SIGNING_KEY_FILE`; the deploy passes the
+`OTA_SIGNING_KEY` secret) and refuses an unsigned release once `ota_keys/` has a key. Setup, key
+changes and bench testing: `docs/firmware/ota.md`. Boards on 0.x need one USB install of 1.0.0.
+
+## Publishing
+
+Each metric is sent with its template's **Decimals** (0.13.0; older firmware always sent 3), and
+"on change" compares the rounded values, so a change smaller than the last digit never publishes
+and a "Change of at least" finer than one step acts as one step. A device sends at most **20
+telemetry messages a second** on average: above that a due metric waits a pass and then sends its
+latest value, so a fast streaming metric can't flood the broker or starve the others. The serial
+log says when that happens (`[TELEMETRY] over 20 messages/s: …`).
+
+A template's existing devices pick up a Decimals change from the retained config message, which
+the platform republishes whenever the template's metrics are saved. Raising Decimals can make a
+threshold rule fire on values that used to round down.
+
+## Self-recovery
+
+The board gets itself back online without anyone unplugging it (0.12.0):
+
+| What goes wrong | What the board does |
+|---|---|
+| The main loop freezes | The loop watchdog restarts it after 30 s |
+| Wi-Fi doesn't join, or drops | Logs the reason (`[WIFI] disconnected: AUTH_FAIL (202)`), joins again after 30 s, 60 s, then every 2 min, and restarts after 5 min without Wi-Fi |
+| Wi-Fi is up but the broker isn't | Retries after 2 s, 4 s, 8 s … up to every minute, and restarts after 15 min |
+| A sensor stops answering (0.12.1) | Logs it once (`[SENSOR] mpu6050@0x68: stopped answering`), reads unknown, retries, and logs when it answers again. An I2C part that left SDA held low gets the bus freed: up to 9 clock pulses, a STOP and a restart of the I2C peripheral, at most every 30 s |
+| The board loses the platform (0.15.0) | Each output set to **When offline: Boot state** goes back to its boot setting (relay off, PWM at its boot value, servo at its boot angle) after its **Offline for** time, counted from boot or the last disconnect. **Keep** (the default) leaves it as it was. On reconnect the retained desired state applies again |
+| A command arrives late (the board was offline and the broker held it) (0.15.1) | Once network time (SNTP) has set the clock, a command older than its `issued_at + ttl` (2 s grace) isn't applied or acked, so the platform shows it as No response. Until the clock is set, commands act as before. The retained desired state still converges the output when the board reconnects |
+| The reset button reads pressed at boot (bad wiring) | Ignores it until it has read released once, so it can't wipe the Wi-Fi on every restart |
+
+The status message (every minute, and within 5 s when the list of faulty sensors changes) carries
+diagnostics from 0.14.0: why the board last restarted, how many times it has booted since it was
+installed (kept in NVS), free memory and its lowest point, Wi-Fi rejoins and the sensors not
+answering. The device page's Health shows them, and a crash or a sensor that stops answering
+raises a *device health* alert.
+
+Every boot logs why the board last restarted (`[BOOT] last restart: brown-out …`). The Arduino core
+alone retried a failed join once and then only for some reasons, so a board could blink "joining"
+forever after a power cut until it was unplugged.
+
+A board with its Wi-Fi typed into its config (no phone setup) restarts when the reset button is held
+5 s: there's no stored network to forget. Run Install again to change its network.
+
 ## Trying it on a board
 
 1. `python3 release.py --dev`.

@@ -28,7 +28,7 @@ PublishProfile = Literal["periodic", "on_change", "streaming"]
 # Wire-format metric keys reserved for the device-health contract (see
 # ingestion/service.py's RESERVED_METRIC_STATUS) — a tenant-authored metric
 # can never collide with the `.../status` or `.../config` topics.
-RESERVED_METRIC_KEYS = {"status", "config"}
+RESERVED_METRIC_KEYS = {"status", "config", "ota"}
 
 
 class CatalogMetric(BaseModel):

@@ -274,6 +274,24 @@ page; `firmware/README.md`):
   themselves (yet), so this only changes what the next Install writes. Old version directories
   are kept, and deleting one breaks nothing.
 
+**Push notifications** (the mobile app's alerts; `docs/mobile-push.md`): off until the worker
+has a Firebase service-account key. To turn them on, from your own machine:
+
+```bash
+ssh deploy@<VPS> 'mkdir -p ~/secrets && chmod 700 ~/secrets'
+scp ~/.config/iodriven/fcm-service-account.json deploy@<VPS>:secrets/fcm-service-account.json
+ssh deploy@<VPS> 'chmod 600 ~/secrets/fcm-service-account.json && id -u'   # must print 1000
+```
+
+If `id -u` isn't 1000, run `sudo chown 1000 ~deploy/secrets/fcm-service-account.json` on the VPS:
+the containers run as uid 1000 and a `chmod 600` file owned by anyone else is unreadable to them.
+Then set `FCM_SERVICE_ACCOUNT_FILE=/home/deploy/secrets/fcm-service-account.json` in
+`infra/.env.prod` (copy the file first: a path that doesn't exist yet makes Docker create a
+directory there) and apply it with `$C up -d worker`. The worker log then says
+`push notifications on (Firebase project io-driven)`; `can't read the FCM service account` means
+the path or the owner is wrong. Push failing never stops the worker: it logs and carries on
+without push. To rotate the key, replace the file and `$C restart worker`.
+
 **Logs:**
 
 ```bash

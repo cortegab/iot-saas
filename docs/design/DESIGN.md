@@ -500,8 +500,8 @@ edits a whole record, and there is no "Expand" toggle.
   group into one row (**×4**, "since Fri 2 Oct 09:12, last 2 min ago"; dates in the one §11
   format, never the browser's language). The API groups, filters and pages, so the ×N counts and
   the numbered pager (§6, 25 / 50 / 100 alerts) cover the whole history. The status filter (§6)
-  is All · Unread, then unread alerts by type: **Offline · Rules** (fired or cleared) **· Rule
-  health · Failed deliveries · Templates**, counted per row of repeats, never per notification;
+  is All · Unread, then unread alerts by type: **Offline · Device health · Rules** (fired or
+  cleared) **· Rule health · Failed deliveries · Templates**, counted per row of repeats, never per notification;
   the nav badge counts the same unread alerts. **Mark all as read** is the toolbar action.
   Filters: severity, device, rule. The sheet lists each time the alert happened, paged.
   **Unread** is the 3 px accent bar and a bold title, nothing more: no Unread pill and no row
@@ -738,6 +738,10 @@ path (CLAUDE.md §9.1).
   - An **in-page contact form**.
   - Contract terms and data retention are answered in the **FAQ**.
   - **No plan tiers.**
+- **Privacy** (`/privacy`): a plain document page on the canvas, a night header bar with the mark
+  linking home, one column of about 70 characters, section headings, last-updated date. Linked
+  from the landing footer and the sign-in footer, and used as the app's privacy policy on the
+  Play Store listing.
 
 ### 10.1 Get started (first run)
 
@@ -962,6 +966,18 @@ restyled.
   sheet with the sentence, the Switch, its inputs (each with its last value and freshness,
   opening the device) and **Reset latch** (confirmed) when latched; **Edit on the web** for
   everything else. The attention strip's rule items open this list filtered.
+- **Push notifications:** asked for once, after sign-in, in a sheet that says why first ("Get alerts
+  on this phone?": what it sends, that it carries names only) with **Turn on alerts** and **Not now**;
+  Android's own permission prompt follows only after Turn on. **More → Notifications** has the
+  per-workspace **Alerts on this phone** Switch and, while on, **Critical only | Warnings and
+  critical**. When the phone's settings block notifications, the row says so and offers **Open the
+  phone's settings**. A notification's title is names only ("Greenhouse fan fired", "Bay 1 went
+  offline"); tapping it opens the device (offline) or Alerts, switching workspace if needed. Android
+  channels: *Critical alerts* (high importance) and *Alerts*.
+- **Update required:** when the API says this app version is too old (`/meta/client`), the app
+  shows only a full screen: "Update required", one sentence naming the installed and the latest
+  version, and **Get the update** (the Play listing, or the test releases until then). A failed
+  check never blocks; the app opens as usual.
 
 ## 16. Reference and changelog
 
@@ -1066,3 +1082,8 @@ restyled.
 | 2026-11-05 | §15 **Controls** (mobile plan M7): the device screen's Controls card and the dashboard actuator widget send commands like the web's §8 rows (Switch / segments / value + Set, confirm first, Retry the only resend, offline said once); viewers see the rows without controls. |
 | 2026-11-05 | §15 **Alerts** (mobile plan M8): Alerts tab with the unread badge, the web's grouped rows and state filter, paging as you scroll, a details sheet (Open device · Mark as unread · Dismiss with Undo), Mark all read in the header; failed deliveries read-only. |
 | 2026-11-05 | §15 **Rules** (mobile plan M9): a Rules tab (the tab bar is now Dashboards · Devices · Alerts · Rules · More, as on the web's phone layout) with the state filter, the rule sentence, 24 h activity, the on/off Switch with Undo, and a sheet with inputs and Reset latch; editing stays on the web. |
+| 2026-11-07 | §10 **Privacy** page (`/privacy`, mobile plan Phase 5): document layout on the canvas with a night header bar; linked from the landing and sign-in footers. The landing footer gets the IO Driven mark (it still had the old gradient square). |
+| 2026-11-07 | §15 **Push notifications** (mobile plan Phase 4): a one-time explainer sheet before the system prompt, More → Notifications (per-workspace Switch, Critical only \| Warnings and critical, Open the phone's settings when blocked), names-only titles, taps open the device or Alerts, two Android channels. |
+| 2026-11-07 | §15 **Update required** (mobile plan Phase 5): a full-screen stop with Get the update when the app is older than the API's minimum; a failed check never blocks. |
+| 2026-11-08 | §8 **Device health** (firmware stability plan F4): the device page's Health card adds, when the firmware reports them (0.14.0+), **Last restart** ("Crash · boot 7", the reason in words), **Sensors** ("All answering", or the parts not answering in the error colour), **Memory** (free · lowest) and **Wi-Fi rejoins**. A new notification kind, *device health* (warning), says a device restarted after a crash, watchdog or brown-out, or that a sensor stopped answering; it gets its own **Device health** state in the notifications filter, after Offline. |
+| 2026-11-08 | §8 device **Settings → Firmware** (firmware stability plan F7, generic-firmware devices only): a FactList with **Running**, **Latest release** with an **Update to …** link for admins (a confirm explains the download, the signature check, the restart and the 2-minute rollback), an **Update** line that follows it (*Downloading …*, *Restarting into …*, *Updated to …*, or why it failed, in the error colour), and **Over the air** saying why it can't update when it can't (offline, 0.x firmware, unsigned release). A failed or rolled-back update is a *device health* alert. |

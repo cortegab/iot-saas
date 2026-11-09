@@ -80,9 +80,24 @@ class Settings(BaseSettings):
     # Public URL of the web app — the base of links sent by email (member
     # invitations, password resets).
     app_base_url: str = "http://localhost:3000"
+    # Firmware releases (firmware/release.py's latest.json + <version>/
+    # manifest.json), for over-the-air updates (app.firmware): where the API
+    # reads the manifest AND the URL boards download from, so it must be
+    # reachable from the boards' network. Empty = app_base_url + "/firmware"
+    # (prod: nginx serves infra/firmware there). Dev: this computer's LAN
+    # address, e.g. http://192.168.1.82:3000/firmware (release.py --dev).
+    firmware_base_url: str = ""
     # Where the public contact form (POST /public/contact) sends enquiries.
     # Empty = the form still answers, and the enquiry is only logged.
     contact_email_to: str = ""
+    # Push notifications (app.push): path to the Firebase service-account
+    # JSON. Empty: push is off and the worker's push loop does nothing.
+    fcm_service_account_file: str = ""
+    # Mobile app releases (app.meta, docs/mobile-release.md): apps older than
+    # min_mobile_version show "Update required" and link to mobile_update_url.
+    min_mobile_version: str = "0.0.0"
+    latest_mobile_version: str = ""
+    mobile_update_url: str = "https://github.com/cortegab/iot-saas/releases"
     email_provider: Literal["console", "smtp"] = "console"
     email_from: str = "alerts@example.com"
     # Display name shown beside EMAIL_FROM in the recipient's inbox
@@ -110,6 +125,10 @@ class Settings(BaseSettings):
     # returning truncated results.
     simulate_replay_max_days: int = 7
     simulate_replay_max_samples: int = 5000
+
+    @property
+    def firmware_url(self) -> str:
+        return (self.firmware_base_url or f"{self.app_base_url.rstrip('/')}/firmware").rstrip("/")
 
     @property
     def cors_allow_origins_list(self) -> list[str]:

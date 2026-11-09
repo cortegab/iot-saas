@@ -81,6 +81,24 @@ class Device(Base):
     battery_pct: Mapped[int | None] = mapped_column(nullable=True)
     uptime_s: Mapped[int | None] = mapped_column(nullable=True)
     fw_version: Mapped[str | None] = mapped_column(nullable=True)
+    # Diagnostics from the same status message (generic firmware 0.14.0+),
+    # kept from the last online report: a Last-Will doesn't carry them.
+    reset_reason: Mapped[str | None] = mapped_column(nullable=True)
+    boot_count: Mapped[int | None] = mapped_column(nullable=True)
+    heap_free: Mapped[int | None] = mapped_column(nullable=True)
+    heap_min: Mapped[int | None] = mapped_column(nullable=True)
+    wifi_reconnects: Mapped[int | None] = mapped_column(nullable=True)
+    faults: Mapped[list[str] | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    # Over-the-air updates (app.firmware): the version last requested and
+    # when, and the update's progress as the device last reported it
+    # ({"version", "state", "error"}; null once it runs the new version).
+    ota_target: Mapped[str | None] = mapped_column(nullable=True)
+    ota_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    ota_state: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

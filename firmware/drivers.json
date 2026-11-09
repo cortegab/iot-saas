@@ -47,10 +47,10 @@
         { "key": "interval_ms", "label": "Read every (ms)", "type": "int", "default": 2000, "min": 1000, "max": 60000 }
       ],
       "channels": [
-        { "key": "temp_1", "label": "Probe 1 (°C)", "data_type": "float" },
-        { "key": "temp_2", "label": "Probe 2 (°C)", "data_type": "float" },
-        { "key": "temp_3", "label": "Probe 3 (°C)", "data_type": "float" },
-        { "key": "temp_4", "label": "Probe 4 (°C)", "data_type": "float" }
+        { "key": "temp_1", "label": "Probe 1 (°C)", "data_type": "float", "decimals": 2, "deadband": 0.1 },
+        { "key": "temp_2", "label": "Probe 2 (°C)", "data_type": "float", "decimals": 2, "deadband": 0.1 },
+        { "key": "temp_3", "label": "Probe 3 (°C)", "data_type": "float", "decimals": 2, "deadband": 0.1 },
+        { "key": "temp_4", "label": "Probe 4 (°C)", "data_type": "float", "decimals": 2, "deadband": 0.1 }
       ],
       "wiring": [
         "Fit a 4.7 kΩ resistor between the data line and 3.3 V (many probe modules already have one).",
@@ -68,8 +68,8 @@
         { "key": "interval_ms", "label": "Read every (ms)", "type": "int", "default": 2500, "min": 2000, "max": 60000 }
       ],
       "channels": [
-        { "key": "temperature", "label": "Temperature (°C)", "data_type": "float" },
-        { "key": "humidity", "label": "Humidity (%)", "data_type": "float" }
+        { "key": "temperature", "label": "Temperature (°C)", "data_type": "float", "decimals": 1, "deadband": 0.2 },
+        { "key": "humidity", "label": "Humidity (%)", "data_type": "float", "decimals": 1, "deadband": 1 }
       ],
       "wiring": [
         "Power it from 3.3 V. A bare sensor needs a 10 kΩ pull-up from data to 3.3 V; modules usually have one.",
@@ -91,7 +91,7 @@
       ],
       "channels": [
         { "key": "total", "label": "Total (units since boot)", "data_type": "float" },
-        { "key": "rate_per_min", "label": "Rate (units per minute)", "data_type": "float" }
+        { "key": "rate_per_min", "label": "Rate (units per minute)", "data_type": "float", "decimals": 1 }
       ],
       "wiring": [
         "Pulses per unit converts pulses to your unit, e.g. 450 for a YF-S201 flow meter in litres.",
@@ -113,7 +113,7 @@
         { "key": "interval_ms", "label": "Measure every (ms)", "type": "int", "default": 500, "min": 60, "max": 5000 },
         { "key": "max_cm", "label": "Max distance (cm)", "type": "float", "default": 400 }
       ],
-      "channels": [{ "key": "distance_cm", "label": "Distance (cm)", "data_type": "float" }],
+      "channels": [{ "key": "distance_cm", "label": "Distance (cm)", "data_type": "float", "decimals": 1, "deadband": 0.5 }],
       "wiring": [
         "The HC-SR04 runs on 5 V and its ECHO pin outputs 5 V: put a divider (1 kΩ from ECHO, 2 kΩ to GND) between ECHO and the GPIO, or use the 3.3 V HC-SR04P.",
         "TRIG can be driven straight from the GPIO.",
@@ -135,16 +135,16 @@
         { "key": "window_ms", "label": "Vibration window (ms)", "type": "int", "default": 1000, "min": 200, "max": 10000 }
       ],
       "channels": [
-        { "key": "tilt_x", "label": "Tilt X (°)", "data_type": "float" },
-        { "key": "tilt_y", "label": "Tilt Y (°)", "data_type": "float" },
-        { "key": "vibration_rms", "label": "Vibration (g RMS)", "data_type": "float" },
-        { "key": "temperature", "label": "Chip temperature (°C)", "data_type": "float", "common": false },
-        { "key": "accel_x", "label": "Accel X (g)", "data_type": "float", "common": false },
-        { "key": "accel_y", "label": "Accel Y (g)", "data_type": "float", "common": false },
-        { "key": "accel_z", "label": "Accel Z (g)", "data_type": "float", "common": false },
-        { "key": "gyro_x", "label": "Gyro X (°/s)", "data_type": "float", "common": false },
-        { "key": "gyro_y", "label": "Gyro Y (°/s)", "data_type": "float", "common": false },
-        { "key": "gyro_z", "label": "Gyro Z (°/s)", "data_type": "float", "common": false }
+        { "key": "tilt_x", "label": "Tilt X (°)", "data_type": "float", "decimals": 1, "deadband": 0.5 },
+        { "key": "tilt_y", "label": "Tilt Y (°)", "data_type": "float", "decimals": 1, "deadband": 0.5 },
+        { "key": "vibration_rms", "label": "Vibration (g RMS)", "data_type": "float", "decimals": 3, "deadband": 0.002 },
+        { "key": "temperature", "label": "Chip temperature (°C)", "data_type": "float", "common": false, "decimals": 1, "deadband": 0.5 },
+        { "key": "accel_x", "label": "Accel X (g)", "data_type": "float", "common": false, "decimals": 3 },
+        { "key": "accel_y", "label": "Accel Y (g)", "data_type": "float", "common": false, "decimals": 3 },
+        { "key": "accel_z", "label": "Accel Z (g)", "data_type": "float", "common": false, "decimals": 3 },
+        { "key": "gyro_x", "label": "Gyro X (°/s)", "data_type": "float", "common": false, "decimals": 1 },
+        { "key": "gyro_y", "label": "Gyro Y (°/s)", "data_type": "float", "common": false, "decimals": 1 },
+        { "key": "gyro_z", "label": "Gyro Z (°/s)", "data_type": "float", "common": false, "decimals": 1 }
       ],
       "wiring": [
         "Connect VCC to 3.3 V, GND to GND, SDA and SCL to the board's I2C pins (set in the I2C bus row). The GY-521 has its own pull-ups.",
@@ -160,10 +160,13 @@
       "pins": [{ "role": "pin", "label": "Signal", "needs": "output" }],
       "params": [
         { "key": "active_low", "label": "Active low", "type": "bool", "default": false },
-        { "key": "boot_state", "label": "On at boot", "type": "bool", "default": false }
+        { "key": "boot_state", "label": "On at boot", "type": "bool", "default": false },
+        { "key": "when_offline", "label": "When offline", "type": "enum", "options": ["Keep", "Boot state"], "default": "Keep" },
+        { "key": "offline_after_s", "label": "Offline for (s)", "type": "int", "default": 60, "min": 5, "max": 86400 }
       ],
       "channels": [{ "key": "value", "label": "On/off", "value_type": "bool" }],
       "wiring": [
+        "When offline: Boot state returns it to its boot setting once the board has been out of touch with the platform that long; Keep leaves it as it was. Either way it follows the platform again when it reconnects.",
         "Many relay modules switch on when their input is LOW: turn on Active low for those.",
         "Power the relay coil from the module's own VCC (5 V), not from a GPIO.",
         "The output holds its boot state until the platform's desired state arrives."
@@ -181,10 +184,13 @@
         { "key": "in_min", "label": "Command for 0%", "type": "float", "default": 0 },
         { "key": "in_max", "label": "Command for 100%", "type": "float", "default": 100 },
         { "key": "boot_value", "label": "Value at boot", "type": "float", "default": 0 },
-        { "key": "invert", "label": "Invert", "type": "bool", "default": false }
+        { "key": "invert", "label": "Invert", "type": "bool", "default": false },
+        { "key": "when_offline", "label": "When offline", "type": "enum", "options": ["Keep", "Boot state"], "default": "Keep" },
+        { "key": "offline_after_s", "label": "Offline for (s)", "type": "int", "default": 60, "min": 5, "max": 86400 }
       ],
       "channels": [{ "key": "value", "label": "Level", "value_type": "float" }],
       "wiring": [
+        "When offline: Boot state returns it to its boot setting once the board has been out of touch with the platform that long; Keep leaves it as it was. Either way it follows the platform again when it reconnects.",
         "Drive loads through a MOSFET or driver module, never straight from the pin.",
         "LED dimming: 1-5 kHz. Fans: 25 kHz. A passive buzzer: its tone's frequency.",
         "Very high frequencies need fewer resolution bits (e.g. 40 kHz at 10 bits)."
@@ -201,10 +207,13 @@
         { "key": "max_angle", "label": "Max angle (°)", "type": "float", "default": 180 },
         { "key": "min_us", "label": "Pulse at min angle (µs)", "type": "float", "default": 500 },
         { "key": "max_us", "label": "Pulse at max angle (µs)", "type": "float", "default": 2500 },
-        { "key": "boot_angle", "label": "Angle at boot (°)", "type": "float", "default": 90 }
+        { "key": "boot_angle", "label": "Angle at boot (°)", "type": "float", "default": 90 },
+        { "key": "when_offline", "label": "When offline", "type": "enum", "options": ["Keep", "Boot state"], "default": "Keep" },
+        { "key": "offline_after_s", "label": "Offline for (s)", "type": "int", "default": 60, "min": 5, "max": 86400 }
       ],
       "channels": [{ "key": "value", "label": "Angle", "value_type": "float" }],
       "wiring": [
+        "When offline: Boot state returns it to its boot setting once the board has been out of touch with the platform that long; Keep leaves it as it was. Either way it follows the platform again when it reconnects.",
         "Power the servo from its own 5 V supply, not the board's 3.3 V, and join the grounds.",
         "If it buzzes or hits the end stops, narrow the pulse widths (e.g. 1000-2000 µs)."
       ]

@@ -19,6 +19,13 @@ export interface RealtimeMessage {
   battery_pct?: number | null;
   uptime_s?: number | null;
   fw_version?: string | null;
+  // Diagnostics (generic firmware 0.14.0+; absent from a Last-Will).
+  reset_reason?: string | null;
+  boot_count?: number | null;
+  heap_free?: number | null;
+  heap_min?: number | null;
+  wifi_reconnects?: number | null;
+  faults?: string[] | null;
   // rule_execution: a rule fired — "just invalidate" like command_ack/
   // notification, not a payload to apply (the row is server-derived state).
   rule_id?: string;
