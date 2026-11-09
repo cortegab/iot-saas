@@ -2,6 +2,8 @@
 // reads and drives comes from the `cfg` partition the dashboard writes when it
 // flashes (src/config.h). See firmware/README.md.
 #include <Arduino.h>
+#include <esp_system.h>
+#include <esp_task_wdt.h>
 
 #include "board.h"  // DEFAULT_LED_* until the config is read
 #include "config.h"
@@ -12,6 +14,11 @@
 #include "version.h"
 
 namespace {
+
+// The loop must come round within this, or the board restarts (reason
+// TASK_WDT on the next boot). Generous: a TLS connect blocks for a few
+// seconds (net.cpp caps its handshake at 15 s).
+constexpr uint32_t LOOP_WATCHDOG_MS = 30000;
 
 DeviceConfig config;
 String fault;  // non-empty = the config can't be used: stay offline, say why
@@ -28,12 +35,44 @@ void faultLoop() {
   delay(20);
 }
 
+const char* resetReasonName(esp_reset_reason_t r) {
+  switch (r) {
+    case ESP_RST_POWERON: return "power-on";
+    case ESP_RST_EXT: return "reset pin";
+    case ESP_RST_SW: return "restarted by the firmware";
+    case ESP_RST_PANIC: return "crash";
+    case ESP_RST_INT_WDT: return "interrupt watchdog";
+    case ESP_RST_TASK_WDT: return "loop watchdog (the loop froze)";
+    case ESP_RST_WDT: return "watchdog";
+    case ESP_RST_DEEPSLEEP: return "deep sleep";
+    case ESP_RST_BROWNOUT: return "brown-out (supply voltage dipped)";
+    case ESP_RST_SDIO: return "SDIO";
+    case ESP_RST_USB: return "USB";
+    case ESP_RST_JTAG: return "JTAG";
+    default: return "unknown";
+  }
+}
+
+// Arduino's loop task feeds the task watchdog on every pass once
+// enableLoopWDT() has added it; the timeout here replaces the core's 5 s.
+void startLoopWatchdog() {
+  esp_task_wdt_config_t wdt = {};
+  wdt.timeout_ms = LOOP_WATCHDOG_MS;
+  wdt.idle_core_mask = 1 << 0;  // keep watching core 0's idle task, as the core does
+  wdt.trigger_panic = true;
+  esp_task_wdt_reconfigure(&wdt);
+  enableLoopWDT();
+}
+
 }  // namespace
 
 void setup() {
   Serial.begin(115200);
   delay(200);
   Serial.printf("\n[BOOT] iot-saas firmware %s (%s)\n", FW_VERSION, BOARD_ID);
+  esp_reset_reason_t reason = esp_reset_reason();
+  Serial.printf("[BOOT] last restart: %s (%d)\n", resetReasonName(reason), (int)reason);
+  startLoopWatchdog();
   // The chip's LED until the config names the board's own, so a board with no
   // usable config still blinks its fault.
   ledBegin(DEFAULT_LED_TYPE, DEFAULT_LED_PIN, DEFAULT_LED_ACTIVE_LOW);

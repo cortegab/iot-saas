@@ -3,6 +3,7 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_wifi.h>
 #include <soc/soc_caps.h>
 
 #include "board.h"
@@ -19,8 +20,28 @@ extern "C" bool btInUse() { return true; }
 namespace {
 
 constexpr unsigned long STATUS_INTERVAL_MS = 60000;
-constexpr unsigned long MQTT_RETRY_MS = 2000;
 constexpr unsigned long RESET_HOLD_MS = 5000;
+
+// MQTT reconnects back off 2 s, 4 s, 8 s ... up to a minute, so a broker
+// that's down isn't hammered by every board at once.
+constexpr unsigned long MQTT_RETRY_MIN_MS = 2000;
+constexpr unsigned long MQTT_RETRY_MAX_MS = 60000;
+// The TLS handshake blocks the loop; keep it well under the watchdog (main.cpp).
+constexpr unsigned long TLS_HANDSHAKE_TIMEOUT_S = 15;
+
+// Wi-Fi supervisor. The Arduino core retries a failed join once, then only
+// for some reasons (not AUTH_FAIL), and then waits forever: the board blinked
+// "connecting" until it was unplugged. So: with no IP this long after boot or
+// a drop, rejoin whatever the reason, backing off 30 s, 60 s, then every 2 min;
+// and restart the board after 5 min without Wi-Fi.
+constexpr unsigned long WIFI_RETRY_FIRST_MS = 30000;
+constexpr unsigned long WIFI_RETRY_MAX_MS = 120000;
+constexpr unsigned long WIFI_RESTART_MS = 5UL * 60 * 1000;
+// Wi-Fi up but no broker for this long: restart, in case the network stack is
+// what's stuck. Longer than Wi-Fi's, since this is usually the server.
+constexpr unsigned long MQTT_RESTART_MS = 15UL * 60 * 1000;
+// Don't repeat the same disconnect reason more often than this.
+constexpr unsigned long WIFI_LOG_REPEAT_MS = 30000;
 
 const DeviceConfig* cfg = nullptr;
 WiFiClient plainClient;
@@ -29,8 +50,19 @@ PubSubClient mqtt;
 String statusTopic;
 unsigned long lastStatusMs = 0;
 unsigned long lastMqttAttemptMs = 0;
+unsigned long mqttRetryMs = MQTT_RETRY_MIN_MS;
 bool mqttAttempted = false;
+unsigned long mqttDownSince = 0;  // 0 = connected, or Wi-Fi isn't up yet
 unsigned long resetDownSince = 0;
+// Set once the reset button has read released: a pin held low from boot (bad
+// wiring, a jumper) must not wipe the Wi-Fi again on every restart.
+bool resetArmed = false;
+unsigned long wifiDownSince = 0;  // 0 = connected
+unsigned long wifiRetryMs = WIFI_RETRY_FIRST_MS;
+unsigned long nextWifiRetryAt = 0;
+// The last disconnect reason logged, and when (from the Wi-Fi event task).
+volatile uint8_t lastWifiReason = 0;
+volatile unsigned long lastWifiReasonLogMs = 0;
 // Advertising over BLE and waiting for the phone app. Set from the Wi-Fi
 // event task, read from loop(), hence volatile.
 volatile bool provisioning = false;
@@ -65,6 +97,19 @@ void onWifiEvent(arduino_event_t* e) {
       Serial.print("[WIFI] connected, IP: ");
       Serial.println(WiFi.localIP());
       break;
+    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: {
+      // Why the join failed or the link dropped (e.g. AUTH_FAIL, NO_AP_FOUND).
+      // Our own disconnect before a rejoin (ASSOC_LEAVE) isn't news.
+      uint8_t reason = e->event_info.wifi_sta_disconnected.reason;
+      if (reason == WIFI_REASON_ASSOC_LEAVE) break;
+      unsigned long now = millis();
+      if (reason != lastWifiReason || now - lastWifiReasonLogMs >= WIFI_LOG_REPEAT_MS) {
+        Serial.printf("[WIFI] disconnected: %s (%u)\n", WiFi.disconnectReasonName((wifi_err_reason_t)reason), reason);
+        lastWifiReason = reason;
+        lastWifiReasonLogMs = now;
+      }
+      break;
+    }
 #if CONFIG_IDF_TARGET_ESP32C3
     // ESP32-C3 boards (the Super Mini especially) fail to authenticate or run
     // hot at full TX power; 8.5 dBm is plenty for a nearby access point.
@@ -78,19 +123,68 @@ void onWifiEvent(arduino_event_t* e) {
 }
 
 // Hold the reset button 5 s while running: forget the Wi-Fi and provision
-// again. (Holding it while powering up starts the bootloader instead.)
-void watchProvisioningReset() {
+// again. A board whose Wi-Fi was typed into its config has nothing to forget,
+// so it just restarts (run Install again to change its network). (Holding it
+// while powering up starts the bootloader instead.)
+void watchResetButton() {
   if (digitalRead(cfg->resetPin) != LOW) {
+    resetArmed = true;
     resetDownSince = 0;
     return;
   }
+  if (!resetArmed) return;  // held low since boot: ignored until released
   if (resetDownSince == 0) resetDownSince = millis();
-  if (millis() - resetDownSince >= RESET_HOLD_MS) {
+  if (millis() - resetDownSince < RESET_HOLD_MS) return;
+  if (cfg->wifiSsid != nullptr) {
+    Serial.println("[WIFI] reset button held: restarting (this board's Wi-Fi is in its config)");
+  } else {
     Serial.println("[PROV] reset button held: forgetting Wi-Fi and restarting");
     WiFi.disconnect(false, true);  // erase the stored network only
+  }
+  delay(100);
+  ESP.restart();
+}
+
+// A station network is set (saved, typed in, or just provisioned), so there's
+// something to rejoin. False while the board waits for the phone.
+bool haveWifiToJoin() {
+  if (provisioning) return false;
+  wifi_config_t conf;
+  return esp_wifi_get_config(WIFI_IF_STA, &conf) == ESP_OK && conf.sta.ssid[0] != 0;
+}
+
+// The Wi-Fi supervisor (see WIFI_RETRY_FIRST_MS). Returns true when Wi-Fi is up.
+bool superviseWifi() {
+  unsigned long now = millis();
+  if (WiFi.status() == WL_CONNECTED) {
+    if (wifiDownSince != 0) {
+      wifiDownSince = 0;
+      wifiRetryMs = WIFI_RETRY_FIRST_MS;
+    }
+    return true;
+  }
+  if (!haveWifiToJoin()) {
+    wifiDownSince = 0;  // the clock starts once there's a network to join
+    return false;
+  }
+  if (wifiDownSince == 0) {
+    wifiDownSince = now;
+    nextWifiRetryAt = now + wifiRetryMs;
+    return false;
+  }
+  if (now - wifiDownSince >= WIFI_RESTART_MS) {
+    Serial.printf("[WIFI] no Wi-Fi for %lu min; restarting\n", WIFI_RESTART_MS / 60000);
     delay(100);
     ESP.restart();
   }
+  if ((long)(now - nextWifiRetryAt) >= 0) {
+    Serial.printf("[WIFI] still not connected after %lus; joining again\n", (now - wifiDownSince) / 1000);
+    esp_wifi_disconnect();
+    esp_wifi_connect();
+    wifiRetryMs = min(wifiRetryMs * 2, WIFI_RETRY_MAX_MS);
+    nextWifiRetryAt = now + wifiRetryMs;
+  }
+  return false;
 }
 
 // Retained health snapshot. The Last-Will set on connect replaces it with
@@ -113,10 +207,31 @@ void tryConnectMqtt() {
                    "{\"online\":false}")) {
     // Free heap, once per connect: the headroom drivers have to work with.
     Serial.printf("connected (free heap %u KB)\n", (unsigned)(ESP.getFreeHeap() / 1024));
+    mqttRetryMs = MQTT_RETRY_MIN_MS;
+    mqttDownSince = 0;
     publishStatus();
     ioSubscribe(mqtt);
   } else {
-    Serial.printf("failed, rc=%d, retrying in 2s\n", mqtt.state());
+    Serial.printf("failed, rc=%d, retrying in %lus\n", mqtt.state(), mqttRetryMs / 1000);
+  }
+}
+
+// MQTT (re)connects with back-off, and a restart if the broker stays out of
+// reach for MQTT_RESTART_MS while Wi-Fi is up.
+void superviseMqtt() {
+  unsigned long now = millis();
+  if (mqttDownSince == 0) mqttDownSince = now;
+  if (now - mqttDownSince >= MQTT_RESTART_MS) {
+    Serial.printf("[MQTT] no broker for %lu min with Wi-Fi up; restarting\n", MQTT_RESTART_MS / 60000);
+    delay(100);
+    ESP.restart();
+  }
+  if (!mqttAttempted) {
+    tryConnectMqtt();
+  } else if (now - lastMqttAttemptMs >= mqttRetryMs) {
+    // The wait before this attempt grows only after a failure.
+    mqttRetryMs = min(mqttRetryMs * 2, MQTT_RETRY_MAX_MS);
+    tryConnectMqtt();
   }
 }
 
@@ -128,6 +243,7 @@ void netBegin(const DeviceConfig& config) {
 
   if (config.tls) {
     tlsClient.setCACert(ROOT_CA);
+    tlsClient.setHandshakeTimeout(TLS_HANDSHAKE_TIMEOUT_S);
     mqtt.setClient(tlsClient);
   } else {
     mqtt.setClient(plainClient);
@@ -144,6 +260,7 @@ void netBegin(const DeviceConfig& config) {
     // Never into the board's own Wi-Fi store: a later phone-setup config would
     // find it there and skip BLE.
     WiFi.persistent(false);
+    pinMode(config.resetPin, INPUT_PULLUP);
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
     WiFi.begin(config.wifiSsid, config.wifiPassword);
@@ -167,11 +284,14 @@ void netBegin(const DeviceConfig& config) {
 }
 
 void netLoop() {
-  if (cfg->wifiSsid == nullptr) watchProvisioningReset();
-  if (WiFi.status() != WL_CONNECTED) return;  // provisioning, or (re)connecting
+  watchResetButton();
+  if (!superviseWifi()) {
+    mqttDownSince = 0;  // the broker's clock runs only while Wi-Fi is up
+    return;              // provisioning, or (re)joining
+  }
 
   if (!mqtt.connected()) {
-    if (!mqttAttempted || millis() - lastMqttAttemptMs >= MQTT_RETRY_MS) tryConnectMqtt();
+    superviseMqtt();
     return;
   }
   mqtt.loop();

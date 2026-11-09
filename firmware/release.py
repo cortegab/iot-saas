@@ -35,8 +35,11 @@ BOARDS = {
 }
 PARTITIONS_OFFSET = 0x8000
 OTADATA_OFFSET = 0xE000
-# Warn when an app fills this much of its OTA slot.
+# Warn when an app fills this much of its OTA slot, and refuse the release
+# above SIZE_FAIL_RATIO: OTA (and every fix after it) needs room left in the
+# slot, and the ESP32-C6 build is the closest to the limit.
 SIZE_WARN_RATIO = 0.9
+SIZE_FAIL_RATIO = 0.95
 
 
 def fail(msg: str) -> None:
@@ -243,6 +246,11 @@ def main() -> None:
         if app_bytes > app_size:
             fail(f"{board}: firmware.bin is {app_bytes} bytes, over its {app_size}-byte OTA slot")
         used = app_bytes / app_size
+        if used > SIZE_FAIL_RATIO:
+            fail(
+                f"{board}: firmware.bin is {app_bytes} bytes, {used:.1%} of its app slot "
+                f"(limit {SIZE_FAIL_RATIO:.0%}): trim it or leave a driver out of this chip (drivers.json \"chips\")"
+            )
         note = "  <-- over 90%, time to trim" if used > SIZE_WARN_RATIO else ""
         print(f"{board}: firmware.bin {app_bytes:,} bytes, {used:.0%} of the app slot{note}")
 

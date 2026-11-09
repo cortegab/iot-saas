@@ -145,6 +145,24 @@ blinks dim blue. It shows where the board is, so you don't need a serial monitor
 The patterns live in `src/led_pattern.h` and are host-tested (`test/test_led_pattern`). Keep this
 table in step with `src/led.h`.
 
+## Self-recovery
+
+The board gets itself back online without anyone unplugging it (0.12.0):
+
+| What goes wrong | What the board does |
+|---|---|
+| The main loop freezes | The loop watchdog restarts it after 30 s |
+| Wi-Fi doesn't join, or drops | Logs the reason (`[WIFI] disconnected: AUTH_FAIL (202)`), joins again after 30 s, 60 s, then every 2 min, and restarts after 5 min without Wi-Fi |
+| Wi-Fi is up but the broker isn't | Retries after 2 s, 4 s, 8 s … up to every minute, and restarts after 15 min |
+| The reset button reads pressed at boot (bad wiring) | Ignores it until it has read released once, so it can't wipe the Wi-Fi on every restart |
+
+Every boot logs why the board last restarted (`[BOOT] last restart: brown-out …`). The Arduino core
+alone retried a failed join once and then only for some reasons, so a board could blink "joining"
+forever after a power cut until it was unplugged.
+
+A board with its Wi-Fi typed into its config (no phone setup) restarts when the reset button is held
+5 s: there's no stored network to forget. Run Install again to change its network.
+
 ## Trying it on a board
 
 1. `python3 release.py --dev`.
