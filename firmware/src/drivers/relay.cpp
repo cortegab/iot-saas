@@ -20,9 +20,12 @@ class Relay : public OutputDriver {
     // The retained desired state replaces this once MQTT connects.
     gpio_set_level((gpio_num_t)pin_, level(bootOn));
     pinMode(pin_, OUTPUT);
+    bootOn_ = bootOn;
     write(bootOn);
     return true;
   }
+
+  void applyBootState() override { write(bootOn_); }
 
   bool apply(JsonVariantConst value, String& err) override {
     bool on;
@@ -40,6 +43,7 @@ class Relay : public OutputDriver {
 
   int pin_ = -1;
   bool activeLow_ = false;
+  bool bootOn_ = false;
 };
 
 }  // namespace

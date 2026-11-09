@@ -168,6 +168,7 @@ The board gets itself back online without anyone unplugging it (0.12.0):
 | Wi-Fi doesn't join, or drops | Logs the reason (`[WIFI] disconnected: AUTH_FAIL (202)`), joins again after 30 s, 60 s, then every 2 min, and restarts after 5 min without Wi-Fi |
 | Wi-Fi is up but the broker isn't | Retries after 2 s, 4 s, 8 s … up to every minute, and restarts after 15 min |
 | A sensor stops answering (0.12.1) | Logs it once (`[SENSOR] mpu6050@0x68: stopped answering`), reads unknown, retries, and logs when it answers again. An I2C part that left SDA held low gets the bus freed: up to 9 clock pulses, a STOP and a restart of the I2C peripheral, at most every 30 s |
+| The board loses the platform (0.15.0) | Each output set to **When offline: Boot state** goes back to its boot setting (relay off, PWM at its boot value, servo at its boot angle) after its **Offline for** time, counted from boot or the last disconnect. **Keep** (the default) leaves it as it was. On reconnect the retained desired state applies again |
 | The reset button reads pressed at boot (bad wiring) | Ignores it until it has read released once, so it can't wipe the Wi-Fi on every restart |
 
 The status message (every minute, and within 5 s when the list of faulty sensors changes) carries

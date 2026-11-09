@@ -42,6 +42,10 @@ struct Actuator {
   String stateTopic;
   String ackTopic;
   OutputDriver* output;
+  // Fail-safe: back to the boot state after this long without the platform
+  // (0 = keep the last state). failedSafe: done, until the next reconnect.
+  uint32_t offlineAfterMs = 0;
+  bool failedSafe = false;
 };
 
 String configTopic;
@@ -161,7 +165,13 @@ bool beginOutputs(const DeviceConfig& cfg, const String& prefix, String& err) {
       }
     }
     if (!driver->begin(binding, err)) return false;
-    actuators.push_back({key, prefix + "cmd/" + key, prefix + "state/" + key, prefix + "ack/" + key, driver});
+    const char* whenOffline;
+    long afterS;
+    if (!enumParam(binding, "when_offline", "Keep", {"Keep", "Boot state"}, whenOffline, err)) return false;
+    if (!intParam(binding, "offline_after_s", 60, 5, 86400, afterS, err)) return false;
+    Actuator a{key, prefix + "cmd/" + key, prefix + "state/" + key, prefix + "ack/" + key, driver};
+    if (strcmp(whenOffline, "Boot state") == 0) a.offlineAfterMs = (uint32_t)afterS * 1000UL;
+    actuators.push_back(a);
   }
   return true;
 }
@@ -395,5 +405,29 @@ void ioHandleMessage(PubSubClient& mqtt, const char* topic, const uint8_t* paylo
   for (Actuator& a : actuators) {
     if (a.cmdTopic == topic) return handleCommand(mqtt, a, payload, length);
     if (a.stateTopic == topic) return handleState(a, payload, length);
+  }
+}
+
+void ioWatchConnection(bool connected, uint32_t nowMs) {
+  // From boot, too: a board that never reaches the platform fails safe.
+  static uint32_t offlineSince = 0;
+  static bool wasConnected = false;
+  if (connected) {
+    if (!wasConnected) {
+      for (Actuator& a : actuators) {
+        if (a.failedSafe) Serial.printf("[FAILSAFE] %s: back online; the platform's desired state applies again\n", a.key);
+        a.failedSafe = false;
+      }
+    }
+    wasConnected = true;
+    return;
+  }
+  if (wasConnected || offlineSince == 0) offlineSince = nowMs == 0 ? 1 : nowMs;
+  wasConnected = false;
+  for (Actuator& a : actuators) {
+    if (a.offlineAfterMs == 0 || a.failedSafe || nowMs - offlineSince < a.offlineAfterMs) continue;
+    a.output->applyBootState();
+    a.failedSafe = true;
+    Serial.printf("[FAILSAFE] %s: out of touch for %lus; back to its boot state\n", a.key, (unsigned long)(a.offlineAfterMs / 1000));
   }
 }

@@ -160,10 +160,13 @@
       "pins": [{ "role": "pin", "label": "Signal", "needs": "output" }],
       "params": [
         { "key": "active_low", "label": "Active low", "type": "bool", "default": false },
-        { "key": "boot_state", "label": "On at boot", "type": "bool", "default": false }
+        { "key": "boot_state", "label": "On at boot", "type": "bool", "default": false },
+        { "key": "when_offline", "label": "When offline", "type": "enum", "options": ["Keep", "Boot state"], "default": "Keep" },
+        { "key": "offline_after_s", "label": "Offline for (s)", "type": "int", "default": 60, "min": 5, "max": 86400 }
       ],
       "channels": [{ "key": "value", "label": "On/off", "value_type": "bool" }],
       "wiring": [
+        "When offline: Boot state returns it to its boot setting once the board has been out of touch with the platform that long; Keep leaves it as it was. Either way it follows the platform again when it reconnects.",
         "Many relay modules switch on when their input is LOW: turn on Active low for those.",
         "Power the relay coil from the module's own VCC (5 V), not from a GPIO.",
         "The output holds its boot state until the platform's desired state arrives."
@@ -181,10 +184,13 @@
         { "key": "in_min", "label": "Command for 0%", "type": "float", "default": 0 },
         { "key": "in_max", "label": "Command for 100%", "type": "float", "default": 100 },
         { "key": "boot_value", "label": "Value at boot", "type": "float", "default": 0 },
-        { "key": "invert", "label": "Invert", "type": "bool", "default": false }
+        { "key": "invert", "label": "Invert", "type": "bool", "default": false },
+        { "key": "when_offline", "label": "When offline", "type": "enum", "options": ["Keep", "Boot state"], "default": "Keep" },
+        { "key": "offline_after_s", "label": "Offline for (s)", "type": "int", "default": 60, "min": 5, "max": 86400 }
       ],
       "channels": [{ "key": "value", "label": "Level", "value_type": "float" }],
       "wiring": [
+        "When offline: Boot state returns it to its boot setting once the board has been out of touch with the platform that long; Keep leaves it as it was. Either way it follows the platform again when it reconnects.",
         "Drive loads through a MOSFET or driver module, never straight from the pin.",
         "LED dimming: 1-5 kHz. Fans: 25 kHz. A passive buzzer: its tone's frequency.",
         "Very high frequencies need fewer resolution bits (e.g. 40 kHz at 10 bits)."
@@ -201,10 +207,13 @@
         { "key": "max_angle", "label": "Max angle (°)", "type": "float", "default": 180 },
         { "key": "min_us", "label": "Pulse at min angle (µs)", "type": "float", "default": 500 },
         { "key": "max_us", "label": "Pulse at max angle (µs)", "type": "float", "default": 2500 },
-        { "key": "boot_angle", "label": "Angle at boot (°)", "type": "float", "default": 90 }
+        { "key": "boot_angle", "label": "Angle at boot (°)", "type": "float", "default": 90 },
+        { "key": "when_offline", "label": "When offline", "type": "enum", "options": ["Keep", "Boot state"], "default": "Keep" },
+        { "key": "offline_after_s", "label": "Offline for (s)", "type": "int", "default": 60, "min": 5, "max": 86400 }
       ],
       "channels": [{ "key": "value", "label": "Angle", "value_type": "float" }],
       "wiring": [
+        "When offline: Boot state returns it to its boot setting once the board has been out of touch with the platform that long; Keep leaves it as it was. Either way it follows the platform again when it reconnects.",
         "Power the servo from its own 5 V supply, not the board's 3.3 V, and join the grounds.",
         "If it buzzes or hits the end stops, narrow the pulse widths (e.g. 1000-2000 µs)."
       ]

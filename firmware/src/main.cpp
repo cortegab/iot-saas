@@ -80,6 +80,7 @@ void loop() {
   if (fault.length() > 0) return faultLoop();
   ioPoll(millis());
   netLoop();
+  ioWatchConnection(netState() == NetState::Connected, millis());
   switch (netState()) {
     case NetState::Provisioning:
       ledSet(LedState::Provisioning);
