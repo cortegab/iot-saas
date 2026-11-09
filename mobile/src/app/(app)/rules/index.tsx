@@ -52,12 +52,15 @@ export default function Rules() {
   const { data: rules, error, isLoading, mutate } = useApiSWR<RuleResponse[]>("/rules", { refreshInterval: 30_000 });
   const { data: activity } = useApiSWR<RuleActivityResponse[]>("/rules/activity", { refreshInterval: 60_000 });
   const activityByRule = useMemo(() => new Map((activity ?? []).map((a) => [a.rule_id, a])), [activity]);
-  // ?state=latched from the attention strip opens the list filtered.
-  const { state } = useLocalSearchParams<{ state?: string }>();
+  // ?state=latched from the attention strip opens the list filtered;
+  // ?rule=<id> (an alert's rule link) opens that rule's sheet.
+  const { state, rule: linkedRule } = useLocalSearchParams<{ state?: string; rule?: string }>();
   const fromLink: RuleFilter = state === "latched" || state === "stale" ? state : "all";
   const [picked, setPicked] = useState<{ link: string | undefined; value: RuleFilter } | null>(null);
   const filter = picked && picked.link === state ? picked.value : fromLink;
-  const [open, setOpen] = useState<string | null>(null);
+  const [opened, setOpened] = useState<{ link: string | undefined; id: string | null } | null>(null);
+  const open = opened && opened.link === linkedRule ? opened.id : (linkedRule ?? null);
+  const setOpen = (id: string | null) => setOpened({ link: linkedRule, id });
   const [busy, setBusy] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ message: string; rule: RuleResponse; enabled: boolean } | null>(null);

@@ -1,4 +1,4 @@
-import { parseSettings, routeFor } from "./routes";
+import { parseSettings, pushedAlert, routeFor } from "./routes";
 
 describe("push notification taps", () => {
   it("opens the device that went offline, in its workspace", () => {
@@ -21,5 +21,20 @@ describe("stored settings", () => {
 
   it("reads back what was saved", () => {
     expect(parseSettings('{"id":"p1","enabled":false,"minSeverity":"critical"}')).toEqual({ id: "p1", enabled: false, minSeverity: "critical" });
+  });
+});
+
+describe("pushedAlert", () => {
+  it("finds the alert among the same device's or rule's unread ones", () => {
+    expect(pushedAlert({ notification_id: "n1", device_id: "d1", rule_id: "r1", kind: "rule_fired" })).toEqual({
+      notificationId: "n1",
+      groupsQuery: "/notifications/groups?unread=true&limit=100&device_id=d1&rule_id=r1",
+    });
+    expect(pushedAlert({ notification_id: "n2", device_id: "d1" })?.groupsQuery).toBe("/notifications/groups?unread=true&limit=100&device_id=d1");
+  });
+
+  it("is null without a notification id", () => {
+    expect(pushedAlert({ device_id: "d1" })).toBeNull();
+    expect(pushedAlert(null)).toBeNull();
   });
 });

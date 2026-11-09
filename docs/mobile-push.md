@@ -27,6 +27,9 @@ rule fires / device goes offline / delivery fails
 - **Repeats collapse.** The Android notification `tag` is `{kind}:{device or rule}`, so repeats of
   one alert replace each other on the phone. Critical alerts use the `critical` channel with high
   priority; the rest use `alerts`.
+- **Opening one reads it.** Tapping a notification marks its alert read (all its repeats, when the
+  app finds the alert among the device's or rule's unread ones; otherwise that one notification),
+  like opening it in Alerts.
 - **Gone phones.** When FCM answers `UNREGISTERED` (404) or an invalid registration token (400),
   the registration is deleted.
 
