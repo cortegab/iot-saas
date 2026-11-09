@@ -3,6 +3,7 @@ Postgres: the API keeps a user to their own phones, RLS keeps workspaces
 apart, and the sender reaches only current members who want the severity,
 forgetting phones FCM reports gone."""
 
+import asyncio
 import uuid
 from typing import Any
 
@@ -67,6 +68,20 @@ async def test_register_update_and_unregister_own_phone(client: httpx.AsyncClien
     assert (
         await client.delete(f"/me/push-devices/{phone['id']}", headers=headers)
     ).status_code == 404
+
+
+async def test_the_same_phone_registering_twice_at_once_is_one_row(
+    client: httpx.AsyncClient,
+) -> None:
+    # The app registers on start and again when FCM reports the token: both
+    # requests can arrive together, and neither may fail.
+    headers, _ = await _workspace(client, "p-race")
+    body = {"token": TOKEN_A, "platform": "android"}
+    replies = await asyncio.gather(
+        *(client.put("/me/push-devices", json=body, headers=headers) for _ in range(4))
+    )
+    assert [r.status_code for r in replies] == [200] * 4
+    assert len({r.json()["id"] for r in replies}) == 1
 
 
 async def test_nobody_else_touches_my_phone_and_workspaces_stay_apart(
