@@ -66,3 +66,15 @@ export function useNotificationActions() {
     restore: (ids: string[]) => api.post(`${NOTIFICATIONS_KEY}/restore`, { ids }).then(after),
   };
 }
+
+/** What the Alerts list follows to know it's out of date: the summary's
+ * counts. They change on every read, unread, dismiss, restore and new alert;
+ * null until the summary has loaded. */
+export function summaryStamp(summary: NotificationSummaryResponse | undefined): string | null {
+  if (!summary) return null;
+  const byType = Object.entries(summary.unread_by_type)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([t, n]) => `${t}:${n}`)
+    .join(",");
+  return `${summary.alerts}|${summary.unread}|${byType}`;
+}

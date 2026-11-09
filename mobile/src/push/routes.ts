@@ -39,3 +39,18 @@ export function parseSettings(raw: string | null): PushSettings {
     return DEFAULT_SETTINGS;
   }
 }
+
+/** The alert a tapped notification is about, to mark it read: its id, and
+ * the groups query that finds its alert (unread, from the same device or
+ * rule). Null when the payload has no notification id. */
+export function pushedAlert(data: Record<string, unknown> | null | undefined): { notificationId: string; groupsQuery: string } | null {
+  const str = (k: string) => (typeof data?.[k] === "string" && data[k] ? (data[k] as string) : null);
+  const notificationId = str("notification_id");
+  if (!notificationId) return null;
+  const q = new URLSearchParams({ unread: "true", limit: "100" });
+  const deviceId = str("device_id");
+  const ruleId = str("rule_id");
+  if (deviceId) q.set("device_id", deviceId);
+  if (ruleId) q.set("rule_id", ruleId);
+  return { notificationId, groupsQuery: `/notifications/groups?${q.toString()}` };
+}

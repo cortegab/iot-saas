@@ -2,12 +2,15 @@ import type { components } from "@iodriven/shared/api";
 import type { ApiPage } from "@iodriven/shared/api-client";
 import { formatWhen, timeAgo } from "@iodriven/shared/time-ago";
 import { Stack, useRouter } from "expo-router";
-import { AlertTriangle, Bell, Info, Mail, Zap } from "lucide-react-native";
-import { useCallback, useMemo, useState } from "react";
+import { AlertTriangle, Bell, Info, Mail, MoreHorizontal, Zap } from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import useSWR from "swr";
 import useSWRInfinite from "swr/infinite";
 import {
   groupsPageKey,
+  NOTIFICATIONS_KEY,
+  summaryStamp,
   PAGE_SIZE,
   TYPES,
   useNotificationActions,
@@ -27,6 +30,7 @@ import { UndoBar } from "@/ui/UndoBar";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
+type NotificationResponse = components["schemas"]["NotificationResponse"];
 type Severity = components["schemas"]["NotificationResponse"]["severity"];
 
 const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; color: keyof Palette }> = {
@@ -39,7 +43,8 @@ const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; color: keyo
  * per alert with repeats grouped (×N), unread marked by the accent bar and a
  * bold title, the web's state filter (All · Unread · unread by type), paged
  * by the API as you scroll. Tapping opens its details and marks it read;
- * the sheet marks it unread or dismisses it, with Undo. */
+ * the row's ⋯ (or a long press) marks it read / unread or dismisses it,
+ * with Undo; the sheet has Done, Mark as unread and Dismiss, like the web. */
 export default function Alerts() {
   const theme = useTheme();
   const api = useApi();
@@ -59,7 +64,26 @@ export default function Alerts() {
   );
   const groups = (data ?? []).flatMap((p) => p.items);
   const total = data?.[0]?.total ?? 0;
-  const [open, setOpen] = useState<AlertGroup | null>(null);
+  // SWR's mutate(filter) skips useSWRInfinite's own keys ("$inf$…"), so the
+  // shared refresh (a write, a live alert, a push tap elsewhere) updates the
+  // summary but never this list. The list follows the summary instead: when
+  // its counts change, the pages load again.
+  const stamp = summaryStamp(summary);
+  const seen = useRef<string | null>(null);
+  useEffect(() => {
+    if (stamp == null) return;
+    if (seen.current != null && seen.current !== stamp) void mutate();
+    seen.current = stamp;
+  }, [stamp, mutate]);
+  // The open alert by key, so its sheet shows the list's latest copy.
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [opened, setOpened] = useState<AlertGroup | null>(null);
+  const open = openKey ? (groups.find((g) => g.key === openKey) ?? opened) : null;
+  const setOpen = (g: AlertGroup | null) => {
+    setOpenKey(g?.key ?? null);
+    setOpened(g);
+  };
+  const [menu, setMenu] = useState<AlertGroup | null>(null);
   const [undo, setUndo] = useState<{ message: string; ids: string[] } | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -73,14 +97,19 @@ export default function Alerts() {
     })),
   ];
 
-  const run = useCallback(async (fn: () => Promise<unknown>, what: string) => {
-    setFailed(null);
-    try {
-      await fn();
-    } catch {
-      setFailed(`Couldn't ${what}. Check your connection and try again.`);
-    }
-  }, []);
+  // Every change reloads this list too (see `stamp` above for why).
+  const run = useCallback(
+    async (fn: () => Promise<unknown>, what: string) => {
+      setFailed(null);
+      try {
+        await fn();
+        await mutate();
+      } catch {
+        setFailed(`Couldn't ${what}. Check your connection and try again.`);
+      }
+    },
+    [mutate],
+  );
 
   function openAlert(g: AlertGroup) {
     setOpen(g);
@@ -89,6 +118,7 @@ export default function Alerts() {
 
   async function dismiss(g: AlertGroup) {
     setOpen(null);
+    setMenu(null);
     await run(async () => {
       const ids = await actions.dismiss(g.key);
       setUndo({ message: ids.length > 1 ? `${ids.length} notifications dismissed` : "Notification dismissed", ids });
@@ -102,6 +132,11 @@ export default function Alerts() {
   }
 
   const hideUndo = useCallback(() => setUndo(null), []);
+  // A link in the sheet: close it, then go.
+  function go(href: Parameters<typeof router.push>[0]) {
+    setOpen(null);
+    router.push(href);
+  }
   const loadError = (summaryError ?? error) && !data;
 
   const empty = isLoading ? (
@@ -175,6 +210,8 @@ export default function Alerts() {
               accessibilityRole="button"
               accessibilityLabel={`${sev.label}${isUnread ? ", unread" : ""}: ${n.message}${g.count > 1 ? `, ${g.count} times` : ""}`}
               onPress={() => openAlert(g)}
+              onLongPress={() => setMenu(g)}
+              accessibilityHint="Long press for actions"
               style={({ pressed }) => [
                 styles.row,
                 { backgroundColor: pressed ? theme.surfaceRaised : theme.surface, borderColor: theme.border },
@@ -202,6 +239,15 @@ export default function Alerts() {
                   {[when, ...source].join(" · ")}
                 </Text>
               </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Actions for ${n.message}`}
+                onPress={() => setMenu(g)}
+                hitSlop={8}
+                style={styles.more}
+              >
+                <MoreHorizontal size={18} color={theme.inkMuted} />
+              </Pressable>
             </Pressable>
           );
         }}
@@ -215,18 +261,7 @@ export default function Alerts() {
         footer={
           open ? (
             <>
-              {open.latest.device_id && deviceName.has(open.latest.device_id) ? (
-                <Button
-                  label="Open device"
-                  onPress={() => {
-                    const id = open.latest.device_id!;
-                    setOpen(null);
-                    router.push({ pathname: "/devices/[deviceId]", params: { deviceId: id } });
-                  }}
-                />
-              ) : (
-                <Button label="Done" onPress={() => setOpen(null)} />
-              )}
+              <Button label="Done" onPress={() => setOpen(null)} />
               <Button
                 label="Mark as unread"
                 variant="secondary"
@@ -246,12 +281,21 @@ export default function Alerts() {
             {open.latest.detail ? <Text>{open.latest.detail}</Text> : null}
             <Facts
               facts={[
-                open.latest.device_id ? ["Device", deviceName.get(open.latest.device_id) ?? "Deleted device"] : null,
-                open.latest.rule_id ? ["Rule", ruleName.get(open.latest.rule_id) ?? "Deleted rule"] : null,
-                [open.count > 1 ? "First" : "When", formatWhen(open.first_at)],
-                open.count > 1 ? ["Last", `${formatWhen(open.last_at)} · ${open.count} times`] : null,
+                open.latest.device_id
+                  ? deviceName.has(open.latest.device_id)
+                    ? { k: "Device", v: deviceName.get(open.latest.device_id)!, onPress: () => go({ pathname: "/devices/[deviceId]", params: { deviceId: open.latest.device_id! } }) }
+                    : { k: "Device", v: "Deleted device" }
+                  : null,
+                open.latest.rule_id
+                  ? ruleName.has(open.latest.rule_id)
+                    ? { k: "Rule", v: ruleName.get(open.latest.rule_id)!, onPress: () => go({ pathname: "/rules", params: { rule: open.latest.rule_id! } }) }
+                    : { k: "Rule", v: "Deleted rule" }
+                  : null,
+                { k: open.count > 1 ? "First" : "When", v: formatWhen(open.first_at) },
+                open.count > 1 ? { k: "Last", v: `${formatWhen(open.last_at)} · ${open.count} times` } : null,
               ]}
             />
+            {open.count > 1 && <EachTime groupKey={open.key} />}
             {open.latest.kind === "delivery_failed" && (
               <Text size="meta" color="inkMuted">
                 Retry failed deliveries on the web, in the rule&apos;s activity.
@@ -261,24 +305,115 @@ export default function Alerts() {
         )}
       </Sheet>
 
+      {/* The row's ⋯: the web's row menu as a short sheet. */}
+      <Sheet
+        open={menu != null}
+        onClose={() => setMenu(null)}
+        title={menu?.latest.message ?? "Notification"}
+        footer={
+          menu ? (
+            <>
+              {menu.unread_count > 0 ? (
+                <Button
+                  label="Mark as read"
+                  variant="secondary"
+                  onPress={() => {
+                    const key = menu.key;
+                    setMenu(null);
+                    void run(() => actions.markRead(key), "mark it as read");
+                  }}
+                />
+              ) : (
+                <Button
+                  label="Mark as unread"
+                  variant="secondary"
+                  onPress={() => {
+                    const key = menu.key;
+                    setMenu(null);
+                    void run(() => actions.markUnread(key), "mark it as unread");
+                  }}
+                />
+              )}
+              <Button label="Dismiss" variant="danger" onPress={() => void dismiss(menu)} />
+            </>
+          ) : null
+        }
+      >
+        {null}
+      </Sheet>
+
       <UndoBar message={undo?.message ?? null} onUndo={() => undo && void run(() => actions.restore(undo.ids), "undo it")} onHide={hideUndo} />
     </View>
   );
 }
 
-function Facts({ facts }: { facts: ([string, string] | null)[] }) {
+interface Fact {
+  k: string;
+  v: string;
+  /** A link: the device or rule it names. */
+  onPress?: () => void;
+}
+
+function Facts({ facts }: { facts: (Fact | null)[] }) {
   return (
     <View style={styles.facts}>
-      {facts.filter((f): f is [string, string] => f != null).map(([k, v]) => (
-        <View key={k} style={styles.fact}>
+      {facts.filter((f): f is Fact => f != null).map((f) => (
+        <View key={f.k} style={styles.fact}>
           <Text size="meta" color="inkMuted" style={styles.factKey}>
-            {k}
+            {f.k}
           </Text>
-          <Text size="meta" style={styles.flex}>
-            {v}
-          </Text>
+          {f.onPress ? (
+            <Pressable accessibilityRole="link" onPress={f.onPress} hitSlop={8} style={styles.flex}>
+              <Text size="meta" color="accent">
+                {f.v}
+              </Text>
+            </Pressable>
+          ) : (
+            <Text size="meta" style={styles.flex}>
+              {f.v}
+            </Text>
+          )}
         </View>
       ))}
+    </View>
+  );
+}
+
+const EACH_TIME_SHOWN = 20;
+
+/** Each time one alert happened, newest first (the web's "Each time"). */
+function EachTime({ groupKey }: { groupKey: string }) {
+  const api = useApi();
+  const theme = useTheme();
+  const key = `${NOTIFICATIONS_KEY}/groups/${encodeURIComponent(groupKey)}/items?limit=${EACH_TIME_SHOWN}`;
+  const { data, error } = useSWR(key, (k: string) => api.getPage<NotificationResponse>(k));
+  return (
+    <View style={styles.eachTime}>
+      <Text size="meta" weight="medium" color="inkMuted" accessibilityRole="header">
+        Each time
+      </Text>
+      {error && !data ? (
+        <Text size="meta" color="statusError">
+          Couldn&apos;t load the times. Pull down on Alerts to try again.
+        </Text>
+      ) : !data ? (
+        <Text size="meta" color="inkMuted">
+          Loading…
+        </Text>
+      ) : (
+        <View style={[styles.times, { borderLeftColor: theme.border }]}>
+          {data.items.map((n) => (
+            <Text key={n.id} size="meta" style={styles.tabular}>
+              {formatWhen(n.created_at)}
+            </Text>
+          ))}
+          {data.total > data.items.length ? (
+            <Text size="meta" color="inkMuted">
+              {`and ${data.total - data.items.length} earlier`}
+            </Text>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -309,4 +444,8 @@ const styles = StyleSheet.create({
   facts: { gap: 6 },
   fact: { flexDirection: "row", gap: 12 },
   factKey: { width: 72 },
+  more: { minWidth: touchTarget, minHeight: touchTarget, marginVertical: -10, marginRight: -10, alignItems: "center", justifyContent: "center" },
+  eachTime: { gap: 8 },
+  times: { gap: 6, borderLeftWidth: 2, paddingLeft: 14 },
+  tabular: { fontVariant: ["tabular-nums"] },
 });

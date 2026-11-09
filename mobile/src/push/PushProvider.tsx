@@ -4,16 +4,19 @@ import * as Notifications from "expo-notifications";
 import { AndroidImportance } from "expo-notifications";
 import * as SecureStore from "expo-secure-store";
 import { useRouter, type Href } from "expo-router";
+import { useSWRConfig } from "swr";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Linking, Platform } from "react-native";
+import { isNotificationsKey } from "@/alerts/notifications";
 import { useAuth } from "@/auth/AuthProvider";
 import { api } from "@/lib/api";
 import { Button } from "@/ui/Button";
 import { Sheet } from "@/ui/Sheet";
 import { Text } from "@/ui/Text";
-import { DEFAULT_SETTINGS, parseSettings, routeFor, type MinSeverity, type PushSettings } from "./routes";
+import { DEFAULT_SETTINGS, parseSettings, pushedAlert, routeFor, type MinSeverity, type PushSettings } from "./routes";
 
 type PushDeviceResponse = components["schemas"]["PushDeviceResponse"];
+type AlertGroup = components["schemas"]["NotificationGroupResponse"];
 type Permission = "granted" | "denied" | "undetermined";
 
 const ASKED = "iodriven.push.asked";
@@ -140,17 +143,44 @@ export function PushProvider({ children }: { children: ReactNode }) {
     return () => sub.remove();
   }, [currentTenantId, permission, settings, register, save]);
 
+  const { mutate } = useSWRConfig();
+
+  /** Opening a notification reads its alert, as opening it in Alerts does:
+   * the whole alert (its repeats too) when it's found, else just this one.
+   * Best effort: a failure leaves it unread, nothing else. */
+  const markRead = useCallback(
+    async (data: Record<string, unknown>, tenantId: string | null) => {
+      const pushed = pushedAlert(data);
+      if (!pushed || !tenantId) return;
+      const ctx = { accessToken: tokenRef.current, tenantId };
+      try {
+        const groups = await api.get<AlertGroup[]>(pushed.groupsQuery, ctx);
+        const group = groups.find((g) => g.latest.id === pushed.notificationId);
+        if (group) await api.post(`/notifications/groups/${encodeURIComponent(group.key)}/read`, ctx);
+        else await api.patch(`/notifications/${pushed.notificationId}/read`, ctx);
+      } catch (err) {
+        console.warn("couldn't mark the tapped alert read:", err instanceof Error ? err.message : String(err));
+      }
+    },
+    [],
+  );
+
   // A tap, also the one that started the app.
   const open = useCallback(
     (response: Notifications.NotificationResponse | null) => {
       if (!response) return;
-      const target = routeFor(response.notification.request.content.data as Record<string, unknown>);
-      if (target.tenantId && target.tenantId !== currentTenantId && memberships.some((m) => m.tenant_id === target.tenantId)) {
-        setCurrentTenantId(target.tenantId);
-      }
+      const data = response.notification.request.content.data as Record<string, unknown>;
+      const target = routeFor(data);
+      const tenantId = target.tenantId && memberships.some((m) => m.tenant_id === target.tenantId) ? target.tenantId : currentTenantId;
+      void markRead(data, tenantId).then(() => {
+        // Same workspace: its badge and list update now. Another workspace
+        // starts with an empty cache, so it loads after the read anyway.
+        if (tenantId === currentTenantId) void mutate(isNotificationsKey);
+      });
+      if (tenantId && tenantId !== currentTenantId) setCurrentTenantId(tenantId);
       router.push(target.href as Href);
     },
-    [currentTenantId, memberships, router, setCurrentTenantId],
+    [currentTenantId, markRead, memberships, mutate, router, setCurrentTenantId],
   );
   useEffect(() => {
     void Notifications.getLastNotificationResponseAsync().then((r) => {
