@@ -401,6 +401,10 @@ async def _handle_config_publish(
             "publish": m.get("publish", "periodic"),
             "interval_seconds": m.get("publish_interval_seconds"),
             "deadband": m.get("publish_deadband"),
+            # The firmware sends readings with these decimals and compares
+            # "on change" on the rounded value (FW 0.13.0+; older ignores it,
+            # and null/absent means 3, what every firmware sent before).
+            "decimals": m.get("decimals"),
         }
         for m in devices[0].metrics
         if m.get("key")

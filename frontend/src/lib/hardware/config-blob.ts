@@ -39,7 +39,8 @@ export interface FirmwareConfig {
    * firmware before 0.6.0 ignores it, and 0.6.0+ falls back to the chip's
    * defaults (firmware/src/board.h) when it's absent. */
   board_io?: { reset_pin: number; led: { type: "gpio" | "rgb" | "none"; pin: number; active_low: boolean } };
-  metrics: { key: string; bool?: boolean; publish?: string; interval_s?: number; deadband?: number }[];
+  /** `decimals`: what the board sends (FW 0.13.0+; older ignores it, absent = 3). */
+  metrics: { key: string; bool?: boolean; publish?: string; interval_s?: number; deadband?: number; decimals?: number }[];
   actuators: { key: string; type: string }[];
   inputs: HardwareBinding[];
   outputs: HardwareBinding[];

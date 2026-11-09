@@ -190,10 +190,14 @@ with them (enforced at catalog write time).
 
 **Config payload** (retained; the device subscribes on connect, same as the desired-state topic)
 ```json
-{ "metrics": [{ "key": "temperature", "publish": "periodic", "interval_seconds": 30 }], "issued_at": 1770001111 }
+{ "metrics": [{ "key": "temperature", "publish": "on_change", "interval_seconds": 300, "deadband": 0.2, "decimals": 1 }], "issued_at": 1770001111 }
 ```
 `publish` is `"periodic"` (default) / `"on_change"` / `"streaming"` — the device enforces its own
-publish cadence locally; the platform only defines and distributes the profile.
+publish cadence locally; the platform only defines and distributes the profile. `deadband`
+(on_change: ignore changes up to this size; null = any change) and `decimals` (the device rounds to
+this before sending and before comparing for on_change; null or absent = 3, what firmware before
+0.13.0 always sent; at most 6) are optional. Raising a metric's `decimals` can change when a
+threshold rule fires: at 3 decimals 0.0492 arrives as 0.049, at 4 it arrives as 0.0492.
 
 **Status payload** (retained; also the device's Last-Will payload with `online: false` on ungraceful
 disconnect)

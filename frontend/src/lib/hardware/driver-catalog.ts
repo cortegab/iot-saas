@@ -37,6 +37,10 @@ export interface DriverChannelSpec {
   /** false: an uncommon reading (a motion sensor's raw axes). Adding the part
    * doesn't make a metric for it until it's kept. Absent = common. */
   common?: boolean;
+  /** Inputs: the decimals and "Change of at least" a metric made for this
+   * reading starts with, sized to the sensor's resolution and noise. */
+  decimals?: number;
+  deadband?: number;
 }
 
 export interface DriverSpec {

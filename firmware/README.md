@@ -145,6 +145,19 @@ blinks dim blue. It shows where the board is, so you don't need a serial monitor
 The patterns live in `src/led_pattern.h` and are host-tested (`test/test_led_pattern`). Keep this
 table in step with `src/led.h`.
 
+## Publishing
+
+Each metric is sent with its template's **Decimals** (0.13.0; older firmware always sent 3), and
+"on change" compares the rounded values, so a change smaller than the last digit never publishes
+and a "Change of at least" finer than one step acts as one step. A device sends at most **20
+telemetry messages a second** on average: above that a due metric waits a pass and then sends its
+latest value, so a fast streaming metric can't flood the broker or starve the others. The serial
+log says when that happens (`[TELEMETRY] over 20 messages/s: …`).
+
+A template's existing devices pick up a Decimals change from the retained config message, which
+the platform republishes whenever the template's metrics are saved. Raising Decimals can make a
+threshold rule fire on values that used to round down.
+
 ## Self-recovery
 
 The board gets itself back online without anyone unplugging it (0.12.0):

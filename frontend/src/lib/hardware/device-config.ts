@@ -68,6 +68,7 @@ export function buildFirmwareConfig(input: DeviceConfigInput): FirmwareConfig {
       publish: m.publish ?? "periodic",
       ...(m.publish_interval_seconds ? { interval_s: m.publish_interval_seconds } : {}),
       ...(m.publish_deadband != null ? { deadband: m.publish_deadband } : {}),
+      ...(m.data_type !== "bool" && m.decimals != null ? { decimals: m.decimals } : {}),
     })),
     actuators: input.actuators.map((a) => ({ key: wireId(a), type: a.value_type ?? "bool" })),
     inputs: (input.wiring.inputs ?? []).map((b) => ({ driver: b.driver, pins: b.pins ?? {}, params: b.params ?? {}, channels: b.channels ?? {} })),
