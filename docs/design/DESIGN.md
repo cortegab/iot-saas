@@ -70,9 +70,12 @@ font in a component.** If you need a value that has no token, add the token here
 - **Mark:** `docs/design/io-driven-mark.png`, white I and O with a circling signal on the blue →
   violet tile. It appears beside the name on the public pages (landing header, sign-in panel), as
   the browser icon (`frontend/src/app/icon.png`, `apple-icon.png`, `favicon.ico`) and as the app's
-  icon and splash (`mobile/assets/`). In the signed-in shell it is the logo: the workspace
-  switcher (sidebar and icon rail) and the phone top bar show the mark beside the **workspace's**
-  name. Inside the switcher's list each workspace keeps its initial tile, so they stay apart.
+  icon and splash (`mobile/assets/`). In the signed-in shell **IO Driven comes first, then the
+  workspace**: the phone top bar shows the mark, then **IO Driven** over the workspace's name
+  (with ⌄), and that name opens the workspace switcher; the full sidebar shows the mark and
+  **IO Driven** above the workspace switcher; the icon rail has room for the mark only, which
+  opens the switcher. The workspace's name is plain text with no tile; only the switcher's list
+  gives each workspace its initial tile, so they stay apart.
 - Never recolour, outline or redraw the mark. Use the files as they are.
 
 ### Theme
@@ -156,10 +159,11 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
 |---|---|
 | **≥ 1440 px** | The full **sidebar**, 256 px, always open. |
 | **641–1439 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. When the nav doesn't fit the height (short laptop screens) it scrolls **without a visible scrollbar**, so its icons stay centred under the logo, with a soft fade on the edge that has more; the sidebar's nav does the same. |
-| **≤ 640 px** | A **top bar** (logo, app name, the live indicator only while reconnecting, search) and a **bottom tab bar**: Dashboards · Devices · **Alerts** (with the active-alert count) · Rules · **More**. More opens a bottom sheet with the user, the theme toggle, the live indicator and the rest of the nav. |
+| **≤ 640 px** | A **top bar** (the mark, **IO Driven** over the workspace's name, which opens the workspace switcher as a bottom sheet, the live indicator only while reconnecting, search) and a **bottom tab bar**: Dashboards · Devices · **Alerts** (with the active-alert count) · Rules · **More**. More opens a bottom sheet with the user, the theme toggle, the live indicator and the rest of the nav. |
 
 - **Sidebar** (full form) is 256 px wide and sticky. From top to bottom:
-  - The workspace switcher (logo tile, name, "role · N devices").
+  - The mark and **IO Driven** (to Dashboards), with the collapse button.
+  - The workspace switcher (name, "role · N devices", ⇅), a bordered button with no tile.
   - The **⌘K search / command palette** trigger. The palette is both navigation and actions:
     "New rule", "Go to device…".
   - Grouped nav:
@@ -179,8 +183,9 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
 - **Page header** (one component, `PageHeader`, for lists, record pages and editors): breadcrumbs,
   an overline, an H1, a one-line description, and actions on the right. The overline starts with
   the **status**, then meta; the line under the title is the description only. Actions align to
-  the **H1 row** (top-aligned), the primary rightmost and ⋯ last. On phones the actions are one
-  row directly under the title, primary first, ⋯ last. A title is plain text (no monospace part).
+  the **H1 row** (top-aligned), the primary rightmost and ⋯ last. On phones the ⋯ stays at the
+  right end of the title row, and the other actions are one row directly under the title,
+  primary first. A title is plain text (no monospace part).
   **Nothing is said twice:** the breadcrumb lists the **parents only** (the H1 right below names
   the current page); the overline carries **status and meta only**, never the record kind (the
   breadcrumb says it); the description never restates the overline. **Creating** a named record
@@ -928,6 +933,11 @@ restyled.
 - **Shape:** the web's phone layout (§4, §12) is the model. That means a bottom tab bar
   (Dashboards · Devices · Alerts · Rules · More), sheets for one item's detail or one action, and list rows
   as Line rows (§5).
+- **Top of every screen:** the web's phone top bar (§4) stays above every screen: the mark (to
+  Dashboards), then **IO Driven** over the workspace's name with ⌄, which opens the workspace list
+  as a sheet (More keeps its Workspace section too). No search icon until the app has search.
+  Under it, each screen has the web's page header: an inner screen's parent as a muted link back
+  ("Devices"), then the 28 px title with the screen's actions (Scan, Mark all read) at its right.
 - **Touch:** every target is at least 44 px (§12). Controls are the web's components in native
   form (Switch, segmented control, value with Set), with the same confirms and states.
 - **What lives where:** the app is for being next to the equipment: watching, finding a device,
@@ -935,7 +945,7 @@ restyled.
   resetting a latch. Creating and editing records (templates, wiring, rules, dashboard layouts,
   members, keys, settings) stays on the web; the app links there with **Open on the web**.
 - **Wording:** §11 applies unchanged.
-- **Device screen:** the web's Overview on a phone. The top bar has the name with the status beside
+- **Device screen:** the web's Overview on a phone. Its title is the name with the status beside
   it (dot and word); **Details** (Template, Zone, Last message) comes before **Health**. Each reading card shows the name with Live / Stale at the top right, the
   value, then when it arrived. The Trend card picks its reading with the web's **metric chips**;
   tapping a reading card picks it too. Charts follow §5, including the shorter on/off chart.
@@ -1100,3 +1110,6 @@ restyled.
 | 2026-11-08 | §8 device **Settings → Firmware** (firmware stability plan F7, generic-firmware devices only): a FactList with **Running**, **Latest release** with an **Update to …** link for admins (a confirm explains the download, the signature check, the restart and the 2-minute rollback), an **Update** line that follows it (*Downloading …*, *Restarting into …*, *Updated to …*, or why it failed, in the error colour), and **Over the air** saying why it can't update when it can't (offline, 0.x firmware, unsigned release). A failed or rolled-back update is a *device health* alert. |
 | 2026-11-09 | §15 **Alerts** matched to the web's Notifications: a **⋯** on each row (and a long press) with Mark as read / unread and Dismiss; the sheet's buttons are **Done**, **Mark as unread**, **Dismiss** (Open device moves to the details as a link, the rule too); **Each time** for repeats. Rows update at once after any change. Opening a push marks its alert read. |
 | 2026-11-09 | §4, §8, §15 **device header** (user review): on the web and in the app the status sits **beside the device name** ("axioma ● Online"), and the template · zone · last message line goes; template and zone are in Settings (web) or the app's new **Details** section, the last message in Health (web) or Details (app). Web **Install** is a header button only on a computer's Chrome or Edge, where installing over USB works; elsewhere it's the ⋯ menu's Install or reconnect…. A device-page exception to §4's status-in-the-overline. |
+| 2026-11-09 | §4 **header ⋯ on phones** (user review): the record's ⋯ stays at the right end of the title row on every page header and full-page editor; the other actions (Connect, Run now…, Edit layout…) take the row under the title. Supersedes 2026-10-28's "only when ⋯ is the only action". |
+| 2026-11-09 | §3 Brand, §4 shell **IO Driven and the workspace** (user review, option A of the device-screen demo): the phone top bar shows the mark, then **IO Driven** over the workspace's name with ⌄, which opens the workspace switcher as a bottom sheet (the More sheet no longer lists workspaces); the full sidebar shows the mark and **IO Driven** above a bordered workspace switcher (name and role, no tile). The workspace never goes in a breadcrumb. Supersedes 2026-11-05's mark beside the workspace's name. |
+| 2026-11-09 | §15 **app header** matched to the web's phone shell (user review): the IO Driven / workspace bar stays above every screen, and its workspace name opens the workspace list as a sheet (More keeps its Workspace section); each screen's header is the web's page header (the parent as a link back, the 28 px title, actions at its right) instead of the native header with a back arrow. No search icon yet. |

@@ -144,12 +144,14 @@ export default function EditRulePage() {
               description={sentence}
               actions={
                 isAdmin ? (
-                  <>
-                    <Button type="button" variant="secondary" onClick={() => void actions.runNow(rule)}>
-                      <Play size={14} aria-hidden /> Run now…
-                    </Button>
-                    <DropdownMenu label="More actions" groups={actions.menu(rule, { where: "page", onDeleted: () => router.push("/rules") })} />
-                  </>
+                  <Button type="button" variant="secondary" onClick={() => void actions.runNow(rule)}>
+                    <Play size={14} aria-hidden /> Run now…
+                  </Button>
+                ) : undefined
+              }
+              menu={
+                isAdmin ? (
+                  <DropdownMenu label="More actions" groups={actions.menu(rule, { where: "page", onDeleted: () => router.push("/rules") })} />
                 ) : undefined
               }
             />

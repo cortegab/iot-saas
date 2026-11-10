@@ -213,6 +213,7 @@ export default function DashboardDetailPage() {
     />
   );
 
+  const hasTrend = widgets.some((w) => w.type === "trend_chart");
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -221,53 +222,57 @@ export default function DashboardDetailPage() {
         eyebrow={data.is_default ? <Tag size="sm">Default</Tag> : undefined}
         description={`${plural(widgets.length, "widget")} · live`}
         actions={
-          <>
-            {widgets.some((w) => w.type === "trend_chart") && (
-              <SegmentedControl
-                ariaLabel="Range"
-                value={String(range)}
-                onChange={(v) => setRange(Number(v))}
-                options={RANGE_OPTIONS.map((o) => ({ value: String(o.ms), label: o.label }))}
-              />
-            )}
-            {
+          (hasTrend || canEdit) && (
+            <>
+              {hasTrend && (
+                <SegmentedControl
+                  ariaLabel="Range"
+                  value={String(range)}
+                  onChange={(v) => setRange(Number(v))}
+                  options={RANGE_OPTIONS.map((o) => ({ value: String(o.ms), label: o.label }))}
+                />
+              )}
+              {canEdit &&
+                (editing ? (
+                  <>
+                    <Button variant="secondary" onClick={() => setAdding(true)}>
+                      <Plus aria-hidden size={15} />
+                      Add widget
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setEditing(false);
+                        toast({ title: "Layout saved" });
+                      }}
+                    >
+                      <Check aria-hidden size={15} />
+                      Done
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="secondary" onClick={() => setEditing(true)}>
+                    <LayoutGrid aria-hidden size={15} />
+                    Edit layout
+                  </Button>
+                ))}
+            </>
+          )
+        }
+        menu={
           canEdit &&
-          (editing ? (
-            <>
-              <Button variant="secondary" onClick={() => setAdding(true)}>
-                <Plus aria-hidden size={15} />
-                Add widget
-              </Button>
-              <Button
-                onClick={() => {
-                  setEditing(false);
-                  toast({ title: "Layout saved" });
-                }}
-              >
-                <Check aria-hidden size={15} />
-                Done
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="secondary" onClick={() => setEditing(true)}>
-                <LayoutGrid aria-hidden size={15} />
-                Edit layout
-              </Button>
-              <DropdownMenu
-                label="More dashboard actions"
-                groups={[
-                  [
-                    defaults.item(data),
-                    { label: "Rename…", icon: <Pencil size={15} />, onClick: () => setRenaming(true) },
-                    { label: "Duplicate…", icon: <Copy size={15} />, onClick: () => setDuplicating(true) },
-                  ],
-                  [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }],
-                ]}
-              />
-            </>
-          ))}
-          </>
+          !editing && (
+            <DropdownMenu
+              label="More dashboard actions"
+              groups={[
+                [
+                  defaults.item(data),
+                  { label: "Rename…", icon: <Pencil size={15} />, onClick: () => setRenaming(true) },
+                  { label: "Duplicate…", icon: <Copy size={15} />, onClick: () => setDuplicating(true) },
+                ],
+                [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }],
+              ]}
+            />
+          )
         }
       />
 

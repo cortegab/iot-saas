@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { ChevronRight, LogOut, Menu, Search, WifiOff } from "lucide-react";
+import { ChevronDown, ChevronRight, LogOut, Menu, Search, WifiOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -41,19 +41,36 @@ function useDown(realtime: RealtimeStatus): boolean {
   return down;
 }
 
-/** Phone top bar (DESIGN.md §4, ≤ 640px): the IO Driven mark to Dashboards, the workspace
- * name, the live indicator only while reconnecting, and search. */
+/** Phone top bar (DESIGN.md §4, ≤ 640px): the IO Driven mark to Dashboards,
+ * then IO Driven over the workspace's name, which opens the workspace
+ * switcher; the live indicator only while reconnecting, and search. */
 export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
+  const router = useRouter();
   const { memberships, currentTenantId } = useAuth();
   const { openPalette } = useShell();
   const down = useDown(realtime);
+  const [switching, setSwitching] = useState(false);
+  const [creating, setCreating] = useState(false);
   const name = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_name ?? "";
   return (
-    <header className="sticky top-0 z-20 flex h-[calc(52px+env(safe-area-inset-top,0px))] items-center gap-2.5 border-b border-border bg-surface pl-3.5 pr-1.5 pt-[env(safe-area-inset-top,0px)] rail:hidden">
-      <Link href="/dashboards" aria-label={`${name}, go to dashboards`} className="rounded-[9px]">
+    <header className="sticky top-0 z-20 flex h-[calc(56px+env(safe-area-inset-top,0px))] items-center gap-2.5 border-b border-border bg-surface pl-3.5 pr-1.5 pt-[env(safe-area-inset-top,0px)] rail:hidden">
+      <Link href="/dashboards" aria-label="IO Driven, go to dashboards" className="shrink-0 rounded-[9px]">
         <BrandMark size={32} />
       </Link>
-      <strong className="min-w-0 flex-1 truncate text-section font-semibold text-ink">{name}</strong>
+      <button
+        type="button"
+        onClick={() => setSwitching(true)}
+        aria-haspopup="dialog"
+        aria-expanded={switching}
+        aria-label={`Workspace: ${name}. Switch workspace`}
+        className="group flex min-h-11 min-w-0 flex-1 flex-col justify-center rounded-md pr-1 text-left leading-tight"
+      >
+        <strong className="text-sm font-semibold text-ink">IO Driven</strong>
+        <span className="flex min-w-0 items-center gap-0.5 text-meta text-ink-muted group-hover:text-ink">
+          <span className="truncate">{name}</span>
+          <ChevronDown aria-hidden size={14} className="shrink-0" />
+        </span>
+      </button>
       {down && <LiveIndicator realtime={realtime} />}
       <button
         type="button"
@@ -63,6 +80,21 @@ export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
       >
         <Search aria-hidden size={18} />
       </button>
+      <Sheet open={switching} onClose={() => setSwitching(false)} label="Switch workspace" side="bottom">
+        <div className="overflow-y-auto px-2 pb-4 pt-2">
+          <WorkspaceMenu
+            onCreate={() => {
+              setSwitching(false);
+              setCreating(true);
+            }}
+            onSwitched={() => {
+              setSwitching(false);
+              router.push("/dashboards");
+            }}
+          />
+        </div>
+      </Sheet>
+      <CreateWorkspaceDialog open={creating} onClose={() => setCreating(false)} />
     </header>
   );
 }
@@ -121,8 +153,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
   );
 }
 
-/** The More bottom sheet: who you are (with Sign out), the workspaces, the
- * rest of the nav, then the live indicator and the theme toggle. */
+/** The More bottom sheet: who you are (with Sign out), the rest of the nav, then the live indicator and the theme toggle. */
 function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => void; realtime: RealtimeStatus }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -130,7 +161,6 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
   const { can } = usePermissions();
   const { data: user } = useCurrentUser();
   const { memberships, currentTenantId, logout } = useAuth();
-  const [creating, setCreating] = useState(false);
   const current = memberships.find((m) => m.tenant_id === currentTenantId);
   const role = toRole(current?.role);
   const items = MORE_ITEMS.filter((i) => !i.requires || can(i.requires));
@@ -162,19 +192,6 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
             </button>
           </div>
 
-          {memberships.length > 1 && (
-            <WorkspaceMenu
-              onCreate={() => {
-                onClose();
-                setCreating(true);
-              }}
-              onSwitched={() => {
-                onClose();
-                router.push("/dashboards");
-              }}
-            />
-          )}
-
           <nav aria-label="More sections" className="overflow-hidden rounded-xl border border-border">
             {items.map((item, i) => {
               const Icon = item.icon;
@@ -202,7 +219,6 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
           </div>
         </div>
       </Sheet>
-      <CreateWorkspaceDialog open={creating} onClose={() => setCreating(false)} />
     </>
   );
 }

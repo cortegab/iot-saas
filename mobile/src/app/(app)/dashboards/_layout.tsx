@@ -1,6 +1,6 @@
 import { Stack } from "expo-router";
-import { font, text } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
+import { PageHeader } from "@/ui/AppHeader";
 
 // A link straight to an item (a label QR, a notification) keeps the list
 // behind it, so Back goes to the list.
@@ -12,10 +12,8 @@ export default function DashboardsLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: theme.surface },
-        headerTintColor: theme.ink,
-        headerTitleStyle: { fontFamily: font.semibold, fontSize: text.section.fontSize },
-        headerShadowVisible: false,
+        // The web's page header under the brand bar (DESIGN.md §15).
+        header: ({ options, back, navigation }) => <PageHeader options={options} back={back} navigation={navigation} />,
         contentStyle: { backgroundColor: theme.canvas },
       }}
     />

@@ -459,21 +459,20 @@ export function EditorFrame({
     <div className="shrink-0 pb-3.5 [grid-area:head]">
       <HeaderBlock
         overline={eyebrow}
-        menuOnly={!headerActions && !closeButton && !!menu?.length}
         heading={
           <h1 tabIndex={-1} className="break-words text-title font-semibold leading-[1.2] tracking-[-0.015em] text-ink outline-none">
             {title}
           </h1>
         }
         actions={
-          (headerActions || (menu && menu.length > 0) || closeButton) && (
+          (headerActions || closeButton) && (
             <>
               {headerActions}
-              {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
               {closeButton}
             </>
           )
         }
+        menu={menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
       >
         {consequence && <p className="mt-1 max-w-[70ch] text-sm text-ink-muted">{consequence}</p>}
       </HeaderBlock>

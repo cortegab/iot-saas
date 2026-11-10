@@ -197,26 +197,24 @@ export default function DeviceDetailPage() {
           </>
         }
         actions={
-          <>
-            {canWrite &&
-              (neverConnected ? (
-                <Link href={`/devices/${deviceId}/connect`} className={buttonClassName()}>
-                  <Zap aria-hidden size={15} />
-                  Connect
-                </Link>
-              ) : (
-                // Installing needs USB from a computer's Chrome or Edge: the
-                // button shows only there; ⋯ always has "Install or reconnect…".
-                installHere && (
-                  <Link href={`/devices/${deviceId}/connect`} className={buttonClassName({ variant: "secondary" })}>
-                    <Wrench aria-hidden size={15} />
-                    Install
-                  </Link>
-                )
-              ))}
-            <DropdownMenu label="More actions" groups={actions.menu(device, { where: "page", onDeleted: () => router.push("/devices") })} />
-          </>
+          canWrite &&
+          (neverConnected ? (
+            <Link href={`/devices/${deviceId}/connect`} className={buttonClassName()}>
+              <Zap aria-hidden size={15} />
+              Connect
+            </Link>
+          ) : (
+            // Installing needs USB from a computer's Chrome or Edge: the
+            // button shows only there; ⋯ always has "Install or reconnect…".
+            installHere && (
+              <Link href={`/devices/${deviceId}/connect`} className={buttonClassName({ variant: "secondary" })}>
+                <Wrench aria-hidden size={15} />
+                Install
+              </Link>
+            )
+          ))
         }
+        menu={<DropdownMenu label="More actions" groups={actions.menu(device, { where: "page", onDeleted: () => router.push("/devices") })} />}
       />
 
       {actions.reveal}
