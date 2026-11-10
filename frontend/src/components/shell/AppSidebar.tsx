@@ -216,10 +216,24 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
 
   return (
     <div className={cn("flex h-full flex-col", compact ? "items-center gap-1.5 px-2 py-2.5" : "gap-3.5 px-3 py-3.5")}>
-      <div className={cn("flex shrink-0", compact ? "flex-col items-center gap-1.5" : "items-center gap-1")}>
-        <WorkspaceSwitcher deviceCount={counts.devices} compact={compact} tipHandlers={tips.handlers} />
-        {pin}
-      </div>
+      {compact ? (
+        <div className="flex shrink-0 flex-col items-center gap-1.5">
+          <WorkspaceSwitcher deviceCount={counts.devices} compact tipHandlers={tips.handlers} />
+          {pin}
+        </div>
+      ) : (
+        // IO Driven first, then the workspace you're in (DESIGN.md §4).
+        <div className="flex shrink-0 flex-col gap-2.5">
+          <div className="flex items-center gap-1">
+            <Link href="/dashboards" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md p-1">
+              <BrandMark size={28} />
+              <span className="truncate text-section font-semibold tracking-[-0.01em] text-ink">IO Driven</span>
+            </Link>
+            {pin}
+          </div>
+          <WorkspaceSwitcher deviceCount={counts.devices} tipHandlers={tips.handlers} />
+        </div>
+      )}
 
       <button
         type="button"
@@ -347,17 +361,20 @@ function WorkspaceSwitcher({
           align="start"
           panelClassName="w-[232px] p-1"
           triggerClassName={cn(
-            "flex items-center rounded-md text-left hover:bg-surface-raised",
-            compact ? "p-1" : "w-full gap-2.5 p-2",
+            "flex items-center text-left",
+            compact
+              ? "rounded-md p-1 hover:bg-surface-raised"
+              : "w-full gap-2.5 rounded-lg border border-border bg-surface p-2 shadow-card hover:border-accent",
           )}
           trigger={
-            // The product mark heads the shell (DESIGN.md §3 Brand); the
-            // list inside keeps each workspace's initial to tell them apart.
+            // The rail has room for the mark only, which opens the switcher;
+            // the full sidebar names IO Driven above and the workspace here,
+            // with its initial tile as in the list (DESIGN.md §3 Brand).
             compact ? (
               <BrandMark size={32} />
             ) : (
               <>
-                <BrandMark size={32} />
+                <WorkspaceLogo name={name} />
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
                   <strong className="truncate text-sm font-semibold text-ink">{name}</strong>
                   <span className="truncate text-xs text-ink-muted">{sub}</span>
