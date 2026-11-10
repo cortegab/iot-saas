@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { cn } from "@/lib/cn";
 
 export interface Crumb {
   label: ReactNode;
@@ -27,6 +26,9 @@ export interface PageHeaderProps {
   back?: { href: string; label: string };
   /** Page actions; the primary action goes last (rightmost). */
   actions?: ReactNode;
+  /** The record's ⋯ menu: after the actions, and on phones beside the title
+   * while the actions take the row under it (DESIGN.md §4). */
+  menu?: ReactNode;
   /** List pages (DESIGN.md §6): the description sits beside the title, on
    * its baseline, and wraps under it when there's no room. */
   inline?: boolean;
@@ -62,30 +64,35 @@ export function Breadcrumbs({ crumbs: all }: { crumbs: Crumb[] }) {
 /** The one header anatomy (DESIGN.md §4), shared by PageHeader and the
  * full-page editors: the overline (status first, then meta), then the title
  * row with the actions on its right, top-aligned with the title (primary
- * rightmost, ⋯ last), then whatever goes under the title. On phones the
- * actions are one row directly under the title. */
+ * rightmost, ⋯ last), then whatever goes under the title. On phones the ⋯
+ * stays at the right of the title row and the other actions are one row
+ * directly under the title. */
 export function HeaderBlock({
   overline,
   heading,
   actions,
-  menuOnly = false,
+  menu,
   children,
 }: {
   overline?: ReactNode;
   /** The title element itself (an `h1`, or the title and description inline). */
   heading: ReactNode;
   actions?: ReactNode;
-  /** The actions are only the ⋯ menu: on phones it stays beside the title
-   * instead of taking a row of its own. */
-  menuOnly?: boolean;
+  /** The record's ⋯ menu. */
+  menu?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-[3px]">
       {overline && <div className="flex flex-wrap items-center gap-2 text-meta text-ink-muted">{overline}</div>}
-      <div className={cn("flex items-start justify-between gap-x-4 gap-y-2.5", !menuOnly && "max-md:flex-col max-md:items-stretch")}>
-        <div className="min-w-0 flex-1">{heading}</div>
-        {actions && <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div>}
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-2.5 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <div className="col-start-1 row-start-1 min-w-0 pr-2">{heading}</div>
+        {actions && (
+          <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-2 md:col-span-1 md:col-start-2 md:row-start-1">
+            {actions}
+          </div>
+        )}
+        {menu && <div className="col-start-2 row-start-1 flex md:col-start-3">{menu}</div>}
       </div>
       {children}
     </div>
@@ -93,7 +100,7 @@ export function HeaderBlock({
 }
 
 /** DESIGN.md §4 page header: breadcrumbs, then the HeaderBlock — overline
- * (status first, then meta), the H1 with the actions on its row, a one-line
+ * (status first, then meta), the H1 with the actions and ⋯ on its row, a one-line
  * description and a meta row. */
 export function PageHeader({
   title,
@@ -105,6 +112,7 @@ export function PageHeader({
   breadcrumbs,
   back,
   actions,
+  menu,
   inline,
 }: PageHeaderProps) {
   const crumbs = breadcrumbs ?? (back ? [{ label: back.label, href: back.href }] : undefined);
@@ -128,6 +136,7 @@ export function PageHeader({
           )
         }
         actions={actions}
+        menu={menu}
       >
         {desc && !inline && <p className="mt-1 max-w-[64ch] text-ink-muted">{desc}</p>}
         {meta && (

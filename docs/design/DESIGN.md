@@ -179,8 +179,9 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
 - **Page header** (one component, `PageHeader`, for lists, record pages and editors): breadcrumbs,
   an overline, an H1, a one-line description, and actions on the right. The overline starts with
   the **status**, then meta; the line under the title is the description only. Actions align to
-  the **H1 row** (top-aligned), the primary rightmost and ⋯ last. On phones the actions are one
-  row directly under the title, primary first, ⋯ last. A title is plain text (no monospace part).
+  the **H1 row** (top-aligned), the primary rightmost and ⋯ last. On phones the ⋯ stays at the
+  right end of the title row, and the other actions are one row directly under the title,
+  primary first. A title is plain text (no monospace part).
   **Nothing is said twice:** the breadcrumb lists the **parents only** (the H1 right below names
   the current page); the overline carries **status and meta only**, never the record kind (the
   breadcrumb says it); the description never restates the overline. **Creating** a named record
@@ -1100,3 +1101,4 @@ restyled.
 | 2026-11-08 | §8 device **Settings → Firmware** (firmware stability plan F7, generic-firmware devices only): a FactList with **Running**, **Latest release** with an **Update to …** link for admins (a confirm explains the download, the signature check, the restart and the 2-minute rollback), an **Update** line that follows it (*Downloading …*, *Restarting into …*, *Updated to …*, or why it failed, in the error colour), and **Over the air** saying why it can't update when it can't (offline, 0.x firmware, unsigned release). A failed or rolled-back update is a *device health* alert. |
 | 2026-11-09 | §15 **Alerts** matched to the web's Notifications: a **⋯** on each row (and a long press) with Mark as read / unread and Dismiss; the sheet's buttons are **Done**, **Mark as unread**, **Dismiss** (Open device moves to the details as a link, the rule too); **Each time** for repeats. Rows update at once after any change. Opening a push marks its alert read. |
 | 2026-11-09 | §4, §8, §15 **device header** (user review): on the web and in the app the status sits **beside the device name** ("axioma ● Online"), and the template · zone · last message line goes; template and zone are in Settings (web) or the app's new **Details** section, the last message in Health (web) or Details (app). Web **Install** is a header button only on a computer's Chrome or Edge, where installing over USB works; elsewhere it's the ⋯ menu's Install or reconnect…. A device-page exception to §4's status-in-the-overline. |
+| 2026-11-09 | §4 **header ⋯ on phones** (user review): the record's ⋯ stays at the right end of the title row on every page header and full-page editor; the other actions (Connect, Run now…, Edit layout…) take the row under the title. Supersedes 2026-10-28's "only when ⋯ is the only action". |
