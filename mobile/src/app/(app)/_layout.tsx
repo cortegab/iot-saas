@@ -1,6 +1,6 @@
 import { Redirect, Tabs } from "expo-router";
 import { Bell, Cpu, LayoutDashboard, ListChecks, Menu } from "lucide-react-native";
-import { AppState } from "react-native";
+import { AppState, View } from "react-native";
 import { SWRConfig } from "swr";
 import { useAuth } from "@/auth/AuthProvider";
 import { useNotificationSummary } from "@/alerts/notifications";
@@ -8,6 +8,7 @@ import { PushProvider } from "@/push/PushProvider";
 import { RealtimeProvider } from "@/realtime/RealtimeProvider";
 import { font, text } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
+import { BrandBar, PageHeader } from "@/ui/AppHeader";
 
 /** SWR in React Native: revalidate when the app comes back to the
  * foreground (the browser's "focus"). */
@@ -38,10 +39,21 @@ export default function AppLayout() {
     <SWRConfig key={currentTenantId ?? "none"} value={swrConfig}>
       <RealtimeProvider>
         <PushProvider>
-          <AppTabs />
+          <AppFrame />
         </PushProvider>
       </RealtimeProvider>
     </SWRConfig>
+  );
+}
+
+/** IO Driven and the workspace above every screen (DESIGN.md §15), then the tabs. */
+function AppFrame() {
+  const theme = useTheme();
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.canvas }}>
+      <BrandBar />
+      <AppTabs />
+    </View>
   );
 }
 
@@ -52,10 +64,8 @@ function AppTabs() {
   return (
       <Tabs
         screenOptions={{
-          headerStyle: { backgroundColor: theme.surface },
-          headerTintColor: theme.ink,
-          headerTitleStyle: { fontFamily: font.semibold, fontSize: text.section.fontSize },
-          headerShadowVisible: false,
+          // The brand bar above holds the top inset; More's own header is the page header.
+          header: ({ options, navigation }) => <PageHeader options={options} navigation={navigation} />,
           tabBarStyle: { backgroundColor: theme.surface, borderTopColor: theme.border },
           tabBarActiveTintColor: theme.accent,
           tabBarInactiveTintColor: theme.inkMuted,
