@@ -933,6 +933,11 @@ restyled.
 - **Shape:** the web's phone layout (§4, §12) is the model. That means a bottom tab bar
   (Dashboards · Devices · Alerts · Rules · More), sheets for one item's detail or one action, and list rows
   as Line rows (§5).
+- **Top of every screen:** the web's phone top bar (§4) stays above every screen: the mark (to
+  Dashboards), then **IO Driven** over the workspace's name with ⌄, which opens the workspace list
+  as a sheet (More keeps its Workspace section too). No search icon until the app has search.
+  Under it, each screen has the web's page header: an inner screen's parent as a muted link back
+  ("Devices"), then the 28 px title with the screen's actions (Scan, Mark all read) at its right.
 - **Touch:** every target is at least 44 px (§12). Controls are the web's components in native
   form (Switch, segmented control, value with Set), with the same confirms and states.
 - **What lives where:** the app is for being next to the equipment: watching, finding a device,
@@ -940,7 +945,7 @@ restyled.
   resetting a latch. Creating and editing records (templates, wiring, rules, dashboard layouts,
   members, keys, settings) stays on the web; the app links there with **Open on the web**.
 - **Wording:** §11 applies unchanged.
-- **Device screen:** the web's Overview on a phone. The top bar has the name with the status beside
+- **Device screen:** the web's Overview on a phone. Its title is the name with the status beside
   it (dot and word); **Details** (Template, Zone, Last message) comes before **Health**. Each reading card shows the name with Live / Stale at the top right, the
   value, then when it arrived. The Trend card picks its reading with the web's **metric chips**;
   tapping a reading card picks it too. Charts follow §5, including the shorter on/off chart.
@@ -1107,3 +1112,4 @@ restyled.
 | 2026-11-09 | §4, §8, §15 **device header** (user review): on the web and in the app the status sits **beside the device name** ("axioma ● Online"), and the template · zone · last message line goes; template and zone are in Settings (web) or the app's new **Details** section, the last message in Health (web) or Details (app). Web **Install** is a header button only on a computer's Chrome or Edge, where installing over USB works; elsewhere it's the ⋯ menu's Install or reconnect…. A device-page exception to §4's status-in-the-overline. |
 | 2026-11-09 | §4 **header ⋯ on phones** (user review): the record's ⋯ stays at the right end of the title row on every page header and full-page editor; the other actions (Connect, Run now…, Edit layout…) take the row under the title. Supersedes 2026-10-28's "only when ⋯ is the only action". |
 | 2026-11-09 | §3 Brand, §4 shell **IO Driven and the workspace** (user review, option A of the device-screen demo): the phone top bar shows the mark, then **IO Driven** over the workspace's name with ⌄, which opens the workspace switcher as a bottom sheet (the More sheet no longer lists workspaces); the full sidebar shows the mark and **IO Driven** above a bordered workspace switcher (name and role, no tile). The workspace never goes in a breadcrumb. Supersedes 2026-11-05's mark beside the workspace's name. |
+| 2026-11-09 | §15 **app header** matched to the web's phone shell (user review): the IO Driven / workspace bar stays above every screen, and its workspace name opens the workspace list as a sheet (More keeps its Workspace section); each screen's header is the web's page header (the parent as a link back, the 28 px title, actions at its right) instead of the native header with a back arrow. No search icon yet. |

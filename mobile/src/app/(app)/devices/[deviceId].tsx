@@ -98,7 +98,7 @@ export default function DeviceScreen() {
           title: device.name,
           headerTitle: () => (
             <View style={styles.headerTitle} accessible accessibilityRole="header" accessibilityLabel={`${device.name}, ${status.label}`}>
-              <Text size="section" weight="semibold" numberOfLines={1} style={styles.headerName}>
+              <Text size="title" weight="semibold" numberOfLines={2} style={styles.headerName}>
                 {device.name}
               </Text>
               <View style={styles.status}>
@@ -225,7 +225,7 @@ export default function DeviceScreen() {
 
 const styles = StyleSheet.create({
   page: { padding: 16, gap: 20 },
-  headerTitle: { flexDirection: "row", alignItems: "center", gap: 10, maxWidth: "100%" },
+  headerTitle: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 12, rowGap: 2 },
   headerName: { flexShrink: 1 },
   status: { flexDirection: "row", alignItems: "center", gap: 8 },
   readingHead: { flexDirection: "row", alignItems: "center", gap: 6 },
