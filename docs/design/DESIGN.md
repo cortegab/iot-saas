@@ -74,8 +74,8 @@ font in a component.** If you need a value that has no token, add the token here
   workspace**: the phone top bar shows the mark, then **IO Driven** over the workspace's name
   (with ⌄), and that name opens the workspace switcher; the full sidebar shows the mark and
   **IO Driven** above the workspace switcher; the icon rail has room for the mark only, which
-  opens the switcher. The workspace itself is always its initial tile (the switcher and its
-  list), so the product mark and a workspace never look alike.
+  opens the switcher. The workspace's name is plain text with no tile; only the switcher's list
+  gives each workspace its initial tile, so they stay apart.
 - Never recolour, outline or redraw the mark. Use the files as they are.
 
 ### Theme
@@ -163,7 +163,7 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
 
 - **Sidebar** (full form) is 256 px wide and sticky. From top to bottom:
   - The mark and **IO Driven** (to Dashboards), with the collapse button.
-  - The workspace switcher (initial tile, name, "role · N devices", ⇅), a bordered button.
+  - The workspace switcher (name, "role · N devices", ⇅), a bordered button with no tile.
   - The **⌘K search / command palette** trigger. The palette is both navigation and actions:
     "New rule", "Go to device…".
   - Grouped nav:
@@ -1106,4 +1106,4 @@ restyled.
 | 2026-11-09 | §15 **Alerts** matched to the web's Notifications: a **⋯** on each row (and a long press) with Mark as read / unread and Dismiss; the sheet's buttons are **Done**, **Mark as unread**, **Dismiss** (Open device moves to the details as a link, the rule too); **Each time** for repeats. Rows update at once after any change. Opening a push marks its alert read. |
 | 2026-11-09 | §4, §8, §15 **device header** (user review): on the web and in the app the status sits **beside the device name** ("axioma ● Online"), and the template · zone · last message line goes; template and zone are in Settings (web) or the app's new **Details** section, the last message in Health (web) or Details (app). Web **Install** is a header button only on a computer's Chrome or Edge, where installing over USB works; elsewhere it's the ⋯ menu's Install or reconnect…. A device-page exception to §4's status-in-the-overline. |
 | 2026-11-09 | §4 **header ⋯ on phones** (user review): the record's ⋯ stays at the right end of the title row on every page header and full-page editor; the other actions (Connect, Run now…, Edit layout…) take the row under the title. Supersedes 2026-10-28's "only when ⋯ is the only action". |
-| 2026-11-09 | §3 Brand, §4 shell **IO Driven and the workspace** (user review, option A of the device-screen demo): the phone top bar shows the mark, then **IO Driven** over the workspace's name with ⌄, which opens the workspace switcher as a bottom sheet (the More sheet no longer lists workspaces); the full sidebar shows the mark and **IO Driven** above a bordered workspace switcher with the workspace's initial tile. The workspace never goes in a breadcrumb. Supersedes 2026-11-05's mark beside the workspace's name. |
+| 2026-11-09 | §3 Brand, §4 shell **IO Driven and the workspace** (user review, option A of the device-screen demo): the phone top bar shows the mark, then **IO Driven** over the workspace's name with ⌄, which opens the workspace switcher as a bottom sheet (the More sheet no longer lists workspaces); the full sidebar shows the mark and **IO Driven** above a bordered workspace switcher (name and role, no tile). The workspace never goes in a breadcrumb. Supersedes 2026-11-05's mark beside the workspace's name. |

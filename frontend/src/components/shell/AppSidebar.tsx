@@ -364,17 +364,16 @@ function WorkspaceSwitcher({
             "flex items-center text-left",
             compact
               ? "rounded-md p-1 hover:bg-surface-raised"
-              : "w-full gap-2.5 rounded-lg border border-border bg-surface p-2 shadow-card hover:border-accent",
+              : "w-full gap-2.5 rounded-lg border border-border bg-surface px-2.5 py-2 shadow-card hover:border-accent",
           )}
           trigger={
             // The rail has room for the mark only, which opens the switcher;
             // the full sidebar names IO Driven above and the workspace here,
-            // with its initial tile as in the list (DESIGN.md §3 Brand).
+            // as plain text (DESIGN.md §3 Brand).
             compact ? (
               <BrandMark size={32} />
             ) : (
               <>
-                <WorkspaceLogo name={name} />
                 <span className="flex min-w-0 flex-1 flex-col leading-tight">
                   <strong className="truncate text-sm font-semibold text-ink">{name}</strong>
                   <span className="truncate text-xs text-ink-muted">{sub}</span>
