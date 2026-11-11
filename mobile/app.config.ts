@@ -6,7 +6,7 @@ import type { ExpoConfig } from "expo/config";
 // The app's version; Android's versionCode and iOS's buildNumber follow it
 // (1.2.3 → 10203, src/lib/version.ts), so every release increases them as the
 // stores require. Bump this, never the codes.
-const VERSION = "0.6.0";
+const VERSION = "0.6.1";
 const [major, minor, patch] = VERSION.split(".").map(Number);
 const BUILD = major * 10000 + minor * 100 + patch;
 
