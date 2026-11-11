@@ -8,10 +8,13 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleShe
 import { useApiSWR } from "@/hooks/useApiSWR";
 import {
   explainFailure,
+  logStep,
   networksFrom,
   signalLabel,
+  STEP_LIMIT_MS,
   type Step,
   type WifiNetwork,
+  withTimeout,
 } from "@/provisioning/wifi";
 import { connectBoard, requestBlePermissions } from "@/provisioning/ble";
 import { devicesForQr, scannedQr } from "@/provisioning/scanned";
@@ -24,7 +27,7 @@ import { TextField } from "@/ui/TextField";
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 
 type Phase =
-  | { kind: "working"; step: Step; label: string }
+  | { kind: "working"; step: Step; label: string; at: number }
   | { kind: "networks"; networks: WifiNetwork[] }
   | { kind: "password"; ssid: string; open: boolean; networks: WifiNetwork[] }
   | { kind: "joined"; ssid: string; at: number }
@@ -48,44 +51,76 @@ export default function WifiSetup() {
   const deviceId = chosen ?? (matches.length === 1 ? matches[0].id : null);
   const device = matches.find((d) => d.id === deviceId) ?? null;
 
-  const [phase, setPhase] = useState<Phase>({ kind: "working", step: "permission", label: "Checking Bluetooth access…" });
+  const [phase, setPhase] = useState<Phase>({ kind: "working", step: "permission", label: "Checking Bluetooth access…", at: Date.now() });
   const board = useRef<ESPDevice | null>(null);
   const started = useRef(false);
+  // Each step takes a number; a step that answers after it was given up on
+  // (timed out, cancelled, retried) no longer changes the screen.
+  const run = useRef(0);
+  const alive = useRef(true);
 
   useEffect(
     () => () => {
+      alive.current = false;
       board.current?.disconnect();
       scannedQr.clear();
     },
     [],
   );
 
-  const fail = (step: Step, error: unknown, retry: () => void) => setPhase({ kind: "failed", step, ...explainFailure(step, error), retry });
+  const working = (step: Step, label: string) => {
+    logStep(step, "start");
+    setPhase({ kind: "working", step, label, at: Date.now() });
+    return ++run.current;
+  };
+  const current = (n: number) => alive.current && n === run.current;
+  const fail = (step: Step, error: unknown, retry: () => void) => {
+    logStep(step, `failed: ${error instanceof Error ? error.message : String(error)}`);
+    setPhase({ kind: "failed", step, ...explainFailure(step, error), retry });
+  };
+
+  // Back to the device list; the board's Bluetooth session closes as the
+  // screen leaves.
+  const cancel = () => {
+    logStep("cancel", phase.kind === "working" ? phase.step : phase.kind);
+    run.current++;
+    router.navigate("/devices");
+  };
 
   async function scanNetworks() {
     const b = board.current;
     if (!b) return;
-    setPhase({ kind: "working", step: "scan", label: "Asking the board for nearby Wi-Fi…" });
+    const n = working("scan", "Asking the board for nearby Wi-Fi…");
     try {
-      setPhase({ kind: "networks", networks: networksFrom(await b.scanWifiList()) });
+      const list = await withTimeout(b.scanWifiList(), STEP_LIMIT_MS.scan, "scan");
+      if (!current(n)) return;
+      logStep("scan", `${list.length} networks`);
+      setPhase({ kind: "networks", networks: networksFrom(list) });
     } catch (e) {
-      fail("scan", e, () => void scanNetworks());
+      if (current(n)) fail("scan", e, () => void scanNetworks());
     }
   }
 
   async function connect() {
     if (!qr) return;
-    setPhase({ kind: "working", step: "permission", label: "Checking Bluetooth access…" });
+    let n = working("permission", "Checking Bluetooth access…");
     if (!(await requestBlePermissions())) {
-      fail("permission", new Error("permission"), () => void connect());
+      if (current(n)) fail("permission", new Error("permission"), () => void connect());
       return;
     }
-    setPhase({ kind: "working", step: "connect", label: `Looking for ${qr.name} over Bluetooth…` });
+    if (!current(n)) return;
+    n = working("connect", `Looking for ${qr.name} over Bluetooth…`);
     try {
       board.current?.disconnect();
-      board.current = await connectBoard(qr);
+      const b = await withTimeout(connectBoard(qr), STEP_LIMIT_MS.connect, "connect");
+      if (!current(n)) {
+        b.disconnect();
+        return;
+      }
+      board.current = b;
+      logStep("connect", "connected");
     } catch (e) {
-      fail("connect", e, () => void connect());
+      if (current(n)) fail("connect", e, () => void connect());
       return;
     }
     await scanNetworks();
@@ -94,11 +129,15 @@ export default function WifiSetup() {
   async function send(ssid: string, password: string, networks: WifiNetwork[]) {
     const b = board.current;
     if (!b) return;
-    setPhase({ kind: "working", step: "provision", label: `Sending ${ssid} to the board…` });
+    const n = working("provision", `Sending ${ssid} to the board…`);
     try {
-      await b.provision(ssid, password);
+      await withTimeout(b.provision(ssid, password), STEP_LIMIT_MS.provision, "provision");
+      if (!current(n)) return;
+      logStep("joined", "the board took the Wi-Fi");
       setPhase({ kind: "joined", ssid, at: Date.now() });
     } catch (e) {
+      if (!current(n)) return;
+      logStep("provision", `failed: ${e instanceof Error ? e.message : String(e)}`);
       // A wrong password or missing network: back to the form, not the start.
       setPhase({
         kind: "failed",
@@ -162,7 +201,12 @@ export default function WifiSetup() {
           </Lines>
         )}
 
-        {!needsPick && phase.kind === "working" && <Working label={phase.label} />}
+        {!needsPick && phase.kind === "working" && (
+          <View style={styles.block}>
+            <Working key={phase.at} label={phase.label} />
+            <Button label="Cancel" variant="secondary" onPress={cancel} />
+          </View>
+        )}
 
         {phase.kind === "networks" && (
           <Networks
@@ -183,7 +227,7 @@ export default function WifiSetup() {
           />
         )}
 
-        {phase.kind === "joined" && <Joined ssid={phase.ssid} since={phase.at} device={device} onDone={() => router.back()} />}
+        {phase.kind === "joined" && <Joined ssid={phase.ssid} board={qr.name} since={phase.at} device={device} onDevices={() => router.navigate("/devices")} />}
 
         {phase.kind === "failed" && (
           <View style={styles.block}>
@@ -192,7 +236,7 @@ export default function WifiSetup() {
             </Text>
             <Text color="inkMuted">{phase.detail}</Text>
             <Button label="Try again" onPress={phase.retry} />
-            <Button label="Cancel" variant="secondary" onPress={() => router.back()} />
+            <Button label="Cancel" variant="secondary" onPress={cancel} />
           </View>
         )}
       </ScrollView>
@@ -200,12 +244,24 @@ export default function WifiSetup() {
   );
 }
 
+/** A spinner line; after a few seconds it also counts the wait, so a slow
+ * board doesn't look frozen. */
 function Working({ label }: { label: string }) {
   const theme = useTheme();
+  const [start] = useState(() => Date.now());
+  const [now, setNow] = useState(start);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(id);
+  }, []);
+  const seconds = Math.floor((now - start) / 1_000);
   return (
     <View style={styles.working} accessibilityLiveRegion="polite">
       <ActivityIndicator color={theme.accent} />
-      <Text color="inkMuted">{label}</Text>
+      <Text color="inkMuted" style={styles.flex}>
+        {label}
+        {seconds >= 5 ? ` ${seconds} s` : ""}
+      </Text>
     </View>
   );
 }
@@ -298,23 +354,48 @@ function PasswordForm({
 
 /** After the board took the Wi-Fi: wait for the device's first message (the
  * web's live check), then offer the device. */
-function Joined({ ssid, since, device, onDone }: { ssid: string; since: number; device: DeviceResponse | null; onDone: () => void }) {
+function Joined({
+  ssid,
+  board,
+  since,
+  device,
+  onDevices,
+}: {
+  ssid: string;
+  board: string;
+  since: number;
+  device: DeviceResponse | null;
+  onDevices: () => void;
+}) {
   const router = useRouter();
   const [timedOut, setTimedOut] = useState(false);
   const { data } = useApiSWR<DeviceResponse>(device ? `/devices/${device.id}` : null, { refreshInterval: 2_000 });
   const online = data != null && data.last_seen_at != null && new Date(data.last_seen_at).getTime() >= since - 5_000;
+  const name = device?.name ?? board;
 
   useEffect(() => {
     const id = setTimeout(() => setTimedOut(true), ONLINE_WAIT_MS);
     return () => clearTimeout(id);
   }, []);
+  useEffect(() => {
+    if (online) logStep("joined", "online");
+  }, [online]);
+
+  // The Bluetooth part is over: say so first, so a slow connection to IO
+  // Driven isn't mistaken for a stuck setup.
+  const took = (
+    <Text weight="semibold" color={online ? "statusOnline" : "ink"}>
+      {online ? `${name} is online` : `${name} has the Wi-Fi`}
+    </Text>
+  );
+  const devices = <Button label="Back to devices" variant="secondary" onPress={onDevices} />;
 
   if (!device) {
     return (
       <View style={styles.block}>
-        <Text weight="semibold">The board joined {ssid}.</Text>
-        <Text color="inkMuted">It connects to IO Driven next. Its device page shows when it&apos;s online.</Text>
-        <Button label="Done" onPress={onDone} />
+        {took}
+        <Text color="inkMuted">It joins {ssid} and connects to IO Driven next. Its device page shows when it&apos;s online.</Text>
+        <Button label="Back to devices" onPress={onDevices} />
       </View>
     );
   }
@@ -323,31 +404,32 @@ function Joined({ ssid, since, device, onDone }: { ssid: string; since: number; 
   if (online) {
     return (
       <View style={styles.block}>
-        <Text weight="semibold" color="statusOnline">
-          {device.name} is online
-        </Text>
+        {took}
         <Text color="inkMuted">It joined {ssid} and sent its first message.</Text>
         <Button label="Open device" onPress={open} />
+        {devices}
       </View>
     );
   }
   return (
     <View style={styles.block}>
-      <Text weight="semibold">The board joined {ssid}.</Text>
+      {took}
       {timedOut ? (
         <>
           <Text color="inkMuted">
-            It hasn&apos;t reached IO Driven yet. Check that this Wi-Fi has internet access, then restart the board. The device page turns online as soon as it
+            It hasn&apos;t reached IO Driven yet. Check that {ssid} has internet access, then restart the board. The device page turns online as soon as it
             connects.
           </Text>
           <Button label="Open device" onPress={open} />
         </>
       ) : (
         <>
-          <Working label={`Waiting for ${device.name} to come online. This usually takes under a minute.`} />
+          <Text color="inkMuted">The phone is done. You can leave this screen: the device page turns online by itself.</Text>
+          <Working label={`Waiting for ${device.name} to join ${ssid} and come online. This usually takes under a minute.`} />
           <Button label="Open device" variant="secondary" onPress={open} />
         </>
       )}
+      {devices}
     </View>
   );
 }
