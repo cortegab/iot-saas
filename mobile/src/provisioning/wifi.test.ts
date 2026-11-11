@@ -1,4 +1,4 @@
-import { explainFailure, networksFrom, signalLabel } from "./wifi";
+import { explainFailure, networksFrom, signalLabel, StepTimeout, withTimeout } from "./wifi";
 import { devicesForQr } from "./scanned";
 
 describe("networksFrom", () => {
@@ -47,5 +47,27 @@ describe("devicesForQr", () => {
 
   it("uses the Security 2 username (the device id) when it is there", () => {
     expect(devicesForQr(devices, { name: "Bay 1", pop: "p", username: "b", security: 2 }).map((x) => x.id)).toEqual(["b"]);
+  });
+});
+
+describe("withTimeout", () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it("passes a step's answer through when it comes in time", async () => {
+    const done = withTimeout(Promise.resolve(4), 1_000, "scan");
+    await expect(done).resolves.toBe(4);
+  });
+
+  it("gives up on a board that never answers", async () => {
+    const done = withTimeout(new Promise<never>(() => {}), 30_000, "scan");
+    jest.advanceTimersByTime(30_000);
+    await expect(done).rejects.toBeInstanceOf(StepTimeout);
+  });
+
+  it("explains a timed-out step as a board that stopped answering", () => {
+    expect(explainFailure("scan", new StepTimeout("scan")).title).toBe("The board stopped answering");
+    // Sending can time out after the board already took the Wi-Fi.
+    expect(explainFailure("provision", new StepTimeout("provision")).detail).toMatch(/check Devices/);
   });
 });

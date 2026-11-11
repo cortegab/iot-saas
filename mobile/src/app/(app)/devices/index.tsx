@@ -3,7 +3,7 @@ import { DEVICE_STATUS, deviceStatusKey, type DeviceStatusKey } from "@iodriven/
 import { statusCounts, visibleDevices, type StatusFilter as Filter } from "@/devices/list";
 import { timeAgo } from "@iodriven/shared/time-ago";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { ChevronRight, ScanQrCode } from "lucide-react-native";
+import { ChevronRight } from "lucide-react-native";
 import { useMemo, useState } from "react";
 import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
 import { useApiSWR } from "@/hooks/useApiSWR";
@@ -66,25 +66,8 @@ export default function Devices() {
 
   return (
     <>
-      <Stack.Screen
-        options={{
-          title: "Devices",
-          headerRight: () => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Scan a device's QR"
-              onPress={() => router.push("/devices/scan")}
-              hitSlop={8}
-              style={styles.scan}
-            >
-              <ScanQrCode size={18} color={theme.accent} />
-              <Text weight="medium" color="accent">
-                Scan
-              </Text>
-            </Pressable>
-          ),
-        }}
-      />
+      {/* Scan is in the top bar, on every screen (DESIGN.md §15). */}
+      <Stack.Screen options={{ title: "Devices" }} />
       <FlatList
         data={rows}
         keyExtractor={(d) => d.id}
@@ -135,7 +118,6 @@ export default function Devices() {
 
 const styles = StyleSheet.create({
   page: { padding: 16 },
-  scan: { minHeight: touchTarget, flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 4 },
   head: { gap: 12, marginBottom: 12 },
   empty: { paddingVertical: 24 },
   row: {

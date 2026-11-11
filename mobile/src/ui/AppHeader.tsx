@@ -1,10 +1,11 @@
 import { ROLE_LABEL, toRole } from "@iodriven/shared/permissions";
 import { useRouter } from "expo-router";
-import { Check, ChevronDown } from "lucide-react-native";
+import { Check, ChevronDown, ScanQrCode } from "lucide-react-native";
 import { type ReactNode, useState } from "react";
 import { Image, Pressable, StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuth } from "@/auth/AuthProvider";
+import { touchTarget } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
 import { Row } from "./Row";
 import { Sheet } from "./Sheet";
@@ -16,7 +17,8 @@ const roleLabel = (role: string) => {
 };
 
 /** The web's phone top bar (DESIGN.md §4, §15): the IO Driven mark, then
- * IO Driven over the workspace's name, which opens the workspace switcher.
+ * IO Driven over the workspace's name, which opens the workspace switcher,
+ * and Scan at the right, where the web has search.
  * It stays put above every screen; each screen's own header is below it. */
 export function BrandBar() {
   const theme = useTheme();
@@ -44,6 +46,15 @@ export function BrandBar() {
           </Text>
           <ChevronDown size={14} color={theme.inkMuted} />
         </View>
+      </Pressable>
+      {/* Where the web has search: the app's scanner, from any screen. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Scan a device's QR"
+        onPress={() => router.navigate("/devices/scan")}
+        style={styles.iconButton}
+      >
+        <ScanQrCode size={22} color={theme.inkMuted} />
       </Pressable>
 
       <Sheet open={open} onClose={() => setOpen(false)} title="Workspaces">
@@ -122,7 +133,8 @@ export function PageHeader({
 }
 
 const styles = StyleSheet.create({
-  bar: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 10, paddingHorizontal: 16, borderBottomWidth: StyleSheet.hairlineWidth },
+  bar: { flexDirection: "row", alignItems: "center", gap: 10, paddingBottom: 10, paddingLeft: 16, paddingRight: 6, borderBottomWidth: StyleSheet.hairlineWidth },
+  iconButton: { width: touchTarget, height: touchTarget, alignItems: "center", justifyContent: "center", borderRadius: 10 },
   mark: { width: 32, height: 32, borderRadius: 9 },
   lockup: { flex: 1, minWidth: 0, minHeight: 40, justifyContent: "center" },
   ws: { flexDirection: "row", alignItems: "center", gap: 2, minWidth: 0 },

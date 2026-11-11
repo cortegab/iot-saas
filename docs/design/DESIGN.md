@@ -935,9 +935,10 @@ restyled.
   as Line rows (§5).
 - **Top of every screen:** the web's phone top bar (§4) stays above every screen: the mark (to
   Dashboards), then **IO Driven** over the workspace's name with ⌄, which opens the workspace list
-  as a sheet (More keeps its Workspace section too). No search icon until the app has search.
+  as a sheet (More keeps its Workspace section too), then **Scan** (a QR icon) at the right, where
+  the web has search, which opens the scanner from any screen.
   Under it, each screen has the web's page header: an inner screen's parent as a muted link back
-  ("Devices"), then the 28 px title with the screen's actions (Scan, Mark all read) at its right.
+  ("Devices"), then the 28 px title with the screen's actions (Mark all read) at its right.
 - **Touch:** every target is at least 44 px (§12). Controls are the web's components in native
   form (Switch, segmented control, value with Set), with the same confirms and states.
 - **What lives where:** the app is for being next to the equipment: watching, finding a device,
@@ -953,14 +954,16 @@ restyled.
   It holds no password." with **Print label** and **Download** (the same label layout as the
   provisioning QR's: QR, name, one caption line). Its link, `/d/<id>`, opens the device in the
   app, or on the web, after sign-in if needed.
-- **Scan and Wi-Fi setup:** Devices has **Scan** in its header. The scanner says what it reads
+- **Scan and Wi-Fi setup:** **Scan** is the top bar's QR icon, on every screen. The scanner says what it reads
   ("Point at a device's label or its Wi-Fi setup QR") and names anything else it can't use. A Wi-Fi
   setup QR opens **Set up Wi-Fi**, one step at a time on one screen: a spinner line for each wait
   (Bluetooth access, looking for the board, its networks, sending); the networks as Line rows
   (name; signal in words · Open / Secured) with **Other network** last; the password with Show /
-  Hide and **Join**; then "Waiting for {device} to come online" until its first message, and
-  **Open device**. Each failure is a red title, the fix in one or two sentences, **Try again** and
-  **Cancel**.
+  Hide and **Join**; then "{device} has the Wi-Fi" (the phone's part is done), "Waiting for
+  {device} to join {network} and come online" until its first message, **Open device** and **Back
+  to devices**. Every wait has **Cancel** (back to the device list) and, after 5 s, counts its
+  seconds; a Bluetooth step that runs past its limit fails as "The board stopped answering". Each
+  failure is a red title, the fix in one or two sentences, **Try again** and **Cancel**.
 - **Controls:** the device screen has a **Controls** card after Trend, and a dashboard's actuator
   widget shows the same rows. Each row is the web's (§8): the name, *Requested {value}*, then what
   happened (Sending… · Waiting for the device… N s · Acknowledged · No response within N s) and who
@@ -1113,3 +1116,5 @@ restyled.
 | 2026-11-09 | §4 **header ⋯ on phones** (user review): the record's ⋯ stays at the right end of the title row on every page header and full-page editor; the other actions (Connect, Run now…, Edit layout…) take the row under the title. Supersedes 2026-10-28's "only when ⋯ is the only action". |
 | 2026-11-09 | §3 Brand, §4 shell **IO Driven and the workspace** (user review, option A of the device-screen demo): the phone top bar shows the mark, then **IO Driven** over the workspace's name with ⌄, which opens the workspace switcher as a bottom sheet (the More sheet no longer lists workspaces); the full sidebar shows the mark and **IO Driven** above a bordered workspace switcher (name and role, no tile). The workspace never goes in a breadcrumb. Supersedes 2026-11-05's mark beside the workspace's name. |
 | 2026-11-09 | §15 **app header** matched to the web's phone shell (user review): the IO Driven / workspace bar stays above every screen, and its workspace name opens the workspace list as a sheet (More keeps its Workspace section); each screen's header is the web's page header (the parent as a link back, the 28 px title, actions at its right) instead of the native header with a back arrow. No search icon yet. |
+| 2026-11-10 | §15 **Scan in the top bar** (user review): the app's top bar has a Scan (QR) icon at its right on every screen, where the web has search; the Devices header's Scan button goes. Alerts stays a tab (it's checked daily; scanning is occasional). |
+| 2026-11-11 | §15 **Set up Wi-Fi recovers** (bench test, two C3 boards): every wait has Cancel and counts its seconds; the network list, sending and connecting have time limits ("The board stopped answering"); once the board takes the Wi-Fi the screen says "{device} has the Wi-Fi" before waiting for it online, with Back to devices. |

@@ -120,10 +120,12 @@ export default function InvitePage() {
               </p>
               <Button
                 variant="secondary"
-                onClick={() => void logout().then(() => router.replace(`/login?next=/invite/${token}`))}
+                // Stay here: signed out, this page offers "Create account and
+                // join" (or "Sign in to accept" when the email has an account).
+                onClick={() => void logout()}
                 className="w-full"
               >
-                Sign out and switch account
+                Sign out to accept as {preview.email}
               </Button>
             </>
           )}
