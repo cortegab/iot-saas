@@ -121,8 +121,7 @@ async def test_dashboards_are_shared_with_the_workspace(
     )
     teammate_headers = _auth_headers(teammate, tenant_id)
 
-    # Everyone in the workspace sees it, and (until roles decide otherwise)
-    # can change it.
+    # Everyone in the workspace sees it; only owners and admins change it.
     list_resp = await client.get("/dashboards", headers=teammate_headers)
     assert [d["id"] for d in list_resp.json()] == [dashboard_id]
     assert (
@@ -131,15 +130,19 @@ async def test_dashboards_are_shared_with_the_workspace(
     patch_resp = await client.patch(
         f"/dashboards/{dashboard_id}", json={"name": "Renamed"}, headers=teammate_headers
     )
-    assert patch_resp.status_code == 200
+    assert patch_resp.status_code == 403
     assert (await client.get(f"/dashboards/{dashboard_id}", headers=owner_headers)).json()[
         "name"
-    ] == "Renamed"
+    ] == "Owner's dashboard"
     counts = (await client.get("/tenants/current/counts", headers=teammate_headers)).json()
     assert counts["dashboards"] == 1
 
+    create_resp = await client.post(
+        "/dashboards", json={"name": "Viewer's"}, headers=teammate_headers
+    )
+    assert create_resp.status_code == 403
     delete_resp = await client.delete(f"/dashboards/{dashboard_id}", headers=teammate_headers)
-    assert delete_resp.status_code == 204
+    assert delete_resp.status_code == 403
 
 
 async def test_dashboard_tenant_isolation(client: httpx.AsyncClient) -> None:

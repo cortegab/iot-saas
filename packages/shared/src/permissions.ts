@@ -38,9 +38,9 @@ const MIN_ROLE: Record<Action, Role> = {
   // Alert recipients and the time zone (DESIGN.md §8); renaming stays owner-only.
   "workspace.alerts": "admin",
   "workspace.setup": "admin",
-  // Dashboards are shared by the workspace; until permissions by role are
-  // decided, every member may change them.
-  "dashboards.write": "viewer",
+  // Dashboards are shared by the workspace: owners and admins change them,
+  // viewers look and pick their own default (decided 2026-11-19).
+  "dashboards.write": "admin",
 };
 
 export function toRole(role: string | null | undefined): Role | null {

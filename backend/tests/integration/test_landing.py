@@ -127,7 +127,10 @@ async def test_a_member_with_a_dashboard_lands_on_it_while_setup_is_unfinished(
         headers=_headers(owner, tenant_id),
     )
     viewer_headers = _headers(viewer, tenant_id)
-    dash = (await client.post("/dashboards", json={"name": "Mine"}, headers=viewer_headers)).json()
+    # Dashboards are made by owners and admins and shared with the workspace.
+    dash = (
+        await client.post("/dashboards", json={"name": "Bays"}, headers=_headers(owner, tenant_id))
+    ).json()
 
     body = await _landing(client, viewer_headers)
     assert body["target"] == "dashboard"

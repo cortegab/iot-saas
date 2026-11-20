@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Clock, DoorOpen, Droplets, Fan, Plus, WifiOff, Waves } from "lucide-react";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { Tag } from "@/components/ui/Badge";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -31,6 +32,7 @@ export default function NewRulePage() {
   const catalog = useRuleCatalog();
   const { timezone } = useWorkspace();
   const [start, setStart] = useState<{ key: string; draft: RuleDraft } | null>(null);
+  const isAdmin = useIsAdmin();
 
   const device = seededDevice ? catalog.devices.find((d) => d.id === seededDevice) : undefined;
   const recipes = useMemo(
@@ -65,7 +67,11 @@ export default function NewRulePage() {
         breadcrumbs={[seededDevice ? { href: back, label: device?.name ?? "Device" } : { href: "/rules", label: "Rules" }]}
         description={start ? undefined : "Start from a recipe or blank. You pick its devices and name it in the next steps."}
       />
-      {start ? (
+      {!isAdmin ? (
+        <p className="max-w-[760px] rounded-lg bg-surface-raised px-3 py-2 text-meta text-ink-muted">
+          Only owners and admins create rules. Ask one to add it.
+        </p>
+      ) : start ? (
         <RuleEditor key={start.key} deviceId={seededDevice} initialDraft={start.draft} onSaved={onSaved} onCancel={() => setStart(null)} />
       ) : (
         <div className="flex max-w-[760px] flex-col gap-4">
