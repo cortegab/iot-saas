@@ -392,18 +392,19 @@ async def test_manual_command_with_a_topic_breaking_name_is_refused(
 async def test_dispatch_refuses_an_actuator_name_saved_before_validation() -> None:
     client = AsyncMock()
 
-    await commands_service.dispatch_command(
-        client,
-        AsyncMock(),
-        uuid.uuid4(),
-        uuid.uuid4(),
-        None,
-        datetime.now(UTC),
-        "acme",
-        "bay1",
-        actuator="fan/+",
-        value=True,
-    )
+    with pytest.raises(commands_service.InvalidActuatorError):
+        await commands_service.dispatch_command(
+            client,
+            AsyncMock(),
+            uuid.uuid4(),
+            uuid.uuid4(),
+            None,
+            datetime.now(UTC),
+            "acme",
+            "bay1",
+            actuator="fan/+",
+            value=True,
+        )
 
     client.publish.assert_not_awaited()
 

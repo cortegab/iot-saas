@@ -522,8 +522,8 @@ function ClearFields({ draft, update }: { draft: RuleDraft; update: Update }) {
       )}
       {flappingRisk(draft) && (
         <Callout tone="warning">
-          With no hysteresis and no clear delay, a reading hovering at the threshold switches the actuator on and off with every reading. Set a
-          hysteresis on the condition or a clear delay.
+          With nothing to smooth it, a reading that flips back and forth (a value hovering at the threshold, or a button that bounces) switches the
+          actuator on and off with every reading. Set a hysteresis on the condition, a hold time, or a clear delay.
         </Callout>
       )}
     </div>
