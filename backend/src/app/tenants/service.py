@@ -354,7 +354,7 @@ async def attention(session: AsyncSession, tenant_id: uuid.UUID) -> Attention:
 
     latched, unhealthy = await rules_service.count_needing_attention(session, tenant_id)
     return Attention(
-        critical_alerts=await notifications_service.count_unread_critical(session, tenant_id),
+        critical_alerts=await notifications_service.count_active_critical(session, tenant_id),
         offline_devices=await devices_service.count_offline(session, tenant_id),
         latched_rules=latched,
         unhealthy_rules=unhealthy,

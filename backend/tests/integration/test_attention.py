@@ -99,8 +99,19 @@ async def test_counts_critical_alerts_offline_devices_and_rules_that_cant_evalua
         "unhealthy_rules": 1,
     }
 
-    # Read alerts and a disabled rule stop counting.
+    # Reading an alarm doesn't silence it for everyone; acknowledging it
+    # does, and a disabled rule stops counting.
     await client.post("/notifications/read", headers=headers)
+    assert (await _attention(client, headers))["critical_alerts"] == 1
+    groups = (
+        await client.get("/notifications/groups", params={"severity": "critical"}, headers=headers)
+    ).json()
+    ack = await client.post(
+        f"/notifications/groups/{groups[0]['key']}/acknowledge",
+        json={"note": "on my way"},
+        headers=headers,
+    )
+    assert ack.status_code == 204
     await client.patch(f"/rules/{rule.json()['id']}", json={"enabled": False}, headers=headers)
     counts = await _attention(client, headers)
     assert counts["critical_alerts"] == 0
