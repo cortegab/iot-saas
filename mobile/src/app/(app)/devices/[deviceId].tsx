@@ -19,6 +19,7 @@ import { Lines, Row } from "@/ui/Row";
 import { Chips } from "@/ui/Chips";
 import { StatusDot } from "@/ui/StatusDot";
 import { Text } from "@/ui/Text";
+import { signalLabel } from "@iodriven/shared/signal";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -41,6 +42,22 @@ function uptime(s: number): string {
 /** One device (the web's device Overview on a phone): its status, its
  * readings marked Live or Stale, the selected reading's trend, and its
  * health. Editing stays on the web. */
+// Why the chip last restarted, as the firmware reports it (firmware/src/diag.h);
+// the same words as the web's Health card.
+const RESTART_REASON: Record<string, string> = {
+  power_on: "Power on",
+  reset_pin: "Reset button",
+  software: "Restarted itself",
+  crash: "Crash",
+  task_wdt: "Froze (watchdog)",
+  interrupt_wdt: "Watchdog",
+  other_wdt: "Watchdog",
+  brownout: "Power dip (brown-out)",
+  deep_sleep: "Woke from sleep",
+};
+
+const kb = (bytes: number) => `${Math.round(bytes / 1024)} KB`;
+
 export default function DeviceScreen() {
   const theme = useTheme();
   const { deviceId } = useLocalSearchParams<{ deviceId: string }>();
@@ -73,12 +90,26 @@ export default function DeviceScreen() {
     ["Zone", zone ?? "No zone"],
     ["Last message", device.last_seen_at ? timeAgo(device.last_seen_at) : "Never"],
   ];
-  const health: [string, string][] = [
-    ...(device.rssi != null ? [["Wi-Fi signal", `${device.rssi} dBm`] as [string, string]] : []),
+  // The web's Health facts (DESIGN.md §8), so a device-health push lands on
+  // the restart and the sensor it's about.
+  const faults = device.faults ?? [];
+  const health: [string, string, boolean?][] = [
+    ...(device.rssi != null ? [["Wi-Fi signal", signalLabel(device.rssi)] as [string, string]] : []),
     ...(device.battery_pct != null ? [["Battery", `${device.battery_pct} %`] as [string, string]] : []),
-    ...(device.uptime_s != null ? [["Uptime", uptime(device.uptime_s)] as [string, string]] : []),
     ...(device.fw_version ? [["Firmware", device.fw_version] as [string, string]] : []),
+    ...(device.uptime_s != null ? [["Uptime", uptime(device.uptime_s)] as [string, string]] : []),
+    ...(device.boot_count != null
+      ? [["Last restart", `${RESTART_REASON[device.reset_reason ?? ""] ?? "Unknown"} · boot ${device.boot_count}`] as [string, string]]
+      : []),
+    ...(device.faults != null
+      ? [faults.length === 0 ? (["Sensors", "All answering"] as [string, string]) : (["Sensors", faults.join("; "), true] as [string, string, boolean])]
+      : []),
+    ...(device.heap_free != null
+      ? [["Memory", `${kb(device.heap_free)} free${device.heap_min != null ? ` · lowest ${kb(device.heap_min)}` : ""}`] as [string, string]]
+      : []),
+    ...(device.wifi_reconnects != null ? [["Wi-Fi rejoins", `${device.wifi_reconnects} since it started`] as [string, string]] : []),
   ];
+  const hasActuators = (template?.actuators.length ?? 0) > 0;
 
   async function onRefresh() {
     setRefreshing(true);
@@ -149,7 +180,8 @@ export default function DeviceScreen() {
                     </Text>
                   </View>
                   <View style={styles.value}>
-                    <Text size="title" weight="semibold" style={styles.tabular}>
+                    {/* A stale value is dimmed, never shown as current (DESIGN.md §5). */}
+                    <Text size="title" weight="semibold" color={fresh.tone === "online" ? "ink" : "inkMuted"} style={styles.tabular}>
                       {value}
                     </Text>
                     {m.unit && m.data_type !== "bool" ? (
@@ -188,14 +220,16 @@ export default function DeviceScreen() {
         </View>
       )}
 
-      <View style={styles.section}>
-        <Text size="section" weight="semibold" accessibilityRole="header">
-          Controls
-        </Text>
-        <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-          <ActuatorControl device={device} />
+      {hasActuators && (
+        <View style={styles.section}>
+          <Text size="section" weight="semibold" accessibilityRole="header">
+            Controls
+          </Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <ActuatorControl device={device} />
+          </View>
         </View>
-      </View>
+      )}
 
       <Lines label="Details">
         {details.map(([label, value]) => (
@@ -205,8 +239,8 @@ export default function DeviceScreen() {
 
       {health.length > 0 && (
         <Lines label="Health">
-          {health.map(([label, value]) => (
-            <Row key={label} title={label} right={<Text color="inkMuted">{value}</Text>} />
+          {health.map(([label, value, bad]) => (
+            <Row key={label} title={label} right={<Text color={bad ? "statusError" : "inkMuted"}>{value}</Text>} />
           ))}
         </Lines>
       )}
