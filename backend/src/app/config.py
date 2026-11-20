@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # Actuator command TTL (CLAUDE.md §4's example) — how long a device should
     # honor a command after `issued_at` before treating it as stale.
     command_default_ttl_seconds: int = 30
+    # Minimum gap between two commands to the same actuator, whatever sent
+    # them (rules, manual, Run now). Inside it the latest value waits for the
+    # gap to end. 0 turns pacing off.
+    actuator_min_interval_seconds: float = 2.0
 
     # Device connection-state threshold (app/devices/): a device with no telemetry
     # more recent than this is shown as "offline" rather than "online". A few

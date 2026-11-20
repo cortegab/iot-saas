@@ -645,16 +645,20 @@ export function validateDraft(draft: RuleDraft): string | null {
   return null;
 }
 
-/** Actuator clears are never held back by cooldown, so an analog reading
- * dithering at a zero-hysteresis threshold would toggle the relay on every
- * reading — the editors warn about it. */
+/** Actuator clears are never held back by cooldown, so a reading that flips
+ * back and forth toggles the relay on every reading — the editors warn about
+ * it. Two ways in: an analog reading dithering at a zero-hysteresis
+ * threshold, or an on/off input (a button, a contact) that bounces, where
+ * hysteresis doesn't apply and only a hold time or clear delay smooths it.
+ * The platform also spaces commands to one actuator (2 s), but the relay
+ * still follows each settled change. */
 export function flappingRisk(draft: RuleDraft): boolean {
-  return (
-    canClear(draft) &&
-    draft.clearDelay === 0 &&
-    draft.actions.some((a) => a.kind === "actuator" && a.revertOnClear) &&
-    contacts(draft.condition).some((c) => HYSTERESIS_OPERATORS.has(c.operator) && !(c.hysteresis > 0))
-  );
+  if (!(canClear(draft) && draft.clearDelay === 0)) return false;
+  if (!draft.actions.some((a) => a.kind === "actuator" && a.revertOnClear)) return false;
+  const leaves = contacts(draft.condition);
+  const ditheringThreshold = leaves.some((c) => HYSTERESIS_OPERATORS.has(c.operator) && !(c.hysteresis > 0));
+  const bouncingInput = draft.forDuration === 0 && leaves.some((c) => !HYSTERESIS_OPERATORS.has(c.operator));
+  return ditheringThreshold || bouncingInput;
 }
 
 // ---- Tree operations -----------------------------------------------------------
