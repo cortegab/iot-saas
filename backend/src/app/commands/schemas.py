@@ -7,6 +7,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.shared.topics import TOPIC_SEGMENT_PATTERN
+
 
 class ManualCommandRequest(BaseModel):
     """A dashboard-triggered actuator toggle (Phase 4) — validated the same
@@ -14,7 +16,7 @@ class ManualCommandRequest(BaseModel):
     ever sees it.
     """
 
-    actuator: str = Field(min_length=1, max_length=100)
+    actuator: str = Field(min_length=1, max_length=100, pattern=TOPIC_SEGMENT_PATTERN)
     value: bool | float | str
 
 

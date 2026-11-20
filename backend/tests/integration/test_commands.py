@@ -334,6 +334,80 @@ async def test_webhook_action_deferred_then_posts_to_url(
     assert webhook_action.detail["attempts"] == 1
 
 
+async def _create_device_with_fan(
+    client: httpx.AsyncClient, headers: dict[str, str]
+) -> dict[str, Any]:
+    entry = await client.post(
+        "/catalog",
+        json={"name": "Fan box", "actuators": [{"name": "Fan", "key": "fan1"}]},
+        headers=headers,
+    )
+    assert entry.status_code == 201
+    resp = await client.post(
+        "/devices", json={"name": "Bay 9", "catalog_entry_id": entry.json()["id"]}, headers=headers
+    )
+    assert resp.status_code == 201
+    result: dict[str, Any] = resp.json()
+    return result
+
+
+async def test_manual_command_to_an_actuator_the_device_lacks_is_refused(
+    client: httpx.AsyncClient, _mock_redis_publish: AsyncMock
+) -> None:
+    owner = await _register(client, "owner9b@example.com", "Acme9b")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    device = await _create_device_with_fan(client, headers)
+
+    _mock_redis_publish.reset_mock()
+    resp = await client.post(
+        f"/devices/{device['device']['id']}/commands",
+        json={"actuator": "pump", "value": True},
+        headers=headers,
+    )
+
+    assert resp.status_code == 422
+    assert all(
+        c.args[0] != commands_service.MANUAL_COMMAND_CHANNEL
+        for c in _mock_redis_publish.call_args_list
+    )
+
+
+@pytest.mark.parametrize("name", ["fan/1", "fan+", "#", "fan\x00"])
+async def test_manual_command_with_a_topic_breaking_name_is_refused(
+    client: httpx.AsyncClient, name: str
+) -> None:
+    owner = await _register(client, f"owner9c{abs(hash(name))}@example.com", "Acme9c")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    device = await _create_device_with_fan(client, headers)
+
+    resp = await client.post(
+        f"/devices/{device['device']['id']}/commands",
+        json={"actuator": name, "value": True},
+        headers=headers,
+    )
+
+    assert resp.status_code == 422
+
+
+async def test_dispatch_refuses_an_actuator_name_saved_before_validation() -> None:
+    client = AsyncMock()
+
+    await commands_service.dispatch_command(
+        client,
+        AsyncMock(),
+        uuid.uuid4(),
+        uuid.uuid4(),
+        None,
+        datetime.now(UTC),
+        "acme",
+        "bay1",
+        actuator="fan/+",
+        value=True,
+    )
+
+    client.publish.assert_not_awaited()
+
+
 async def test_manual_command_publishes_request_as_admin(
     client: httpx.AsyncClient,
     _mock_redis_publish: AsyncMock,
@@ -341,7 +415,7 @@ async def test_manual_command_publishes_request_as_admin(
     owner = await _register(client, "owner9@example.com", "Acme9")
     tenant_id = owner["memberships"][0]["tenant_id"]
     headers = _auth_headers(owner, tenant_id)
-    device = await _create_device(client, headers)
+    device = await _create_device_with_fan(client, headers)
     device_id = device["device"]["id"]
     device_slug = device["device"]["slug"]
 
