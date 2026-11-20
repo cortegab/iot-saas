@@ -75,7 +75,9 @@ async def test_latest_returns_most_recent_per_metric(
     device_id = device["device"]["id"]
     now = datetime.now(UTC)
 
-    await _insert_telemetry(admin_session, tenant_id, device_id, "temperature", 20.0, now - timedelta(minutes=5))
+    await _insert_telemetry(
+        admin_session, tenant_id, device_id, "temperature", 20.0, now - timedelta(minutes=5)
+    )
     await _insert_telemetry(admin_session, tenant_id, device_id, "temperature", 21.5, now)
     await _insert_telemetry(admin_session, tenant_id, device_id, "humidity", 55.0, now)
 
@@ -95,8 +97,12 @@ async def test_data_raw_resolution_returns_points_in_range(
     device_id = device["device"]["id"]
     now = datetime.now(UTC)
 
-    await _insert_telemetry(admin_session, tenant_id, device_id, "temperature", 19.0, now - timedelta(hours=2))
-    await _insert_telemetry(admin_session, tenant_id, device_id, "temperature", 20.0, now - timedelta(minutes=10))
+    await _insert_telemetry(
+        admin_session, tenant_id, device_id, "temperature", 19.0, now - timedelta(hours=2)
+    )
+    await _insert_telemetry(
+        admin_session, tenant_id, device_id, "temperature", 20.0, now - timedelta(minutes=10)
+    )
     await _insert_telemetry(admin_session, tenant_id, device_id, "temperature", 21.0, now)
 
     resp = await client.get(
@@ -159,7 +165,12 @@ async def test_rollup_reflects_raw_data(
     bucket_start = datetime.now(UTC).replace(second=0, microsecond=0) - timedelta(minutes=10)
     await _insert_telemetry(admin_session, tenant_id, device_id, "temperature", 10.0, bucket_start)
     await _insert_telemetry(
-        admin_session, tenant_id, device_id, "temperature", 20.0, bucket_start + timedelta(seconds=30)
+        admin_session,
+        tenant_id,
+        device_id,
+        "temperature",
+        20.0,
+        bucket_start + timedelta(seconds=30),
     )
 
     # Continuous aggregate refresh can't run inside an ORM-managed transaction
@@ -174,7 +185,10 @@ async def test_rollup_reflects_raw_data(
                 "CALL refresh_continuous_aggregate("
                 "'telemetry_1m', CAST(:start AS timestamptz), CAST(:end AS timestamptz))"
             ),
-            {"start": bucket_start - timedelta(minutes=1), "end": bucket_start + timedelta(minutes=1)},
+            {
+                "start": bucket_start - timedelta(minutes=1),
+                "end": bucket_start + timedelta(minutes=1),
+            },
         )
 
     resp = await client.get(

@@ -121,4 +121,8 @@ async def test_ack_publishes_realtime_command_ack_event(
     ]
     assert len(calls) == 1
     event = json.loads(calls[0].args[1])
-    assert event == {"type": "command_ack", "command_id": str(command_id), "device_id": str(device_id)}
+    assert event == {
+        "type": "command_ack",
+        "command_id": str(command_id),
+        "device_id": str(device_id),
+    }

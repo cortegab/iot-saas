@@ -26,6 +26,7 @@ from app.config import settings
 from app.db import set_tenant_context
 from app.realtime import service as realtime_service
 from app.redis import redis_client
+from app.shared.topics import is_topic_segment
 from app.tenants import service as tenants_service
 
 log = logging.getLogger("commands")
@@ -57,6 +58,17 @@ async def dispatch_command(
     action_executions row (rules/service.py) before knowing whether dispatch
     succeeds, without this function needing to return anything.
     """
+    if not is_topic_segment(actuator):
+        # Schemas refuse these names; this guards rules saved before they did.
+        # A `+`/`#` would make the MQTT client raise, a `/` would publish to
+        # another topic and get the worker's shared connection denied.
+        log.warning(
+            "refusing command for tenant=%s device=%s: actuator %r is not a valid topic segment",
+            tenant_id,
+            device_id,
+            actuator,
+        )
+        return
     command_id = command_id if command_id is not None else uuid.uuid4()
     issued_at = datetime.now(UTC)
     ttl = settings.command_default_ttl_seconds
