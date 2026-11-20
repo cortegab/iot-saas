@@ -40,7 +40,12 @@ async def _complete_setup(
     factory: async_sessionmaker[AsyncSession],
 ) -> str:
     """A device that has reported, a rule and a dashboard: the four steps."""
-    entry = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+    created = await client.post(
+        "/catalog",
+        json={"name": "Bay sensor", "metrics": [{"name": "Temperature", "key": "temperature"}]},
+        headers=headers,
+    )
+    entry = created.json()["id"]
     created = await client.post(
         "/devices", json={"name": "bay1", "catalog_entry_id": entry}, headers=headers
     )
@@ -138,6 +143,9 @@ async def test_setup_steps_are_read_from_data(
     tenant_id = owner["memberships"][0]["tenant_id"]
     headers = _headers(owner, tenant_id)
     before = (await client.get("/tenants/current/setup", headers=headers)).json()
+    # The empty "Legacy / Uncategorized" entry every workspace starts with
+    # isn't a template anyone made.
+    assert before["template"] is False
     assert before["device"] is False
     assert before["rule"] is False
     assert before["dashboard"] is False

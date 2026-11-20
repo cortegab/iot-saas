@@ -10,6 +10,7 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { Badge } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
+import { CopyButton } from "@/components/ui/SecretReveal";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -32,6 +33,7 @@ import { webSerialSupported } from "@/lib/hardware/flasher";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { getDeviceActuators } from "@/lib/device-actuators";
 import { readingFreshness } from "@/lib/freshness";
+import { signalLabel } from "@iodriven/shared/signal";
 import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
@@ -235,6 +237,13 @@ export default function DeviceDetailPage() {
                     Connect it
                   </Link>{" "}
                   to see readings here.
+                  {!installHere && (
+                    <>
+                      {" "}
+                      Installing its firmware needs a computer with Chrome or Edge and a USB cable: open this page there.{" "}
+                      <CopyButton value={typeof window !== "undefined" ? window.location.href : ""} label="link" />
+                    </>
+                  )}
                 </>
               ) : (
                 "Readings show up here once it connects."
@@ -364,8 +373,8 @@ function Health({ device }: { device: DeviceResponse }) {
       facts={[
         ["Last message", device.last_seen_at ? timeAgo(device.last_seen_at) : "Never"],
         !reported && ["Report", <span key="r" className="text-ink-muted">Not reported yet</span>],
-        device.rssi != null && ["Signal", `${device.rssi} dBm`],
-        reported && ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : "Mains"],
+        device.rssi != null && ["Signal", signalLabel(device.rssi)],
+        reported && ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : "Not reported"],
         device.fw_version != null && ["Firmware", device.fw_version],
         device.uptime_s != null && ["Uptime", uptime(device.uptime_s)],
         device.boot_count != null && [
