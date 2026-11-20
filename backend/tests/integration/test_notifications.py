@@ -103,7 +103,9 @@ async def test_mark_single_notification_read(
     assert resp.status_code == 200
     assert resp.json()["read_at"] is not None
 
-    refetched = {n["id"]: n["read_at"] for n in (await client.get("/notifications", headers=headers)).json()}
+    refetched = {
+        n["id"]: n["read_at"] for n in (await client.get("/notifications", headers=headers)).json()
+    }
     other_id = next(n["id"] for n in listed if n["message"] == "two")
     assert refetched[unread_id] is not None
     assert refetched[other_id] is None

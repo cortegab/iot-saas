@@ -40,7 +40,10 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
+    # Hard memory cap; noeviction so nothing (rule-state checkpoints, the
+    # stream) is silently evicted. The stream itself is capped by the app
+    # (TELEMETRY_STREAM_MAXLEN), so this is the backstop, not the limit.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "noeviction"]
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -90,6 +93,7 @@ services:
       MQTT_WORKER_USERNAME: ${MQTT_WORKER_USERNAME}
       MQTT_WORKER_PASSWORD: ${MQTT_WORKER_PASSWORD}
       TELEMETRY_BATCH_SIZE: ${TELEMETRY_BATCH_SIZE}
+      TELEMETRY_STREAM_MAXLEN: ${TELEMETRY_STREAM_MAXLEN:-750000}
       TELEMETRY_FLUSH_INTERVAL_MS: ${TELEMETRY_FLUSH_INTERVAL_MS}
       REALTIME_FLUSH_INTERVAL_MS: ${REALTIME_FLUSH_INTERVAL_MS:-250}
     ports:
@@ -124,6 +128,7 @@ services:
       MQTT_WORKER_USERNAME: ${MQTT_WORKER_USERNAME}
       MQTT_WORKER_PASSWORD: ${MQTT_WORKER_PASSWORD}
       TELEMETRY_BATCH_SIZE: ${TELEMETRY_BATCH_SIZE}
+      TELEMETRY_STREAM_MAXLEN: ${TELEMETRY_STREAM_MAXLEN:-750000}
       TELEMETRY_FLUSH_INTERVAL_MS: ${TELEMETRY_FLUSH_INTERVAL_MS}
       # Push notifications: set FCM_SERVICE_ACCOUNT_FILE in infra/.env to the
       # key's host path (e.g. ~/.config/iodriven/fcm-service-account.json).

@@ -225,18 +225,34 @@ def _condition_leaves(node: dict[str, Any] | None) -> list[dict[str, Any]]:
     return out
 
 
+def _reset_condition(execution_policy: dict[str, Any] | None) -> dict[str, Any] | None:
+    reset = (execution_policy or {}).get("reset_condition")
+    return reset if isinstance(reset, dict) else None
+
+
+def rule_signals(rule: Rule) -> set[SignalKey]:
+    """Every (device, metric) a rule reads: its condition and, for the
+    reset_condition / latch strategies, its reset tree. A reset-only signal
+    must be cached and in the snapshot too, or the reset tree is always
+    unknown and the rule never re-arms."""
+    return referenced_signals(rule.condition) | referenced_signals(
+        _reset_condition(rule.execution_policy)
+    )
+
+
 def _rule_device_map(
     condition: dict[str, Any] | None,
     actions: list[dict[str, Any]],
     trigger: dict[str, Any] | None = None,
     clear_actions: list[dict[str, Any]] | None = None,
+    reset_condition: dict[str, Any] | None = None,
 ) -> dict[uuid.UUID, set[str]]:
     """device_id -> {roles} the rule references, for the rule_devices table.
     A device_status trigger's device counts as an input too — the rule
     watches it even though no condition leaf need reference it (condition
     may be None entirely)."""
     out: dict[uuid.UUID, set[str]] = {}
-    for leaf in _condition_leaves(condition):
+    for leaf in [*_condition_leaves(condition), *_condition_leaves(reset_condition)]:
         did = leaf.get("device_id")
         if did:
             out.setdefault(uuid.UUID(str(did)), set()).add(RuleDeviceRole.INPUT.value)
@@ -356,7 +372,9 @@ async def _persist_rule(
     _validate_trigger(trigger)
     _validate_clear_actions(trigger, clear_actions)
     _validate_latch(trigger, execution_policy, clear_actions)
-    device_map = _rule_device_map(condition, actions, trigger, clear_actions)
+    device_map = _rule_device_map(
+        condition, actions, trigger, clear_actions, _reset_condition(execution_policy)
+    )
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
 
     rule = Rule(
@@ -644,7 +662,13 @@ async def update_rule(
     _assert_leaves_have_device(rule.condition)
     _validate_clear_actions(rule.trigger, rule.clear_actions)
     _validate_latch(rule.trigger, rule.execution_policy, rule.clear_actions)
-    device_map = _rule_device_map(rule.condition, rule.actions, rule.trigger, rule.clear_actions)
+    device_map = _rule_device_map(
+        rule.condition,
+        rule.actions,
+        rule.trigger,
+        rule.clear_actions,
+        _reset_condition(rule.execution_policy),
+    )
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
     await session.flush()
     await _sync_rule_devices(session, tenant_id, rule.id, device_map)
@@ -800,7 +824,7 @@ async def load_rule_cache(factory: async_sessionmaker[AsyncSession]) -> None:
             if watched:
                 new_device_status.setdefault(uuid.UUID(str(watched)), []).append(rule)
         elif trigger_type != "manual":  # metric (or an unknown/legacy shape)
-            for signal in referenced_signals(rule.condition):
+            for signal in rule_signals(rule):
                 new_cache.setdefault(signal, []).append(rule)
     _rule_cache.clear()
     _rule_cache.update(new_cache)
@@ -872,7 +896,7 @@ async def evaluate_and_dispatch(
         return
 
     for rule in rules:
-        needed = referenced_signals(rule.condition)
+        needed = rule_signals(rule)
         snapshot = _snapshot_for_signals(needed)
         state = _state_for(rule)
         try:
@@ -1018,7 +1042,7 @@ async def _dispatch_actions(
                     continue
                 target_id, target_tenant_slug, target_device_slug = target
                 command_id = uuid.uuid4()
-                await commands_service.dispatch_command(
+                sent_id = await commands_service.dispatch_command(
                     client,
                     factory,
                     tenant_id,
@@ -1031,18 +1055,18 @@ async def _dispatch_actions(
                     value=action["value"],
                     command_id=command_id,
                 )
+                detail: dict[str, Any] = {
+                    "actuator": action["actuator"],
+                    "value": action["value"],
+                    "device_id": str(target_id),
+                }
+                if sent_id is None:
+                    # Paced (minimum interval per actuator): the latest value is
+                    # sent when the interval ends, or not at all if it equals
+                    # the value just sent. No command row exists for this firing.
+                    detail["paced"] = True
                 outcomes.append(
-                    _ActionOutcome(
-                        "actuator_command",
-                        action_index,
-                        "success",
-                        {
-                            "actuator": action["actuator"],
-                            "value": action["value"],
-                            "device_id": str(target_id),
-                        },
-                        command_id,
-                    )
+                    _ActionOutcome("actuator_command", action_index, "success", detail, sent_id)
                 )
             elif action_type == "webhook":
                 deferred.append(_DeferredAction("webhook", action_index, dict(action)))
@@ -1812,7 +1836,7 @@ async def run_rule_out_of_band(
         return
 
     now = datetime.now(UTC)
-    snapshot = _snapshot_for_signals(referenced_signals(rule.condition))
+    snapshot = _snapshot_for_signals(rule_signals(rule))
 
     edge: Edge = "fire"
     if trigger_source == "manual":
@@ -2183,7 +2207,14 @@ async def restore_rule_states() -> None:
             continue
         if rule_id not in _rules_by_id:
             continue
-        _rule_states[rule_id] = rule_state_from_dict(blob)
+        state = rule_state_from_dict(blob)
+        # Hold timers don't count time the worker was down: nobody saw the
+        # condition during the outage, so a 10-minute hold must not fire on
+        # the first reading after a 20-minute restart. Latch and cooldown
+        # state (armed, last_fired_at, active) are kept.
+        state.condition_since = None
+        state.clear_since = None
+        _rule_states[rule_id] = state
         restored += 1
     log.info("restored %d rule states from checkpoint", restored)
 
@@ -2395,7 +2426,9 @@ async def simulate_draft(
     _validate_trigger(trigger)
     _validate_clear_actions(trigger, clear_actions)
     _validate_latch(trigger, policy, clear_actions)
-    device_map = _rule_device_map(condition, actions, trigger, clear_actions)
+    device_map = _rule_device_map(
+        condition, actions, trigger, clear_actions, _reset_condition(policy)
+    )
     await _validate_devices_in_tenant(session, tenant_id, set(device_map))
     draft = Rule(
         id=uuid.uuid4(),

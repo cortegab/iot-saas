@@ -13,6 +13,7 @@ connections/event-loop state across dozens of back-to-back tests that never
 needed a connection in the first place).
 """
 
+import os
 from collections.abc import AsyncGenerator, Coroutine
 from dataclasses import dataclass, field
 from typing import Any
@@ -29,8 +30,16 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-ADMIN_TEST_URL = "postgresql+asyncpg://iot:iot_dev_password@127.0.0.1:5432/iot_test"
-APP_TEST_URL = "postgresql+asyncpg://iot_app:iot_app_dev_password@127.0.0.1:5432/iot_test"
+# Override both to run a second suite at once against another migrated
+# database (e.g. iot_test2): the suites truncate tables between tests, so two
+# runs on one database break each other.
+ADMIN_TEST_URL = os.environ.get(
+    "TEST_ADMIN_DATABASE_URL", "postgresql+asyncpg://iot:iot_dev_password@127.0.0.1:5432/iot_test"
+)
+APP_TEST_URL = os.environ.get(
+    "TEST_APP_DATABASE_URL",
+    "postgresql+asyncpg://iot_app:iot_app_dev_password@127.0.0.1:5432/iot_test",
+)
 
 # All app tables, in any order — TRUNCATE ... CASCADE handles FK dependencies
 # regardless of the order they're listed in. Add one entry whenever a new

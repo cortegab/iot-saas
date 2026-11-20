@@ -213,7 +213,8 @@ last restarted (`power_on`, `reset_pin`, `software`, `crash`, `task_wdt`, `inter
 low-water mark (bytes), Wi-Fi rejoins since boot, and the parts not answering right now. The
 platform keeps the last online report's diagnostics through a Last-Will, trims odd values instead
 of dropping the message, and raises a *device health* alert for a new boot after a crash, watchdog
-or brown-out, and for each newly listed fault. Firmware 1.0.0+ also reports an over-the-air
+or brown-out, and for each newly listed fault. Firmware 1.0.1+ adds `"ota_keys": ["<16 hex>", …]`, the
+ids of the update keys it trusts (`docs/firmware/ota.md`). Firmware 1.0.0+ also reports an over-the-air
 update's progress as `"ota": {"version": "1.0.1", "state": "downloading" | "restarting" | "failed" |
 "rolled_back", "error": "…"}`.
 

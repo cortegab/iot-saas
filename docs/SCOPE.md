@@ -1,7 +1,13 @@
-# SCOPE.md: what iodriven does today
+# SCOPE.md: what IO Driven does today
 
-**Last reviewed:** 2026-11-04 · **State described:** production at iodriven.tech, which equals the
-`main` branch up to PR #223 · **Previous review:** 2026-10-07 (PR #86)
+**Last reviewed:** 2026-11-18 · **State described:** production at iodriven.tech, which equals the
+`main` branch up to PR #280 (deployed with #282) · **Previous review:** 2026-11-04 (PR #223)
+
+**Since the previous review:** an Android app (§4 *Mobile app*), push notifications, generic
+firmware 0.11 → **1.0.0** (self-recovery, sensor recovery, metric decimals and a rate limit,
+diagnostics with *device health* alerts, fail-safe outputs, network time, signed over-the-air
+updates with rollback), printable device labels, a privacy page, and the **IO Driven** name and
+mark everywhere.
 
 This is the single description of what the platform does **today**: what is built, how it works,
 what it deliberately leaves out, and what is still open. It is written to stand on its own, so that
@@ -42,7 +48,7 @@ We want a second opinion in four areas. Section 9 lists specific questions for e
 
 ## 1. The product
 
-iodriven is a multi-tenant IoT platform for monitoring and automating physical equipment:
+IO Driven is a multi-tenant IoT platform for monitoring and automating physical equipment:
 
 - **Ingest:** devices (ESP32-class boards, or anything that speaks MQTT over TLS) publish sensor
   readings.
@@ -52,14 +58,16 @@ iodriven is a multi-tenant IoT platform for monitoring and automating physical e
   in-app notifications or calls webhooks. A rule can also undo its action when the condition
   clears.
 - **Watch and manage:** people follow live dashboards and manage devices, templates, zones, rules
-  and members in a browser, on desktop or phone.
+  and members in a browser, on desktop or phone, and follow devices, alerts and controls in an
+  Android app with push notifications.
 
 **Key differentiator:** it also covers the device end.
 
 - **Firmware without code:** a ready-made firmware for ESP32-family boards can be installed from
   the browser, configured from a wiring description (which part is on which pin). No code is
-  needed.
-- **Wi-Fi from a phone:** the board gets its Wi-Fi credentials from a phone over Bluetooth.
+  needed. Later versions arrive over the air, signed, with automatic rollback.
+- **Wi-Fi from a phone:** the board gets its Wi-Fi credentials from a phone over Bluetooth, from
+  the IO Driven app (scan the board's QR) or Espressif's own provisioning app.
 
 So a customer can go from a bare board to a working control loop without writing firmware.
 
@@ -116,6 +124,9 @@ Commands carry a TTL, so a device back after a long outage doesn't act on a stal
 | Layer | Choice |
 |---|---|
 | Frontend | Next.js 15 + React + Tailwind CSS v4; uPlot for high-frequency charts; SWR |
+| Mobile app | Expo + React Native + TypeScript (`expo-router`), Android first; built locally with Gradle |
+| Shared client code | `@iodriven/shared` in a pnpm workspace: the generated API types plus pure helpers (status, freshness, formatting, realtime merging) used by both the web and the app |
+| Push | Firebase Cloud Messaging (HTTP v1, called directly, no Google SDK), sent from the worker |
 | Backend | Python 3.12 + FastAPI (async), Pydantic v2 |
 | Hot path / worker | A separate asyncio process using `aiomqtt` |
 | ORM / migrations | SQLAlchemy 2.0 (async) + Alembic |
@@ -124,10 +135,10 @@ Commands carry a TTL, so a device back after a long outage doesn't act on a stal
 | Cache / stream / pub-sub | Redis |
 | Edge | NGINX + Let's Encrypt |
 | Runtime | Docker Compose on one VPS |
-| Device firmware | ESP-IDF (C), PlatformIO; browser installer over Web Serial |
+| Device firmware | C++ on Arduino-ESP32 (pioarduino; ESP-IDF APIs called directly where Arduino falls short), PlatformIO; browser installer over Web Serial; over-the-air updates |
 
-**API types:** the frontend's API types are generated from FastAPI's OpenAPI schema, never written
-by hand. This is how a Python backend and a TypeScript frontend keep type safety across the seam.
+**API types:** the web's and the app's API types are generated from FastAPI's OpenAPI schema,
+never written by hand. This is how a Python backend and a TypeScript frontend keep type safety across the seam.
 
 **Why Python, not Node:** the deciding factor is the ML roadmap. An anomaly detector is only useful
 if it can trigger actuators. In the same runtime, a detector is just another rule evaluator,
@@ -177,7 +188,8 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
   - **workspace:** tenants, users, memberships, invitations, API keys;
   - **devices:** devices, device templates (catalog), zones, per-sensor health;
   - **rules:** rules, rule versions, rule ↔ device links, rule executions, action executions;
-  - **operations:** commands, notifications, dashboards.
+  - **operations:** commands, notifications, dashboards, push devices (one phone token per app
+    install per workspace).
 - **Credentials:** device tokens and API keys are stored hashed with argon2id.
 
 ### 3.4 The device contract (shared with the single-tenant variant; treated as stable)
@@ -189,14 +201,28 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 {tenant}/{device}/ack/{actuator}      acknowledgement device → platform
 {tenant}/{device}/config              publish profile retained, platform → device
 {tenant}/{device}/status              health          retained, device → platform; Last-Will target
+{tenant}/{device}/ota                 firmware update platform → device, QoS 1, not retained
 ```
 
 | Message | Payload |
 |---|---|
 | Telemetry | `{"value": 27.4, "timestamp": 1770001111}` (timestamp optional; server time otherwise) |
 | Command | `{"value": true, "issued_at": …, "ttl": 30, "command_id": "uuid"}` |
-| Config | `{"metrics": [{"key": "temperature", "publish": "periodic", "interval_seconds": 30}]}` |
-| Status | `{"online": true, "rssi": -63, "battery_pct": 87, "uptime_s": 1234, "fw_version": "1.2.0"}` |
+| Config | `{"metrics": [{"key": "temperature", "publish": "on_change", "interval_seconds": 300, "deadband": 0.2, "decimals": 1}]}` |
+| Status | `{"online": true, "rssi": -63, "battery_pct": 87, "uptime_s": 1234, "fw_version": "1.0.0", "reset_reason": "brownout", "boot_count": 7, "heap_free": 118000, "heap_min": 91000, "wifi_reconnects": 2, "faults": […]}` |
+| OTA request | `{"version": "1.0.1", "url": "https://…/firmware.bin", "size": …, "sha256": "…", "signature": "…", "command_id": "uuid"}` |
+
+- **Changes since the previous review (all additive and optional, so older firmware keeps
+  working):**
+  - **`decimals`** per metric: the device rounds to it before sending and before the on-change
+    comparison (absent = 3, the old behaviour). Raising it can change when a threshold rule fires.
+  - **Status diagnostics** (firmware 0.14.0+): restart reason, boot count, free memory, Wi-Fi
+    rejoins and sensors not answering. A Last-Will keeps the last known values.
+  - **`ota` topic and progress** (firmware 1.0.0+): the status message reports
+    `downloading` / `restarting` / `failed` / `rolled_back`. `ota`, like `status` and `config`,
+    is a reserved metric key.
+- **Each of these has to be mirrored in the single-tenant variant by hand.** This document doesn't
+  record whether that has been done.
 
 - **Credentials and ACLs:** one MQTT credential per device; EMQX ACLs restrict each device to its
   own topic subtree.
@@ -238,13 +264,21 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Device registry: create, edit, disable, delete, bulk actions, zones, filters, pagination | ✅ | Status filter: online / offline / never connected / disabled. |
 | Per-device MQTT credential (hashed, shown once, rotatable) | ✅ | The Connect flow always creates or rotates it first. |
 | Device templates: metrics (number or on/off, unit, decimals, range, publish cadence) and actuators (on/off, number, text, or a fixed list) | ✅ | Usage counts; risky renames are warned about. |
-| **Generic firmware**, configured by wiring instead of code, installed from the browser (Web Serial) | 🚧 | Firmware source is at **0.11.0**. The release index in the repo stops at **0.8.1**, so the boards added in 0.9–0.11 install from the browser only once those releases are published (to confirm on the server). No over-the-air updates. |
-| Supported boards | ✅ | ESP32 DevKit (30- and 38-pin), ESP32-C3 Super Mini, ESP32-S3 DevKitC-1 (two revisions), ESP32-C6 DevKitC-1, Lolin S2 Mini (no Bluetooth). |
+| **Generic firmware**, configured by wiring instead of code, installed from the browser (Web Serial) | ✅ | **1.0.0**, published at iodriven.tech/firmware. The deploy workflow builds and publishes each new firmware version, so the installer no longer lags the source. The board starts its firmware right after a web install, with no replug. |
+| Firmware self-recovery | ✅ | Watchdog; MQTT reconnect with backoff; its own Wi-Fi retries, restarting after 5 minutes without Wi-Fi; a wrong Wi-Fi password no longer traps the board; a stuck I²C bus is freed and sensors come back without a power cycle. |
+| Publishing discipline | ✅ | Readings follow each metric's Decimals; on change compares rounded values; at most 20 messages/s per device (latest value coalesced, never queued). |
+| Fail-safe outputs | ✅ | Per output in the wiring: **Keep** (default) or **Boot state** after 5 s–24 h without the platform. The retained desired state applies again on reconnect. |
+| Network time; late commands ignored | ✅ | A command past its TTL isn't acted on. |
+| **Over-the-air firmware updates** (Device → Settings → Firmware) | 🚧 | Built: ECDSA P-256 signature, SHA-256 and size checks; the new version is on probation and rolls back unless it reaches the broker within 2 minutes; progress and failures shown and alerted. **Not usable yet:** no public signing key is committed, so the published 1.0.0 is unsigned and boards refuse every update. Boards on 0.x need one USB install of 1.0.0. |
+| Supported boards | ✅ | ESP32 DevKit (30- and 38-pin), ESP32-C3 Super Mini, ESP32-S3 DevKitC-1 (two revisions), ESP32-C6 DevKitC-1, Lolin S2 Mini (no Bluetooth). DevKits reset Wi-Fi with the BOOT button (firmware 0.11.1+). Flash use is checked against a 95% guard; the C6 is the tightest at 87.9%. |
 | Firmware parts (drivers) | ✅ | **Inputs:** digital in, analog in, DS18B20, DHT22, pulse counter, HC-SR04, MPU6050. **Outputs:** relay, PWM, servo. Plus an I2C bus. |
-| Wiring per template, with a per-device override | ✅ | Pin checks per board; parts bring their metrics and actuators. |
+| Wiring per template, with a per-device override | ✅ | Pin checks per board; parts bring their metrics and actuators, with suggested decimals and deadbands. |
+| Device label | ✅ | A printable QR (`/d/<device id>`) opens the device on the web or in the app. It holds no password. |
+| Bench test of firmware 0.12–1.0 on real boards | 🚧 | Unit-tested and built for all five chips; the full bench pass is still pending. |
 | Generated Arduino sketch for custom firmware | ✅ | For boards or needs the generic firmware doesn't cover. |
 | Wi-Fi from a phone: Espressif BLE provisioning, QR carrying the device credential | 🚧 | Security 1 only. Security 2 is in the contract but off until the firmware's provisioning library supports it. Boards without Bluetooth take Wi-Fi typed in at install time. |
 | Device health: retained status, Last-Will offline, RSSI, battery, firmware version, uptime; per-sensor staleness | ✅ | |
+| Device diagnostics: last restart and why, sensors not answering, memory, Wi-Fi rejoins | ✅ | Health card on the device page. A *device health* alert fires for a restart after a crash, watchdog or brown-out, and for each newly failing sensor; power-ons and reset-button restarts don't alert. |
 | HTTP REST ingest as a fallback to MQTT | ✅ | `POST /ingest`. |
 | Gateways / edge connectors | 🚧 | Work only as a plain device (§7). |
 
@@ -283,11 +317,12 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Command status: Sending, a TTL countdown, Acknowledged, No response with Retry; command timeline | 🚧 | "No response" is worked out in the browser; it isn't stored. Devices don't report their real state yet (a deferred contract change). |
 | Email action (SMTP) | ✅ | |
 | Webhook action with retries and backoff | 🚧 | POST to any URL. No request signing, and no block on internal or private addresses (§6). |
-| In-app notifications | ✅ | Types: device offline, rule fired / cleared, rule health, failed delivery, template changed. Repeats grouped; server-side paging; unread counts by type; read / unread, dismiss / undo. |
+| In-app notifications | ✅ | Types: device offline, device health, rule fired / cleared, rule health, failed delivery, template changed. Repeats grouped; server-side paging; unread counts by type; read / unread, dismiss / undo. |
 | Failed deliveries list with reason and Retry | ✅ | |
 | Alarm lifecycle (acknowledge with who and a note, active / cleared state) | ⛔ | The UI is designed; the backend isn't built. |
 | "Back online" notification; muting per device | ⛔ | Offline alerts are fixed and on for every device. |
-| SMS, push, Slack / Teams | ⛔ | Webhooks cover integrations for now. |
+| Push notifications to the Android app | ✅ | Per phone: critical only, or warnings and critical (info never pushes). The payload carries **names only**, never readings or rule text, because FCM relays through Google. A tap opens the device or alert. |
+| SMS, Slack / Teams | ⛔ | Webhooks cover integrations for now. |
 
 ### Dashboards and landing
 
@@ -313,12 +348,29 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Command palette, responsive shell (icon rail, full sidebar, phone tab bar) | ✅ | Accessibility audited with axe: zero violations across 36+ pages at the last audit. |
 | SSO (SAML / OIDC), audit log of who changed what | ⛔ | Rule versions record who edited a rule; nothing else is audited. |
 
+### Mobile app (Android)
+
+| Capability | Status | Notes |
+|---|---|---|
+| Sign in and stay signed in; workspace switch; the web's header (IO Driven, the workspace, then the page) | ✅ | App **0.6.2**. |
+| Devices: list, readings, trends, live updates, status and health | ✅ | |
+| Dashboards with the attention strip | ✅ | Read-only: editing stays on the web. |
+| Actuator controls on the device and on dashboard widgets | ✅ | |
+| Alerts tab with unread count, grouped repeats, paging, read / dismiss / undo | ✅ | Same actions as the web. |
+| Rules: turn on / off, Reset latch | ✅ | Creating and editing rules stays on the web. |
+| **Scan** (top bar, every screen): a device label opens the device; a board's setup QR starts **Set up Wi-Fi** over Bluetooth | ✅ | Wi-Fi setup searches fresh, never hangs, says why it failed and when the board has the Wi-Fi. |
+| Push notifications | ✅ | See *Actions, commands and notifications*. |
+| Update gate | ✅ | The app checks `/meta/client` at start; a version below the minimum shows only *Update required*. A failed check never blocks. |
+| Distribution | 🚧 | APKs published as GitHub pre-releases. The Play internal-testing setup is prepared (`docs/mobile-release.md`, store images, data-safety answers); the Play Console steps are the owner's. App Links verify only with a Play- or upload-signed build. |
+| iOS | ⛔ | The code is iOS-ready; no iOS build or listing. |
+
 ### Public site
 
 | Capability | Status | Notes |
 |---|---|---|
 | Landing page: product tour, how it works, safety, onboarding, security, deployment options, FAQ | ✅ | |
 | "Talk to us" contact form | ✅ | Emails the owner and stores nothing; honeypot, 5 per address per hour. |
+| Privacy page (`/privacy`), linked from the landing and sign-in footers | 🚧 | Written from what the platform actually does (for example: backups are not encrypted). A factual draft, not reviewed by a lawyer. |
 
 ### Business
 
@@ -333,11 +385,13 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 
 | Item | Value |
 |---|---|
-| Backend | About 13,000 lines of Python; 459 pytest tests (unit tests for the evaluators, integration tests against real RLS policies, including a cross-tenant read test) |
-| Frontend | About 42,000 lines of TypeScript; 261 vitest unit tests; 73 Playwright end-to-end tests in 33 specs |
-| Firmware | About 2,400 lines of C (ESP-IDF), plus board and driver catalogs as data |
-| Type checks | `mypy --strict` on the backend, `tsc` on the frontend; ruff and ESLint |
-| CI | ⛔ **None.** Every suite runs locally before merge. |
+| Backend | About 14,300 lines of Python; 527 pytest tests (unit tests for the evaluators, integration tests against real RLS policies, including a cross-tenant read test) |
+| Web | About 34,400 lines of TypeScript (less than at the last review, because shared code moved out); 205 vitest unit tests; 75 Playwright end-to-end tests in 34 specs |
+| Shared client package | About 9,300 lines of TypeScript, mostly the generated API types; 97 vitest tests |
+| Mobile app | About 5,500 lines of TypeScript; 48 jest tests. One run during this review had 3 failures that passed on rerun (flaky under load) |
+| Firmware | About 3,400 lines of C++, plus board and driver catalogs as data; native unit tests for publishing math, command math, driver math, the config blob and LED patterns |
+| Type checks | `mypy --strict` on the backend, `tsc` on the web, shared package and app; ruff and ESLint |
+| CI | 🚧 **Firmware only.** The deploy workflow builds, signs (once a key exists) and publishes firmware releases for all five chips. No test suite runs in CI; every suite runs locally before merge. |
 | Design system | One binding design document (`docs/design/DESIGN.md`) with a changelog, followed by every UI change |
 
 ---
@@ -347,7 +401,12 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 ### In place
 
 - **Deploy:** push-to-deploy from a `prod` branch with GitHub Actions, migrations on deploy, and a
-  health check.
+  health check. The same workflow builds and publishes new firmware releases.
+- **Firmware signing:** the private OTA signing key is meant to live only as a secret of the
+  protected `production` GitHub environment plus an offline backup, never on the VPS. Releases are
+  refused unsigned once a public key is committed. The key isn't created yet (§4).
+- **Push:** the FCM service-account key is a host file mounted read-only into the worker; push is
+  off if it isn't set.
 - **TLS:** Let's Encrypt on NGINX with a renewal timer. Devices connect over MQTT/TLS.
 - **Backups:** a daily database backup at 03:00, with a restore script and runbook. The off-host
   copy is optional (`RCLONE_REMOTE`).
@@ -368,10 +427,12 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | **Off-host backup copy is optional** | A lost VPS loses its backups too, unless `RCLONE_REMOTE` is set. |
 | **Webhook URLs are not restricted** | An Admin can point a webhook at internal services (server-side request forgery). There's no signature for receivers to verify. |
 | **No sign-in rate limit, no MFA, no email verification** | Credential stuffing; workspaces created with unowned email addresses. |
-| **No CI** | Regressions rely on running suites locally before merge. |
+| **No test CI** | Regressions rely on running suites locally before merge (CI builds firmware only). |
 | **One host, no high availability** | Recovery is a restore from backup, measured in minutes to hours. |
-| **The firmware release behind the browser installer** may lag the source (0.8.1 vs 0.11.0) | Newer boards can't be installed until it is published. |
-| **No over-the-air firmware updates** | A firmware fix means reconnecting each board over USB. |
+| **OTA signing key not set up** | Over-the-air updates are built but refused by every board, so a firmware fix still means reconnecting each board over USB. |
+| **Firmware 0.12–1.0 not bench-tested as a whole** | Recovery, fail-safe and rollback behaviour is proven by unit tests and builds, not yet on real hardware end to end. |
+| **Backups are not encrypted** | Stated on the privacy page; matters more once the off-host copy is used. |
+| **Privacy page not legally reviewed** | Needed before the Play listing goes public and before paying customers. |
 
 ---
 
@@ -399,8 +460,9 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
   - SSO and audit log;
   - non-MQTT connectors;
   - ML / anomaly detection;
-  - over-the-air updates;
-  - CI.
+  - test CI;
+  - an iOS build of the app;
+  - creating or editing rules and dashboards in the app (web only, by design for now).
 
 ---
 
@@ -414,6 +476,8 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Reported actuator state | Deferred (§7). |
 | Alarm lifecycle | Designed in the UI standard, backend not started. |
 | Who the customers are | §1 is a suggestion, not a decision. |
+| Rolling out OTA | Needs the signing key (owner's one-time setup in `docs/firmware/ota.md`), then one USB install of 1.0.0 per board. |
+| Play Store release | Internal testing prepared; public listing waits on the owner's Play Console setup and the privacy review. |
 
 ---
 
@@ -425,28 +489,30 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 2. Is building our own firmware and browser installer a strength worth its maintenance cost, or
    should the platform stay hardware-agnostic and leave firmware to customers?
 3. What should come next, in order: alarm lifecycle, monitoring, gateway / Modbus support,
-   billing, OTA updates, or ML detection?
+   billing, or ML detection?
+4. Is an Android app with view, control and alerts (rules and dashboards edited only on the web)
+   the right split, and does it need iOS before a first sale?
 
 **Architecture fit**
-4. Is one VPS (with backups and no HA) acceptable for automation that switches real equipment? If
+5. Is one VPS (with backups and no HA) acceptable for automation that switches real equipment? If
    not, what is the smallest step up that one person can operate?
-5. Is the split hot path / storage path sound? Are there failure modes (worker crash, Redis loss,
+6. Is the split hot path / storage path sound? Are there failure modes (worker crash, Redis loss,
    EMQX restart) that lose commands or fire rules wrongly?
-6. Telemetry has no RLS because of compression. Is an explicit `tenant_id` filter in code an
+7. Telemetry has no RLS because of compression. Is an explicit `tenant_id` filter in code an
    acceptable risk, and how would you guard it?
-7. Does Python + FastAPI + one asyncio worker hold at 1,000 devices, and at what point would you
+8. Does Python + FastAPI + one asyncio worker hold at 1,000 devices, and at what point would you
    split?
 
 **Production readiness**
-8. What are the minimum monitoring and alerting a single operator needs, and with which tools?
-9. Which security gaps in §6 must be closed before taking paying customers?
-10. Would you sell the Cloud offer before a restore drill is recorded and off-host backups are
+9. What are the minimum monitoring and alerting a single operator needs, and with which tools?
+10. Which security gaps in §6 must be closed before taking paying customers?
+11. Would you sell the Cloud offer before a restore drill is recorded and off-host backups are
     mandatory?
 
 **Product and market**
-11. Who would you target first, and how would you position against existing platforms
+12. Who would you target first, and how would you position against existing platforms
     (ThingsBoard, Blynk, Ubidots, Losant, AWS IoT, Arduino Cloud)?
-12. Are the three deployment offers (cloud, dedicated, on-premise) right for one developer to
+13. Are the three deployment offers (cloud, dedicated, on-premise) right for one developer to
     support, or should some wait?
 
 ---
@@ -459,7 +525,8 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Frontend standard and its changelog | `docs/design/DESIGN.md` |
 | Rule semantics | `docs/rule-engine-multi-device.md` |
 | Implementation decisions and the runtime diagram | `docs/decisions.md` |
-| Generic firmware | `firmware/README.md`, `docs/firmware/` |
+| Generic firmware, OTA updates and signing | `firmware/README.md`, `docs/firmware/` (`ota.md`) |
+| Mobile app, push, Play release | `mobile/README.md`, `docs/mobile-push.md`, `docs/mobile-release.md` |
 | BLE provisioning | `docs/ble-provisioning.md` |
 | Deploy, VPS, backups | `infra/README.md`, `infra/backups/RESTORE_RUNBOOK.md` |
 | API reference | the running API's OpenAPI docs at `/docs` |

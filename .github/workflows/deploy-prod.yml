@@ -108,10 +108,12 @@ jobs:
             export OTA_SIGNING_KEY_FILE="$KEY_FILE"
           fi
           # Builds every chip and fails on an oversized app, a catalog that
-          # disagrees with the firmware (drivers.json, boards.json), or a
-          # signing key that matches none of the firmware's public keys.
-          python3 firmware/release.py
-          rm -f "$RUNNER_TEMP/ota-signing.pem"
+          # disagrees with the firmware (drivers.json, boards.json), a
+          # signing key that matches none of the firmware's public keys, or
+          # (--require-signed) no public key / no signing key at all: a
+          # production release boards can't update from must not ship.
+          trap 'rm -f "$RUNNER_TEMP/ota-signing.pem"' EXIT
+          python3 firmware/release.py --require-signed
 
       - name: Publish to the VPS
         if: steps.version.outputs.needed == 'true'

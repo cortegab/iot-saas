@@ -43,8 +43,12 @@ class Ds18b20 : public InputDriver {
       int missing = 0;
       for (int i = 0; i < MAX_PROBES; i++) {
         float t = i < count_ ? sensors_->getTempC(addrs_[i]) : DEVICE_DISCONNECTED_C;
-        // -127 means the probe didn't answer: unknown, never a reading.
-        temps_[i] = (t == DEVICE_DISCONNECTED_C || (t == 85.0f && firstRead_)) ? NAN : t;
+        // -127 means the probe didn't answer: unknown, never a reading. 85 °C
+        // exactly is the power-on value, read before a conversion finished:
+        // at the first read, and again whenever a probe browns out mid-run.
+        // It counts as a real 85 only right after readings near 85.
+        bool powerOnValue = t == 85.0f && (firstRead_ || isnan(temps_[i]) || fabsf(temps_[i] - 85.0f) > 5.0f);
+        temps_[i] = (t == DEVICE_DISCONNECTED_C || powerOnValue) ? NAN : t;
         if (i < count_ && t == DEVICE_DISCONNECTED_C) missing++;
       }
       firstRead_ = false;

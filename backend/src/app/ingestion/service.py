@@ -5,6 +5,7 @@ ingest fallback (app/ingestion/router.py), per CLAUDE.md §6's description of
 this module as the "normalization, fork point."
 """
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -13,10 +14,13 @@ from datetime import UTC, datetime
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.config import settings
 from app.devices import service as devices_service
 from app.devices.service import DeviceDirectoryRecord
 from app.ingestion.schemas import TelemetryPayload
 from app.realtime import service as realtime_service
+
+log = logging.getLogger(__name__)
 
 TELEMETRY_STREAM = "telemetry"
 
@@ -128,12 +132,54 @@ async def resolve_device_for_topic(
     return record
 
 
+# HTTP-ingested readings go to the worker on this channel: the API process
+# has no MQTT client and holds no rule state, so the worker runs the rules for
+# them (app.worker's manual_command_loop), like it does for MQTT readings.
+HTTP_READING_CHANNEL = "ingest:http-reading"
+
+# HTTP ingest limit per device, per rolling minute (the firmware's own cap is
+# 20 messages/s; HTTP is the fallback path, so this is far below it).
+HTTP_INGEST_PER_MINUTE = 120
+_http_ingest_windows: dict[uuid.UUID, tuple[int, int]] = {}
+
+
+def allow_http_reading(device_id: uuid.UUID, now: float | None = None) -> bool:
+    """Fixed one-minute window per device, in this API process (there is one).
+    The table only holds the current minute's devices."""
+    minute = int((time.time() if now is None else now) // 60)
+    window, count = _http_ingest_windows.get(device_id, (minute, 0))
+    if window != minute:
+        if len(_http_ingest_windows) > 10_000:
+            stale = [d for d, (w, _) in _http_ingest_windows.items() if w != minute]
+            for d in stale:
+                del _http_ingest_windows[d]
+        window, count = minute, 0
+    if count >= HTTP_INGEST_PER_MINUTE:
+        return False
+    _http_ingest_windows[device_id] = (window, count + 1)
+    return True
+
+
+# A device timestamp outside this window is treated as absent (server time is
+# used): before 2020, or more than a day ahead of the server's clock.
+EARLIEST_DEVICE_TIMESTAMP = 1577836800  # 2020-01-01T00:00:00Z
+MAX_DEVICE_CLOCK_AHEAD_SECONDS = 86400
+
+
 def reading_time(payload: TelemetryPayload) -> datetime:
     """The device's own timestamp when it sent one, else server receive time
-    (sub-second). Computed once per reading, at arrival."""
-    if payload.timestamp:
-        return datetime.fromtimestamp(payload.timestamp, tz=UTC)
-    return datetime.now(UTC)
+    (sub-second). Computed once per reading, at arrival.
+
+    An implausible device timestamp (an unset clock, or a huge value that
+    would overflow datetime) falls back to server time: the payload is
+    untrusted input (CLAUDE.md constraint 11) and must never raise here."""
+    now = datetime.now(UTC)
+    ts = payload.timestamp
+    if ts and EARLIEST_DEVICE_TIMESTAMP <= ts <= now.timestamp() + MAX_DEVICE_CLOCK_AHEAD_SECONDS:
+        return datetime.fromtimestamp(ts, tz=UTC)
+    if ts:
+        log.warning("ignoring implausible device timestamp %s; using server time", ts)
+    return now
 
 
 async def record_telemetry_direct(
@@ -163,6 +209,10 @@ async def record_telemetry_direct(
             "value": str(payload.value),
             "timestamp": str(received_at.timestamp()),
         },
+        # Approximate trim keeps the stream bounded: XACK alone never deletes
+        # entries, so without a cap Redis memory grows with every reading.
+        maxlen=settings.telemetry_stream_maxlen,
+        approximate=True,
     )
     # Live-updates side channel (Phase 4) — separate from the stream above,
     # which the batched writer drains for storage. This is a plain PUBLISH,

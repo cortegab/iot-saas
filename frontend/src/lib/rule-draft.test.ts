@@ -331,6 +331,16 @@ describe("validateDraft", () => {
     d.clearDelay = 5;
     expect(flappingRisk(d)).toBe(false);
   });
+
+  it("flags an on/off input that reverts with no hold time or clear delay", () => {
+    const d = emptyDraft(DEV_A);
+    d.condition = { ...contact("t"), operator: "==" };
+    d.actions = [{ ...(d.actions[0] as ActuatorActionDraft), actuator: "relay", revertOnClear: true }];
+    d.forDuration = 0;
+    expect(flappingRisk(d)).toBe(true);
+    d.forDuration = 1;
+    expect(flappingRisk(d)).toBe(false);
+  });
 });
 
 describe("emptyDraft", () => {

@@ -3,38 +3,43 @@
  * Two layers. CHIP_PINS are the chip's rules and mirror firmware/src/pins.cpp,
  * which refuses the same things at boot; release.py fails when the two
  * disagree, so keep this object's shape (one `chip: { usable, adc1,
- * inputOnly }` per chip) that it reads. A board model
+ * inputOnly, bootToggles }` per chip) that it reads. A board model
  * (firmware/boards.json, published in the manifest) then narrows them to the
  * pins on that board's header and gives them their printed labels. Never
  * strapping, flash, USB or the provisioning-reset button's pin. */
 import { BOARDS, type SketchBoard } from "@/lib/firmware-sketch";
 import type { BoardModel, PinNeed } from "@/lib/hardware/driver-catalog";
 
-export const CHIP_PINS: Record<SketchBoard, { usable: number[]; adc1: number[]; inputOnly: number[] }> = {
+export const CHIP_PINS: Record<SketchBoard, { usable: number[]; adc1: number[]; inputOnly: number[]; bootToggles: number[] }> = {
   esp32: {
     usable: [4, 13, 14, 16, 17, 18, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39],
     adc1: [32, 33, 34, 35, 36, 39],
     inputOnly: [34, 35, 36, 39],
+    bootToggles: [14],
   },
   esp32c3: {
     usable: [0, 1, 3, 4, 5, 6, 7, 10, 20, 21],
     adc1: [0, 1, 3, 4],
     inputOnly: [],
+    bootToggles: [21],
   },
   esp32s3: {
     usable: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48],
     adc1: [1, 2, 4, 5, 6, 7, 8, 9, 10],
     inputOnly: [],
+    bootToggles: [],
   },
   esp32c6: {
     usable: [0, 1, 2, 3, 6, 7, 10, 11, 14, 18, 19, 20, 21, 22, 23],
     adc1: [0, 1, 2, 3, 6],
     inputOnly: [],
+    bootToggles: [],
   },
   esp32s2: {
     usable: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 21, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42],
     adc1: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
     inputOnly: [],
+    bootToggles: [],
   },
 };
 
@@ -49,7 +54,8 @@ export function pinsFor(model: BoardModel, needs: PinNeed): number[] {
   const chip = CHIP_PINS[model.chip];
   const usable = model.pins.filter((p) => chip.usable.includes(p));
   if (needs === "adc1") return usable.filter((p) => chip.adc1.includes(p));
-  if (needs === "output" || needs === "bus") return usable.filter((p) => !chip.inputOnly.includes(p));
+  if (needs === "output") return usable.filter((p) => !chip.inputOnly.includes(p) && !chip.bootToggles.includes(p));
+  if (needs === "bus") return usable.filter((p) => !chip.inputOnly.includes(p));
   return usable;
 }
 
@@ -69,6 +75,8 @@ export function pinProblem(model: BoardModel, needs: PinNeed, pin: number): stri
   if (!model.pins.includes(pin) || !chip.usable.includes(pin)) return `GPIO ${pin} isn't free on the ${model.label}. Pick another pin.`;
   if (needs === "adc1" && !chip.adc1.includes(pin)) return `GPIO ${pin} can't read analog while Wi-Fi is on. Pick an ADC1 pin.`;
   if ((needs === "output" || needs === "bus") && chip.inputOnly.includes(pin)) return `GPIO ${pin} is input-only. Pick another pin.`;
+  if (needs === "output" && chip.bootToggles.includes(pin))
+    return `GPIO ${pin} switches on and off while the board starts, so an output there twitches at every restart. Pick another pin.`;
   return null;
 }
 

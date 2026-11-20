@@ -9,6 +9,7 @@ then the query/request is delegated to commands.service.
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.catalog import service as catalog_service
 from app.commands import service
 from app.commands.models import Command
 from app.commands.schemas import CommandResponse, ManualCommandRequest
@@ -81,6 +82,20 @@ async def request_command(
     # not this 409, is what tells the user the change is pending).
     if device.status != DeviceStatus.ACTIVE.value:
         raise HTTPException(status.HTTP_409_CONFLICT, "Device is disabled")
+    actuators = await catalog_service.actuator_keys(
+        session, device.tenant_id, device.catalog_entry_id
+    )
+    if body.actuator not in actuators:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"This device has no actuator called {body.actuator!r}.",
+        )
     await service.request_manual_command(
-        session, device.tenant_id, device.id, device.slug, body.actuator, body.value
+        session,
+        device.tenant_id,
+        device.id,
+        device.slug,
+        body.actuator,
+        body.value,
+        requested_by=ctx.user_id,
     )

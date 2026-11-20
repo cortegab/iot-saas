@@ -40,18 +40,28 @@ $COMPOSE exec -T timescaledb pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$
 size=$(du -h "$dump_file" | cut -f1)
 echo "==> Wrote ${dump_file} (${size})"
 
+# A dump that only lives on this VPS goes down with it. Unless explicitly
+# allowed (BACKUP_ALLOW_LOCAL_ONLY=1, for a test box), a missing off-host copy
+# makes this run fail, so the timer/cron reports it instead of passing quietly.
+offhost_ok=1
 if [ -n "$RCLONE_REMOTE" ]; then
   if command -v rclone >/dev/null 2>&1; then
     echo "==> Copying to ${RCLONE_REMOTE}"
     rclone copy "$dump_file" "$RCLONE_REMOTE"
   else
-    echo "RCLONE_REMOTE is set but rclone is not installed — skipping off-host copy." >&2
+    echo "RCLONE_REMOTE is set but rclone is not installed — no off-host copy." >&2
+    offhost_ok=0
   fi
 else
   echo "RCLONE_REMOTE not set — dump stays local only. See this script's header." >&2
+  offhost_ok=0
 fi
 
 echo "==> Pruning local dumps older than ${RETENTION_DAYS} days"
 find "$BACKUP_DIR" -name 'iot-*.dump' -mtime "+${RETENTION_DAYS}" -print -delete
 
+if [ "$offhost_ok" = 0 ] && [ "${BACKUP_ALLOW_LOCAL_ONLY:-0}" != 1 ]; then
+  echo "FAILED: the dump was written locally but not copied off this host." >&2
+  exit 1
+fi
 echo "==> Done."
