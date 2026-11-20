@@ -25,8 +25,12 @@ import { useTheme } from "@/theme/useTheme";
 import { Button } from "@/ui/Button";
 import { Segmented } from "@/ui/Segmented";
 import { Sheet } from "@/ui/Sheet";
+import { useCan } from "@/hooks/useCan";
 import { Text } from "@/ui/Text";
 import { UndoBar } from "@/ui/UndoBar";
+
+type UserResponse = components["schemas"]["UserResponse"];
+type MemberResponse = components["schemas"]["MemberResponse"];
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -51,6 +55,23 @@ export default function Alerts() {
   const router = useRouter();
   const { summary, unread, error: summaryError } = useNotificationSummary();
   const actions = useNotificationActions();
+  // Owners and admins acknowledge and dismiss; everyone reads (DESIGN.md §13).
+  const canManage = useCan("alerts.manage");
+  const { data: me } = useApiSWR<UserResponse>("/auth/me");
+  const { data: members } = useApiSWR<MemberResponse[]>("/tenants/members");
+  const who = (id: string | null | undefined) => {
+    if (!id) return "someone";
+    if (id === me?.id) return "you";
+    const m = members?.find((x) => x.user_id === id);
+    return m ? m.name || m.email : "someone";
+  };
+  const alarmState = (n: AlertGroup["latest"]): string | null => {
+    if (n.cleared_at) return `Cleared ${timeAgo(n.cleared_at)}`;
+    if (n.acknowledged_at)
+      return `Acknowledged by ${who(n.acknowledged_by)}, ${timeAgo(n.acknowledged_at)}${n.acknowledged_note ? `: “${n.acknowledged_note}”` : ""}`;
+    return null;
+  };
+  const canAcknowledge = (g: AlertGroup) => canManage && g.latest.severity !== "info" && !g.latest.acknowledged_at && !g.latest.cleared_at;
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
   const deviceName = useMemo(() => new Map((devices ?? []).map((d) => [d.id, d.name])), [devices]);
@@ -261,7 +282,18 @@ export default function Alerts() {
         footer={
           open ? (
             <>
-              <Button label="Done" onPress={() => setOpen(null)} />
+              {canAcknowledge(open) ? (
+                <Button
+                  label="Acknowledge"
+                  onPress={() => {
+                    const key = open.key;
+                    setOpen(null);
+                    void run(() => actions.acknowledge(key), "acknowledge it");
+                  }}
+                />
+              ) : (
+                <Button label="Done" onPress={() => setOpen(null)} />
+              )}
               <Button
                 label="Mark as unread"
                 variant="secondary"
@@ -271,7 +303,7 @@ export default function Alerts() {
                   void run(() => actions.markUnread(key), "mark it as unread");
                 }}
               />
-              <Button label="Dismiss" variant="danger" onPress={() => void dismiss(open)} />
+              {canManage && <Button label="Dismiss" variant="danger" onPress={() => void dismiss(open)} />}
             </>
           ) : null
         }
@@ -279,6 +311,11 @@ export default function Alerts() {
         {open && (
           <>
             {open.latest.detail ? <Text>{open.latest.detail}</Text> : null}
+            {alarmState(open.latest) ? (
+              <Text size="meta" color={open.latest.cleared_at ? "statusOnline" : "inkMuted"}>
+                {alarmState(open.latest)}
+              </Text>
+            ) : null}
             <Facts
               facts={[
                 open.latest.device_id
@@ -334,7 +371,18 @@ export default function Alerts() {
                   }}
                 />
               )}
-              <Button label="Dismiss" variant="danger" onPress={() => void dismiss(menu)} />
+              {canAcknowledge(menu) && (
+                <Button
+                  label="Acknowledge"
+                  variant="secondary"
+                  onPress={() => {
+                    const key = menu.key;
+                    setMenu(null);
+                    void run(() => actions.acknowledge(key), "acknowledge it");
+                  }}
+                />
+              )}
+              {canManage && <Button label="Dismiss" variant="danger" onPress={() => void dismiss(menu)} />}
             </>
           ) : null
         }

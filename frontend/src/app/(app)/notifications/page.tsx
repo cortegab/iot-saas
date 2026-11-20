@@ -7,6 +7,9 @@ import { AlertTriangle, Bell, Check, CheckCheck, Info, Mail, X, Zap } from "luci
 import { NOTIFICATIONS_KEY, refreshNotifications, useNotificationActions, useNotificationSummary } from "@/hooks/useNotifications";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { usePermissions } from "@/hooks/usePermissions";
+import { Input } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
@@ -36,6 +39,16 @@ type NotificationResponse = components["schemas"]["NotificationResponse"];
 type AlertGroup = components["schemas"]["NotificationGroupResponse"];
 type NotificationType = NonNullable<NonNullable<operations["list_groups_notifications_groups_get"]["parameters"]["query"]>["type"]>;
 type Severity = NotificationResponse["severity"];
+type MemberResponse = components["schemas"]["MemberResponse"];
+
+/** The alarm state of an alert (DESIGN.md §13), in words: who is on it, or
+ * that its condition went away. Null while it's active. */
+function alarmState(n: NotificationResponse, who: (id: string | null | undefined) => string): string | null {
+  if (n.cleared_at) return `Cleared ${timeAgo(n.cleared_at)}`;
+  if (n.acknowledged_at)
+    return `Acknowledged by ${who(n.acknowledged_by)}, ${timeAgo(n.acknowledged_at)}${n.acknowledged_note ? `: “${n.acknowledged_note}”` : ""}`;
+  return null;
+}
 
 const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; tone: string }> = {
   critical: { icon: AlertTriangle, label: "Critical", tone: "text-status-error" },
@@ -67,7 +80,28 @@ export default function NotificationsPage() {
   const toast = useToast();
   const api = useApi();
   const { summary, error: summaryError } = useNotificationSummary();
-  const { markAllRead, markRead, markUnread, dismiss, restore } = useNotificationActions();
+  const { markAllRead, markRead, markUnread, dismiss, restore, acknowledge } = useNotificationActions();
+  // Owners and admins acknowledge and dismiss; everyone reads (DESIGN.md §13).
+  const canManage = usePermissions().can("alerts.manage");
+  const { data: me } = useCurrentUser();
+  const { data: members } = useApiSWR<MemberResponse[]>("/tenants/members");
+  const who = (id: string | null | undefined) => {
+    if (!id) return "someone";
+    if (id === me?.id) return "you";
+    const m = members?.find((x) => x.user_id === id);
+    return m ? m.name || m.email : "someone";
+  };
+  const [ackNote, setAckNote] = useState("");
+
+  async function onAcknowledge(g: AlertGroup, note?: string) {
+    try {
+      await acknowledge(g.key, note);
+      setAckNote("");
+      toast({ title: "Acknowledged", detail: "It no longer counts as needing attention. Everyone sees who's on it." });
+    } catch (err) {
+      toast({ tone: "error", title: "Couldn't acknowledge it", detail: err instanceof ApiRequestError ? err.message : undefined });
+    }
+  }
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
   const { data: templates } = useApiSWR<CatalogEntryResponse[]>("/catalog");
@@ -86,7 +120,8 @@ export default function NotificationsPage() {
   const f = list.filters;
   const all = (v: string) => (v === "all" ? null : v);
   const key = pageKey(`${NOTIFICATIONS_KEY}/groups`, list.page, list.pageSize, {
-    unread: f.state === "all" ? null : "true",
+    unread: f.state === "all" || f.state === "active" ? null : "true",
+    active: f.state === "active" ? "true" : null,
     type: isType(f.state) ? f.state : null,
     severity: all(f.severity),
     device_id: all(f.device),
@@ -162,8 +197,9 @@ export default function NotificationsPage() {
         <EmptyState icon={<Bell aria-hidden size={26} />} title="Nothing needs attention" description="No alerts. New ones appear here, with a count in the sidebar." />
       ) : (
         <>
-          {/* The state filter: unread alerts by type. Unread stands in for
-              "not acknowledged" until alarms have a lifecycle (DESIGN.md §13). */}
+          {/* The state filter: alarms that still need someone (not
+              acknowledged, not cleared; DESIGN.md §13), unread, and unread by
+              type. */}
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
@@ -176,6 +212,7 @@ export default function NotificationsPage() {
               onChange: (v) => list.setFilter("state", v),
               options: [
                 { value: "all", label: "All", count: summary.alerts },
+                { value: "active", label: "Needs attention", hint: "Not acknowledged, not cleared" },
                 { value: "unread", label: "Unread", count: unreadTotal, tone: "accent", hint: "Not read yet" },
                 ...TYPES.map((t) => ({ ...t, count: summary.unread_by_type[t.value] ?? 0 })),
               ],
@@ -213,7 +250,17 @@ export default function NotificationsPage() {
           <FilterChips chips={chips} onClearAll={list.clearAll} />
           {total === 0 ? (
             f.state !== "all" && chips.length === 0 ? (
-              <EmptyState icon={<Check aria-hidden size={26} />} title="Nothing unread" description={f.state === "unread" ? "Every notification has been read." : "Nothing of this type is waiting to be read."} />
+              <EmptyState
+                icon={<Check aria-hidden size={26} />}
+                title={f.state === "active" ? "Nothing needs attention" : "Nothing unread"}
+                description={
+                  f.state === "active"
+                    ? "Every alarm is acknowledged or has cleared."
+                    : f.state === "unread"
+                      ? "Every notification has been read."
+                      : "Nothing of this type is waiting to be read."
+                }
+              />
             ) : (
               <NoResults noun="notifications" onClear={list.clearAll} />
             )
@@ -254,6 +301,9 @@ export default function NotificationsPage() {
                             )}
                           </button>
                           {n.detail && <span className="text-xs text-ink-muted">{n.detail}</span>}
+                          {alarmState(n, who) && (
+                            <span className={cn("text-xs", n.cleared_at ? "text-status-online" : "text-ink-muted")}>{alarmState(n, who)}</span>
+                          )}
                           <span className="text-xs text-ink-muted">
                             {g.count > 1 ? `since ${formatWhen(g.first_at)}, last ${timeAgo(g.last_at)}` : timeAgo(g.last_at)}
                             <SourceLinks n={n} deviceName={deviceName} ruleName={ruleName} templateName={templateName} />
@@ -268,8 +318,11 @@ export default function NotificationsPage() {
                               unread
                                 ? { label: "Mark as read", icon: <Check size={15} />, onClick: () => void markRead(g.key) }
                                 : { label: "Mark as unread", icon: <Bell size={15} />, onClick: () => void markUnread(g.key) },
+                              ...(canManage && n.severity !== "info" && !n.acknowledged_at && !n.cleared_at
+                                ? [{ label: "Acknowledge", icon: <CheckCheck size={15} />, onClick: () => void onAcknowledge(g) }]
+                                : []),
                             ],
-                            [{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }],
+                            ...(canManage ? [[{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }]] : []),
                           ]}
                         />
                       </div>
@@ -300,13 +353,21 @@ export default function NotificationsPage() {
         footer={
           open ? (
             <>
-              <Button variant="link-danger" className="mr-auto text-meta" onClick={() => void onDismiss(open)}>
-                Dismiss
-              </Button>
+              {canManage ? (
+                <Button variant="link-danger" className="mr-auto text-meta" onClick={() => void onDismiss(open)}>
+                  Dismiss
+                </Button>
+              ) : (
+                <span className="mr-auto" />
+              )}
               <Button variant="ghost" onClick={() => void markUnread(open.key)}>
                 Mark as unread
               </Button>
-              <Button onClick={() => setOpen(null)}>Done</Button>
+              {canManage && open.latest.severity !== "info" && !open.latest.acknowledged_at && !open.latest.cleared_at ? (
+                <Button onClick={() => void onAcknowledge(open, ackNote).then(() => setOpen(null))}>Acknowledge</Button>
+              ) : (
+                <Button onClick={() => setOpen(null)}>Done</Button>
+              )}
             </>
           ) : undefined
         }
@@ -314,6 +375,17 @@ export default function NotificationsPage() {
         {open && (
           <div className="flex flex-col gap-4">
             {open.latest.detail && <p className="text-sm text-ink">{open.latest.detail}</p>}
+            {alarmState(open.latest, who) ? (
+              <p className={cn("text-sm", open.latest.cleared_at ? "text-status-online" : "text-ink-muted")}>{alarmState(open.latest, who)}</p>
+            ) : (
+              canManage &&
+              open.latest.severity !== "info" && (
+                <label className="flex flex-col gap-1 text-meta text-ink-muted">
+                  Note for the team (optional)
+                  <Input value={ackNote} maxLength={500} placeholder="e.g. On my way, ETA 20 min" onChange={(e) => setAckNote(e.target.value)} />
+                </label>
+              )
+            )}
             <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
               {open.latest.device_id && (
                 <>
