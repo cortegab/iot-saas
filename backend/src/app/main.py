@@ -23,6 +23,7 @@ from app.meta.router import router as meta_router
 from app.notifications.router import router as notifications_router
 from app.paging import TOTAL_HEADER
 from app.push.router import router as push_router
+from app.readiness.router import router as readiness_router
 from app.realtime.router import router as realtime_router
 from app.rules.router import router as rules_router
 from app.telemetry.router import router as telemetry_router
@@ -67,6 +68,7 @@ app.include_router(zones_router)
 app.include_router(contact_router)
 app.include_router(push_router)
 app.include_router(meta_router)
+app.include_router(readiness_router)
 
 
 @app.get("/")
