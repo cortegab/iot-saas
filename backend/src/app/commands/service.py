@@ -11,9 +11,12 @@ synchronous insert can't lose an audit record the way an unflushed buffer
 could).
 """
 
+import asyncio
 import json
 import logging
+import time
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Literal
 
@@ -40,6 +43,38 @@ log = logging.getLogger("commands")
 MANUAL_COMMAND_CHANNEL = "commands:manual"
 
 
+class InvalidActuatorError(ValueError):
+    """An actuator name that can't be an MQTT topic segment."""
+
+    def __init__(self, actuator: str) -> None:
+        super().__init__(f"actuator {actuator!r} is not a valid topic segment")
+
+
+@dataclass
+class _Pace:
+    """The last command sent to one actuator, and the value waiting to follow
+    it once the minimum interval has passed."""
+
+    last_sent_at: float
+    last_value: Any
+    pending: tuple[Any, ...] | None = None
+    task: asyncio.Task[None] | None = None
+
+
+# (device_id, actuator) -> pace, in the worker process (both command paths,
+# rules and manual, dispatch from there).
+_pace: dict[tuple[uuid.UUID, str], _Pace] = {}
+_deferred_tasks: set[asyncio.Task[None]] = set()
+
+
+def reset_pacing() -> None:
+    """Forget every actuator's pacing (tests, and a worker restart)."""
+    for pace in _pace.values():
+        if pace.task is not None:
+            pace.task.cancel()
+    _pace.clear()
+
+
 async def dispatch_command(
     client: aiomqtt.Client,
     factory: async_sessionmaker[AsyncSession],
@@ -52,23 +87,96 @@ async def dispatch_command(
     actuator: str,
     value: Any,
     command_id: uuid.UUID | None = None,
-) -> None:
-    """`command_id` is normally generated here — a rule firing pre-generates
-    and passes one in instead, so it can record the same id on its own
-    action_executions row (rules/service.py) before knowing whether dispatch
-    succeeds, without this function needing to return anything.
+) -> uuid.UUID | None:
+    """Send a command to one actuator, at most once per
+    `actuator_min_interval_seconds` (CLAUDE.md §9 constraint 7: real relays
+    are on the other end). Every path goes through here: rules, clear
+    actions, "Run now", schedules and manual commands.
+
+    Inside the interval the command is not dropped: the latest value waits and
+    is sent when the interval ends, unless by then it equals the value last
+    sent (a bounce that settled back), in which case nothing more is sent.
+    That way the actuator always ends in the last requested state.
+
+    Returns the command's id when it was published now; None when it was
+    folded into a later send. Raises InvalidActuatorError for a name that
+    can't be a topic segment. `command_id` is
+    normally generated here; a rule firing passes one in so it can record the
+    same id on its action_executions row.
     """
     if not is_topic_segment(actuator):
         # Schemas refuse these names; this guards rules saved before they did.
         # A `+`/`#` would make the MQTT client raise, a `/` would publish to
         # another topic and get the worker's shared connection denied.
-        log.warning(
-            "refusing command for tenant=%s device=%s: actuator %r is not a valid topic segment",
-            tenant_id,
+        raise InvalidActuatorError(actuator)
+
+    args = (
+        client,
+        factory,
+        tenant_id,
+        device_id,
+        rule_id,
+        reading_timestamp,
+        tenant_slug,
+        device_slug,
+        actuator,
+        value,
+    )
+    key = (device_id, actuator)
+    interval = settings.actuator_min_interval_seconds
+    now = time.monotonic()
+    pace = _pace.get(key)
+    if interval > 0 and pace is not None and now - pace.last_sent_at < interval:
+        pace.pending = None if value == pace.last_value else args
+        if pace.pending is not None and pace.task is None:
+            delay = interval - (now - pace.last_sent_at)
+            pace.task = asyncio.create_task(_send_pending(key, delay))
+            _deferred_tasks.add(pace.task)
+            pace.task.add_done_callback(_deferred_tasks.discard)
+        log.info(
+            "command to device=%s actuator=%s %s (minimum interval %.1fs)",
             device_id,
             actuator,
+            "waits for the interval" if pace.pending else "matches the last one sent; not repeated",
+            interval,
         )
+        return None
+
+    _pace[key] = _Pace(last_sent_at=now, last_value=value)
+    return await _publish_command(*args, command_id=command_id)
+
+
+async def _send_pending(key: tuple[uuid.UUID, str], delay: float) -> None:
+    await asyncio.sleep(delay)
+    pace = _pace.get(key)
+    if pace is None:
         return
+    pace.task = None
+    pending, pace.pending = pace.pending, None
+    if pending is None:
+        return
+    pace.last_sent_at = time.monotonic()
+    pace.last_value = pending[-1]
+    try:
+        await _publish_command(*pending)
+    except Exception:
+        log.exception("deferred command to device=%s actuator=%s failed", key[0], key[1])
+
+
+async def _publish_command(
+    client: aiomqtt.Client,
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    device_id: uuid.UUID,
+    rule_id: uuid.UUID | None,
+    reading_timestamp: datetime,
+    tenant_slug: str,
+    device_slug: str,
+    actuator: str,
+    value: Any,
+    command_id: uuid.UUID | None = None,
+) -> uuid.UUID:
+    """Publish now and record the command row. Returns its id."""
     command_id = command_id if command_id is not None else uuid.uuid4()
     issued_at = datetime.now(UTC)
     ttl = settings.command_default_ttl_seconds
@@ -122,6 +230,7 @@ async def dispatch_command(
         actuator,
         latency_ms,
     )
+    return command_id
 
 
 async def record_ack(

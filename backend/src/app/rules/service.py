@@ -1042,7 +1042,7 @@ async def _dispatch_actions(
                     continue
                 target_id, target_tenant_slug, target_device_slug = target
                 command_id = uuid.uuid4()
-                await commands_service.dispatch_command(
+                sent_id = await commands_service.dispatch_command(
                     client,
                     factory,
                     tenant_id,
@@ -1055,18 +1055,18 @@ async def _dispatch_actions(
                     value=action["value"],
                     command_id=command_id,
                 )
+                detail: dict[str, Any] = {
+                    "actuator": action["actuator"],
+                    "value": action["value"],
+                    "device_id": str(target_id),
+                }
+                if sent_id is None:
+                    # Paced (minimum interval per actuator): the latest value is
+                    # sent when the interval ends, or not at all if it equals
+                    # the value just sent. No command row exists for this firing.
+                    detail["paced"] = True
                 outcomes.append(
-                    _ActionOutcome(
-                        "actuator_command",
-                        action_index,
-                        "success",
-                        {
-                            "actuator": action["actuator"],
-                            "value": action["value"],
-                            "device_id": str(target_id),
-                        },
-                        command_id,
-                    )
+                    _ActionOutcome("actuator_command", action_index, "success", detail, sent_id)
                 )
             elif action_type == "webhook":
                 deferred.append(_DeferredAction("webhook", action_index, dict(action)))
