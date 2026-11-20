@@ -6,6 +6,7 @@ constructs the runtime (`iot_app`) engine — every other module gets its sessio
 through `get_session()`.
 """
 
+import logging
 import uuid
 from collections.abc import AsyncGenerator, Awaitable, Callable
 
@@ -14,6 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import DeclarativeBase
 
 from app.config import settings
+
+log = logging.getLogger(__name__)
 
 
 class Base(DeclarativeBase):
@@ -55,7 +58,13 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         async with session.begin():
             yield session
         for callback in session.info.pop("post_commit_callbacks", []):
-            await callback()
+            try:
+                await callback()
+            except Exception:
+                # The change is already committed: answering 500 would tell
+                # the user it failed. Readers that missed the signal catch up
+                # on their own (the worker re-reads rules every minute).
+                log.exception("post-commit callback failed")
 
 
 def add_post_commit_callback(
