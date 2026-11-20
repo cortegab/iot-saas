@@ -64,6 +64,8 @@ export function useNotificationActions() {
       return ids;
     },
     restore: (ids: string[]) => api.post(`${NOTIFICATIONS_KEY}/restore`, { ids }).then(after),
+    /** Someone is on it (DESIGN.md §13): owners and admins. */
+    acknowledge: (key: string) => api.post(`${group(key)}/acknowledge`, { note: null }).then(after),
   };
 }
 

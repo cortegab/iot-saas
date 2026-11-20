@@ -285,6 +285,14 @@ async def _handle_status(
         await rules_service.run_device_status_rules(
             client, factory, resolved.tenant_id, resolved.device_id, data.online
         )
+        # Back online: its offline alarm clears on its own (DESIGN.md §13).
+        if data.online:
+            try:
+                await notifications_service.clear_alarms(
+                    factory, resolved.tenant_id, kind="device_offline", device_id=resolved.device_id
+                )
+            except Exception:
+                log.exception("clearing offline alarms failed for %s", resolved.device_id)
         # A genuine flip to offline (never the first observation after a
         # restart, so retained LWTs don't re-alert) is a critical feed row.
         if not data.online and resolved.status != DeviceStatus.DISABLED:

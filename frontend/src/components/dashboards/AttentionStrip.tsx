@@ -19,7 +19,7 @@ export function AttentionStrip() {
   const { data } = useApiSWR<AttentionResponse>("/tenants/current/attention", { refreshInterval: 60_000 });
   if (!data) return null;
   const items = [
-    { n: data.critical_alerts, text: plural(data.critical_alerts, "critical alert"), href: "/notifications?state=unread&severity=critical" },
+    { n: data.critical_alerts, text: plural(data.critical_alerts, "critical alarm"), href: "/notifications?state=active&severity=critical" },
     { n: data.offline_devices, text: `${plural(data.offline_devices, "device")} offline`, href: "/devices?status=offline" },
     { n: data.latched_rules, text: `${plural(data.latched_rules, "rule")} latched`, href: "/rules?state=latched" },
     { n: data.unhealthy_rules, text: `${plural(data.unhealthy_rules, "rule")} can't evaluate`, href: "/rules?state=stale" },

@@ -1177,6 +1177,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications/groups/{key}/acknowledge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Acknowledge Group
+         * @description Someone is on it (DESIGN.md §13): records who, when and an optional
+         *     note on every unacknowledged repeat, and takes it out of "needs
+         *     attention". Owners and admins.
+         */
+        post: operations["acknowledge_group_notifications_groups__key__acknowledge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/notifications/groups/{key}/dismiss": {
         parameters: {
             query?: never;
@@ -1483,6 +1505,14 @@ export interface components {
             name?: string | null;
             /** Password */
             password?: string | null;
+        };
+        /**
+         * AcknowledgeRequest
+         * @description Acknowledging an alarm: who is on it is recorded; the note is optional.
+         */
+        AcknowledgeRequest: {
+            /** Note */
+            note?: string | null;
         };
         /** ActionExecutionResponse */
         ActionExecutionResponse: {
@@ -2564,6 +2594,14 @@ export interface components {
             read_at: string | null;
             /** Dismissed At */
             dismissed_at: string | null;
+            /** Acknowledged At */
+            acknowledged_at?: string | null;
+            /** Acknowledged By */
+            acknowledged_by?: string | null;
+            /** Acknowledged Note */
+            acknowledged_note?: string | null;
+            /** Cleared At */
+            cleared_at?: string | null;
         };
         /**
          * NotificationSummaryResponse
@@ -6005,6 +6043,7 @@ export interface operations {
                 rule_id?: string | null;
                 q?: string | null;
                 unread?: boolean;
+                active?: boolean;
             };
             header?: {
                 authorization?: string | null;
@@ -6151,6 +6190,42 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    acknowledge_group_notifications_groups__key__acknowledge_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AcknowledgeRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             204: {

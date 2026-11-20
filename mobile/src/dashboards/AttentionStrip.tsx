@@ -20,7 +20,7 @@ export function AttentionStrip() {
   const { data } = useApiSWR<AttentionResponse>("/tenants/current/attention", { refreshInterval: 30_000 });
   if (!data) return null;
   const items = [
-    data.critical_alerts ? { label: plural(data.critical_alerts, "critical alert", "critical alerts"), onPress: () => router.push("/alerts") } : null,
+    data.critical_alerts ? { label: plural(data.critical_alerts, "critical alarm", "critical alarms"), onPress: () => router.push("/alerts") } : null,
     data.offline_devices
       ? { label: plural(data.offline_devices, "device offline", "devices offline"), onPress: () => router.push("/devices?status=offline") }
       : null,

@@ -21,7 +21,8 @@ export type Action =
   | "workspace.rename"
   | "workspace.alerts"
   | "workspace.setup"
-  | "dashboards.write";
+  | "dashboards.write"
+  | "alerts.manage";
 
 const RANK: Record<Role, number> = { viewer: 0, admin: 1, owner: 2 };
 
@@ -41,6 +42,9 @@ const MIN_ROLE: Record<Action, Role> = {
   // Dashboards are shared by the workspace: owners and admins change them,
   // viewers look and pick their own default (decided 2026-11-19).
   "dashboards.write": "admin",
+  // Acknowledging and dismissing alarms speak for the whole workspace
+  // (DESIGN.md §13); everyone reads them.
+  "alerts.manage": "admin",
 };
 
 export function toRole(role: string | null | undefined): Role | null {
