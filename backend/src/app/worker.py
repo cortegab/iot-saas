@@ -88,6 +88,7 @@ from app.ingestion.schemas import StatusPayload, TelemetryPayload
 from app.logging_config import configure_logging
 from app.notifications import service as notifications_service
 from app.push import sender as push_sender
+from app.readiness import service as readiness_service
 from app.realtime import service as realtime_service
 from app.redis import redis_client
 from app.rules import service as rules_service
@@ -96,6 +97,11 @@ configure_logging()
 log = logging.getLogger("worker")
 
 RECONNECT_SECONDS = 3
+
+# For the heartbeat (app.readiness): whether the ingest loop holds a broker
+# connection, and when it last handled a message (monotonic seconds).
+_mqtt_connected = False
+_last_message_at: float | None = None
 CONSUMER_GROUP = "telemetry-writer"
 CONSUMER_NAME = "worker"
 
@@ -401,6 +407,7 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
         settings.mqtt_port,
         settings.redis_url,
     )
+    global _mqtt_connected, _last_message_at
     while True:
         try:
             async with aiomqtt.Client(
@@ -409,6 +416,7 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
                 username=settings.mqtt_worker_username,
                 password=settings.mqtt_worker_password.get_secret_value(),
             ) as client:
+                _mqtt_connected = True
                 log.info(
                     "connected to MQTT broker; subscribing to '%s' and '%s'",
                     ingestion_service.TELEMETRY_TOPIC_FILTER,
@@ -417,6 +425,7 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
                 await client.subscribe(ingestion_service.TELEMETRY_TOPIC_FILTER)
                 await client.subscribe(ingestion_service.ACK_TOPIC_FILTER)
                 async for message in client.messages:
+                    _last_message_at = time.monotonic()
                     topic = str(message.topic)
                     try:
                         await handle_message(
@@ -435,6 +444,7 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
                         # while handling it drops that message, not the loop.
                         log.exception("dropping message on %s after an error", topic)
         except aiomqtt.MqttError as exc:
+            _mqtt_connected = False
             log.warning("MQTT connection error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS)
             await asyncio.sleep(RECONNECT_SECONDS)
 
@@ -990,6 +1000,25 @@ async def health_monitor_loop(factory: async_sessionmaker[AsyncSession]) -> None
             await asyncio.sleep(RECONNECT_SECONDS)
 
 
+def heartbeat_payload(now: float, monotonic_now: float) -> str:
+    idle = None if _last_message_at is None else round(monotonic_now - _last_message_at, 1)
+    return json.dumps(
+        {"ts": now, "mqtt_connected": _mqtt_connected, "seconds_since_last_message": idle}
+    )
+
+
+async def heartbeat_loop() -> None:
+    """Tell app.readiness the worker is alive (and connected to the broker).
+    The key expires on its own, so a dead worker reads as "no heartbeat"."""
+    while True:
+        await redis_client.set(
+            readiness_service.HEARTBEAT_KEY,
+            heartbeat_payload(time.time(), time.monotonic()),
+            ex=readiness_service.HEARTBEAT_MAX_AGE_SECONDS * 2,
+        )
+        await asyncio.sleep(readiness_service.HEARTBEAT_INTERVAL_SECONDS)
+
+
 SUPERVISOR_MAX_BACKOFF_SECONDS = 30.0
 # A loop that ran this long before failing starts its backoff over.
 SUPERVISOR_HEALTHY_SECONDS = 60.0
@@ -1027,6 +1056,7 @@ async def run() -> None:
         "rules_maintenance": lambda: rules_maintenance_loop(f),
         "pending_timer": lambda: pending_timer_loop(f),
         "push": lambda: push_sender.push_loop(f),
+        "heartbeat": heartbeat_loop,
     }
     try:
         await asyncio.gather(*(supervise(name, start) for name, start in loops.items()))

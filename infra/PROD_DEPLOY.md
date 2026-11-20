@@ -231,12 +231,35 @@ Adjust `WorkingDirectory=` in the two `.service` files first if the repo isn't a
    `/var/backups/iot-saas/`.
 2. Set `RCLONE_REMOTE` in the environment (or edit the script's default) so backups leave the host —
    see `infra/backups/backup.sh`'s header comment. A backup that only exists on the VPS you're
-   protecting against isn't a backup.
+   protecting against isn't a backup. Until it is set, `backup.sh` writes the dump and then
+   **exits 1** (the timer shows `failed`), so the gap can't go unnoticed. On a throwaway test box,
+   `BACKUP_ALLOW_LOCAL_ONLY=1` accepts a local-only dump.
 3. Do the restore rehearsal in `infra/backups/RESTORE_RUNBOOK.md` now, before you need it for real.
 
 ---
 
-## 11. Ongoing operations
+## 11. Monitoring: be told when the platform stops
+
+`GET https://api.iodriven.tech/health/ready` answers **200** only when all of these work, and
+**503** naming the one that doesn't:
+
+| Check | Fails when |
+|---|---|
+| `database` | Postgres doesn't answer |
+| `redis` | Redis doesn't answer |
+| `worker` | the worker's heartbeat is older than 45 s (stopped or crash-looping), or it has lost the MQTT broker. While the worker is down **no rule runs** |
+| `telemetry_storage` | more than 50,000 readings are waiting to be stored |
+
+`GET /health` stays the cheap "is the API process up" check the deploy uses.
+
+Point an external uptime monitor at `/health/ready`: any service that polls a URL every minute or
+so and alerts you by email or phone when it isn't 200 (pick one you already use). It has to run
+**off this VPS**, or it goes down with it. `docker compose ps` also shows the `api` and `worker`
+containers as `unhealthy` from the same signals.
+
+---
+
+## 12. Ongoing operations
 
 **Deploying a change** (this is what `.github/workflows/deploy-prod.yml` automates on push to `prod`):
 
