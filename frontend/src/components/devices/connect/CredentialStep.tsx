@@ -21,9 +21,13 @@ export function CredentialStep({ flow }: { flow: ConnectFlow }) {
         <>
           <h2 className="text-section font-semibold text-ink">Credential</h2>
           <Callout tone="warning">
-            <strong>Getting firmware {neverConnected ? "creates" : "rotates"} this device&apos;s credential.</strong> Credentials are stored
-            hashed, so the only way to put one in a sketch is to make a new one.{" "}
-            {neverConnected ? "This device has never connected, so nothing is interrupted." : `The firmware running on ${device.name} now disconnects until you flash the new sketch.`}
+            <strong>Getting firmware {neverConnected ? "creates" : "rotates"} this device&apos;s password.</strong>{" "}
+            {flow.install
+              ? "Install puts it on the board for you."
+              : "The platform keeps only a fingerprint of it, so the sketch needs a new one."}{" "}
+            {neverConnected
+              ? "This device has never connected, so nothing is interrupted."
+              : `${device.name} goes offline until it gets the new ${flow.install ? "install" : "sketch"}.`}
           </Callout>
           {can("devices.write") ? (
             <div>
@@ -47,7 +51,9 @@ export function CredentialStep({ flow }: { flow: ConnectFlow }) {
  * with Copy, the password's "won't be shown again", and Continue in the
  * bottom bar once "I've stored it" is checked. */
 function StoreCredential({ flow, credential }: { flow: ConnectFlow; credential: { username: string; password: string } }) {
-  const [stored, setStored] = useState(flow.stored);
+  // Install writes the password to the board, so there's nothing to store by
+  // hand: no "I've stored it" gate on that path.
+  const [stored, setStored] = useState(flow.stored || flow.install != null);
   const fields = [
     { label: "Username", value: credential.username, warning: undefined },
     {
@@ -59,8 +65,10 @@ function StoreCredential({ flow, credential }: { flow: ConnectFlow; credential: 
   return (
     <>
       <div className="flex flex-col gap-1">
-        <h2 className="text-section font-semibold text-ink">Store its credential</h2>
-        <p className="text-meta text-ink-muted">The device signs in to the broker with these. The password is shown once and stored hashed.</p>
+        <h2 className="text-section font-semibold text-ink">{flow.install ? "Its credential" : "Store its credential"}</h2>
+        <p className="text-meta text-ink-muted">
+          The device signs in with these. The password is shown only now{flow.install ? "; Install puts it on the board." : "."}
+        </p>
       </div>
       {fields.map((f) => (
         <div key={f.label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2">
@@ -73,12 +81,14 @@ function StoreCredential({ flow, credential }: { flow: ConnectFlow; credential: 
           </div>
         </div>
       ))}
-      <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-ink">
-        <input type="checkbox" checked={stored} onChange={(e) => setStored(e.target.checked)} className="h-4 w-4 accent-[var(--color-accent)]" />
-        I&apos;ve stored it
-      </label>
+      {!flow.install && (
+        <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-ink">
+          <input type="checkbox" checked={stored} onChange={(e) => setStored(e.target.checked)} className="h-4 w-4 accent-[var(--color-accent)]" />
+          I&apos;ve stored it
+        </label>
+      )}
       <StepNav
-        state="Store the password, then continue"
+        state={flow.install ? "Continue to the board's options" : "Store the password, then continue"}
         nextDisabled={!stored}
         onNext={() => {
           flow.setStored(true);
