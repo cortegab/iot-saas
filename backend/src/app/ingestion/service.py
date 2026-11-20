@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.config import settings
 from app.devices import service as devices_service
 from app.devices.service import DeviceDirectoryRecord
 from app.ingestion.schemas import TelemetryPayload
@@ -180,6 +181,10 @@ async def record_telemetry_direct(
             "value": str(payload.value),
             "timestamp": str(received_at.timestamp()),
         },
+        # Approximate trim keeps the stream bounded: XACK alone never deletes
+        # entries, so without a cap Redis memory grows with every reading.
+        maxlen=settings.telemetry_stream_maxlen,
+        approximate=True,
     )
     # Live-updates side channel (Phase 4) — separate from the stream above,
     # which the batched writer drains for storage. This is a plain PUBLISH,
