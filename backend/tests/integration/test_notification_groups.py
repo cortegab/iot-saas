@@ -142,6 +142,7 @@ async def test_summary_counts_unread_alerts_by_type(
         "rules": 2,
         "rule_health": 0,
         "device_offline": 2,
+        "device_health": 0,
         "delivery_failed": 0,
         "template_changed": 0,
     }

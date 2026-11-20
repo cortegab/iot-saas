@@ -124,6 +124,7 @@ export default function EditRulePage() {
   return (
     <div className={`${PAGE_WITH_BAR} gap-4`}>
       <RuleEditor
+        readOnly={!isAdmin}
         header={(sentence) => (
           <>
             <PageHeader

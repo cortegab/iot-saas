@@ -24,7 +24,8 @@ from app.dashboards.schemas import (
     Widget,
 )
 from app.db import get_session
-from app.tenants.deps import TenantContext, require_tenant_context
+from app.tenants.deps import TenantContext, require_role, require_tenant_context
+from app.tenants.models import TenantRole
 
 router = APIRouter(prefix="/dashboards", tags=["dashboards"])
 
@@ -54,7 +55,7 @@ async def list_dashboards(
 @router.post("", response_model=DashboardResponse, status_code=status.HTTP_201_CREATED)
 async def create_dashboard(
     body: DashboardCreateRequest,
-    ctx: TenantContext = Depends(require_tenant_context),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> DashboardResponse:
@@ -76,7 +77,13 @@ async def get_dashboard(
     return _to_response(dashboard, await _default_id(session, dashboard, current_user))
 
 
-@router.patch("/{dashboard_id}", response_model=DashboardResponse)
+@router.patch(
+    "/{dashboard_id}",
+    response_model=DashboardResponse,
+    # Dashboards are shared by the workspace: owners and admins change them,
+    # viewers look (DESIGN.md §8). A viewer still picks their own default.
+    dependencies=[Depends(require_role(TenantRole.ADMIN))],
+)
 async def update_dashboard(
     body: DashboardUpdateRequest,
     dashboard: Dashboard = Depends(get_dashboard_or_404),
@@ -115,7 +122,11 @@ async def clear_default(
         await service.set_default(session, dashboard.tenant_id, current_user.id, None)
 
 
-@router.delete("/{dashboard_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{dashboard_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_role(TenantRole.ADMIN))],
+)
 async def delete_dashboard(
     dashboard: Dashboard = Depends(get_dashboard_or_404),
     session: AsyncSession = Depends(get_session, scope="function"),

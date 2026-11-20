@@ -36,6 +36,8 @@ export function useApi() {
       get: <T,>(path: string) => withRetry<T>((ctx) => api.get<T>(path, ctx)),
       getPage: <T,>(path: string) => withRetry((ctx) => api.getPage<T>(path, ctx)),
       post: <T,>(path: string, body?: JsonBody) => withRetry<T>((ctx) => api.post<T>(path, ctx, body)).then(afterWrite),
+      // A POST that only reads (a dry run): no cache revalidation after it.
+      query: <T,>(path: string, body?: JsonBody) => withRetry<T>((ctx) => api.post<T>(path, ctx, body)),
       patch: <T,>(path: string, body?: JsonBody) => withRetry<T>((ctx) => api.patch<T>(path, ctx, body)).then(afterWrite),
       put: <T,>(path: string, body?: JsonBody) => withRetry<T>((ctx) => api.put<T>(path, ctx, body)).then(afterWrite),
       delete: <T,>(path: string) => withRetry<T>((ctx) => api.delete<T>(path, ctx)).then(afterWrite),
