@@ -41,33 +41,9 @@ APP_TEST_URL = os.environ.get(
     "postgresql+asyncpg://iot_app:iot_app_dev_password@127.0.0.1:5432/iot_test",
 )
 
-# All app tables, in any order — TRUNCATE ... CASCADE handles FK dependencies
-# regardless of the order they're listed in. Add one entry whenever a new
-# table lands. Continuous aggregates (telemetry_1m/telemetry_1h) aren't listed
-# here — they're materialized views, not plain tables, and can't be TRUNCATEd;
-# tests that care about rollup contents refresh them explicitly instead.
-ALL_TABLES = (
-    "users",
-    "tenants",
-    "tenant_memberships",
-    "refresh_tokens",
-    "devices",
-    "push_devices",
-    "api_keys",
-    "telemetry",
-    "rules",
-    "rule_devices",
-    "rule_versions",
-    "commands",
-    "dashboards",
-    "notifications",
-    "device_metric_health",
-    "rule_executions",
-    "action_executions",
-    "zones",
-    "invitations",
-    "password_reset_tokens",
-)
+# Continuous aggregates (telemetry_1m/telemetry_1h) aren't cleaned between
+# tests: they're materialized views, not tables; tests that care about rollup
+# contents refresh them explicitly instead.
 
 
 @pytest_asyncio.fixture
@@ -232,9 +208,22 @@ async def clean_tables(admin_session: AsyncSession) -> AsyncGenerator[None, None
     to RLS.
     """
     yield
-    await admin_session.execute(
-        text(f"TRUNCATE TABLE {', '.join(ALL_TABLES)} RESTART IDENTITY CASCADE")
-    )
+    # DELETE, not TRUNCATE: TRUNCATE gives every table and index a new file
+    # and fsyncs it, which took 20-40 s per test on a loaded dev machine; a
+    # DELETE of a test's few rows takes milliseconds. Every table in public
+    # (so a new one is never forgotten), with foreign-key triggers off for
+    # this transaction so the order doesn't matter (superuser only).
+    tables = (
+        await admin_session.execute(
+            text(
+                "SELECT tablename FROM pg_tables WHERE schemaname = 'public' "
+                "AND tablename <> 'alembic_version'"
+            )
+        )
+    ).scalars()
+    await admin_session.execute(text("SET LOCAL session_replication_role = replica"))
+    for table in tables:
+        await admin_session.execute(text(f'DELETE FROM "{table}"'))
     await admin_session.commit()
 
 
