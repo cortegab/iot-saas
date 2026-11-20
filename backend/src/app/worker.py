@@ -1,5 +1,6 @@
-"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Eight
-concurrent loops in one process; there is no third process (the API server
+"""Ingestion worker — the hot path and the storage path (CLAUDE.md §2). Nine
+concurrent loops in one process, each restarted on its own by `supervise` if
+it fails; there is no third process (the API server
 never subscribes to MQTT, the worker never serves HTTP):
 
 1. mqtt_ingest_loop — subscribes to telemetry AND ack topics, validates
@@ -60,7 +61,9 @@ never subscribes to MQTT, the worker never serves HTTP):
 import asyncio
 import json
 import logging
+import time
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import cast
 
@@ -68,6 +71,7 @@ import aiomqtt
 import redis.asyncio as redis
 from pydantic import ValidationError
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.catalog import service as catalog_service
@@ -109,11 +113,17 @@ async def handle_message(
     client: aiomqtt.Client,
     topic: str,
     payload: bytes,
+    *,
+    retain: bool = False,
 ) -> None:
     """Route one MQTT message to the ack path or the telemetry path. A single
     malformed message (bad topic, bad JSON, unknown/inactive device) is
     logged and dropped — it must never stop the stream (CLAUDE.md
     constraint 11).
+
+    `retain` is the broker's retained flag. Only `status` is retained by
+    contract (CLAUDE.md §4); retained telemetry would be re-delivered on every
+    reconnect and replayed into the rules, so it's dropped.
     """
     ack_topic = ingestion_service.parse_ack_topic(topic)
     if ack_topic is not None:
@@ -130,6 +140,9 @@ async def handle_message(
         return
     if parsed.metric in ingestion_service.PLATFORM_TO_DEVICE_SEGMENTS:
         return  # our own publish to the device, echoed back
+    if retain:
+        log.warning("dropping retained telemetry on %s (only status is retained)", topic)
+        return
 
     try:
         data = TelemetryPayload.model_validate_json(payload)
@@ -404,12 +417,29 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
                 await client.subscribe(ingestion_service.TELEMETRY_TOPIC_FILTER)
                 await client.subscribe(ingestion_service.ACK_TOPIC_FILTER)
                 async for message in client.messages:
-                    await handle_message(
-                        factory, r, client, str(message.topic), bytes(message.payload)
-                    )
+                    topic = str(message.topic)
+                    try:
+                        await handle_message(
+                            factory,
+                            r,
+                            client,
+                            topic,
+                            bytes(message.payload),
+                            retain=bool(message.retain),
+                        )
+                    except aiomqtt.MqttError:
+                        raise  # the connection itself: reconnect below
+                    except Exception:
+                        # One message must never stop ingestion for every
+                        # tenant (CLAUDE.md constraint 11): a Redis or DB blip
+                        # while handling it drops that message, not the loop.
+                        log.exception("dropping message on %s after an error", topic)
         except aiomqtt.MqttError as exc:
             log.warning("MQTT connection error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS)
             await asyncio.sleep(RECONNECT_SECONDS)
+
+
+_rule_states_restored = False
 
 
 async def rule_cache_loop(factory: async_sessionmaker[AsyncSession]) -> None:
@@ -417,10 +447,15 @@ async def rule_cache_loop(factory: async_sessionmaker[AsyncSession]) -> None:
     message — a rule CRUD change reaches the hot path within milliseconds,
     not up to a stale TTL window later.
     """
+    global _rule_states_restored
     await rules_service.load_rule_cache(factory)
     # Restore the _rule_states checkpoint now that _rules_by_id is populated
     # (so states for rules deleted while the worker was down are dropped).
-    await rules_service.restore_rule_states()
+    # Once per process: when the supervisor restarts this loop, the live
+    # in-memory state is newer than the checkpoint.
+    if not _rule_states_restored:
+        await rules_service.restore_rule_states()
+        _rule_states_restored = True
     while True:
         try:
             async with redis_client.pubsub() as pubsub:
@@ -554,6 +589,19 @@ async def _handle_ota_request(client: aiomqtt.Client, raw: str | bytes) -> None:
     log.info("ota request -> %s (version %s)", topic, data["payload"].get("version"))
 
 
+async def _route_request(
+    client: aiomqtt.Client, factory: async_sessionmaker[AsyncSession], channel: str, data: str
+) -> None:
+    if channel == catalog_service.CONFIG_PUBLISH_CHANNEL:
+        await _handle_config_publish(client, factory, data)
+    elif channel == rules_service.RULES_MANUAL_CHANNEL:
+        await _handle_rule_trigger(client, factory, data)
+    elif channel == firmware_service.OTA_CHANNEL:
+        await _handle_ota_request(client, data)
+    else:
+        await _handle_manual_command(client, factory, data)
+
+
 async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
     while True:
         try:
@@ -575,14 +623,12 @@ async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redi
                 async for message in pubsub.listen():
                     if message["type"] != "message":
                         continue
-                    if message["channel"] == catalog_service.CONFIG_PUBLISH_CHANNEL:
-                        await _handle_config_publish(client, factory, message["data"])
-                    elif message["channel"] == rules_service.RULES_MANUAL_CHANNEL:
-                        await _handle_rule_trigger(client, factory, message["data"])
-                    elif message["channel"] == firmware_service.OTA_CHANNEL:
-                        await _handle_ota_request(client, message["data"])
-                    else:
-                        await _handle_manual_command(client, factory, message["data"])
+                    try:
+                        await _route_request(client, factory, message["channel"], message["data"])
+                    except (aiomqtt.MqttError, redis.RedisError):
+                        raise  # the connection itself: reconnect below
+                    except Exception:
+                        log.exception("dropping %s request after an error", message["channel"])
         except (aiomqtt.MqttError, redis.RedisError) as exc:
             log.warning(
                 "manual command loop error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS
@@ -710,8 +756,82 @@ def _row_from_stream_entry(fields: dict[str, str]) -> _TelemetryRow | None:
             fields["metric"],
             float(fields["value"]),
         )
-    except (KeyError, ValueError):
+    except (KeyError, ValueError, OverflowError, OSError):
         return None
+
+
+async def _insert_batch(session: AsyncSession, rows: list[_TelemetryRow]) -> None:
+    await session.execute(
+        _INSERT_SQL,
+        [
+            {"time": t, "tenant_id": tid, "device_id": did, "metric": metric, "value": value}
+            for t, tid, did, metric, value in rows
+        ],
+    )
+
+
+async def _insert_rows_one_by_one(
+    session: AsyncSession, rows: list[_TelemetryRow]
+) -> list[_TelemetryRow]:
+    """Fallback after the batch INSERT failed on a constraint: each row in its
+    own savepoint, so a row whose device was deleted while it sat in the
+    stream (telemetry.device_id references devices) is dropped alone instead
+    of taking the whole batch with it. Returns the rows that were stored."""
+    stored: list[_TelemetryRow] = []
+    for row in rows:
+        try:
+            async with session.begin_nested():
+                await _insert_batch(session, [row])
+            stored.append(row)
+        except IntegrityError:
+            log.warning(
+                "dropping telemetry row for tenant=%s device=%s metric=%s: %s",
+                row[1],
+                row[2],
+                row[3],
+                "its device or tenant no longer exists",
+            )
+    return stored
+
+
+async def write_telemetry_batch(
+    factory: async_sessionmaker[AsyncSession], rows: list[_TelemetryRow]
+) -> int:
+    """Store one batch plus the per-device bookkeeping in one transaction.
+    Returns how many rows were stored. Raises when the database itself fails
+    (the caller keeps the rows and retries)."""
+    async with factory() as session, session.begin():
+        try:
+            async with session.begin_nested():
+                await _insert_batch(session, rows)
+            stored = rows
+        except IntegrityError:
+            stored = await _insert_rows_one_by_one(session, rows)
+        if not stored:
+            return 0
+        # Connection-state tracking, batched with this flush rather than
+        # per-message so it never sits on the hot path. `seen_at` is one
+        # timestamp for the whole batch (not each row's own reading time)
+        # since this only has to be accurate to "the writer flushed
+        # recently", not per-reading precision.
+        await devices_service.touch_last_seen(
+            session, list({did for _, _, did, _, _ in stored}), datetime.now(UTC)
+        )
+        # Per-(device, metric) freshness (Tier B), batched with this flush
+        # for the same reason touch_last_seen is: the last value per key
+        # within the batch wins, one shared seen_at for the whole batch.
+        latest: dict[tuple[uuid.UUID, str], float] = {}
+        for _, _, did, metric, value in stored:
+            latest[(did, metric)] = value
+        await health_service.record_batch(
+            session,
+            [(did, metric, value) for (did, metric), value in latest.items()],
+            datetime.now(UTC),
+        )
+    return len(stored)
+
+
+FLUSH_RETRY_MAX_SECONDS = 30.0
 
 
 async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
@@ -723,77 +843,63 @@ async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis
     interval_s = block_ms / 1000
     # When the oldest row still in `buffer` arrived (monotonic seconds).
     first_buffered_at = 0.0
+    # Seconds to wait before retrying a flush the database refused.
+    retry_delay = 0.0
 
     async def flush() -> None:
         nonlocal buffer, ack_ids
         if buffer:
-            async with factory() as session, session.begin():
-                await session.execute(
-                    _INSERT_SQL,
-                    [
-                        {
-                            "time": t,
-                            "tenant_id": tid,
-                            "device_id": did,
-                            "metric": metric,
-                            "value": value,
-                        }
-                        for t, tid, did, metric, value in buffer
-                    ],
-                )
-                # Connection-state tracking, batched with this flush rather than
-                # per-message so it never sits on the hot path. `seen_at` is one
-                # timestamp for the whole batch (not each row's own reading time)
-                # since this only has to be accurate to "the writer flushed
-                # recently", not per-reading precision.
-                await devices_service.touch_last_seen(
-                    session, list({did for _, _, did, _, _ in buffer}), datetime.now(UTC)
-                )
-                # Per-(device, metric) freshness (Tier B), batched with this
-                # flush for the same reason touch_last_seen is: the last
-                # value per key within the batch wins, one shared seen_at
-                # for the whole batch.
-                latest: dict[tuple[uuid.UUID, str], float] = {}
-                for _, _, did, metric, value in buffer:
-                    latest[(did, metric)] = value
-                await health_service.record_batch(
-                    session,
-                    [(did, metric, value) for (did, metric), value in latest.items()],
-                    datetime.now(UTC),
-                )
+            stored = await write_telemetry_batch(factory, buffer)
+            log.info("flushed %d telemetry rows", stored)
+        if ack_ids:
             await r.xack(ingestion_service.TELEMETRY_STREAM, CONSUMER_GROUP, *ack_ids)
-            log.info("flushed %d telemetry rows", len(buffer))
         buffer = []
         ack_ids = []
 
     loop = asyncio.get_running_loop()
     while True:
-        # With rows waiting, block only until the oldest one is due.
-        wait_ms = block_ms
-        if buffer:
-            wait_ms = max(1, int((first_buffered_at + interval_s - loop.time()) * 1000))
-        raw = await r.xreadgroup(
-            CONSUMER_GROUP,
-            CONSUMER_NAME,
-            {ingestion_service.TELEMETRY_STREAM: ">"},
-            count=batch_size - len(buffer),
-            block=wait_ms,
-        )
-        # redis-py's stub covers both decode_responses=True/False shapes as a
-        # Union; this client is always constructed with decode_responses=True
-        # (app/redis.py), so the response is always the str-keyed list form.
-        entries = cast(list[tuple[str, list[tuple[str, dict[str, str]]]]], raw)
-        for _stream, messages in entries:
-            for msg_id, fields in messages:
-                row = _row_from_stream_entry(fields)
-                if row is not None:
-                    if not buffer:
-                        first_buffered_at = loop.time()
-                    buffer.append(row)
-                ack_ids.append(msg_id)
+        if len(buffer) < batch_size:
+            # With rows waiting, block only until the oldest one is due.
+            wait_ms = block_ms
+            if buffer:
+                wait_ms = max(1, int((first_buffered_at + interval_s - loop.time()) * 1000))
+            raw = await r.xreadgroup(
+                CONSUMER_GROUP,
+                CONSUMER_NAME,
+                {ingestion_service.TELEMETRY_STREAM: ">"},
+                count=batch_size - len(buffer),
+                block=wait_ms,
+            )
+            # redis-py's stub covers both decode_responses=True/False shapes as a
+            # Union; this client is always constructed with decode_responses=True
+            # (app/redis.py), so the response is always the str-keyed list form.
+            entries = cast(list[tuple[str, list[tuple[str, dict[str, str]]]]], raw)
+            for _stream, messages in entries:
+                for msg_id, fields in messages:
+                    row = _row_from_stream_entry(fields)
+                    if row is not None:
+                        if not buffer:
+                            first_buffered_at = loop.time()
+                        buffer.append(row)
+                    ack_ids.append(msg_id)
 
-        if _should_flush(len(buffer), loop.time() - first_buffered_at, batch_size, interval_s):
-            await flush()
+        if _should_flush(len(buffer), loop.time() - first_buffered_at, batch_size, interval_s) or (
+            not buffer and ack_ids
+        ):
+            try:
+                await flush()
+                retry_delay = 0.0
+            except redis.RedisError:
+                raise
+            except Exception:
+                # The database is down or refusing: keep the rows (they are
+                # still unacknowledged in the stream too) and try again,
+                # backing off, instead of losing the batch.
+                retry_delay = min(max(retry_delay * 2, 1.0), FLUSH_RETRY_MAX_SECONDS)
+                log.exception(
+                    "telemetry flush of %d rows failed; retrying in %.0fs", len(buffer), retry_delay
+                )
+                await asyncio.sleep(retry_delay)
 
 
 async def health_monitor_loop(factory: async_sessionmaker[AsyncSession]) -> None:
@@ -825,19 +931,46 @@ async def health_monitor_loop(factory: async_sessionmaker[AsyncSession]) -> None
             await asyncio.sleep(RECONNECT_SECONDS)
 
 
+SUPERVISOR_MAX_BACKOFF_SECONDS = 30.0
+# A loop that ran this long before failing starts its backoff over.
+SUPERVISOR_HEALTHY_SECONDS = 60.0
+
+
+async def supervise(name: str, start: Callable[[], Awaitable[None]]) -> None:
+    """Run one worker loop forever. An unexpected exception restarts that loop
+    alone, after a backoff, instead of ending asyncio.gather and with it the
+    hot path for every tenant. Cancellation (shutdown) still propagates."""
+    backoff = 1.0
+    while True:
+        started = time.monotonic()
+        try:
+            await start()
+            log.warning("worker loop %s returned; restarting", name)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("worker loop %s failed; restarting in %.0fs", name, backoff)
+        if time.monotonic() - started >= SUPERVISOR_HEALTHY_SECONDS:
+            backoff = 1.0
+        await asyncio.sleep(backoff)
+        backoff = min(backoff * 2, SUPERVISOR_MAX_BACKOFF_SECONDS)
+
+
 async def run() -> None:
+    f, r = session_factory, redis_client
+    loops: dict[str, Callable[[], Awaitable[None]]] = {
+        "mqtt_ingest": lambda: mqtt_ingest_loop(f, r),
+        "stream_writer": lambda: stream_writer_loop(f, r),
+        "rule_cache": lambda: rule_cache_loop(f),
+        "manual_command": lambda: manual_command_loop(f, r),
+        "health_monitor": lambda: health_monitor_loop(f),
+        "schedule": lambda: schedule_loop(f),
+        "rules_maintenance": lambda: rules_maintenance_loop(f),
+        "pending_timer": lambda: pending_timer_loop(f),
+        "push": lambda: push_sender.push_loop(f),
+    }
     try:
-        await asyncio.gather(
-            mqtt_ingest_loop(session_factory, redis_client),
-            stream_writer_loop(session_factory, redis_client),
-            rule_cache_loop(session_factory),
-            manual_command_loop(session_factory, redis_client),
-            health_monitor_loop(session_factory),
-            schedule_loop(session_factory),
-            rules_maintenance_loop(session_factory),
-            pending_timer_loop(session_factory),
-            push_sender.push_loop(session_factory),
-        )
+        await asyncio.gather(*(supervise(name, start) for name, start in loops.items()))
     finally:
         # Best-effort drain of in-flight webhook/email deliveries on shutdown.
         pending = [t for t in rules_service._BACKGROUND_TASKS if not t.done()]

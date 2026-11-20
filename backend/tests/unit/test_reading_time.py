@@ -55,3 +55,28 @@ def test_stream_row_empty_timestamp_stamps_now() -> None:
 
 def test_stream_row_garbage_timestamp_dropped() -> None:
     assert _row_from_stream_entry(_fields("not-a-number")) is None
+
+
+def test_reading_time_ignores_a_timestamp_that_would_overflow() -> None:
+    # A device (or anyone with its credential) sending a huge value must not
+    # crash the worker: it falls back to server time.
+    before = datetime.now(UTC)
+    stamped = reading_time(TelemetryPayload(value=1.0, timestamp=99999999999999))
+    assert before <= stamped <= datetime.now(UTC)
+
+
+def test_reading_time_ignores_an_unset_device_clock() -> None:
+    before = datetime.now(UTC)
+    stamped = reading_time(TelemetryPayload(value=1.0, timestamp=12))  # 1970: no NTP yet
+    assert before <= stamped <= datetime.now(UTC)
+
+
+def test_reading_time_ignores_a_clock_more_than_a_day_ahead() -> None:
+    ahead = int(datetime.now(UTC).timestamp()) + 2 * 86400
+    before = datetime.now(UTC)
+    stamped = reading_time(TelemetryPayload(value=1.0, timestamp=ahead))
+    assert before <= stamped <= datetime.now(UTC)
+
+
+def test_stream_row_with_an_overflowing_timestamp_is_skipped() -> None:
+    assert _row_from_stream_entry(_fields("1e30")) is None

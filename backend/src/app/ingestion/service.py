@@ -5,6 +5,7 @@ ingest fallback (app/ingestion/router.py), per CLAUDE.md §6's description of
 this module as the "normalization, fork point."
 """
 
+import logging
 import time
 import uuid
 from dataclasses import dataclass
@@ -17,6 +18,8 @@ from app.devices import service as devices_service
 from app.devices.service import DeviceDirectoryRecord
 from app.ingestion.schemas import TelemetryPayload
 from app.realtime import service as realtime_service
+
+log = logging.getLogger(__name__)
 
 TELEMETRY_STREAM = "telemetry"
 
@@ -128,12 +131,26 @@ async def resolve_device_for_topic(
     return record
 
 
+# A device timestamp outside this window is treated as absent (server time is
+# used): before 2020, or more than a day ahead of the server's clock.
+EARLIEST_DEVICE_TIMESTAMP = 1577836800  # 2020-01-01T00:00:00Z
+MAX_DEVICE_CLOCK_AHEAD_SECONDS = 86400
+
+
 def reading_time(payload: TelemetryPayload) -> datetime:
     """The device's own timestamp when it sent one, else server receive time
-    (sub-second). Computed once per reading, at arrival."""
-    if payload.timestamp:
-        return datetime.fromtimestamp(payload.timestamp, tz=UTC)
-    return datetime.now(UTC)
+    (sub-second). Computed once per reading, at arrival.
+
+    An implausible device timestamp (an unset clock, or a huge value that
+    would overflow datetime) falls back to server time: the payload is
+    untrusted input (CLAUDE.md constraint 11) and must never raise here."""
+    now = datetime.now(UTC)
+    ts = payload.timestamp
+    if ts and EARLIEST_DEVICE_TIMESTAMP <= ts <= now.timestamp() + MAX_DEVICE_CLOCK_AHEAD_SECONDS:
+        return datetime.fromtimestamp(ts, tz=UTC)
+    if ts:
+        log.warning("ignoring implausible device timestamp %s; using server time", ts)
+    return now
 
 
 async def record_telemetry_direct(
