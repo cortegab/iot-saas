@@ -166,7 +166,10 @@ async def handle_message(
     timestamp = ingestion_service.reading_time(data)
 
     # Hot path — in-memory, before the storage-path queue hop below
-    # (CLAUDE.md §9 constraint 1).
+    # (CLAUDE.md §9 constraint 1). Rules run on the server's clock: hold
+    # times, cooldowns and staleness must not depend on a device's clock
+    # (a skewed one would satisfy for_duration early, or block a rule with a
+    # future last_fired_at). The stored reading keeps the device's time.
     await rules_service.evaluate_and_dispatch(
         client,
         factory,
@@ -176,7 +179,7 @@ async def handle_message(
         parsed.device_slug,
         parsed.metric,
         data.value,
-        timestamp,
+        datetime.now(UTC),
     )
 
     # Storage path — carries the same timestamp the hot path just used.
@@ -450,6 +453,9 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
 
 
 _rule_states_restored = False
+# The worker re-reads every enabled rule this often even without an
+# invalidation message.
+RULE_CACHE_REFRESH_SECONDS = 60.0
 
 
 async def rule_cache_loop(factory: async_sessionmaker[AsyncSession]) -> None:
@@ -470,10 +476,19 @@ async def rule_cache_loop(factory: async_sessionmaker[AsyncSession]) -> None:
         try:
             async with redis_client.pubsub() as pubsub:
                 await pubsub.subscribe(rules_service.RULES_INVALIDATE_CHANNEL)
-                async for message in pubsub.listen():
-                    if message["type"] != "message":
-                        continue
+                # Edits published while this channel was down were missed:
+                # reload once subscribed, so nothing falls in the gap.
+                await rules_service.load_rule_cache(factory)
+                while True:
+                    message = await pubsub.get_message(
+                        ignore_subscribe_messages=True, timeout=RULE_CACHE_REFRESH_SECONDS
+                    )
+                    # A message means a rule changed; a timeout is the
+                    # periodic re-read, which also covers an invalidation the
+                    # API failed to publish after its commit.
                     await rules_service.load_rule_cache(factory)
+                    if message is None:
+                        log.debug("periodic rule cache refresh")
         except redis.RedisError as exc:
             log.warning(
                 "rule invalidation channel error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS
@@ -612,12 +627,20 @@ async def _handle_http_reading(
         device_slug = str(data["device_slug"])
         metric = str(data["metric"])
         value = float(data["value"])
-        timestamp = datetime.fromtimestamp(float(data["timestamp"]), tz=UTC)
-    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+    except (KeyError, TypeError, ValueError) as exc:
         log.warning("dropping malformed http reading: %s", exc)
         return
+    # Server time, like an MQTT reading (see handle_message).
     await rules_service.evaluate_and_dispatch(
-        client, factory, tenant_id, device_id, tenant_slug, device_slug, metric, value, timestamp
+        client,
+        factory,
+        tenant_id,
+        device_id,
+        tenant_slug,
+        device_slug,
+        metric,
+        value,
+        datetime.now(UTC),
     )
 
 

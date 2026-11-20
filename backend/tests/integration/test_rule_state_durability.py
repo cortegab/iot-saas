@@ -88,7 +88,8 @@ async def test_rule_state_checkpoint_round_trip(
     assert set(rules_service._rule_states) == {rule_id}
     restored = rules_service._rule_states[rule_id]
     assert restored.armed is False
-    assert restored.condition_since == since
+    # The hold timer restarts: downtime doesn't count toward for_duration.
+    assert restored.condition_since is None
     assert restored.last_fired_at == fired_at
     assert restored.condition_fingerprint == "fp1"
 
