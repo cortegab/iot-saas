@@ -64,7 +64,7 @@ import logging
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import aiomqtt
@@ -189,7 +189,9 @@ async def handle_message(
     await ingestion_service.record_telemetry_direct(
         r, resolved.tenant_id, resolved.device_id, parsed.metric, data, timestamp
     )
-    log.info("telemetry %s -> value=%s", topic, data.value)
+    # DEBUG: at the design load this line was ~200 a second, gigabytes of
+    # container log a day.
+    log.debug("telemetry %s -> value=%s", topic, data.value)
 
 
 async def _handle_status(
@@ -965,7 +967,7 @@ async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis
         nonlocal buffer, ack_ids
         if buffer:
             stored = await write_telemetry_batch(factory, buffer)
-            log.info("flushed %d telemetry rows", stored)
+            log.debug("flushed %d telemetry rows", stored)
         if ack_ids:
             await r.xack(ingestion_service.TELEMETRY_STREAM, CONSUMER_GROUP, *ack_ids)
         buffer = []
@@ -1044,6 +1046,35 @@ async def health_monitor_loop(factory: async_sessionmaker[AsyncSession]) -> None
                 RECONNECT_SECONDS,
             )
             await asyncio.sleep(RECONNECT_SECONDS)
+
+
+# Rule executions, commands and read/dismissed notifications older than this
+# are deleted nightly (prune_history); raw telemetry has its own 90-day
+# retention in the database.
+HISTORY_RETENTION_DAYS = 90
+PRUNE_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+async def pruning_loop(factory: async_sessionmaker[AsyncSession]) -> None:
+    """Once a day (first run an hour after start): delete history older than
+    HISTORY_RETENTION_DAYS, so the audit tables don't grow without bound."""
+    await asyncio.sleep(3600)
+    while True:
+        before = datetime.now(UTC) - timedelta(days=HISTORY_RETENTION_DAYS)
+        async with factory() as session, session.begin():
+            row = (
+                await session.execute(
+                    text("SELECT * FROM prune_history(:before)"), {"before": before}
+                )
+            ).one()
+        log.info(
+            "pruned history before %s: %d rule executions, %d commands, %d notifications",
+            before.date(),
+            row.rule_executions,
+            row.commands,
+            row.notifications,
+        )
+        await asyncio.sleep(PRUNE_INTERVAL_SECONDS)
 
 
 COMMAND_EXPIRY_INTERVAL_SECONDS = 5
@@ -1165,6 +1196,7 @@ async def run() -> None:
         "push": lambda: push_sender.push_loop(f),
         "heartbeat": heartbeat_loop,
         "command_expiry": lambda: command_expiry_loop(f),
+        "pruning": lambda: pruning_loop(f),
     }
     try:
         await asyncio.gather(*(supervise(name, start) for name, start in loops.items()))

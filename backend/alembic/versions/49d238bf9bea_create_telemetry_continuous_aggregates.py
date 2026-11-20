@@ -63,7 +63,9 @@ def upgrade() -> None:
                 schedule_interval => INTERVAL '{schedule_interval}')
             """
         )
-        op.execute(f"ALTER MATERIALIZED VIEW {view_name} SET (timescaledb.materialized_only = false)")
+        op.execute(
+            f"ALTER MATERIALIZED VIEW {view_name} SET (timescaledb.materialized_only = false)"
+        )
         op.execute(f"GRANT SELECT ON {view_name} TO iot_app")
 
 
