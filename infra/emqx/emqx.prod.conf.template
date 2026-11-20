@@ -84,3 +84,12 @@ authorization {
   no_match = deny
   deny_action = disconnect
 }
+
+# Retained messages (each device's desired state, config, last status) on
+# disc: EMQX's default keeps them in RAM, so a broker restart lost every
+# device's desired state and config until the next change.
+retainer {
+  backend {
+    storage_type = disc
+  }
+}
