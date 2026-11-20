@@ -91,5 +91,11 @@ async def request_command(
             f"This device has no actuator called {body.actuator!r}.",
         )
     await service.request_manual_command(
-        session, device.tenant_id, device.id, device.slug, body.actuator, body.value
+        session,
+        device.tenant_id,
+        device.id,
+        device.slug,
+        body.actuator,
+        body.value,
+        requested_by=ctx.user_id,
     )

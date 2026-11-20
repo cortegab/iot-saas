@@ -18,10 +18,10 @@ import time
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 import aiomqtt
-from sqlalchemy import ColumnElement, func, select, update
+from sqlalchemy import ColumnElement, func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.commands.models import Command
@@ -87,6 +87,7 @@ async def dispatch_command(
     actuator: str,
     value: Any,
     command_id: uuid.UUID | None = None,
+    requested_by: uuid.UUID | None = None,
 ) -> uuid.UUID | None:
     """Send a command to one actuator, at most once per
     `actuator_min_interval_seconds` (CLAUDE.md §9 constraint 7: real relays
@@ -121,6 +122,7 @@ async def dispatch_command(
         device_slug,
         actuator,
         value,
+        requested_by,
     )
     key = (device_id, actuator)
     interval = settings.actuator_min_interval_seconds
@@ -146,6 +148,10 @@ async def dispatch_command(
     return await _publish_command(*args, command_id=command_id)
 
 
+# Position of `value` in dispatch_command's pacing args tuple.
+_VALUE_ARG = 9
+
+
 async def _send_pending(key: tuple[uuid.UUID, str], delay: float) -> None:
     await asyncio.sleep(delay)
     pace = _pace.get(key)
@@ -156,7 +162,7 @@ async def _send_pending(key: tuple[uuid.UUID, str], delay: float) -> None:
     if pending is None:
         return
     pace.last_sent_at = time.monotonic()
-    pace.last_value = pending[-1]
+    pace.last_value = pending[_VALUE_ARG]
     try:
         await _publish_command(*pending)
     except Exception:
@@ -174,6 +180,7 @@ async def _publish_command(
     device_slug: str,
     actuator: str,
     value: Any,
+    requested_by: uuid.UUID | None = None,
     command_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     """Publish now and record the command row. Returns its id."""
@@ -221,6 +228,7 @@ async def _publish_command(
                 ttl_seconds=ttl,
                 published_at=published_at,
                 latency_ms=latency_ms,
+                requested_by=requested_by,
             )
         )
     log.info(
@@ -328,6 +336,7 @@ async def request_manual_command(
     device_slug: str,
     actuator: str,
     value: Any,
+    requested_by: uuid.UUID | None = None,
 ) -> None:
     """Publish a manual-command request for app.worker's manual_command_loop
     to fulfil. This writes nothing to the database itself (dispatch_command
@@ -344,6 +353,54 @@ async def request_manual_command(
             "device_slug": device_slug,
             "actuator": actuator,
             "value": value,
+            "requested_by": str(requested_by) if requested_by else None,
         }
     )
     await redis_client.publish(MANUAL_COMMAND_CHANNEL, payload)
+
+
+class ExpiredCommand(NamedTuple):
+    command_id: uuid.UUID
+    tenant_id: uuid.UUID
+    device_id: uuid.UUID
+    actuator: str
+    tenant_slug: str
+    device_slug: str
+    is_latest: bool
+    has_acked_value: bool
+    acked_value: Any
+
+
+async def expire_overdue_commands(
+    factory: async_sessionmaker[AsyncSession], now: datetime
+) -> list[ExpiredCommand]:
+    """Mark every command past its TTL with no ack as expired ("No
+    response", stored), across tenants (expire_unacked_commands, SECURITY
+    DEFINER: the worker has no tenant context)."""
+    async with factory() as session, session.begin():
+        result = await session.execute(
+            text("SELECT * FROM expire_unacked_commands(:now)"), {"now": now}
+        )
+        return [ExpiredCommand(**row) for row in result.mappings().all()]
+
+
+async def restore_desired_state(client: aiomqtt.Client, expired: ExpiredCommand) -> None:
+    """A command the device never confirmed must not be applied later, when
+    the device reconnects and reads the retained desired state. Put that
+    retained state back to the last value the device did confirm, or clear it
+    when it never confirmed any. Only for the actuator's latest command: a
+    newer one owns the retained state now."""
+    if not expired.is_latest:
+        return
+    topic = f"{expired.tenant_slug}/{expired.device_slug}/state/{expired.actuator}"
+    if expired.has_acked_value:
+        payload: str | bytes = json.dumps({"value": expired.acked_value})
+    else:
+        payload = b""  # an empty retained message deletes the retained state
+    await client.publish(topic, payload, qos=1, retain=True)
+    log.info(
+        "command %s expired unconfirmed; desired state of %s %s",
+        expired.command_id,
+        topic,
+        "back to the last confirmed value" if expired.has_acked_value else "cleared",
+    )
