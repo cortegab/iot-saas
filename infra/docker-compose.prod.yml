@@ -22,9 +22,18 @@
 
 name: iot-saas-prod
 
+# Every container's log is rotated: Docker's json-file driver keeps them
+# forever by default, and at the design load the worker alone wrote GBs a day.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   # ── Infrastructure ────────────────────────────────────────────────────────
   timescaledb:
+    logging: *default-logging
     image: timescale/timescaledb:2.17.2-pg16
     restart: always
     environment:
@@ -41,6 +50,7 @@ services:
       retries: 10
 
   redis:
+    logging: *default-logging
     image: redis:7-alpine
     restart: always
     # Hard memory cap; noeviction so nothing (rule-state checkpoints, the
@@ -56,6 +66,7 @@ services:
       retries: 10
 
   emqx:
+    logging: *default-logging
     image: emqx/emqx:5.8
     restart: always
     environment:
@@ -80,6 +91,7 @@ services:
 
   # ── Application ──────────────────────────────────────────────────────────
   api:
+    logging: *default-logging
     build:
       context: ../backend
       dockerfile: Dockerfile.prod
@@ -138,6 +150,7 @@ services:
         condition: service_healthy
 
   worker:
+    logging: *default-logging
     build:
       context: ../backend
       dockerfile: Dockerfile.prod
@@ -192,6 +205,7 @@ services:
         condition: service_healthy
 
   frontend:
+    logging: *default-logging
     build:
       # The repo root: the web app is part of the pnpm workspace (root
       # .dockerignore keeps the context to the workspace files).
@@ -210,6 +224,7 @@ services:
 
   # ── Edge: TLS termination + reverse proxy ───────────────────────────────
   nginx:
+    logging: *default-logging
     image: nginx:1.27-alpine
     restart: always
     ports:
@@ -231,6 +246,7 @@ services:
   # infra/PROD_DEPLOY.md and infra/backups/renew-certs.sh for how this is
   # invoked (`docker compose ... run --rm certbot ...`).
   certbot:
+    logging: *default-logging
     image: certbot/certbot:latest
     profiles: ["certbot"]
     volumes:

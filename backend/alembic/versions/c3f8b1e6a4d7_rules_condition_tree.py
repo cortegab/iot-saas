@@ -73,9 +73,7 @@ def downgrade() -> None:
     op.add_column("rules", sa.Column("metric", sa.String(), nullable=True))
     op.add_column("rules", sa.Column("operator", sa.String(), nullable=True))
     op.add_column("rules", sa.Column("threshold", sa.Float(), nullable=True))
-    op.add_column(
-        "rules", sa.Column("hysteresis", sa.Float(), nullable=False, server_default="0")
-    )
+    op.add_column("rules", sa.Column("hysteresis", sa.Float(), nullable=False, server_default="0"))
     op.execute(
         """
         UPDATE rules SET

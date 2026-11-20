@@ -42,7 +42,9 @@ def upgrade() -> None:
             sa.ForeignKey("devices.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("rule_id", sa.Uuid(), sa.ForeignKey("rules.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "rule_id", sa.Uuid(), sa.ForeignKey("rules.id", ondelete="SET NULL"), nullable=True
+        ),
         sa.Column("actuator", sa.String(), nullable=False),
         sa.Column("value", JSONB(), nullable=False),
         sa.Column("issued_at", sa.DateTime(timezone=True), nullable=False),
@@ -54,7 +56,9 @@ def upgrade() -> None:
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
     )
-    op.execute("CREATE INDEX ix_commands_device_published ON commands (device_id, published_at DESC)")
+    op.execute(
+        "CREATE INDEX ix_commands_device_published ON commands (device_id, published_at DESC)"
+    )
 
     op.execute("ALTER TABLE commands ENABLE ROW LEVEL SECURITY")
     op.execute("ALTER TABLE commands FORCE ROW LEVEL SECURITY")
