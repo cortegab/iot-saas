@@ -1,11 +1,13 @@
 # Over-the-air firmware updates
 
-From firmware **1.0.0**, a board running our generic firmware can update itself. An admin opens the
+From firmware **1.0.1**, a board running our generic firmware can update itself. An admin opens the
 device → **Settings → Firmware** → **Update to …**. The board downloads the new release, checks it
 and restarts into it. If the new version can't reach the broker within 2 minutes, the bootloader
 goes back to the version it had.
 
-Boards running 0.x need **one USB install of 1.0.0**. After that, updates come over the air.
+Boards running 0.x or 1.0.0 need **one USB install of 1.0.1 or later**. After that, updates come over
+the air. (1.0.0 was published before any update key was committed, so it was built with none and
+refuses every update.)
 
 ## How it's kept safe
 
@@ -48,7 +50,7 @@ Do these yourself: the private key must never pass through anyone else, Claude i
    `OTA_SIGNING_KEY`, value the whole contents of `ota-signing-key.pem` (the `BEGIN`/`END` lines
    too). Then delete the file from your Downloads or desktop. The backups are the only other copies.
 5. **Commit the public key:** copy `key-1.pem` into `firmware/ota_keys/` and commit it.
-6. **Install 1.0.0 over USB on each board** (Install on the device page), once.
+6. **Install 1.0.1 or later over USB on each board** (Install on the device page), once.
 
 From then on, `release.py` refuses to publish an unsigned release (`ota_keys/` has a key), and the
 deploy signs each release with the secret.
@@ -58,8 +60,8 @@ deploy signs each release with the secret.
 1. Bump `FW_VERSION` in `firmware/src/version.h` and merge to `prod` as usual.
 2. The deploy's `firmware` job builds every chip, signs each `firmware.bin` and copies the release
    to the VPS. It fails if the secret's key matches none of `ota_keys/`.
-3. On the device page: **Settings → Firmware** shows *Running 1.0.0 · Latest release 1.0.1 ·
-   Update to 1.0.1…* (admins only, and only while the device is online).
+3. On the device page: **Settings → Firmware** shows *Running 1.0.1 · Latest release 1.0.2 ·
+   Update to 1.0.2…* (admins only, and only while the device is online).
 4. The **Update** line follows it: *Downloading …*, *Restarting into …*, then *Updated to …*, or
    why it failed. A failed or rolled-back update also raises a **Device health** alert.
 
@@ -82,6 +84,38 @@ online.
 
 Outputs go to their boot state during the restart, then follow the retained desired state as
 usual.
+
+## Which key a board trusts
+
+From 1.0.1 the status message carries `ota_keys`: the id of each public key built into the firmware
+(the first 16 hex digits of the SHA-256 of the key's DER; `ota_keys.py` builds them in). `release.py`
+writes the id of the key that signed each build into the manifest (`boards.<chip>.app.key_id`). The
+platform offers an update only to a board that trusts that key, and says otherwise on the device
+page ("doesn't trust the key the release is signed with: install it over USB once"). That covers
+both 1.0.0 (no keys) and a board left behind by a key change.
+
+The production deploy runs `release.py --require-signed`: it fails when `ota_keys/` has no public key
+or the `OTA_SIGNING_KEY` secret isn't set, so a release boards can't update from never ships.
+
+## A board also refuses
+
+- a version that isn't newer than the one it runs (an older release is signed too: without this,
+  anyone able to publish on the broker could put a board back on a version with a known bug);
+- a request whose version string isn't `major.minor.patch`.
+
+## If an update fails, where to look
+
+- **The device page's reason** (Settings → Firmware): offline, version not reported, no build for
+  this board, unsigned release, untrusted key, already the latest.
+- **The status message's `ota.error`**, shown on the same page and in a Device health alert:
+  - *download failed*: the board can't reach `FIRMWARE_BASE_URL` over HTTPS with the Let's Encrypt
+    root. Check the address resolves from the device's network and the certificate is valid.
+  - *size or SHA-256 mismatch*: the server sent a stale or partial file. Compare
+    `infra/firmware/<version>/` with its `manifest.json`.
+  - *the signature doesn't match*: the board's keys differ from the signing key. Compare the
+    device's `ota_keys` with the manifest's `key_id`.
+  - *rolled_back*: the new build didn't reach the broker within 2 minutes. Read its serial log.
+- **The worker log**: `ota request -> {tenant}/{device}/ota` shows the request went out.
 
 ## Changing the key
 

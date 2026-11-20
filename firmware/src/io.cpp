@@ -1,5 +1,7 @@
 #include "io.h"
 
+#include "diag.h"
+
 #include <Wire.h>
 
 #include "command_math.h"
@@ -57,6 +59,72 @@ RateLimiter publishLimiter(MAX_MESSAGES_PER_S);
 unsigned long heldBack = 0;
 unsigned long heldBackLoggedMs = 0;
 std::vector<Actuator> actuators;
+
+// Outputs set to "Keep" keep their last applied value across the board's own
+// restarts (software, watchdog, crash): the Wi-Fi/broker self-restarts in
+// net.cpp, an update's restart, a frozen loop. RTC memory survives those but
+// not a power cut, which starts from the boot state as before. A brown-out
+// isn't restored either: a relay that drew the supply down would do it again.
+constexpr uint32_t KEEP_MAGIC = 0x4B455031;  // "KEP1"
+constexpr size_t KEEP_SLOTS = 12;
+constexpr size_t KEEP_KEY_LEN = 32;
+constexpr size_t KEEP_VALUE_LEN = 24;
+struct KeptOutputs {
+  uint32_t magic;
+  uint32_t count;
+  char key[KEEP_SLOTS][KEEP_KEY_LEN];
+  char value[KEEP_SLOTS][KEEP_VALUE_LEN];
+};
+RTC_NOINIT_ATTR KeptOutputs kept;
+
+bool keptValid() { return kept.magic == KEEP_MAGIC && kept.count <= KEEP_SLOTS; }
+
+void keepApplied(const char* key, JsonVariantConst value) {
+  if (!keptValid()) {
+    kept.magic = KEEP_MAGIC;
+    kept.count = 0;
+  }
+  char text[KEEP_VALUE_LEN];
+  size_t n = serializeJson(value, text, sizeof(text));
+  if (n == 0 || n >= sizeof(text) - 1 || strlen(key) >= KEEP_KEY_LEN) return;  // too long to keep
+  size_t slot = 0;
+  while (slot < kept.count && strncmp(kept.key[slot], key, KEEP_KEY_LEN) != 0) slot++;
+  if (slot == kept.count) {
+    if (kept.count == KEEP_SLOTS) return;
+    kept.count++;
+    strncpy(kept.key[slot], key, KEEP_KEY_LEN - 1);
+    kept.key[slot][KEEP_KEY_LEN - 1] = '\0';
+  }
+  memcpy(kept.value[slot], text, n);
+  kept.value[slot][n] = '\0';
+}
+
+bool restartKeepsOutputs() {
+  const char* r = diagResetReason();
+  return strcmp(r, "software") == 0 || strcmp(r, "crash") == 0 || strcmp(r, "task_wdt") == 0 ||
+         strcmp(r, "interrupt_wdt") == 0 || strcmp(r, "other_wdt") == 0;
+}
+
+// After beginOutputs: put "Keep" outputs back where they were before a
+// restart of the board's own making; otherwise start the record afresh.
+void restoreKeptOutputs() {
+  if (!restartKeepsOutputs() || !keptValid()) {
+    kept.magic = KEEP_MAGIC;
+    kept.count = 0;
+    return;
+  }
+  for (Actuator& a : actuators) {
+    if (a.offlineAfterMs != 0) continue;  // "Boot state" outputs start from their boot state
+    for (size_t slot = 0; slot < kept.count; slot++) {
+      if (strncmp(kept.key[slot], a.key, KEEP_KEY_LEN) != 0) continue;
+      JsonDocument doc;
+      String err;
+      if (deserializeJson(doc, kept.value[slot]) == DeserializationError::Ok && a.output->apply(doc.as<JsonVariantConst>(), err))
+        Serial.printf("[IO] %s: kept %s across the restart\n", a.key, kept.value[slot]);
+      break;
+    }
+  }
+}
 
 unsigned long defaultIntervalMs(uint8_t mode) {
   if (mode == MODE_ON_CHANGE) return 300000UL;  // heartbeat
@@ -223,6 +291,7 @@ void handleCommand(PubSubClient& mqtt, Actuator& a, const uint8_t* payload, unsi
     Serial.printf("[CMD] %s: %s, not acked\n", a.key, err.c_str());
     return;
   }
+  keepApplied(a.key, doc["value"]);
   Serial.printf("[ACTUATOR] %s <- command\n", a.key);
   const char* commandId = doc["command_id"] | "";
   if (strlen(commandId) == 0) return;
@@ -240,7 +309,11 @@ void handleState(Actuator& a, const uint8_t* payload, unsigned int length) {
   JsonDocument doc;
   if (deserializeJson(doc, payload, length)) return;
   String err;
-  if (!a.output->apply(doc["value"], err)) Serial.printf("[STATE] %s: %s\n", a.key, err.c_str());
+  if (!a.output->apply(doc["value"], err)) {
+    Serial.printf("[STATE] %s: %s\n", a.key, err.c_str());
+    return;
+  }
+  keepApplied(a.key, doc["value"]);
 }
 
 bool i2cReady = false;
@@ -326,6 +399,7 @@ bool ioBegin(const DeviceConfig& cfg, String& err) {
   }
   // Outputs first: they reach their safe boot state as early as possible.
   if (!beginOutputs(cfg, prefix, err)) return false;
+  restoreKeptOutputs();
   if (!beginInputs(cfg, err)) return false;
 
   for (const Metric& m : metrics)

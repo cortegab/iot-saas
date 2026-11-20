@@ -3,6 +3,7 @@
 #include <PubSubClient.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_task_wdt.h>
 #include <esp_wifi.h>
 #include <soc/soc_caps.h>
 
@@ -34,8 +35,15 @@ constexpr unsigned long RESET_HOLD_MS = 5000;
 // that's down isn't hammered by every board at once.
 constexpr unsigned long MQTT_RETRY_MIN_MS = 2000;
 constexpr unsigned long MQTT_RETRY_MAX_MS = 60000;
-// The TLS handshake blocks the loop; keep it well under the watchdog (main.cpp).
-constexpr unsigned long TLS_HANDSHAKE_TIMEOUT_S = 15;
+// Connecting to the broker blocks the loop, and the loop watchdog (main.cpp)
+// restarts the board after 30 s. Each phase is capped and the watchdog is fed
+// between them: TCP connect, TLS handshake, then the broker's CONNACK. Before
+// 1.0.1 the TCP connect could wait 30 s on its own (the core's default), so a
+// board whose internet was down but router up restarted in a loop.
+constexpr int32_t TCP_CONNECT_TIMEOUT_MS = 5000;
+constexpr unsigned long TLS_HANDSHAKE_TIMEOUT_S = 10;
+constexpr uint16_t MQTT_SOCKET_TIMEOUT_S = 5;
+constexpr uint16_t MQTT_BUFFER_BYTES = 4096;
 
 // Wi-Fi supervisor. The Arduino core retries a failed join once, then only
 // for some reasons (not AUTH_FAIL), and then waits forever: the board blinked
@@ -220,14 +228,19 @@ void publishStatus() {
   doc["heap_min"] = ESP.getMinFreeHeap();
   doc["wifi_reconnects"] = diagWifiReconnects();
   JsonArray faults = doc["faults"].to<JsonArray>();
-  // At most 6 (of up to 8 kept): ~65 bytes each keeps the message inside
-  // PubSubClient's 1024-byte buffer with the topic.
   for (size_t i = 0; i < sensorFaultCount() && i < 6; i++) faults.add(sensorFaultText(i));
   JsonObject ota = doc["ota"].to<JsonObject>();
   if (!otaReport(ota)) doc.remove("ota");
-  char payload[800];
-  size_t len = serializeJson(doc, payload, sizeof(payload));
-  mqtt.publish(statusTopic.c_str(), (const uint8_t*)payload, len, true);
+  // Which update keys this build trusts (1.0.1+): the platform only offers an
+  // update signed with one of them.
+  JsonArray keys = doc["ota_keys"].to<JsonArray>();
+  otaKeyIds(keys);
+  // Sized to the message, never cut off: a truncated retained status would be
+  // invalid JSON until the next one.
+  String payload;
+  payload.reserve(measureJson(doc) + 1);
+  serializeJson(doc, payload);
+  mqtt.publish(statusTopic.c_str(), (const uint8_t*)payload.c_str(), payload.length(), true);
   lastStatusMs = millis();
   publishedFaultsVersion = sensorFaultsVersion();
   publishedOtaVersion = otaReportVersion();
@@ -245,6 +258,16 @@ void tryConnectMqtt() {
   mqttAttempted = true;
   lastMqttAttemptMs = millis();
   Serial.printf("[MQTT] connecting as %s ... ", cfg->mqttUsername);
+  esp_task_wdt_reset();
+  // Open the socket ourselves, with a timeout: PubSubClient then skips its own
+  // connect (which has none) because the client is already connected.
+  bool open = cfg->tls ? tlsClient.connect(cfg->mqttHost, cfg->mqttPort, TCP_CONNECT_TIMEOUT_MS)
+                       : plainClient.connect(cfg->mqttHost, cfg->mqttPort, TCP_CONNECT_TIMEOUT_MS);
+  esp_task_wdt_reset();
+  if (!open) {
+    Serial.printf("can't reach %s:%u, retrying in %lus\n", cfg->mqttHost, cfg->mqttPort, mqttRetryMs / 1000);
+    return;
+  }
   if (mqtt.connect(cfg->mqttUsername, cfg->mqttUsername, cfg->mqttPassword, statusTopic.c_str(), 1, true,
                    "{\"online\":false}")) {
     // Free heap, once per connect: the headroom drivers have to work with.
@@ -310,8 +333,12 @@ void netBegin(const DeviceConfig& config) {
     mqtt.setClient(plainClient);
   }
   mqtt.setServer(config.mqttHost, config.mqttPort);
-  // The retained config message doesn't fit PubSubClient's default 256 bytes.
-  mqtt.setBufferSize(1024);
+  // The retained config message (one entry per metric, ~100 bytes each) and
+  // the status message don't fit PubSubClient's default 256 bytes, and a
+  // message that doesn't fit is dropped without a word: 4 KB holds a profile
+  // of about 35 metrics.
+  mqtt.setBufferSize(MQTT_BUFFER_BYTES);
+  mqtt.setSocketTimeout(MQTT_SOCKET_TIMEOUT_S);
   mqtt.setCallback(onMessage);
 
   WiFi.onEvent(onWifiEvent);

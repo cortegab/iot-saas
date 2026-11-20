@@ -37,7 +37,9 @@ log = logging.getLogger(__name__)
 # app.worker's manual_command_loop publishes these to {tenant}/{device}/ota.
 OTA_CHANNEL = "firmware:ota"
 # The first firmware that can update itself; older ones need one USB install.
-OTA_MIN_VERSION = (1, 0, 0)
+# 1.0.0 shipped with no update key built in, so it refuses every update: the
+# first version that can update itself is 1.0.1.
+OTA_MIN_VERSION = (1, 0, 1)
 MANIFEST_TTL_S = 60.0
 
 _VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
@@ -126,7 +128,7 @@ async def _plan(
     elif current is None:
         reason = "The device hasn't reported its firmware version yet."
     elif parse_version(current) is None or parse_version(current) < OTA_MIN_VERSION:  # type: ignore[operator]
-        reason = "This firmware can't update itself: install 1.0.0 or later over USB once."
+        reason = "This firmware can't update itself: install 1.0.1 or later over USB once."
     elif not newer:
         reason = "It already runs the latest release."
     elif devices_service.connection_state(device) != "online":
@@ -143,10 +145,17 @@ async def _plan(
             None,
         )
         signature = (board or {}).get("app", {}).get("signature")
+        key_id = (board or {}).get("app", {}).get("key_id")
+        trusted = device.ota_keys or []
         if board is None or firmware is None:
             reason = "The latest release has no build for this board."
         elif not signature:
             reason = "The latest release isn't signed, so it can only be installed over USB."
+        elif key_id and trusted and key_id not in trusted:
+            reason = (
+                "This board's firmware doesn't trust the key the release is signed with: "
+                "install it over USB once."
+            )
         else:
             app = {
                 "url": f"{settings.firmware_url}/{latest}/{firmware['path']}",
