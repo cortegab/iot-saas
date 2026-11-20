@@ -38,3 +38,21 @@ export function getDeviceActuators(
   }
   return Array.from(options, ([id, label]) => ({ id, label }));
 }
+
+/** Enabled rules that switch this device's actuator (on firing or on clear):
+ * a manual command to it may be switched back by them, so the confirmation
+ * names them. */
+export function rulesDrivingActuator(rules: RuleResponse[] | undefined, deviceId: string, actuator: string): string[] {
+  const names: string[] = [];
+  for (const rule of rules ?? []) {
+    if (!rule.enabled) continue;
+    const acts = [...rule.actions, ...(rule.clear_actions ?? [])];
+    if (
+      acts.some(
+        (a) => a.type === "actuator_command" && a.actuator === actuator && (a.device_id == null || a.device_id === deviceId),
+      )
+    )
+      names.push(rule.name);
+  }
+  return names;
+}
