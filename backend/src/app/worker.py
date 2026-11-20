@@ -742,7 +742,9 @@ def _should_flush(buffered: int, oldest_age_s: float, batch_size: int, interval_
     return buffered >= batch_size or (buffered > 0 and oldest_age_s >= interval_s)
 
 
-def _row_from_stream_entry(fields: dict[str, str]) -> _TelemetryRow | None:
+def _row_from_stream_entry(fields: dict[str, str] | None) -> _TelemetryRow | None:
+    if not fields:
+        return None  # trimmed from the stream while it was still pending
     try:
         # Float epoch seconds (sub-second receive time). Entries queued by an
         # older worker may be int strings or empty — float() and the now()
@@ -834,8 +836,40 @@ async def write_telemetry_batch(
 FLUSH_RETRY_MAX_SECONDS = 30.0
 
 
+async def drain_pending(
+    factory: async_sessionmaker[AsyncSession], r: redis.Redis, batch_size: int
+) -> int:
+    """Store the entries this consumer read but never acknowledged: the batch
+    that was in memory when the worker stopped. Reading the group from id "0"
+    returns this consumer's pending entries (">" only returns new ones), so
+    without this they would stay pending forever and never reach the
+    database. Returns how many rows were stored."""
+    total = 0
+    while True:
+        raw = await r.xreadgroup(
+            CONSUMER_GROUP,
+            CONSUMER_NAME,
+            {ingestion_service.TELEMETRY_STREAM: "0"},
+            count=batch_size,
+        )
+        entries = cast(list[tuple[str, list[tuple[str, dict[str, str] | None]]]], raw)
+        messages = [m for _stream, batch in entries for m in batch]
+        if not messages:
+            break
+        rows = [row for _id, fields in messages if (row := _row_from_stream_entry(fields))]
+        if rows:
+            total += await write_telemetry_batch(factory, rows)
+        await r.xack(
+            ingestion_service.TELEMETRY_STREAM, CONSUMER_GROUP, *[msg_id for msg_id, _ in messages]
+        )
+    if total:
+        log.info("stored %d telemetry rows left pending by the previous run", total)
+    return total
+
+
 async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis.Redis) -> None:
     await _ensure_consumer_group(r)
+    await drain_pending(factory, r, settings.telemetry_batch_size)
     buffer: list[_TelemetryRow] = []
     ack_ids: list[str] = []
     batch_size = settings.telemetry_batch_size
