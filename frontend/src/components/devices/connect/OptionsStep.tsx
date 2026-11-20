@@ -184,9 +184,15 @@ function WifiOptions({ flow }: { flow: ConnectFlow }) {
   );
 }
 
+/** Where the board connects. Filled in for this server and over TLS, so most
+ * people never open it; it opens by itself when something needs a look. */
 function BrokerOptions({ flow }: { flow: ConnectFlow }) {
   return (
-    <>
+    <details open={flow.hostProblem != null || !flow.tls} className="overflow-hidden rounded-lg border border-border">
+      <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">
+        Advanced: where it connects <span className="text-ink-muted">· {flow.host || "…"}, {flow.tls ? "secure" : "not secure"}</span>
+      </summary>
+      <div className="flex flex-col gap-4 p-4">
       <Field label="Broker host" error={flow.hostProblem ?? undefined} hint="Where the board connects: this server's address, as the board's network sees it.">
         <Input mono value={flow.host} autoComplete="off" spellCheck={false} onChange={(e) => flow.setHost(e.target.value)} />
       </Field>
@@ -205,7 +211,8 @@ function BrokerOptions({ flow }: { flow: ConnectFlow }) {
           Without TLS the credential crosses the network in the clear. Use it only against a local development broker.
         </p>
       )}
-    </>
+      </div>
+    </details>
   );
 }
 
