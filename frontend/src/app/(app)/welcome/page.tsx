@@ -83,17 +83,19 @@ export default function WelcomePage() {
           A first dashboard
         </h2>
         <p className="text-meta text-ink-muted">
-          {devices > 0
-            ? `A chart for each device's main reading (up to 8), shared with everyone in the workspace and set as where you land. Change it any time.`
-            : "There are no devices yet, so there's nothing to chart. Look around first; you can make one later from Dashboards."}
+          {role === "viewer"
+            ? "Owners and admins make the workspace's dashboards. Open one from Dashboards and set it as where you land."
+            : devices > 0
+              ? `A chart for each device's main reading (up to 8), shared with everyone in the workspace and set as where you land. Change it any time.`
+              : "There are no devices yet, so there's nothing to chart. Look around first; you can make one later from Dashboards."}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          {devices > 0 && (
+          {devices > 0 && role !== "viewer" && (
             <Button disabled={busy} onClick={() => void answer(buildMine)}>
               {busy ? "Building…" : "Build my dashboard"}
             </Button>
           )}
-          <Button variant={devices > 0 ? "ghost" : "primary"} disabled={busy} onClick={() => void answer(async () => "/devices")}>
+          <Button variant={devices > 0 && role !== "viewer" ? "ghost" : "primary"} disabled={busy} onClick={() => void answer(async () => "/devices")}>
             Look around first
           </Button>
         </div>

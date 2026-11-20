@@ -1,6 +1,7 @@
 import type { components } from "@iodriven/shared/api";
 import { ApiRequestError } from "@iodriven/shared/api-client";
 import { RULE_STATE, ruleStateKey } from "@iodriven/shared/rule-text";
+import { DISABLE_GUARDED_RULE, guardsHardware, resetLatchReadings, resetLatchVerdict } from "@iodriven/shared/rule-safety";
 import { timeAgo } from "@iodriven/shared/time-ago";
 import * as Linking from "expo-linking";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -21,6 +22,7 @@ import { Switch } from "@/ui/Switch";
 import { Text } from "@/ui/Text";
 import { UndoBar } from "@/ui/UndoBar";
 
+type SimulateResponse = components["schemas"]["SimulateResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
 
@@ -78,6 +80,12 @@ export default function Rules() {
 
   const setEnabled = useCallback(
     async (rule: RuleResponse, enabled: boolean, undoable = true) => {
+      // The same check as the web: turning off a rule that switches hardware
+      // or latches removes a protection, so it asks first.
+      if (!enabled && undoable && guardsHardware(rule)) {
+        const ok = await confirm(`Disable ${rule.name}?`, DISABLE_GUARDED_RULE, "Disable rule");
+        if (!ok) return;
+      }
       setBusy(rule.id);
       setFailed(null);
       try {
@@ -94,9 +102,18 @@ export default function Rules() {
   );
 
   async function resetLatch(rule: RuleResponse) {
+    // As on the web (DESIGN.md §9.8): a dry run says whether it would fire
+    // again straight away, with the readings it's judged on.
+    let sim: SimulateResponse | null = null;
+    try {
+      sim = await api.query<SimulateResponse>(`/rules/${rule.id}/simulate`, {});
+    } catch {
+      // resetLatchVerdict(null) keeps the cautious wording.
+    }
+    const readings = resetLatchReadings(rule);
     const ok = await confirm(
       `Reset ${rule.name}?`,
-      "It's latched: it fired and waits for someone to reset it. Resetting arms it again, so it fires the next time its condition holds.",
+      [resetLatchVerdict(sim), ...(readings.length ? ["", ...readings] : [])].join("\n"),
       "Reset latch",
     );
     if (!ok) return;

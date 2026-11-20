@@ -482,8 +482,9 @@ edits a whole record, and there is no "Expand" toggle.
   - The list shows Zone / Devices / Status.
   - Delete is blocked while devices are assigned.
   - The Devices list can filter by zone.
-- **Dashboards** are shared by everyone in the workspace (user decision 2026-11-02); until
-  permissions by role are decided, any member may edit, rename, duplicate and delete them. Who
+- **Dashboards** are shared by everyone in the workspace (user decision 2026-11-02). Owners and
+  admins create, edit, rename, duplicate and delete them; viewers open them and pick their own
+  default (user decision 2026-11-19). Who
   made one is recorded but filters nothing; leaving a workspace leaves your dashboards with it.
   They are edited **in place on the grid** (Edit layout): drag and
   resize as before, and **click a widget** to open its item sheet: Type, Device, Reading (or
@@ -1118,3 +1119,4 @@ restyled.
 | 2026-11-09 | §15 **app header** matched to the web's phone shell (user review): the IO Driven / workspace bar stays above every screen, and its workspace name opens the workspace list as a sheet (More keeps its Workspace section); each screen's header is the web's page header (the parent as a link back, the 28 px title, actions at its right) instead of the native header with a back arrow. No search icon yet. |
 | 2026-11-10 | §15 **Scan in the top bar** (user review): the app's top bar has a Scan (QR) icon at its right on every screen, where the web has search; the Devices header's Scan button goes. Alerts stays a tab (it's checked daily; scanning is occasional). |
 | 2026-11-11 | §15 **Set up Wi-Fi recovers** (bench test, two C3 boards): every wait has Cancel and counts its seconds; the network list, sending and connecting have time limits ("The board stopped answering"); once the board takes the Wi-Fi the screen says "{device} has the Wi-Fi" before waiting for it online, with Back to devices. |
+| 2026-11-19 | §8, §9.8, §10.2 permissions and confirms (platform audit U4): **dashboards** are changed by owners and admins only (viewers see Open and Set as default; the API refuses their writes); Welcome doesn't offer viewers **Build my dashboard**. A viewer's **rule page** shows every field disabled with "View only. Ask an owner or admin to make changes." and no save bar; **New rule** tells them who can create one. **Disabling a rule** that drives an actuator or latches asks first ("Its actuators stay in their current state…"), on the web and in the app. The app's **Reset latch** confirm says, from a dry run, whether it fires again straight away and lists the readings, like the web's. |
