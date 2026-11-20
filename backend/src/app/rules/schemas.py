@@ -29,6 +29,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.shared.topics import TOPIC_SEGMENT_PATTERN
+
 _OPERATOR_PATTERN = r"^(>|>=|<|<=|==|!=|between|not_between|in|not_in|changed|increased|decreased)$"
 _RANGE_OPERATORS = {"between", "not_between"}
 _SET_OPERATORS = {"in", "not_in"}
@@ -50,7 +52,7 @@ class ActuatorCommandAction(BaseModel):
     # None = the rule's primary device (the device-scoped wrapper / a
     # single-device rule); set = command a different device.
     device_id: uuid.UUID | None = None
-    actuator: str = Field(min_length=1, max_length=100)
+    actuator: str = Field(min_length=1, max_length=100, pattern=TOPIC_SEGMENT_PATTERN)
     value: bool | float | str
 
 

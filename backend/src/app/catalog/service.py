@@ -337,6 +337,15 @@ async def get_catalog_entry(
     return entry
 
 
+async def actuator_keys(
+    session: AsyncSession, tenant_id: uuid.UUID, entry_id: uuid.UUID
+) -> frozenset[str]:
+    """The wire keys of a template's actuators: the only names a command to a
+    device on this template may carry."""
+    entry = await get_catalog_entry(session, tenant_id, entry_id)
+    return _keys_of(list(entry.actuators or []))
+
+
 async def update_catalog_entry(
     session: AsyncSession,
     entry: DeviceCatalogEntry,

@@ -589,6 +589,28 @@ async def _handle_ota_request(client: aiomqtt.Client, raw: str | bytes) -> None:
     log.info("ota request -> %s (version %s)", topic, data["payload"].get("version"))
 
 
+async def _handle_http_reading(
+    client: aiomqtt.Client, factory: async_sessionmaker[AsyncSession], raw: str
+) -> None:
+    """A reading the API accepted over HTTP ingest: run the rules on it, as
+    for an MQTT reading. The API stores it; this only evaluates."""
+    try:
+        data = json.loads(raw)
+        tenant_id = uuid.UUID(data["tenant_id"])
+        device_id = uuid.UUID(data["device_id"])
+        tenant_slug = str(data["tenant_slug"])
+        device_slug = str(data["device_slug"])
+        metric = str(data["metric"])
+        value = float(data["value"])
+        timestamp = datetime.fromtimestamp(float(data["timestamp"]), tz=UTC)
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        log.warning("dropping malformed http reading: %s", exc)
+        return
+    await rules_service.evaluate_and_dispatch(
+        client, factory, tenant_id, device_id, tenant_slug, device_slug, metric, value, timestamp
+    )
+
+
 async def _route_request(
     client: aiomqtt.Client, factory: async_sessionmaker[AsyncSession], channel: str, data: str
 ) -> None:
@@ -598,6 +620,8 @@ async def _route_request(
         await _handle_rule_trigger(client, factory, data)
     elif channel == firmware_service.OTA_CHANNEL:
         await _handle_ota_request(client, data)
+    elif channel == ingestion_service.HTTP_READING_CHANNEL:
+        await _handle_http_reading(client, factory, data)
     else:
         await _handle_manual_command(client, factory, data)
 
@@ -619,6 +643,7 @@ async def manual_command_loop(factory: async_sessionmaker[AsyncSession], r: redi
                     catalog_service.CONFIG_PUBLISH_CHANNEL,
                     rules_service.RULES_MANUAL_CHANNEL,
                     firmware_service.OTA_CHANNEL,
+                    ingestion_service.HTTP_READING_CHANNEL,
                 )
                 async for message in pubsub.listen():
                     if message["type"] != "message":

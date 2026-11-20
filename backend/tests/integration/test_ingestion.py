@@ -11,6 +11,7 @@ iot_test.
 """
 
 import base64
+import json
 import uuid
 from typing import Any
 from unittest.mock import AsyncMock
@@ -21,6 +22,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.ingestion.service import (
+    HTTP_INGEST_PER_MINUTE,
+    HTTP_READING_CHANNEL,
+    allow_http_reading,
+)
 from app.tenants.models import Tenant
 
 EMQX_HEADERS = {"x-emqx-auth-secret": settings.emqx_auth_shared_secret.get_secret_value()}
@@ -304,3 +310,58 @@ async def test_emqx_authorize_worker_publish_topics(
     )
     assert resp.status_code == 200
     assert resp.json()["result"] == expected
+
+
+async def test_ingest_hands_the_reading_to_the_worker_for_rules(
+    client: httpx.AsyncClient, _mock_redis_publish: AsyncMock
+) -> None:
+    owner = await _register(client, "http-rules@example.com", "HttpRules")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    created = await _create_device(client, headers, "Sensor 1")
+    _mock_redis_publish.reset_mock()
+
+    resp = await client.post(
+        "/ingest",
+        json={"metric": "temperature", "value": 31.5},
+        headers=_basic_auth_header(
+            created["credential"]["username"], created["credential"]["password"]
+        ),
+    )
+
+    assert resp.status_code == 202
+    calls = [c for c in _mock_redis_publish.call_args_list if c.args[0] == HTTP_READING_CHANNEL]
+    assert len(calls) == 1
+    data = json.loads(calls[0].args[1])
+    assert data["device_id"] == created["device"]["id"]
+    assert data["device_slug"] == created["device"]["slug"]
+    assert data["metric"] == "temperature"
+    assert data["value"] == 31.5
+
+
+@pytest.mark.parametrize("metric", ["status", "config", "OTA", "a/b", "temp#"])
+async def test_ingest_refuses_reserved_and_topic_breaking_metrics(
+    client: httpx.AsyncClient, metric: str
+) -> None:
+    owner = await _register(client, f"http-res-{abs(hash(metric))}@example.com", "HttpRes")
+    headers = _auth_headers(owner, owner["memberships"][0]["tenant_id"])
+    created = await _create_device(client, headers, "Sensor 1")
+
+    resp = await client.post(
+        "/ingest",
+        json={"metric": metric, "value": 1},
+        headers=_basic_auth_header(
+            created["credential"]["username"], created["credential"]["password"]
+        ),
+    )
+
+    assert resp.status_code == 422
+
+
+def test_http_ingest_is_rate_limited_per_device_per_minute() -> None:
+    device = uuid.uuid4()
+    other = uuid.uuid4()
+    t0 = 1_800_000_000.0
+    allowed = [allow_http_reading(device, t0 + i * 0.1) for i in range(HTTP_INGEST_PER_MINUTE + 5)]
+    assert allowed.count(True) == HTTP_INGEST_PER_MINUTE
+    assert allow_http_reading(other, t0)  # per device
+    assert allow_http_reading(device, t0 + 60)  # next minute

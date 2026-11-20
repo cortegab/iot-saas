@@ -5,12 +5,14 @@ dependencies — callers are devices or EMQX itself, never a logged-in user.
 
 import base64
 import binascii
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service as auth_service
+from app.catalog.schemas import RESERVED_METRIC_KEYS
 from app.config import settings
 from app.db import get_session
 from app.devices import service as devices_service
@@ -65,14 +67,37 @@ async def ingest(
     MQTT ingest path — one normalization path, not two.
     """
     device_id, record = await _authenticate_device_basic(authorization, session)
+    if body.metric.strip().lower() in RESERVED_METRIC_KEYS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"{body.metric!r} is reserved for the platform; send it on MQTT.",
+        )
+    if not ingestion_service.allow_http_reading(device_id):
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"At most {ingestion_service.HTTP_INGEST_PER_MINUTE} readings a minute per device.",
+            headers={"Retry-After": "60"},
+        )
     payload = TelemetryPayload(value=body.value, timestamp=body.timestamp)
+    received_at = ingestion_service.reading_time(payload)
+    # Rules first (in the worker, which holds them), then storage, the same
+    # order as an MQTT reading.
+    await redis_client.publish(
+        ingestion_service.HTTP_READING_CHANNEL,
+        json.dumps(
+            {
+                "tenant_id": str(record.tenant_id),
+                "device_id": str(device_id),
+                "tenant_slug": record.tenant_slug,
+                "device_slug": record.device_slug,
+                "metric": body.metric,
+                "value": body.value,
+                "timestamp": received_at.timestamp(),
+            }
+        ),
+    )
     await ingestion_service.record_telemetry_direct(
-        redis_client,
-        record.tenant_id,
-        device_id,
-        body.metric,
-        payload,
-        ingestion_service.reading_time(payload),
+        redis_client, record.tenant_id, device_id, body.metric, payload, received_at
     )
     return {"status": "accepted"}
 

@@ -30,7 +30,9 @@ async def test_owner_can_rename_current_tenant(client: httpx.AsyncClient) -> Non
     assert get_resp.status_code == 200
     assert get_resp.json()["name"] == "Original Name"
 
-    patch_resp = await client.patch("/tenants/current", json={"name": "Renamed Org"}, headers=headers)
+    patch_resp = await client.patch(
+        "/tenants/current", json={"name": "Renamed Org"}, headers=headers
+    )
     assert patch_resp.status_code == 200
     assert patch_resp.json()["name"] == "Renamed Org"
 

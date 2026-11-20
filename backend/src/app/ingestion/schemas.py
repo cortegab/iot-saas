@@ -6,6 +6,8 @@ downstream sees them.
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.shared.topics import TOPIC_SEGMENT_PATTERN
+
 # Status diagnostics are best-effort: a too-long or odd value is trimmed or
 # dropped, never a reason to lose the message's `online` state.
 MAX_FAULTS = 8
@@ -91,7 +93,7 @@ class IngestRequest(BaseModel):
     by its Basic-auth credentials, not by anything in the body.
     """
 
-    metric: str = Field(min_length=1, max_length=100)
+    metric: str = Field(min_length=1, max_length=100, pattern=TOPIC_SEGMENT_PATTERN)
     value: float
     timestamp: int | None = None
 
