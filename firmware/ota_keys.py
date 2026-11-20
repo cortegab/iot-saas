@@ -8,7 +8,17 @@
 # so the key can change with one ordinary update.
 #
 # No key file: the header has no keys, and the firmware refuses every update.
+import base64
+import hashlib
 from pathlib import Path
+
+
+def key_id(pem: str) -> str:
+    """The id the status message reports and release.py writes into the
+    manifest: the first 16 hex digits of the SHA-256 of the key's DER."""
+    body = "".join(line for line in pem.strip().splitlines() if not line.startswith("-----"))
+    return hashlib.sha256(base64.b64decode(body)).hexdigest()[:16]
+
 
 Import("env")  # type: ignore[name-defined]  # noqa: F821
 
@@ -19,6 +29,7 @@ if env["PIOENV"] != "native":  # type: ignore[name-defined]  # noqa: F821
     if len(keys) > MAX_KEYS:
         raise SystemExit(f"ota_keys.py: at most {MAX_KEYS} public keys in ota_keys/, found {len(keys)}")
     pems = []
+    ids: list[str] = []
     for path in keys:
         text = path.read_text().strip()
         if "PRIVATE KEY" in text:
@@ -26,6 +37,7 @@ if env["PIOENV"] != "native":  # type: ignore[name-defined]  # noqa: F821
         if not text.startswith("-----BEGIN PUBLIC KEY-----"):
             raise SystemExit(f"ota_keys.py: {path.name} isn't a PEM public key")
         pems.append(text + "\n")
+        ids.append(key_id(text))
     out_dir = Path(env.subst("$BUILD_DIR")) / "generated"  # type: ignore[name-defined]  # noqa: F821
     out_dir.mkdir(parents=True, exist_ok=True)
     body = ",\n".join(f'    R"PEM({pem})PEM"' for pem in pems)
@@ -37,6 +49,11 @@ if env["PIOENV"] != "native":  # type: ignore[name-defined]  # noqa: F821
         "#include <stddef.h>\n"
         f"static constexpr size_t OTA_KEY_COUNT = {len(pems)};\n"
         + (f"static const char* const OTA_KEYS[] = {{\n{body}\n}};\n" if pems else "static const char* const* OTA_KEYS = nullptr;\n")
+        + (
+            "static const char* const OTA_KEY_IDS[] = {" + ", ".join(f'"{i}"' for i in ids) + "};\n"
+            if ids
+            else "static const char* const* OTA_KEY_IDS = nullptr;\n"
+        )
     )
     target = out_dir / "ota_keys.h"
     if not target.exists() or target.read_text() != header:
