@@ -123,7 +123,14 @@ export default function GetStartedPage() {
   const device = setup.first_device_id;
   const steps: Step[] = [
     { key: "template", title: "Create a device template", why: "What a kind of device sends and what it can switch.", href: "/templates/new", action: "New template" },
-    { key: "device", title: "Connect a device", why: "Done when it sends its first reading.", href: "/devices/new", action: "Add device", needs: setup.template ? undefined : "Needs a template" },
+    {
+      key: "device",
+      title: "Connect a device",
+      why: "Done when it sends its first reading. Installing its firmware takes a computer with Chrome or Edge and a USB cable.",
+      href: "/devices/new",
+      action: "Add device",
+      needs: setup.template ? undefined : "Needs a template",
+    },
     {
       key: "rule",
       title: "Create a rule",
