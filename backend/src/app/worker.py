@@ -97,6 +97,9 @@ configure_logging()
 log = logging.getLogger("worker")
 
 RECONNECT_SECONDS = 3
+# The ingest loop's MQTT client id: fixed, so its persistent session (and the
+# messages queued in it while it reconnects) is found again.
+WORKER_INGEST_CLIENT_ID = "iot-worker-ingest"
 
 # For the heartbeat (app.readiness): whether the ingest loop holds a broker
 # connection, and when it last handled a message (monotonic seconds).
@@ -422,11 +425,17 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
     global _mqtt_connected, _last_message_at
     while True:
         try:
+            # A fixed client id with a persistent session and QoS 1: the
+            # broker keeps telemetry and acks that arrive while the worker
+            # reconnects (and delivers them after), instead of dropping them
+            # as it did with a random id, a clean session and QoS 0.
             async with aiomqtt.Client(
                 settings.mqtt_host,
                 port=settings.mqtt_port,
                 username=settings.mqtt_worker_username,
                 password=settings.mqtt_worker_password.get_secret_value(),
+                identifier=WORKER_INGEST_CLIENT_ID,
+                clean_session=False,
             ) as client:
                 _mqtt_connected = True
                 log.info(
@@ -434,8 +443,8 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
                     ingestion_service.TELEMETRY_TOPIC_FILTER,
                     ingestion_service.ACK_TOPIC_FILTER,
                 )
-                await client.subscribe(ingestion_service.TELEMETRY_TOPIC_FILTER)
-                await client.subscribe(ingestion_service.ACK_TOPIC_FILTER)
+                await client.subscribe(ingestion_service.TELEMETRY_TOPIC_FILTER, qos=1)
+                await client.subscribe(ingestion_service.ACK_TOPIC_FILTER, qos=1)
                 async for message in client.messages:
                     _last_message_at = time.monotonic()
                     topic = str(message.topic)

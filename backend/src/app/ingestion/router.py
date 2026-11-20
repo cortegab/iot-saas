@@ -5,6 +5,7 @@ dependencies — callers are devices or EMQX itself, never a logged-in user.
 
 import base64
 import binascii
+import hmac
 import json
 import uuid
 
@@ -49,7 +50,7 @@ async def _authenticate_device_basic(
     if (
         record is None
         or record.status != DeviceStatus.ACTIVE.value
-        or not auth_service.verify_secret(password, record.token_hash)
+        or not await auth_service.verify_secret_off_loop(password, record.token_hash)
     ):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid credentials")
     return device_id, record
@@ -112,7 +113,9 @@ async def emqx_authenticate(
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> EmqxAuthenticateResponse:
     if body.username == settings.mqtt_worker_username:
-        allowed = body.password == settings.mqtt_worker_password.get_secret_value()
+        allowed = hmac.compare_digest(
+            body.password.encode(), settings.mqtt_worker_password.get_secret_value().encode()
+        )
         return EmqxAuthenticateResponse(result="allow" if allowed else "deny")
 
     try:
@@ -124,10 +127,27 @@ async def emqx_authenticate(
     if (
         record is None
         or record.status != DeviceStatus.ACTIVE.value
-        or not auth_service.verify_secret(body.password, record.token_hash)
+        or not await auth_service.verify_secret_off_loop(body.password, record.token_hash)
     ):
         return EmqxAuthenticateResponse(result="deny")
     return EmqxAuthenticateResponse(result="allow")
+
+
+def _is_device_publish_topic(topic: str, own_subtree: str) -> bool:
+    """What a device may publish (CLAUDE.md §4), by direction: its telemetry
+    and `status` ({tenant}/{device}/{metric}) and its acks
+    ({tenant}/{device}/ack/{actuator}). Never what the platform sends it
+    (cmd, state, config, ota): the device credential is also the BLE
+    provisioning PoP printed in a QR, so it must not be able to switch its own
+    outputs or push its own update."""
+    if not topic.startswith(own_subtree):
+        return False
+    rest = topic[len(own_subtree) :].split("/")
+    if not all(rest):
+        return False
+    if len(rest) == 1:
+        return rest[0] not in ingestion_service.PLATFORM_TO_DEVICE_SEGMENTS
+    return len(rest) == 2 and rest[0] == "ack"
 
 
 def _is_worker_publish_topic(topic: str) -> bool:
@@ -177,8 +197,12 @@ async def emqx_authorize(
     if record is None or record.status != DeviceStatus.ACTIVE.value:
         return EmqxAuthorizeResponse(result="deny")
 
-    # Restrict each device to its own topic subtree (CLAUDE.md §4) — covers
-    # telemetry, and cmd/state/ack.
+    # Each device stays in its own topic subtree (CLAUDE.md §4). It may read
+    # anything there (its cmd, state, config and ota), and publish only what
+    # flows device -> platform.
     own_subtree = f"{record.tenant_slug}/{record.device_slug}/"
-    allowed = body.topic.startswith(own_subtree)
+    if body.action == "publish":
+        allowed = _is_device_publish_topic(body.topic, own_subtree)
+    else:
+        allowed = body.topic.startswith(own_subtree)
     return EmqxAuthorizeResponse(result="allow" if allowed else "deny")
