@@ -1415,6 +1415,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Ready
+         * @description 200 when the database, Redis, the worker and telemetry storage are all
+         *     working; 503 with the failing check otherwise.
+         */
+        get: operations["ready_health_ready_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -1753,6 +1774,10 @@ export interface components {
             published_at: string;
             /** Acked At */
             acked_at: string | null;
+            /** Expired At */
+            expired_at?: string | null;
+            /** Requested By */
+            requested_by?: string | null;
             /** Latency Ms */
             latency_ms: number;
         };
@@ -6708,6 +6733,28 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ClientInfoResponse"];
+                };
+            };
+        };
+    };
+    ready_health_ready_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };

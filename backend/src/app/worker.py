@@ -513,6 +513,7 @@ async def _handle_manual_command(
         device_slug = str(data["device_slug"])
         actuator = str(data["actuator"])
         value = data["value"]
+        requested_by = uuid.UUID(data["requested_by"]) if data.get("requested_by") else None
     except (KeyError, TypeError, ValueError) as exc:
         log.warning("dropping malformed manual command request: %s", exc)
         return
@@ -528,6 +529,7 @@ async def _handle_manual_command(
         device_slug,
         actuator=actuator,
         value=value,
+        requested_by=requested_by,
     )
 
 
@@ -1023,6 +1025,67 @@ async def health_monitor_loop(factory: async_sessionmaker[AsyncSession]) -> None
             await asyncio.sleep(RECONNECT_SECONDS)
 
 
+COMMAND_EXPIRY_INTERVAL_SECONDS = 5
+
+
+async def command_expiry_loop(factory: async_sessionmaker[AsyncSession]) -> None:
+    """Every few seconds: store "No response" for commands past their TTL with
+    no ack, put the retained desired state back to the last confirmed value
+    (so a device that reconnects later doesn't act on a command nobody saw
+    land), and tell people with a delivery_failed alert. Its own broker
+    connection, like manual_command_loop's."""
+    while True:
+        try:
+            async with aiomqtt.Client(
+                settings.mqtt_host,
+                port=settings.mqtt_port,
+                username=settings.mqtt_worker_username,
+                password=settings.mqtt_worker_password.get_secret_value(),
+            ) as client:
+                while True:
+                    for expired in await commands_service.expire_overdue_commands(
+                        factory, datetime.now(UTC)
+                    ):
+                        await _handle_expired_command(client, factory, expired)
+                    await asyncio.sleep(COMMAND_EXPIRY_INTERVAL_SECONDS)
+        except aiomqtt.MqttError as exc:
+            log.warning(
+                "command expiry loop error (%s); reconnecting in %ss", exc, RECONNECT_SECONDS
+            )
+            await asyncio.sleep(RECONNECT_SECONDS)
+
+
+async def _handle_expired_command(
+    client: aiomqtt.Client,
+    factory: async_sessionmaker[AsyncSession],
+    expired: commands_service.ExpiredCommand,
+) -> None:
+    await commands_service.restore_desired_state(client, expired)
+    if not expired.is_latest:
+        return  # a newer command followed; its own outcome is what matters
+    kept = (
+        "it keeps the last state it confirmed"
+        if expired.has_acked_value
+        else "nothing will be applied when it reconnects"
+    )
+    try:
+        await notifications_service.create_notification(
+            factory,
+            expired.tenant_id,
+            expired.device_id,
+            None,
+            f"{expired.device_slug}: {expired.actuator} didn't confirm the command",
+            severity="warning",
+            kind="delivery_failed",
+            detail=(
+                f"The device didn't answer in time, so {kept}. Check that it's online, "
+                "then send the command again."
+            ),
+        )
+    except Exception:
+        log.exception("expired-command notification failed for %s", expired.command_id)
+
+
 def heartbeat_payload(now: float, monotonic_now: float) -> str:
     idle = None if _last_message_at is None else round(monotonic_now - _last_message_at, 1)
     return json.dumps(
@@ -1080,6 +1143,7 @@ async def run() -> None:
         "pending_timer": lambda: pending_timer_loop(f),
         "push": lambda: push_sender.push_loop(f),
         "heartbeat": heartbeat_loop,
+        "command_expiry": lambda: command_expiry_loop(f),
     }
     try:
         await asyncio.gather(*(supervise(name, start) for name, start in loops.items()))
