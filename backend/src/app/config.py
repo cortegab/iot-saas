@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     # first — batch size or flush interval.
     telemetry_batch_size: int = 500
     telemetry_flush_interval_ms: int = 1000
+    # Cap on the Redis telemetry stream (XADD MAXLEN ~). Sized to hold about an
+    # hour of a database outage at the design load (1,000 devices at one
+    # reading every ~5 s is ~200/s, ~720k/h); older entries are trimmed.
+    telemetry_stream_maxlen: int = 750_000
 
     # Live-updates WebSocket (app/realtime/router.py): each socket gets at most
     # one frame per interval, carrying every event since the last one. UI-only
