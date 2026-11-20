@@ -7,6 +7,7 @@ credentials and API keys both use the same split public-id/secret pattern as
 refresh tokens here (CLAUDE.md constraint 12).
 """
 
+import asyncio
 import hashlib
 import secrets
 import uuid
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.auth.models import PasswordResetToken, RefreshToken, User
 from app.config import settings
+from app.redis import redis_client
 from app.tenants import service as tenants_service
 from app.tenants.models import Tenant
 
@@ -57,6 +59,14 @@ def verify_password(raw: str, hashed: str) -> bool:
 # make each call site read as what it means, not just how it's implemented.
 hash_secret = hash_password
 verify_secret = verify_password
+
+
+async def verify_secret_off_loop(secret: str, secret_hash: str) -> bool:
+    """verify_secret in a worker thread. argon2 is deliberately slow (~64 MiB,
+    tens of ms) and blocks: on the event loop, 1,000 devices reconnecting
+    after a broker restart would stall every request for tens of seconds and
+    trip EMQX's 5 s auth timeout into a reconnect storm."""
+    return await asyncio.to_thread(verify_secret, secret, secret_hash)
 
 
 def create_access_token(user_id: uuid.UUID) -> str:
@@ -321,3 +331,38 @@ async def revoke_refresh_token(session: AsyncSession, raw_token: str) -> None:
         return
     if row.revoked_at is None:
         row.revoked_at = datetime.now(UTC)
+
+
+# Sign-in throttling (credential stuffing): failed attempts per email and per
+# client address, in Redis like the contact form's limit. Counted only on
+# failure; a success clears the email's count.
+LOGIN_WINDOW_S = 15 * 60
+LOGIN_MAX_FAILURES_PER_EMAIL = 10
+LOGIN_MAX_FAILURES_PER_CLIENT = 50
+
+
+class LoginRateLimitedError(Exception):
+    pass
+
+
+def _login_keys(email: str, client: str) -> tuple[str, str]:
+    return f"login:fail:email:{email.strip().lower()}", f"login:fail:ip:{client}"
+
+
+async def check_login_allowed(email: str, client: str) -> None:
+    by_email, by_client = _login_keys(email, client)
+    if int(await redis_client.get(by_email) or 0) >= LOGIN_MAX_FAILURES_PER_EMAIL:
+        raise LoginRateLimitedError
+    if int(await redis_client.get(by_client) or 0) >= LOGIN_MAX_FAILURES_PER_CLIENT:
+        raise LoginRateLimitedError
+
+
+async def note_login_failure(email: str, client: str) -> None:
+    for key in _login_keys(email, client):
+        count = int(await redis_client.get(key) or 0)
+        await redis_client.set(key, str(count + 1), ex=LOGIN_WINDOW_S)
+
+
+async def clear_login_failures(email: str, client: str) -> None:
+    by_email, _ = _login_keys(email, client)
+    await redis_client.set(by_email, "0", ex=LOGIN_WINDOW_S)

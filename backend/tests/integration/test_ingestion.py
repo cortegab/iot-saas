@@ -365,3 +365,71 @@ def test_http_ingest_is_rate_limited_per_device_per_minute() -> None:
     assert allowed.count(True) == HTTP_INGEST_PER_MINUTE
     assert allow_http_reading(other, t0)  # per device
     assert allow_http_reading(device, t0 + 60)  # next minute
+
+
+@pytest.mark.parametrize(
+    ("suffix", "action", "result"),
+    [
+        ("temperature", "publish", "allow"),
+        ("status", "publish", "allow"),
+        ("ack/fan1", "publish", "allow"),
+        # What the platform sends a device: never published by the device.
+        ("cmd/fan1", "publish", "deny"),
+        ("state/fan1", "publish", "deny"),
+        ("config", "publish", "deny"),
+        ("ota", "publish", "deny"),
+        ("a/b/c", "publish", "deny"),
+        # Reading its own subtree is fine.
+        ("cmd/fan1", "subscribe", "allow"),
+        ("state/fan1", "subscribe", "allow"),
+        ("config", "subscribe", "allow"),
+        ("ota", "subscribe", "allow"),
+    ],
+)
+async def test_emqx_authorize_device_by_direction(
+    client: httpx.AsyncClient,
+    admin_session: AsyncSession,
+    suffix: str,
+    action: str,
+    result: str,
+) -> None:
+    owner = await _register(client, f"dir-{abs(hash((suffix, action)))}@example.com", "Dir")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    created = await _create_device(client, _auth_headers(owner, tenant_id), "Sensor 1")
+    slug = await _tenant_slug(admin_session, tenant_id)
+
+    resp = await client.post(
+        "/ingestion/emqx/authorize",
+        json={
+            "username": created["credential"]["username"],
+            "topic": f"{slug}/{created['device']['slug']}/{suffix}",
+            "action": action,
+        },
+        headers=EMQX_HEADERS,
+    )
+
+    assert resp.json()["result"] == result
+
+
+async def test_sign_in_is_throttled_after_repeated_failures(
+    client: httpx.AsyncClient, redis_kv: dict[str, str]
+) -> None:
+    await _register(client, "throttle@example.com", "Throttle")
+    for _ in range(10):
+        bad = await client.post(
+            "/auth/login", json={"email": "throttle@example.com", "password": "wrong-password"}
+        )
+        assert bad.status_code == 401
+
+    blocked = await client.post(
+        "/auth/login", json={"email": "throttle@example.com", "password": "hunter2hunter2"}
+    )
+    assert blocked.status_code == 429
+    assert blocked.headers["retry-after"] == "900"
+
+    # A different account from the same place isn't blocked yet.
+    await _register(client, "other@example.com", "Other")
+    ok = await client.post(
+        "/auth/login", json={"email": "other@example.com", "password": "hunter2hunter2"}
+    )
+    assert ok.status_code == 200

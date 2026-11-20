@@ -155,7 +155,7 @@ async def authenticate_api_key(session: AsyncSession, presented: str) -> ApiKeyP
         .mappings()
         .first()
     )
-    if row is None or not auth_service.verify_secret(secret, row["key_hash"]):
+    if row is None or not await auth_service.verify_secret_off_loop(secret, row["key_hash"]):
         raise ApiKeyAuthError
     now = datetime.now(UTC)
     if row["revoked_at"] is not None or (
