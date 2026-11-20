@@ -56,6 +56,17 @@ class StatusPayload(BaseModel):
     # {"version", "state": downloading | restarting | failed | rolled_back,
     # "error"}. Absent when there's nothing to say.
     ota: dict[str, str] | None = None
+    # The update keys this firmware trusts (1.0.1+): ids of its built-in
+    # public keys (firmware/ota_keys.py). The platform offers an update only
+    # when the key that signed it is among them.
+    ota_keys: list[str] | None = None
+
+    @field_validator("ota_keys", mode="before")
+    @classmethod
+    def _ota_keys(cls, v: object) -> object:
+        if not isinstance(v, list):
+            return None
+        return [k[:32] for k in v if isinstance(k, str) and k][:4]
 
     @field_validator("ota", mode="before")
     @classmethod

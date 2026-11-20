@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <math.h>
 
 #include "../health.h"
 #include "../pins.h"
@@ -102,7 +103,7 @@ inline bool enumParam(JsonObjectConst binding, const char* key, const char* def,
 }
 
 // A command value read as a number: a number, true/false (1/0), or numeric text.
-inline bool numeric(JsonVariantConst value, float& out) {
+inline bool numericAnyFloat(JsonVariantConst value, float& out) {
   if (value.is<float>()) {
     out = value.as<float>();
     return true;
@@ -118,6 +119,12 @@ inline bool numeric(JsonVariantConst value, float& out) {
     return end != s && *end == '\0';
   }
   return false;
+}
+
+inline bool numeric(JsonVariantConst value, float& out) {
+  bool ok = numericAnyFloat(value, out);
+  // "nan" and "inf" parse as floats but mean nothing to a PWM or a servo.
+  return ok && isfinite(out);
 }
 
 // Whether the config set the I2C bus pins and io.cpp started the bus. I2C

@@ -360,6 +360,8 @@ class StatusDiagnostics(NamedTuple):
     faults: list[str] | None
     # An over-the-air update's progress (firmware 1.0.0+), or None.
     ota_state: dict[str, str] | None = None
+    # The update keys the firmware trusts (1.0.1+), or None.
+    ota_keys: list[str] | None = None
 
 
 class StatusChange(NamedTuple):

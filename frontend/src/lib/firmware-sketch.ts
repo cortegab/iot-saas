@@ -91,10 +91,11 @@ export const BOARDS: Record<
     resetPin: 9,
     resetButton: "BOOT",
     bleHandler: "NETWORK_PROV_SCHEME_HANDLER_FREE_BLE",
-    // Strapping pins 2, 8, 9 and USB pins 18, 19 are left out; 20/21 (UART0)
-    // are free with USB CDC on boot and go last.
+    // Strapping pins 2, 8, 9 and USB pins 18, 19 are left out; 20 (UART0 RX)
+    // is free with USB CDC on boot and goes last. 21 (UART0 TX) isn't an
+    // output: the ROM prints its boot log on it at every reset.
     inputs: [4, 5, 6, 7, 10],
-    outputs: [3, 1, 0, 20, 21],
+    outputs: [3, 1, 0, 20],
   },
   esp32s3: {
     label: "ESP32-S3",

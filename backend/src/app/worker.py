@@ -239,6 +239,7 @@ async def _handle_status(
             wifi_reconnects=data.wifi_reconnects,
             faults=data.faults,
             ota_state=data.ota,
+            ota_keys=data.ota_keys,
         )
         if data.boot_count is not None
         else None
@@ -568,8 +569,11 @@ async def _handle_config_publish(
         for m in devices[0].metrics
         if m.get("key")
     ]
+    # Compact: the firmware's MQTT buffer holds the whole message (4 KB from
+    # 1.0.1, 1 KB before), and a message that doesn't fit is dropped silently.
     payload = json.dumps(
-        {"metrics": metrics_payload, "issued_at": int(datetime.now(UTC).timestamp())}
+        {"metrics": metrics_payload, "issued_at": int(datetime.now(UTC).timestamp())},
+        separators=(",", ":"),
     )
     for row in devices:
         await client.publish(

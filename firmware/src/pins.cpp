@@ -13,10 +13,14 @@ namespace {
 const int8_t USABLE[] = {0, 1, 3, 4, 5, 6, 7, 10, 20, 21};
 const int8_t ADC1[] = {0, 1, 3, 4};
 const int8_t INPUT_ONLY[] = {-1};
+// U0TXD: the ROM prints its boot log on it at every reset.
+const int8_t BOOT_TOGGLES[] = {21};
 #elif CONFIG_IDF_TARGET_ESP32
 const int8_t USABLE[] = {4, 13, 14, 16, 17, 18, 21, 22, 23, 25, 26, 27, 32, 33, 34, 35, 36, 39};
 const int8_t ADC1[] = {32, 33, 34, 35, 36, 39};
 const int8_t INPUT_ONLY[] = {34, 35, 36, 39};
+// Puts out a PWM signal during boot.
+const int8_t BOOT_TOGGLES[] = {14};
 #elif CONFIG_IDF_TARGET_ESP32S3
 // Left out: strapping 0, 3, 45, 46; USB 19, 20; flash and octal PSRAM 26–37;
 // the USB-UART bridge 43, 44. 38 and 48 are each a DevKitC-1 revision's RGB
@@ -24,18 +28,21 @@ const int8_t INPUT_ONLY[] = {34, 35, 36, 39};
 const int8_t USABLE[] = {1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 38, 39, 40, 41, 42, 47, 48};
 const int8_t ADC1[] = {1, 2, 4, 5, 6, 7, 8, 9, 10};
 const int8_t INPUT_ONLY[] = {-1};
+const int8_t BOOT_TOGGLES[] = {-1};
 #elif CONFIG_IDF_TARGET_ESP32C6
 // Left out: strapping 4, 5, 8 (the RGB LED), 9 (BOOT), 15; USB 12, 13; the
 // USB-UART bridge 16, 17; flash 24-30.
 const int8_t USABLE[] = {0, 1, 2, 3, 6, 7, 10, 11, 14, 18, 19, 20, 21, 22, 23};
 const int8_t ADC1[] = {0, 1, 2, 3, 6};
 const int8_t INPUT_ONLY[] = {-1};
+const int8_t BOOT_TOGGLES[] = {-1};
 #elif CONFIG_IDF_TARGET_ESP32S2
 // Left out: strapping 0, 45, 46; USB 19, 20; flash and PSRAM 26-32; 15 (the
 // Lolin S2 Mini's LED).
 const int8_t USABLE[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 21, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42};
 const int8_t ADC1[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
 const int8_t INPUT_ONLY[] = {-1};
+const int8_t BOOT_TOGGLES[] = {-1};
 #else
 #error "No pin rules for this chip in src/pins.cpp"
 #endif
@@ -66,6 +73,13 @@ bool claimRawPin(int pin, PinUse use, const char* owner, String& err) {
   if ((use == PinUse::Output || use == PinUse::Bus) && contains(INPUT_ONLY, pin)) {
     err = where + " is input-only";
     return false;
+  }
+  if (use == PinUse::Output && contains(BOOT_TOGGLES, pin)) {
+    // Refused for new wiring by the dashboard (board-pins.ts); a board already
+    // wired this way keeps working, with a warning, rather than failing on an
+    // update.
+    Serial.printf("[PINS] warning: %s toggles while the chip boots; an output there twitches at every restart\n",
+                  where.c_str());
   }
   if (use == PinUse::Analog && !contains(ADC1, pin)) {
     err = where + " can't read analog while Wi-Fi is on (ADC1 pins only)";

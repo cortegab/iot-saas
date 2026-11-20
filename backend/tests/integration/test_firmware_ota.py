@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 import httpx
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app import worker
@@ -23,10 +24,14 @@ HARDWARE = {
 }
 
 
-def manifest(version: str = "1.0.1", signed: bool = True) -> dict[str, Any]:
+KEY = "0123456789abcdef"
+
+
+def manifest(version: str = "1.0.2", signed: bool = True, key_id: str = KEY) -> dict[str, Any]:
     app: dict[str, Any] = {"offset": 65536, "size": 1966080, "used": 1441315}
     if signed:
         app["signature"] = "MEUCIQ..."
+        app["key_id"] = key_id
     return {
         "version": version,
         "boards": {
@@ -65,7 +70,8 @@ async def _setup(
     client: httpx.AsyncClient,
     factory: async_sessionmaker[AsyncSession],
     email: str,
-    fw_version: str | None = "1.0.0",
+    fw_version: str | None = "1.0.1",
+    ota_keys: list[str] | None = None,
 ) -> tuple[dict[str, str], dict[str, Any]]:
     resp = await client.post(
         "/auth/register",
@@ -94,7 +100,13 @@ async def _setup(
         parsed = ParsedTopic(
             tenant_slug=device["tenant_slug"], device_slug=device["device"]["slug"], metric="status"
         )
-        payload = {"online": True, "fw_version": fw_version, "boot_count": 1, "faults": []}
+        payload: dict[str, Any] = {
+            "online": True,
+            "fw_version": fw_version,
+            "boot_count": 1,
+            "faults": [],
+            "ota_keys": [KEY] if ota_keys is None else ota_keys,
+        }
         await worker._handle_status(factory, AsyncMock(), parsed, json.dumps(payload).encode())
     return headers, device
 
@@ -108,8 +120,8 @@ async def test_status_offers_the_latest_signed_release(
     resp = await client.get(f"/devices/{device['device']['id']}/firmware", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
-    assert body["current"] == "1.0.0"
-    assert body["latest"] == "1.0.1"
+    assert body["current"] == "1.0.1"
+    assert body["latest"] == "1.0.2"
     assert body["update_available"] is True
     assert body["can_update"] is True
     assert body["reason"] is None
@@ -118,10 +130,12 @@ async def test_status_offers_the_latest_signed_release(
 @pytest.mark.parametrize(
     ("fw_version", "release_manifest", "reason"),
     [
-        ("0.15.1", manifest(), "install 1.0.0 or later over USB"),
-        ("1.0.1", manifest(), "already runs the latest"),
-        ("1.0.0", manifest(signed=False), "isn't signed"),
-        ("1.0.0", None, "No firmware release"),
+        ("0.15.1", manifest(), "install 1.0.1 or later over USB"),
+        # 1.0.0 has no update key built in: it refuses every update.
+        ("1.0.0", manifest(), "install 1.0.1 or later over USB"),
+        ("1.0.2", manifest(), "already runs the latest"),
+        ("1.0.1", manifest(signed=False), "isn't signed"),
+        ("1.0.1", None, "No firmware release"),
         (None, manifest(), "hasn't reported"),
     ],
 )
@@ -141,6 +155,33 @@ async def test_status_says_why_it_cant_update(
     assert reason in body["reason"]
 
 
+async def test_status_refuses_a_release_signed_with_a_key_the_board_doesnt_trust(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    release: dict[str, Any],
+) -> None:
+    release["manifest"] = manifest(key_id="feedfacefeedface")
+    headers, device = await _setup(client, app_session_factory, "ota-key@example.com")
+    body = (await client.get(f"/devices/{device['device']['id']}/firmware", headers=headers)).json()
+    assert body["can_update"] is False
+    assert "doesn't trust the key" in body["reason"]
+
+
+async def test_status_stores_the_keys_the_board_trusts(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    release: dict[str, Any],
+) -> None:
+    _, device = await _setup(
+        client, app_session_factory, "ota-keys@example.com", ota_keys=[KEY, "x" * 40, 7]
+    )
+    row = await admin_session.execute(
+        text("SELECT ota_keys FROM devices WHERE id = :id"), {"id": device["device"]["id"]}
+    )
+    assert row.scalar_one() == [KEY, "x" * 32]
+
+
 async def test_update_request_is_published_for_the_worker(
     client: httpx.AsyncClient,
     app_session_factory: async_sessionmaker[AsyncSession],
@@ -157,10 +198,10 @@ async def test_update_request_is_published_for_the_worker(
     assert resp.status_code == 409
 
     resp = await client.post(
-        f"/devices/{device_id}/firmware/update", json={"version": "1.0.1"}, headers=headers
+        f"/devices/{device_id}/firmware/update", json={"version": "1.0.2"}, headers=headers
     )
     assert resp.status_code == 200, resp.text
-    assert resp.json()["target"] == "1.0.1"
+    assert resp.json()["target"] == "1.0.2"
 
     calls = [
         c for c in _mock_redis_publish.call_args_list if c.args[0] == firmware_service.OTA_CHANNEL
@@ -169,8 +210,8 @@ async def test_update_request_is_published_for_the_worker(
     request = json.loads(calls[0].args[1])
     assert request["device_slug"] == device["device"]["slug"]
     sent = request["payload"]
-    assert sent["version"] == "1.0.1"
-    assert sent["url"].endswith("/1.0.1/esp32/firmware.bin")
+    assert sent["version"] == "1.0.2"
+    assert sent["url"].endswith("/1.0.2/esp32/firmware.bin")
     assert sent["size"] == 1441315
     assert sent["sha256"] == "bb" * 32
     assert sent["signature"] == "MEUCIQ..."
@@ -196,10 +237,10 @@ async def test_a_failed_update_is_reported_and_alerted(
     )
     report = {
         "online": True,
-        "fw_version": "1.0.0",
+        "fw_version": "1.0.1",
         "boot_count": 1,
         "faults": [],
-        "ota": {"version": "1.0.1", "state": "failed", "error": "the signature doesn't match"},
+        "ota": {"version": "1.0.2", "state": "failed", "error": "the signature doesn't match"},
     }
     for _ in range(2):  # reported twice, alerted once
         await worker._handle_status(
@@ -207,7 +248,7 @@ async def test_a_failed_update_is_reported_and_alerted(
         )
     body = (await client.get(f"/devices/{device['device']['id']}/firmware", headers=headers)).json()
     assert body["state"] == {
-        "version": "1.0.1",
+        "version": "1.0.2",
         "state": "failed",
         "error": "the signature doesn't match",
     }
@@ -216,7 +257,7 @@ async def test_a_failed_update_is_reported_and_alerted(
         for n in (await client.get("/notifications", headers=headers)).json()
         if n["kind"] == "device_health"
     ]
-    assert alerts == [f"{device['device']['slug']}: update to 1.0.1 failed"]
+    assert alerts == [f"{device['device']['slug']}: update to 1.0.2 failed"]
 
 
 async def test_update_needs_a_signed_in_user(
@@ -229,7 +270,7 @@ async def test_update_needs_a_signed_in_user(
     headers, device = await _setup(client, app_session_factory, "ota4@example.com")
     resp = await client.post(
         f"/devices/{device['device']['id']}/firmware/update",
-        json={"version": "1.0.1"},
+        json={"version": "1.0.2"},
         headers={"authorization": "Bearer nope", "x-tenant-id": headers["x-tenant-id"]},
     )
     assert resp.status_code in (401, 403)

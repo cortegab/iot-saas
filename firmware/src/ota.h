@@ -37,3 +37,7 @@ void otaRun();
 // whenever it changes, so the status can go out at once.
 bool otaReport(JsonObject out);
 uint32_t otaReportVersion();
+
+// The ids of the update keys built in (ota_keys.py: the first 16 hex digits of
+// the SHA-256 of each public key's DER), for the status message's "ota_keys".
+void otaKeyIds(JsonArray out);

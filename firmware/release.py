@@ -115,7 +115,7 @@ def pin_list(block: str, name: str, where: str) -> set[int]:
 def firmware_pins() -> dict[str, dict[str, set[int]]]:
     """Each chip's pin rules, read from src/pins.cpp (the firmware's own)."""
     return {
-        chip: {key: pin_list(block, name, f"src/pins.cpp ({chip})") for key, name in (("usable", "USABLE"), ("adc1", "ADC1"), ("inputOnly", "INPUT_ONLY"))}
+        chip: {key: pin_list(block, name, f"src/pins.cpp ({chip})") for key, name in (("usable", "USABLE"), ("adc1", "ADC1"), ("inputOnly", "INPUT_ONLY"), ("bootToggles", "BOOT_TOGGLES"))}
         for chip, block in chip_blocks("src/pins.cpp").items()
     }
 
@@ -209,10 +209,20 @@ def public_keys() -> list[Path]:
     return sorted((HERE / "ota_keys").glob("*.pem"))
 
 
-def sign(app: Path, key: Path, sig_out: Path) -> str:
+def key_id(pem_path: Path) -> str:
+    """The id of a public key, as ota_keys.py builds it into the firmware and
+    the status message reports it: the first 16 hex digits of the SHA-256 of
+    the key's DER."""
+    body = "".join(line for line in pem_path.read_text().strip().splitlines() if not line.startswith("-----"))
+    return hashlib.sha256(base64.b64decode(body)).hexdigest()[:16]
+
+
+def sign(app: Path, key: Path, sig_out: Path) -> dict[str, str]:
     """Signs firmware.bin for over-the-air updates: ECDSA P-256 over its
     SHA-256, DER, base64 (src/ota.cpp checks it). Refuses a key whose
-    signature no built-in public key accepts: boards would reject the update."""
+    signature no built-in public key accepts: boards would reject the update.
+    Returns the signature and the id of the public key that accepts it (the
+    platform offers the update only to boards that trust that key)."""
     subprocess.run(["openssl", "dgst", "-sha256", "-sign", str(key), "-out", str(sig_out), str(app)], check=True)
     accepted = [
         pub
@@ -225,7 +235,7 @@ def sign(app: Path, key: Path, sig_out: Path) -> str:
     ]
     if not accepted:
         fail(f"the signing key matches none of the public keys in ota_keys/ ({', '.join(p.name for p in public_keys())})")
-    return base64.b64encode(sig_out.read_bytes()).decode()
+    return {"signature": base64.b64encode(sig_out.read_bytes()).decode(), "key_id": key_id(accepted[0])}
 
 
 def main() -> None:
@@ -240,7 +250,17 @@ def main() -> None:
         help="private ECDSA P-256 key (PEM) that signs each app for OTA updates (or OTA_SIGNING_KEY_FILE)",
     )
     parser.add_argument("--unsigned", action="store_true", help="release without signatures: boards refuse it over the air")
+    parser.add_argument(
+        "--require-signed",
+        action="store_true",
+        help="fail unless ota_keys/ has a public key and a signing key is given (the production deploy)",
+    )
     args = parser.parse_args()
+    if args.require_signed:
+        if not public_keys():
+            fail("--require-signed: ota_keys/ has no public key; boards built now could never update (docs/firmware/ota.md)")
+        if args.sign_key is None or args.unsigned:
+            fail("--require-signed: no signing key (the OTA_SIGNING_KEY secret isn't set for this deploy)")
     if public_keys() and args.sign_key is None and not args.unsigned:
         fail("ota_keys/ has update keys, so a release must be signed: pass --sign-key (or --unsigned for a USB-only build)")
 
@@ -305,7 +325,7 @@ def main() -> None:
                 # Over-the-air updates (src/ota.cpp): what the platform sends.
                 # No signature: this release can only be installed over USB.
                 **(
-                    {"signature": sign(out_dir / board / "firmware.bin", args.sign_key, out_dir / board / "firmware.sig")}
+                    sign(out_dir / board / "firmware.bin", args.sign_key, out_dir / board / "firmware.sig")
                     if args.sign_key is not None
                     else {}
                 ),
