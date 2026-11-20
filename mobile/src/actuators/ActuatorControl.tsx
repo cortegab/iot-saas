@@ -1,8 +1,8 @@
 import { commandRange, controlKind, isRequested, parseCommand, type CommandRange, type CommandValue } from "@iodriven/shared/actuator-command";
 import type { components } from "@iodriven/shared/api";
 import { ApiRequestError } from "@iodriven/shared/api-client";
-import { commandStatus, msUntilCommandDeadline } from "@iodriven/shared/command-status";
-import { getDeviceActuators } from "@iodriven/shared/device-actuators";
+import { commandStatus, lastConfirmedValue, manualSender, msUntilCommandDeadline } from "@iodriven/shared/command-status";
+import { getDeviceActuators, rulesDrivingActuator } from "@iodriven/shared/device-actuators";
 import { timeAgo } from "@iodriven/shared/time-ago";
 import { wireId } from "@iodriven/shared/wire-id";
 import { useEffect, useMemo, useState } from "react";
@@ -18,6 +18,8 @@ import { Switch } from "@/ui/Switch";
 import { Text } from "@/ui/Text";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
+type UserResponse = components["schemas"]["UserResponse"];
+type MemberResponse = components["schemas"]["MemberResponse"];
 type CommandResponse = components["schemas"]["CommandResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogActuator = components["schemas"]["CatalogActuator"];
@@ -109,6 +111,9 @@ function ActuatorRow({
   range,
   canSend,
   latest,
+  confirmed,
+  drivingRules,
+  sender,
   ruleName,
   onSent,
 }: {
@@ -119,6 +124,9 @@ function ActuatorRow({
   range: CommandRange | null;
   canSend: boolean;
   latest: CommandResponse | undefined;
+  confirmed: unknown;
+  drivingRules: string[];
+  sender: (c: CommandResponse) => string;
   ruleName: (id: string) => string | undefined;
   onSent: () => Promise<CommandResponse[] | undefined>;
 }) {
@@ -152,11 +160,16 @@ function ActuatorRow({
     const words = formatCommandValue(next, range?.unit);
     const verb = typeof next === "boolean" ? `Turn ${words}` : `Set to ${words}`;
     const what = typeof next === "boolean" ? `Turn ${label} ${words}?` : `Set ${label} to ${words}?`;
+    // As on the web: a rule that also switches it may switch it straight back.
+    const rulesNote =
+      drivingRules.length > 0
+        ? `${drivingRules.length === 1 ? `The rule ${drivingRules[0]} also switches` : `The rules ${drivingRules.join(", ")} also switch`} it and may switch it back.`
+        : "";
     const ok = online
-      ? await confirm(retry ? "Send it again?" : what, retry ? what : "", retry ? "Retry" : verb)
+      ? await confirm(retry ? "Send it again?" : what, [retry ? what : "", rulesNote].filter(Boolean).join(" "), retry ? "Retry" : verb)
       : await confirm(
           "Send to an offline device?",
-          `The device is offline. The command waits as its desired state and applies when it reconnects, if that's within the command's time limit. ${what}`,
+          `The device is offline. The command waits as its desired state and applies when it reconnects, if that's within the command's time limit. ${rulesNote ? `${rulesNote} ` : ""}${what}`,
           retry ? "Retry" : verb,
         );
     if (!ok) return;
@@ -180,7 +193,8 @@ function ActuatorRow({
     }
   }
 
-  const sentBy = latest ? (latest.rule_id ? `by rule ${ruleName(latest.rule_id) ?? "a rule"}` : "manually") : "";
+  const sentBy = latest ? (latest.rule_id ? `by rule ${ruleName(latest.rule_id) ?? "a rule"}` : sender(latest)) : "";
+  const unconfirmed = sending == null && latest != null && status !== "confirmed";
   const control = !canSend ? null : kind === "switch" ? (
     <Switch accessibilityLabel={label} value={requested === true} disabled={disabled || busy} onValueChange={(on) => void send(on)} />
   ) : null;
@@ -192,6 +206,12 @@ function ActuatorRow({
           <Text weight="medium">{label}</Text>
           <Text size="meta" color="inkMuted">
             Requested <Text size="meta" weight="medium">{requested == null ? "unknown" : formatCommandValue(requested, range?.unit)}</Text>
+            {unconfirmed && (
+              <Text size="meta" color="statusPending">
+                {" · not confirmed"}
+                {confirmed !== undefined && !isRequested(confirmed as CommandValue, requested) ? `, last confirmed ${formatCommandValue(confirmed, range?.unit)}` : ""}
+              </Text>
+            )}
           </Text>
           <Text size="meta" color="inkMuted" accessibilityLiveRegion="polite">
             {sending != null ? (
@@ -253,6 +273,8 @@ function ActuatorRow({
  * a number or text. Offline is said once, above the rows. */
 export function ActuatorControl({ device }: { device: DeviceResponse }) {
   const canSend = useCan("commands.send");
+  const { data: me } = useApiSWR<UserResponse>("/auth/me");
+  const { data: members } = useApiSWR<MemberResponse[]>("/tenants/members");
   const { data: rules } = useApiSWR<RuleResponse[]>(`/devices/${device.id}/rules`);
   const { data: allRules } = useApiSWR<RuleResponse[]>("/rules");
   const { data: template } = useApiSWR<CatalogEntryResponse>(`/catalog/${device.catalog_entry_id}`);
@@ -305,6 +327,9 @@ export function ActuatorControl({ device }: { device: DeviceResponse }) {
           range={commandRange(device.hardware ?? template.hardware, id)}
           canSend={canSend}
           latest={commands?.find((c) => c.actuator === id)}
+          confirmed={lastConfirmedValue(commands, id)}
+          drivingRules={rulesDrivingActuator(allRules, device.id, id)}
+          sender={(c) => manualSender(c, members, me?.id)}
           ruleName={(rid) => ruleNames.get(rid)}
           onSent={() => mutate()}
         />
