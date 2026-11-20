@@ -41,4 +41,10 @@ class Command(Base):
     # Breach reading timestamp -> publish, per CLAUDE.md's "latency
     # instrumentation: record breach->publish for every firing."
     latency_ms: Mapped[float] = mapped_column(nullable=False)
+    # Set by the worker when the TTL passed with no ack ("No response").
+    expired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Who sent a manual command; null for a rule's.
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -37,4 +37,8 @@ class CommandResponse(BaseModel):
     ttl_seconds: int
     published_at: datetime
     acked_at: datetime | None
+    # Set once the TTL passed with no ack ("No response").
+    expired_at: datetime | None = None
+    # Who sent a manual command; null for a rule's.
+    requested_by: uuid.UUID | None = None
     latency_ms: float
