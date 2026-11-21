@@ -102,9 +102,11 @@ jobs:
         run: |
           pip install platformio==6.2.0
           if [ -n "$OTA_SIGNING_KEY" ]; then
-            umask 077
             KEY_FILE="$RUNNER_TEMP/ota-signing.pem"
-            printf '%s\n' "$OTA_SIGNING_KEY" > "$KEY_FILE"
+            # Private to the runner user. The umask stays in this subshell:
+            # leaked into release.py it made the whole release 0600/0700,
+            # which nginx then refused to serve (403 on latest.json).
+            ( umask 077; printf '%s\n' "$OTA_SIGNING_KEY" > "$KEY_FILE" )
             export OTA_SIGNING_KEY_FILE="$KEY_FILE"
           fi
           # Builds every chip and fails on an oversized app, a catalog that
@@ -125,7 +127,7 @@ jobs:
           # points at a half-copied release.
           tar -C infra/firmware -cf - "$VERSION" latest.json \
             | ssh -i ~/.ssh/id_ed25519 "deploy@${VPS_HOST}" \
-                'mkdir -p ~/iot-saas/infra/firmware && tar -C ~/iot-saas/infra/firmware -xf -'
+                'mkdir -p ~/iot-saas/infra/firmware && tar -C ~/iot-saas/infra/firmware --no-same-permissions -xf - && chmod -R a+rX ~/iot-saas/infra/firmware'
 
   deploy:
     needs: firmware
@@ -152,6 +154,9 @@ jobs:
           # nginx bind-mounts this; created here (as deploy) so Docker never
           # creates it root-owned, which would block publishing firmware.
           mkdir -p infra/firmware
+          # nginx reads these as another user: every release must be world-
+          # readable. Also repairs a release published without it.
+          chmod -R a+rX infra/firmware
           C="docker compose -f infra/docker-compose.prod.yml --env-file infra/.env.prod"
           \$C up -d --build
           # Re-render the generated nginx/emqx configs so a .template change in
