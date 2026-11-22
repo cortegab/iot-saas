@@ -16,7 +16,10 @@ def test_round_trip() -> None:
 
 def test_wrong_signature_rejected() -> None:
     token = create_access_token(uuid.uuid4())
-    tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
+    # Not the last character: its low bits can be base64 padding, so changing
+    # it sometimes leaves the signature bytes as they were (a flaky test).
+    i = len(token) - 3
+    tampered = token[:i] + ("A" if token[i] != "A" else "B") + token[i + 1 :]
     with pytest.raises(InvalidAccessTokenError):
         decode_access_token(tampered)
 

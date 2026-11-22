@@ -6,7 +6,7 @@ auth/service.py and tenants/service.py.
 
 import uuid
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
@@ -29,6 +29,7 @@ from app.config import settings
 from app.db import get_session, set_user_context
 from app.notifications.email import EmailMessage, send_after_commit
 from app.redis import redis_client
+from app.shared.client_ip import client_ip
 from app.tenants import service as tenants_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -71,14 +72,27 @@ async def register(
 
 @router.post("/login", response_model=TokenPairResponse)
 async def login(
-    body: LoginRequest, session: AsyncSession = Depends(get_session, scope="function")
+    body: LoginRequest,
+    request: Request,
+    session: AsyncSession = Depends(get_session, scope="function"),
 ) -> TokenPairResponse:
+    client = client_ip(request)
+    try:
+        await service.check_login_allowed(body.email, client)
+    except service.LoginRateLimitedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed sign-ins. Wait 15 minutes, or reset your password.",
+            headers={"Retry-After": str(service.LOGIN_WINDOW_S)},
+        ) from exc
     try:
         user = await service.authenticate_user(session, body.email, body.password)
     except service.InvalidCredentialsError as exc:
+        await service.note_login_failure(body.email, client)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password"
         ) from exc
+    await service.clear_login_failures(body.email, client)
 
     refresh_token = await service.issue_refresh_token(session, user.id)
     return await _token_pair_response(session, user.id, refresh_token)

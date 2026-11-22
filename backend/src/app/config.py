@@ -9,6 +9,8 @@ from typing import Literal
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEV_PLACEHOLDER_SECRET = "dev-only-change-me"
+
 
 class Settings(BaseSettings):
     # .env.local is gitignored and, if present, overrides .env — for real
@@ -88,6 +90,11 @@ class Settings(BaseSettings):
     # Public URL of the web app — the base of links sent by email (member
     # invitations, password resets).
     app_base_url: str = "http://localhost:3000"
+    # Refuse webhook URLs that resolve to private, loopback, link-local or
+    # other non-public addresses (server-side request forgery: an Admin
+    # pointing a webhook at the VPS's own services). Off only in tests and a
+    # dev box that posts to a local receiver.
+    webhook_check_destination: bool = True
     # Firmware releases (firmware/release.py's latest.json + <version>/
     # manifest.json), for over-the-air updates (app.firmware): where the API
     # reads the manifest AND the URL boards download from, so it must be
@@ -138,9 +145,32 @@ class Settings(BaseSettings):
     def firmware_url(self) -> str:
         return (self.firmware_base_url or f"{self.app_base_url.rstrip('/')}/firmware").rstrip("/")
 
+    def refuse_dev_secrets_in_production(self) -> None:
+        """Called at import: a server reachable over https (production) must not
+        run with a development placeholder secret. Anyone who has read this
+        repository knows it, so it would sign JWTs or admit MQTT clients."""
+        base = self.app_base_url.lower()
+        if not base.startswith("https://") or "localhost" in base or "127.0.0.1" in base:
+            return
+        placeholders = [
+            name
+            for name, value in (
+                ("JWT_SECRET_KEY", self.jwt_secret_key),
+                ("EMQX_AUTH_SHARED_SECRET", self.emqx_auth_shared_secret),
+                ("MQTT_WORKER_PASSWORD", self.mqtt_worker_password),
+            )
+            if value.get_secret_value() == DEV_PLACEHOLDER_SECRET
+        ]
+        if placeholders:
+            raise RuntimeError(
+                f"{', '.join(placeholders)} still {'has' if len(placeholders) == 1 else 'have'} "
+                f"the development placeholder; set real secrets for {self.app_base_url}"
+            )
+
     @property
     def cors_allow_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_allow_origins.split(",") if origin.strip()]
 
 
 settings = Settings()
+settings.refuse_dev_secrets_in_production()

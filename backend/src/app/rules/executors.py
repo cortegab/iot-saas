@@ -12,14 +12,18 @@ alias of `asyncio.sleep` so tests can neutralise the backoff.
 """
 
 import asyncio
+import ipaddress
 import logging
+import socket
 import time
 import uuid
 from dataclasses import dataclass
 from typing import Any, NamedTuple, Protocol
+from urllib.parse import urlsplit
 
 import httpx
 
+from app.config import settings
 from app.notifications.email import EmailMessage, get_email_provider
 
 log = logging.getLogger("rules.executors")
@@ -65,11 +69,52 @@ class Executor(Protocol):
     async def execute(self, config: dict[str, Any], ctx: ActionContext) -> ActionResult: ...
 
 
+class BlockedDestinationError(Exception):
+    pass
+
+
+async def _resolve(host: str, port: int) -> list[str]:
+    loop = asyncio.get_running_loop()
+    infos = await loop.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    return [str(info[4][0]) for info in infos]
+
+
+async def check_webhook_destination(url: str) -> None:
+    """Refuse a webhook that would reach this server's own network: only
+    http(s) to hosts whose every address is public. Raises
+    BlockedDestinationError with the reason. (The address is checked when the
+    webhook runs; a DNS answer that changes between this check and the
+    connection is a residual risk.)"""
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise BlockedDestinationError("only http and https URLs with a host can be called")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        addresses = await _resolve(parsed.hostname, port)
+    except OSError as exc:
+        raise BlockedDestinationError(f"{parsed.hostname} doesn't resolve") from exc
+    for raw in addresses:
+        ip = ipaddress.ip_address(raw.split("%")[0])
+        if not ip.is_global or ip.is_multicast:
+            raise BlockedDestinationError(
+                f"{parsed.hostname} resolves to {ip}, which isn't a public address"
+            )
+
+
 class WebhookExecutor:
     async def execute(self, config: dict[str, Any], ctx: ActionContext) -> ActionResult:
         _, timeout_s = parse_retry(config)
         url = str(config["url"])
         started = time.monotonic()
+        if settings.webhook_check_destination:
+            try:
+                await check_webhook_destination(url)
+            except BlockedDestinationError as exc:
+                # Not retried: the same URL would be refused again.
+                return ActionResult(
+                    "failed",
+                    {"url": _truncate(url), "error": _truncate(f"blocked: {exc}"), "blocked": True},
+                )
         try:
             async with httpx.AsyncClient(timeout=timeout_s) as client:
                 response = await client.post(url, json=config.get("body", {}))
@@ -131,6 +176,8 @@ async def execute_with_retry(kind: str, config: dict[str, Any], ctx: ActionConte
             result = ActionResult("failed", {"error": _truncate(str(exc))})
         if result.status == "success":
             return ActionResult("success", {**result.detail, "attempts": attempt})
+        if result.detail.get("blocked"):
+            return ActionResult("failed", {**result.detail, "attempts": attempt})
         if attempt < max_attempts:
             delay = _BACKOFF_SCHEDULE[min(attempt - 1, len(_BACKOFF_SCHEDULE) - 1)]
             await _sleep(delay)

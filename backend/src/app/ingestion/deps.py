@@ -1,5 +1,7 @@
 """Dependency-injection providers for ingestion routes."""
 
+import hmac
+
 from fastapi import Header, HTTPException, status
 
 from app.config import settings
@@ -13,7 +15,8 @@ async def require_emqx_shared_secret(
     traffic reaching the api container: a shared secret only EMQX's mounted
     config and this app both know.
     """
-    if x_emqx_auth_secret != settings.emqx_auth_shared_secret.get_secret_value():
+    expected = settings.emqx_auth_shared_secret.get_secret_value().encode()
+    if x_emqx_auth_secret is None or not hmac.compare_digest(x_emqx_auth_secret.encode(), expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or missing shared secret"
         )
