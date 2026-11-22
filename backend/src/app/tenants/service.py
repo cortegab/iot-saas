@@ -320,7 +320,13 @@ async def setup_status(
     tenant = await get_tenant(session, tenant_id)
     seen = await devices_service.first_seen_device(session, tenant_id)
     return SetupStatus(
-        template=await catalog_service.count_catalog_entries(session, tenant_id) > 0,
+        # The seeded "Legacy / Uncategorized" entry is empty: counting it ticked
+        # this step before anyone made a template, and a first device on it
+        # never sent a reading.
+        template=await catalog_service.count_catalog_entries(
+            session, tenant_id, include_legacy=False
+        )
+        > 0,
         device=seen is not None,
         rule=await rules_service.count_rules(session, tenant_id) > 0,
         dashboard=await dashboards_service.count_dashboards(session, tenant_id) > 0,
