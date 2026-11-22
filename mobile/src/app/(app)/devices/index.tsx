@@ -103,8 +103,9 @@ export default function Devices() {
                 <Text weight="medium" numberOfLines={1}>
                   {d.name}
                 </Text>
+                {/* The status in words, not only the dot's colour (DESIGN.md §3). */}
                 <Text size="meta" color="inkMuted" numberOfLines={1}>
-                  {[where, seen].filter(Boolean).join(" · ")}
+                  {[s.label, where, seen].filter(Boolean).join(" · ")}
                 </Text>
               </View>
               <ChevronRight size={18} color={theme.inkMuted} />

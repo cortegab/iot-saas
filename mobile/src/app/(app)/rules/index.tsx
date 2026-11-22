@@ -248,7 +248,7 @@ export default function Rules() {
             {canWrite && (
               <View style={styles.toggle}>
                 <View style={styles.flex}>
-                  <Text weight="medium">{openRule.enabled ? "On" : "Off"}</Text>
+                  <Text weight="medium">{openRule.enabled ? "Enabled" : "Disabled"}</Text>
                   <Text size="meta" color="inkMuted">
                     {openRule.enabled ? "Fires when its trigger and conditions are met." : "Keeps its settings and history, but won't fire."}
                   </Text>
