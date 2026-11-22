@@ -97,6 +97,7 @@ export function RuleEditor({
   activity,
   header,
   consequence,
+  readOnly = false,
 }: {
   /** Seeds the first condition and action device for a new rule. */
   deviceId?: string;
@@ -114,6 +115,9 @@ export function RuleEditor({
   header?: (sentence: ReactNode) => ReactNode;
   /** A saved rule's "what saving touches", under Basics. */
   consequence?: string;
+  /** Viewers (no rules.write): every field shows, nothing can change, no
+   * save bar (DESIGN.md §7's view-only editor). */
+  readOnly?: boolean;
 }) {
   const api = useApi();
   const catalog = useRuleCatalog();
@@ -408,8 +412,15 @@ export function RuleEditor({
 
   return (
     <>
-      {header?.(<EditableSentence draft={draft} catalog={catalog} update={setDraft} onOpenFull={openFull} inline />)}
+      {header?.(
+        <fieldset disabled={readOnly} className="contents">
+          <EditableSentence draft={draft} catalog={catalog} update={setDraft} onOpenFull={openFull} inline />
+        </fieldset>,
+      )}
       <form onSubmit={handleSubmit} className="@container flex flex-1 flex-col gap-4">
+        {readOnly && (
+          <p className="max-w-[760px] rounded-lg bg-surface-raised px-3 py-2 text-meta text-ink-muted">View only. Ask an owner or admin to make changes.</p>
+        )}
         {/* DESIGN.md §9.2: the 760px editor column every editor has; the
             preview is behind its button at every width. */}
         <div className="flex flex-col gap-4">
@@ -459,7 +470,7 @@ export function RuleEditor({
             </div>
           </div>
 
-          <div className={cn("flex min-w-0 flex-col gap-4", !canvasWide && "max-w-[760px]")}>
+          <fieldset disabled={readOnly} className={cn("flex min-w-0 flex-col gap-4", !canvasWide && "max-w-[760px]")}>
             {!wizard &&
               panel(
                 "basics",
@@ -495,7 +506,7 @@ export function RuleEditor({
                   <div className="flex flex-col gap-3">{preview}</div>
                 </>,
               )}
-          </div>
+          </fieldset>
 
         </div>
 
@@ -503,7 +514,7 @@ export function RuleEditor({
             only once there is a change, a save or a problem. Activity has
             nothing to save. Unmounted, not hidden: toasts rise above any
             [data-savebar] in the page. */}
-        {tab !== "activity" && (wizard || isNew || dirty || submitting || blocking.length > 0 || error) && (
+        {!readOnly && tab !== "activity" && (wizard || isNew || dirty || submitting || blocking.length > 0 || error) && (
         <div
           data-savebar
           className={cn(SAVE_BAR, !wizard && !isNew && "motion-safe:animate-[toastin_.15s_ease-out]")}

@@ -9,6 +9,7 @@ import { RealtimeProvider } from "@/realtime/RealtimeProvider";
 import { font, text } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
 import { BrandBar, PageHeader } from "@/ui/AppHeader";
+import { ReconnectingBanner } from "@/ui/ReconnectingBanner";
 
 /** SWR in React Native: revalidate when the app comes back to the
  * foreground (the browser's "focus"). */
@@ -52,6 +53,7 @@ function AppFrame() {
   return (
     <View style={{ flex: 1, backgroundColor: theme.canvas }}>
       <BrandBar />
+      <ReconnectingBanner />
       <AppTabs />
     </View>
   );

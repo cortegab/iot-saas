@@ -39,7 +39,5 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    op.drop_constraint(
-        "ck_device_catalog_entries_status", "device_catalog_entries", type_="check"
-    )
+    op.drop_constraint("ck_device_catalog_entries_status", "device_catalog_entries", type_="check")
     op.drop_column("device_catalog_entries", "status")

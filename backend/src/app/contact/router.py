@@ -4,15 +4,13 @@ from fastapi import APIRouter, HTTPException, Request, status
 
 from app.contact import service
 from app.contact.schemas import ContactRequest, ContactResponse
+from app.shared.client_ip import client_ip
 
 router = APIRouter(prefix="/public", tags=["public"])
 
 
 def _client(request: Request) -> str:
-    # Behind NGINX the peer is the proxy; it forwards the real address.
-    forwarded = request.headers.get("x-real-ip") or request.headers.get("x-forwarded-for", "")
-    first = forwarded.split(",")[0].strip()
-    return first or (request.client.host if request.client else "unknown")
+    return client_ip(request)
 
 
 @router.post("/contact", response_model=ContactResponse, status_code=status.HTTP_202_ACCEPTED)

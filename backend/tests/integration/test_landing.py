@@ -40,7 +40,12 @@ async def _complete_setup(
     factory: async_sessionmaker[AsyncSession],
 ) -> str:
     """A device that has reported, a rule and a dashboard: the four steps."""
-    entry = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+    created = await client.post(
+        "/catalog",
+        json={"name": "Bay sensor", "metrics": [{"name": "Temperature", "key": "temperature"}]},
+        headers=headers,
+    )
+    entry = created.json()["id"]
     created = await client.post(
         "/devices", json={"name": "bay1", "catalog_entry_id": entry}, headers=headers
     )
@@ -122,7 +127,10 @@ async def test_a_member_with_a_dashboard_lands_on_it_while_setup_is_unfinished(
         headers=_headers(owner, tenant_id),
     )
     viewer_headers = _headers(viewer, tenant_id)
-    dash = (await client.post("/dashboards", json={"name": "Mine"}, headers=viewer_headers)).json()
+    # Dashboards are made by owners and admins and shared with the workspace.
+    dash = (
+        await client.post("/dashboards", json={"name": "Bays"}, headers=_headers(owner, tenant_id))
+    ).json()
 
     body = await _landing(client, viewer_headers)
     assert body["target"] == "dashboard"
@@ -138,6 +146,9 @@ async def test_setup_steps_are_read_from_data(
     tenant_id = owner["memberships"][0]["tenant_id"]
     headers = _headers(owner, tenant_id)
     before = (await client.get("/tenants/current/setup", headers=headers)).json()
+    # The empty "Legacy / Uncategorized" entry every workspace starts with
+    # isn't a template anyone made.
+    assert before["template"] is False
     assert before["device"] is False
     assert before["rule"] is False
     assert before["dashboard"] is False

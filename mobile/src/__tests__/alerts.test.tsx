@@ -57,6 +57,8 @@ const mockApi = {
   }),
 };
 jest.mock("@/hooks/useApi", () => ({ useApi: () => mockApi }));
+// An admin: acknowledges and dismisses (DESIGN.md §13).
+jest.mock("@/hooks/useCan", () => ({ useCan: () => true }));
 jest.mock("expo-router", () => ({
   // The header's Mark all read renders in place of the native header.
   Stack: { Screen: ({ options }: { options?: { headerRight?: () => ReactNode } }) => options?.headerRight?.() ?? null },
@@ -117,12 +119,12 @@ it("the row's ⋯ marks it read and unread, like the web's row menu", async () =
   await waitFor(() => expect(row().props.accessibilityLabel).toMatch(/unread/));
 });
 
-it("opening an alert reads it; its sheet has Done, Mark as unread and Dismiss", async () => {
+it("opening an active alarm reads it; its sheet has Acknowledge, Mark as unread and Dismiss", async () => {
   await renderAlerts();
   await waitFor(() => expect(row().props.accessibilityLabel).toMatch(/unread/));
   await fireEvent.press(row());
   await waitFor(() => expect(row().props.accessibilityLabel).not.toMatch(/unread/));
-  expect(screen.getByText("Done")).toBeTruthy();
+  expect(screen.getByText("Acknowledge")).toBeTruthy();
   expect(screen.getByText("Mark as unread")).toBeTruthy();
   expect(screen.getByText("Dismiss")).toBeTruthy();
   expect(screen.queryByText("Open device")).toBeNull();

@@ -109,6 +109,15 @@ async def add_notification(
     add_post_commit_callback(session, _publish)
 
 
+def _publish_changed(session: AsyncSession, tenant_id: uuid.UUID) -> None:
+    """Tell open pages the feed changed, once the transaction commits."""
+
+    async def _publish() -> None:
+        await realtime_service.publish_event(tenant_id, {"type": "notification", "id": None})
+
+    add_post_commit_callback(session, _publish)
+
+
 async def list_notifications(
     session: AsyncSession, tenant_id: uuid.UUID, limit: int = 50, offset: int = 0
 ) -> list[Notification]:
@@ -287,6 +296,8 @@ class FeedFilters:
     q: str | None = None
     # Only groups with something unread.
     unread: bool = False
+    # Only active alarms: not acknowledged, not cleared (DESIGN.md §13).
+    active: bool = False
 
 
 async def _filter_clauses(
@@ -301,6 +312,9 @@ async def _filter_clauses(
         where.append(Notification.device_id == f.device_id)
     if f.rule_id:
         where.append(Notification.rule_id == f.rule_id)
+    if f.active:
+        where.append(Notification.acknowledged_at.is_(None))
+        where.append(Notification.cleared_at.is_(None))
     if f.q and f.q.strip():
         where.append(await _search(session, tenant_id, f.q.strip()))
     return where
@@ -426,12 +440,77 @@ class FeedSummary:
     rule_ids: list[uuid.UUID]
 
 
-async def count_unread_critical(session: AsyncSession, tenant_id: uuid.UUID) -> int:
-    """Critical alerts (rows of repeats) with something unread."""
+async def count_active_critical(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    """Critical alarms (rows of repeats) nobody has acknowledged and whose
+    condition hasn't cleared: what "needs attention" counts. Reading one
+    doesn't change it, so one person opening an alert can't silence it for
+    everyone (DESIGN.md §13)."""
     _, total = await list_groups(
-        session, tenant_id, FeedFilters(severity="critical", unread=True), limit=1
+        session, tenant_id, FeedFilters(severity="critical", active=True), limit=1
     )
     return total
+
+
+async def acknowledge_group(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    key: GroupKey,
+    user_id: uuid.UUID | None,
+    note: str | None,
+) -> int:
+    """Someone is on it: every unacknowledged repeat of the alert records who,
+    when and the note. Returns how many. Owners and admins (the router)."""
+    now = datetime.now(UTC)
+    result = await session.execute(
+        update(Notification)
+        .where(*_feed(tenant_id), *_matches_key(key), Notification.acknowledged_at.is_(None))
+        .values(
+            acknowledged_at=now,
+            acknowledged_by=user_id,
+            acknowledged_note=(note or "").strip() or None,
+            read_at=func.coalesce(Notification.read_at, now),
+        )
+        .returning(Notification.id)
+    )
+    ids = result.scalars().all()
+    if not ids:
+        raise NotificationNotFoundError
+    _publish_changed(session, tenant_id)
+    return len(ids)
+
+
+async def clear_alarms(
+    factory: async_sessionmaker[AsyncSession],
+    tenant_id: uuid.UUID,
+    *,
+    kind: NotificationKind,
+    device_id: uuid.UUID | None = None,
+    rule_id: uuid.UUID | None = None,
+) -> int:
+    """The condition went away on its own (the device is back online, the
+    rule cleared): its open alarms of `kind` read as Cleared. Called by the
+    worker. Returns how many."""
+    where = [
+        Notification.tenant_id == tenant_id,
+        Notification.kind == kind,
+        Notification.cleared_at.is_(None),
+    ]
+    if device_id is not None:
+        where.append(Notification.device_id == device_id)
+    if rule_id is not None:
+        where.append(Notification.rule_id == rule_id)
+    async with factory() as session, session.begin():
+        await set_tenant_context(session, tenant_id)
+        result = await session.execute(
+            update(Notification)
+            .where(*where)
+            .values(cleared_at=datetime.now(UTC))
+            .returning(Notification.id)
+        )
+        cleared = len(result.all())
+    if cleared:
+        await realtime_service.publish_event(tenant_id, {"type": "notification", "id": None})
+    return cleared
 
 
 async def summarize(session: AsyncSession, tenant_id: uuid.UUID) -> FeedSummary:

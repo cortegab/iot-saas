@@ -214,7 +214,7 @@ export default function DevicesPage() {
         <FirstUse
           icon={<Cpu aria-hidden size={28} />}
           title="No devices yet"
-          description="Add a device to get its MQTT credential and a ready-to-flash ESP32 sketch. Readings show up here within a second of the first publish."
+          description="Add a device, then install its firmware from a computer over USB, no code needed. Its readings show up here as soon as it's online."
           action={addAction ?? undefined}
           readOnlyNote="Ask an admin to add the first device."
         />

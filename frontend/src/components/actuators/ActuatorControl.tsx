@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useApi } from "@/hooks/useApi";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -15,8 +16,8 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Switch } from "@/components/ui/Switch";
 import { commandRange, controlKind, isRequested, parseCommand, type CommandRange, type CommandValue } from "@/lib/actuator-command";
 import { ApiRequestError } from "@/lib/api-client";
-import { commandStatus, commandStatusLabel, commandStatusTone, msUntilCommandDeadline } from "@/lib/command-status";
-import { getDeviceActuators } from "@/lib/device-actuators";
+import { commandStatus, commandStatusLabel, commandStatusTone, lastConfirmedValue, manualSender, msUntilCommandDeadline } from "@/lib/command-status";
+import { getDeviceActuators, rulesDrivingActuator } from "@/lib/device-actuators";
 import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
@@ -26,6 +27,7 @@ type CommandResponse = components["schemas"]["CommandResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogActuator = components["schemas"]["CatalogActuator"];
 type HardwareConfig = components["schemas"]["HardwareConfig"];
+type MemberResponse = components["schemas"]["MemberResponse"];
 
 function formatValue(value: unknown, unit?: string): string {
   if (typeof value === "boolean") return value ? "On" : "Off";
@@ -111,6 +113,9 @@ function ActuatorRow({
   deviceDisabled,
   isAdmin,
   latest,
+  confirmed,
+  drivingRules,
+  sender,
   ruleName,
   onSent,
 }: {
@@ -126,6 +131,12 @@ function ActuatorRow({
   deviceDisabled: boolean;
   isAdmin: boolean;
   latest: CommandResponse | undefined;
+  /** The value the device last confirmed (its newest acknowledged command). */
+  confirmed: unknown;
+  /** Enabled rules that also switch this actuator. */
+  drivingRules: string[];
+  /** "by you", "by Ana" or "manually", for a manual command. */
+  sender: (c: CommandResponse) => string;
   ruleName: (id: string) => string | undefined;
   /** Re-fetches the device's commands; resolves with the fresh list. */
   onSent: () => Promise<CommandResponse[] | undefined>;
@@ -152,6 +163,7 @@ function ActuatorRow({
   const status = latest ? commandStatus(latest) : null;
   const kind = controlKind(def);
   const requested: unknown = sending ?? latest?.value;
+  const unconfirmed = sending == null && latest != null && status !== "confirmed";
 
   async function send(next: CommandValue, retry = false) {
     // The value already requested isn't sent again; Retry is the only resend.
@@ -160,9 +172,15 @@ function ActuatorRow({
     const verb = typeof next === "boolean" ? `Turn ${words}` : `Set to ${words}`;
     const what = typeof next === "boolean" ? `turn ${actuatorLabel} ${words}` : `set ${actuatorLabel} to ${words}`;
     // DESIGN.md §8: a command to an offline device says so before it's sent.
+    const ask = `${what.charAt(0).toUpperCase()}${what.slice(1)}?`;
+    // A rule that also switches it may switch it straight back: say which.
+    const rulesNote =
+      drivingRules.length > 0
+        ? ` ${drivingRules.length === 1 ? `The rule ${drivingRules[0]} also switches` : `The rules ${drivingRules.join(", ")} also switch`} it and may switch it back.`
+        : "";
     const body = deviceOnline
-      ? `${retry ? "Send it again: " : ""}${what.charAt(0).toUpperCase()}${what.slice(1)}?`
-      : `The device is offline. The command waits as its desired state and applies when it reconnects, if that's within the command's time limit. ${what.charAt(0).toUpperCase()}${what.slice(1)}?`;
+      ? `${retry ? "Send it again: " : ""}${ask}${rulesNote}`
+      : `The device is offline. The command waits as its desired state and applies when it reconnects, if that's within the command's time limit.${rulesNote} ${ask}`;
     const ok = await confirm(body, {
       title: deviceOnline ? undefined : "Send to an offline device?",
       danger: false,
@@ -199,6 +217,15 @@ function ActuatorRow({
         <span className="text-xs text-ink-muted">
           Requested{" "}
           {requested == null ? <span>unknown</span> : <b className="font-medium text-ink">{formatValue(requested, range?.unit)}</b>}
+          {/* The control shows what was asked; until the device confirms it,
+              say what it last confirmed, so a switch reading Off over a pump
+              that never got the command doesn't pass for the truth. */}
+          {unconfirmed && (
+            <span className="text-status-pending">
+              {" · not confirmed"}
+              {confirmed !== undefined && !isRequested(confirmed as CommandValue, requested) && <>, last confirmed {formatValue(confirmed, range?.unit)}</>}
+            </span>
+          )}
         </span>
         {/* What happened, then who sent it (DESIGN.md §8). "Device reports"
             waits for reported state (§13, deferred). */}
@@ -233,7 +260,7 @@ function ActuatorRow({
                     </Link>
                   </>
                 ) : (
-                  "manually"
+                  sender(latest)
                 )}
                 , {timeAgo(latest.issued_at)}
               </span>
@@ -298,6 +325,8 @@ export function ActuatorControl({
   wiring?: HardwareConfig | null;
 }) {
   const isAdmin = useIsAdmin();
+  const { data: me } = useCurrentUser();
+  const { data: members } = useApiSWR<MemberResponse[]>("/tenants/members");
   const { data: rules, isLoading: rulesLoading } = useApiSWR<RuleResponse[]>(`/devices/${deviceId}/rules`);
   const { data: allRules } = useApiSWR<RuleResponse[]>("/rules");
   const { data: catalogEntry, isLoading: catalogLoading } = useApiSWR<CatalogEntryResponse>(`/catalog/${catalogEntryId}`);
@@ -334,6 +363,9 @@ export function ActuatorControl({
           deviceDisabled={deviceDisabled}
           isAdmin={isAdmin}
           latest={commands?.find((c) => c.actuator === id)}
+          confirmed={lastConfirmedValue(commands, id)}
+          drivingRules={rulesDrivingActuator(allRules, deviceId, id)}
+          sender={(c) => manualSender(c, members, me?.id)}
           ruleName={(rid) => ruleNames.get(rid)}
           onSent={() => mutateCommands()}
         />

@@ -62,14 +62,20 @@ export default function NewDevicePage() {
   );
 }
 
+function isEmptyLegacy(e: CatalogEntryResponse): boolean {
+  return e.is_legacy && (e.metrics?.length ?? 0) === 0 && (e.actuators?.length ?? 0) === 0;
+}
+
 function FromTemplate({ cards }: { cards: ReactNode }) {
   const api = useApi();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { data: allEntries } = useApiSWR<CatalogEntryResponse[]>("/catalog");
   const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
-  // Disabled templates can't be picked for new devices (DESIGN.md §8).
-  const templates = allEntries?.filter((e) => e.status === "active");
+  // Disabled templates can't be picked for new devices (DESIGN.md §8), nor
+  // the empty "Legacy / Uncategorized" one every workspace starts with: a
+  // device on it has nothing to send, so a first device never showed a reading.
+  const templates = allEntries?.filter((e) => e.status === "active" && !isEmptyLegacy(e));
   const [name, setName] = useState(searchParams.get("name") ?? "");
   const [templateId, setTemplateId] = useState(searchParams.get("catalog_entry_id") ?? "");
   const [zoneId, setZoneId] = useState("");
@@ -77,11 +83,12 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
   const [submitting, setSubmitting] = useState(false);
   const template = templates?.find((t) => t.id === templateId);
 
-  // Default to the first template (a fresh tenant always has its "Legacy /
-  // Uncategorized" one — devices/service.py), unless one was handed in.
+  // Default to the first template, unless one was handed in. With none yet,
+  // "Something new" is the only way to start.
   useEffect(() => {
     if (templates && templates.length > 0 && !templateId) setTemplateId(templates[0].id);
-  }, [templates, templateId]);
+    if (templates && templates.length === 0) router.replace("/devices/new?from=new");
+  }, [templates, templateId, router]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();

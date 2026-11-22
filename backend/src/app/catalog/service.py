@@ -312,15 +312,19 @@ async def list_catalog_entries(
     return list(result.scalars().all())
 
 
-async def count_catalog_entries(session: AsyncSession, tenant_id: uuid.UUID) -> int:
-    return (
-        await session.scalar(
-            select(func.count())
-            .select_from(DeviceCatalogEntry)
-            .where(DeviceCatalogEntry.tenant_id == tenant_id)
-        )
-        or 0
+async def count_catalog_entries(
+    session: AsyncSession, tenant_id: uuid.UUID, *, include_legacy: bool = True
+) -> int:
+    """`include_legacy=False` leaves out the "Legacy / Uncategorized" entry
+    every workspace is created with: it isn't a template anyone made."""
+    query = (
+        select(func.count())
+        .select_from(DeviceCatalogEntry)
+        .where(DeviceCatalogEntry.tenant_id == tenant_id)
     )
+    if not include_legacy:
+        query = query.where(DeviceCatalogEntry.is_legacy.is_(False))
+    return await session.scalar(query) or 0
 
 
 async def get_catalog_entry(

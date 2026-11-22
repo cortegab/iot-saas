@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 Severity = Literal["info", "warning", "critical"]
 NotificationKind = Literal[
@@ -30,6 +30,11 @@ class NotificationResponse(BaseModel):
     created_at: datetime
     read_at: datetime | None
     dismissed_at: datetime | None
+    # Alarm lifecycle: Active (both null), Acknowledged, Cleared.
+    acknowledged_at: datetime | None = None
+    acknowledged_by: uuid.UUID | None = None
+    acknowledged_note: str | None = None
+    cleared_at: datetime | None = None
 
 
 # The summary's types: what a person scans for, so a rule firing and its
@@ -46,6 +51,12 @@ KIND_TYPE: dict[str, NotificationType] = {
     "delivery_failed": "delivery_failed",
     "template_changed": "template_changed",
 }
+
+
+class AcknowledgeRequest(BaseModel):
+    """Acknowledging an alarm: who is on it is recorded; the note is optional."""
+
+    note: str | None = Field(default=None, max_length=500)
 
 
 class NotificationGroupResponse(BaseModel):

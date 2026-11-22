@@ -32,15 +32,22 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
-        primary
-          ? { backgroundColor: theme.accent, borderColor: theme.accent }
-          : { backgroundColor: theme.surfaceRaised, borderColor: theme.border },
-        { opacity: off ? 0.55 : pressed ? 0.8 : 1 },
+        // Disabled reads as disabled by its colours, not by fading: faded text
+        // fails contrast outdoors (DESIGN.md §12). Busy keeps its own look.
+        disabled && !busy
+          ? { backgroundColor: theme.surfaceRaised, borderColor: theme.border }
+          : primary
+            ? { backgroundColor: theme.accent, borderColor: theme.accent }
+            : { backgroundColor: theme.surfaceRaised, borderColor: theme.border },
+        { opacity: pressed && !off ? 0.8 : 1 },
       ]}
     >
       <View style={styles.row}>
         {busy && <ActivityIndicator size="small" color={primary ? theme.onAccent : theme.ink} />}
-        <Text weight="medium" color={primary ? "onAccent" : variant === "danger" ? "statusError" : "ink"}>
+        <Text
+          weight="medium"
+          color={disabled && !busy ? "inkMuted" : primary ? "onAccent" : variant === "danger" ? "statusError" : "ink"}
+        >
           {label}
         </Text>
       </View>

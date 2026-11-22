@@ -64,7 +64,7 @@ import logging
 import time
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
 import aiomqtt
@@ -97,6 +97,9 @@ configure_logging()
 log = logging.getLogger("worker")
 
 RECONNECT_SECONDS = 3
+# The ingest loop's MQTT client id: fixed, so its persistent session (and the
+# messages queued in it while it reconnects) is found again.
+WORKER_INGEST_CLIENT_ID = "iot-worker-ingest"
 
 # For the heartbeat (app.readiness): whether the ingest loop holds a broker
 # connection, and when it last handled a message (monotonic seconds).
@@ -186,7 +189,9 @@ async def handle_message(
     await ingestion_service.record_telemetry_direct(
         r, resolved.tenant_id, resolved.device_id, parsed.metric, data, timestamp
     )
-    log.info("telemetry %s -> value=%s", topic, data.value)
+    # DEBUG: at the design load this line was ~200 a second, gigabytes of
+    # container log a day.
+    log.debug("telemetry %s -> value=%s", topic, data.value)
 
 
 async def _handle_status(
@@ -285,6 +290,14 @@ async def _handle_status(
         await rules_service.run_device_status_rules(
             client, factory, resolved.tenant_id, resolved.device_id, data.online
         )
+        # Back online: its offline alarm clears on its own (DESIGN.md §13).
+        if data.online:
+            try:
+                await notifications_service.clear_alarms(
+                    factory, resolved.tenant_id, kind="device_offline", device_id=resolved.device_id
+                )
+            except Exception:
+                log.exception("clearing offline alarms failed for %s", resolved.device_id)
         # A genuine flip to offline (never the first observation after a
         # restart, so retained LWTs don't re-alert) is a critical feed row.
         if not data.online and resolved.status != DeviceStatus.DISABLED:
@@ -414,11 +427,17 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
     global _mqtt_connected, _last_message_at
     while True:
         try:
+            # A fixed client id with a persistent session and QoS 1: the
+            # broker keeps telemetry and acks that arrive while the worker
+            # reconnects (and delivers them after), instead of dropping them
+            # as it did with a random id, a clean session and QoS 0.
             async with aiomqtt.Client(
                 settings.mqtt_host,
                 port=settings.mqtt_port,
                 username=settings.mqtt_worker_username,
                 password=settings.mqtt_worker_password.get_secret_value(),
+                identifier=WORKER_INGEST_CLIENT_ID,
+                clean_session=False,
             ) as client:
                 _mqtt_connected = True
                 log.info(
@@ -426,8 +445,8 @@ async def mqtt_ingest_loop(factory: async_sessionmaker[AsyncSession], r: redis.R
                     ingestion_service.TELEMETRY_TOPIC_FILTER,
                     ingestion_service.ACK_TOPIC_FILTER,
                 )
-                await client.subscribe(ingestion_service.TELEMETRY_TOPIC_FILTER)
-                await client.subscribe(ingestion_service.ACK_TOPIC_FILTER)
+                await client.subscribe(ingestion_service.TELEMETRY_TOPIC_FILTER, qos=1)
+                await client.subscribe(ingestion_service.ACK_TOPIC_FILTER, qos=1)
                 async for message in client.messages:
                     _last_message_at = time.monotonic()
                     topic = str(message.topic)
@@ -948,7 +967,7 @@ async def stream_writer_loop(factory: async_sessionmaker[AsyncSession], r: redis
         nonlocal buffer, ack_ids
         if buffer:
             stored = await write_telemetry_batch(factory, buffer)
-            log.info("flushed %d telemetry rows", stored)
+            log.debug("flushed %d telemetry rows", stored)
         if ack_ids:
             await r.xack(ingestion_service.TELEMETRY_STREAM, CONSUMER_GROUP, *ack_ids)
         buffer = []
@@ -1027,6 +1046,35 @@ async def health_monitor_loop(factory: async_sessionmaker[AsyncSession]) -> None
                 RECONNECT_SECONDS,
             )
             await asyncio.sleep(RECONNECT_SECONDS)
+
+
+# Rule executions, commands and read/dismissed notifications older than this
+# are deleted nightly (prune_history); raw telemetry has its own 90-day
+# retention in the database.
+HISTORY_RETENTION_DAYS = 90
+PRUNE_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+async def pruning_loop(factory: async_sessionmaker[AsyncSession]) -> None:
+    """Once a day (first run an hour after start): delete history older than
+    HISTORY_RETENTION_DAYS, so the audit tables don't grow without bound."""
+    await asyncio.sleep(3600)
+    while True:
+        before = datetime.now(UTC) - timedelta(days=HISTORY_RETENTION_DAYS)
+        async with factory() as session, session.begin():
+            row = (
+                await session.execute(
+                    text("SELECT * FROM prune_history(:before)"), {"before": before}
+                )
+            ).one()
+        log.info(
+            "pruned history before %s: %d rule executions, %d commands, %d notifications",
+            before.date(),
+            row.rule_executions,
+            row.commands,
+            row.notifications,
+        )
+        await asyncio.sleep(PRUNE_INTERVAL_SECONDS)
 
 
 COMMAND_EXPIRY_INTERVAL_SECONDS = 5
@@ -1148,6 +1196,7 @@ async def run() -> None:
         "push": lambda: push_sender.push_loop(f),
         "heartbeat": heartbeat_loop,
         "command_expiry": lambda: command_expiry_loop(f),
+        "pruning": lambda: pruning_loop(f),
     }
     try:
         await asyncio.gather(*(supervise(name, start) for name, start in loops.items()))
