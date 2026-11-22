@@ -69,7 +69,9 @@ def upgrade() -> None:
     manual follow-up on already-deployed firmware.
     """
     conn = op.get_bind()
-    rows = conn.execute(text("SELECT id, metrics, actuators FROM device_catalog_entries")).fetchall()
+    rows = conn.execute(
+        text("SELECT id, metrics, actuators FROM device_catalog_entries")
+    ).fetchall()
 
     for entry_id, metrics, actuators in rows:
         normalized_metrics = _normalize(metrics, "metric")

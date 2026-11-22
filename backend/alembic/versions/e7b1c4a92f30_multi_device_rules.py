@@ -115,7 +115,9 @@ def upgrade() -> None:
             "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
         sa.CheckConstraint("role IN ('input', 'target')", name="ck_rule_devices_role"),
-        sa.UniqueConstraint("rule_id", "device_id", "role", name="uq_rule_devices_rule_device_role"),
+        sa.UniqueConstraint(
+            "rule_id", "device_id", "role", name="uq_rule_devices_rule_device_role"
+        ),
     )
     op.execute("CREATE INDEX ix_rule_devices_tenant ON rule_devices (tenant_id)")
     op.execute("CREATE INDEX ix_rule_devices_rule ON rule_devices (rule_id)")
@@ -159,7 +161,7 @@ def upgrade() -> None:
                 "UPDATE rules SET "
                 "condition = CAST(:condition AS jsonb), "
                 "name = :name, "
-                "trigger = CAST('{\"type\": \"metric\"}' AS jsonb), "
+                'trigger = CAST(\'{"type": "metric"}\' AS jsonb), '
                 "actions = CAST(:actions AS jsonb), "
                 "execution_policy = CAST(:policy AS jsonb) "
                 "WHERE id = :id"
