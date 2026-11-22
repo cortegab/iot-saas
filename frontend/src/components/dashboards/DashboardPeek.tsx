@@ -7,6 +7,7 @@ import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
 import { PeekFrame, PeekOpen, PeekPlaceholder } from "@/components/editor/PeekFrame";
 import { useDefaultDashboard } from "@/components/dashboards/useDefaultDashboard";
+import { usePermissions } from "@/hooks/usePermissions";
 import { widgetSummary } from "@/lib/dashboard-summary";
 import { formatWhen, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
@@ -29,20 +30,21 @@ export function DashboardPeek({
 }) {
   const toast = useToast();
   const defaults = useDefaultDashboard();
+  const canWrite = usePermissions().can("dashboards.write");
   if (!dashboard) return <PeekPlaceholder noun="dashboard" missing onClose={onClose} />;
 
   const devices = new Set(dashboard.layout.map((w) => w.device_id)).size;
   const menu: DropdownMenuItem[][] = [
     [
       defaults.item(dashboard),
-      { label: "Duplicate", icon: <Copy size={15} />, onClick: () => onDuplicate(dashboard) },
+      ...(canWrite ? [{ label: "Duplicate", icon: <Copy size={15} />, onClick: () => onDuplicate(dashboard) }] : []),
       {
         label: "Copy link",
         icon: <Link2 size={15} />,
         onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/dashboards/${dashboard.id}`).then(() => toast({ tone: "info", title: "Link copied" })),
       },
     ],
-    [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => onDelete(dashboard) }],
+    ...(canWrite ? [[{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => onDelete(dashboard) }]] : []),
   ];
 
   return (
@@ -59,9 +61,11 @@ export function DashboardPeek({
       primary={
         <>
           <PeekOpen href={`/dashboards/${dashboard.id}`} noun="dashboard" />
-          <Link href={`/dashboards/${dashboard.id}?edit=1`} className={buttonClassName({ variant: "secondary", size: "sm" })}>
-            <LayoutGrid aria-hidden size={14} /> {dashboard.layout.length ? "Edit layout" : "Add widgets"}
-          </Link>
+          {canWrite && (
+            <Link href={`/dashboards/${dashboard.id}?edit=1`} className={buttonClassName({ variant: "secondary", size: "sm" })}>
+              <LayoutGrid aria-hidden size={14} /> {dashboard.layout.length ? "Edit layout" : "Add widgets"}
+            </Link>
+          )}
         </>
       }
       menu={menu}

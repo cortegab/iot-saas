@@ -12,6 +12,7 @@ import { ApiRequestError } from "@/lib/api-client";
 import { upsertRuleInCache } from "@/lib/rule-cache";
 import { draftFromRule, draftToRequest } from "@/lib/rule-draft";
 import { timeAgo } from "@/lib/time-ago";
+import { DISABLE_GUARDED_RULE, guardsHardware, resetLatchVerdict } from "@iodriven/shared/rule-safety";
 import type { components } from "@/types/api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -37,6 +38,12 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
   }
 
   async function setEnabled(rule: RuleResponse, enabled: boolean, undoable = true) {
+    // Turning off a rule that switches hardware, or that latches, removes a
+    // protection: say so before it happens, not only with an Undo after.
+    if (!enabled && undoable && guardsHardware(rule)) {
+      const ok = await confirm(DISABLE_GUARDED_RULE, { title: `Disable ${rule.name}?`, confirmLabel: "Disable rule" });
+      if (!ok) return;
+    }
     try {
       await api.patch(`/rules/${rule.id}`, { enabled });
       changed(rule);
@@ -102,18 +109,13 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
    * current readings and says, from a dry run, whether it would fire again
    * right away: a reset can switch hardware again. */
   async function resetLatch(rule: RuleResponse) {
-    let verdict = "We couldn't check the current readings. If the condition still holds, it fires again after its hold time.";
+    let sim: SimulateResponse | null = null;
     try {
-      const sim = await api.query<SimulateResponse>(`/rules/${rule.id}/simulate`, {});
-      verdict =
-        sim.unavailable_signals.length > 0
-          ? "It re-arms now. Some readings are missing or stale, so it can't fire until they report."
-          : sim.would_fire
-            ? "It re-arms now. Its condition is still true, so it fires again after its hold time."
-            : "It re-arms now. Its condition is false now, so it won't fire straight away.";
+      sim = await api.query<SimulateResponse>(`/rules/${rule.id}/simulate`, {});
     } catch {
-      // Keep the cautious wording above.
+      // resetLatchVerdict(null) keeps the cautious wording.
     }
+    const verdict = resetLatchVerdict(sim);
     const readings = rule.health.signals;
     const ok = await confirm(verdict, {
       title: `Reset ${rule.name}?`,

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Copy, LayoutDashboard, LayoutGrid, Plus, SquareArrowOutUpRight, Trash2 } from "lucide-react";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { usePermissions } from "@/hooks/usePermissions";
 import { buttonClassName } from "@/components/ui/Button";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
@@ -121,24 +122,30 @@ export default function DashboardsPage() {
     },
   ];
 
-  const rowMenu = (d: DashboardResponse): DropdownMenuItem[][] => [
-    [
-      { label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/dashboards/${d.id}`) },
-      { label: "Edit layout", icon: <LayoutGrid size={15} />, onClick: () => router.push(`/dashboards/${d.id}?edit=1`) },
-      defaults.item(d),
-      { label: "Duplicate", icon: <Copy size={15} />, onClick: () => void duplicate(d) },
-    ],
-    [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(d) }],
-  ];
+  // Owners and admins change dashboards; viewers open them and pick their
+  // own default (DESIGN.md §8).
+  const canWrite = usePermissions().can("dashboards.write");
+  const rowMenu = (d: DashboardResponse): DropdownMenuItem[][] =>
+    canWrite
+      ? [
+          [
+            { label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/dashboards/${d.id}`) },
+            { label: "Edit layout", icon: <LayoutGrid size={15} />, onClick: () => router.push(`/dashboards/${d.id}?edit=1`) },
+            defaults.item(d),
+            { label: "Duplicate", icon: <Copy size={15} />, onClick: () => void duplicate(d) },
+          ],
+          [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(d) }],
+        ]
+      : [[{ label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/dashboards/${d.id}`) }, defaults.item(d)]];
 
   const chips: FilterChip[] = list.q ? [{ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") }] : [];
   const total = dashboards?.length ?? 0;
-  const newButton = (
+  const newButton = canWrite ? (
     <Link href="/dashboards/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
       New dashboard
     </Link>
-  );
+  ) : undefined;
 
   return (
     <>
@@ -183,6 +190,7 @@ export default function DashboardsPage() {
               title="No dashboards yet"
               description="Create one and add value cards, charts, gauges and controls for the devices you watch most."
               action={newButton}
+              readOnlyNote="Ask an owner or admin to make the first one."
             />
           ) : (
             <>
