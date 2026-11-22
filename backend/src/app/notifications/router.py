@@ -16,6 +16,7 @@ from app.db import get_session
 from app.notifications import service
 from app.notifications.models import Notification
 from app.notifications.schemas import (
+    AcknowledgeRequest,
     NotificationGroupResponse,
     NotificationIdsRequest,
     NotificationResponse,
@@ -24,7 +25,8 @@ from app.notifications.schemas import (
     Severity,
 )
 from app.paging import OFFSET, limit_param, set_total
-from app.tenants.deps import TenantContext, require_tenant_context
+from app.tenants.deps import TenantContext, require_role, require_tenant_context
+from app.tenants.models import TenantRole
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -62,11 +64,18 @@ async def list_groups(
     rule_id: uuid.UUID | None = None,
     q: str | None = Query(None, max_length=200),
     unread: bool = False,
+    active: bool = False,
 ) -> list[NotificationGroupResponse]:
     """Alerts: repeats of one alert from one source as one row, the most
     recent first, filtered and paged; the total is in X-Total-Count."""
     filters = service.FeedFilters(
-        type=type, severity=severity, device_id=device_id, rule_id=rule_id, q=q, unread=unread
+        type=type,
+        severity=severity,
+        device_id=device_id,
+        rule_id=rule_id,
+        q=q,
+        unread=unread,
+        active=active,
     )
     groups, total = await service.list_groups(
         session, ctx.tenant_id, filters, limit=limit, offset=offset
@@ -150,10 +159,31 @@ async def mark_group_unread(
         ) from exc
 
 
+@router.post("/groups/{key}/acknowledge", status_code=status.HTTP_204_NO_CONTENT)
+async def acknowledge_group(
+    key: str,
+    body: AcknowledgeRequest,
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> None:
+    """Someone is on it (DESIGN.md §13): records who, when and an optional
+    note on every unacknowledged repeat, and takes it out of "needs
+    attention". Owners and admins."""
+    try:
+        await service.acknowledge_group(
+            session, ctx.tenant_id, _group_key(key), ctx.user_id, body.note
+        )
+    except service.NotificationNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Nothing left to acknowledge"
+        ) from exc
+
+
 @router.post("/groups/{key}/dismiss", response_model=NotificationIdsRequest)
 async def dismiss_group(
     key: str,
-    ctx: TenantContext = Depends(require_tenant_context),
+    # Dismissing removes it from everyone's feed: owners and admins.
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> NotificationIdsRequest:
     """Dismisses every repeat; returns their ids for Undo (POST /restore)."""
@@ -169,7 +199,7 @@ async def dismiss_group(
 @router.post("/restore", status_code=status.HTTP_204_NO_CONTENT)
 async def restore_many(
     body: NotificationIdsRequest,
-    ctx: TenantContext = Depends(require_tenant_context),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     """Undo a group dismissal."""
@@ -221,7 +251,7 @@ async def mark_unread(
 @router.post("/{notification_id}/dismiss", response_model=NotificationResponse)
 async def dismiss(
     notification_id: uuid.UUID,
-    ctx: TenantContext = Depends(require_tenant_context),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> NotificationResponse:
     return await _one(service.dismiss, session, ctx, notification_id)
@@ -230,7 +260,7 @@ async def dismiss(
 @router.post("/{notification_id}/restore", response_model=NotificationResponse)
 async def restore(
     notification_id: uuid.UUID,
-    ctx: TenantContext = Depends(require_tenant_context),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> NotificationResponse:
     return await _one(service.restore, session, ctx, notification_id)

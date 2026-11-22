@@ -1105,6 +1105,15 @@ async def _dispatch_actions(
         ((i, a) for i, a in enumerate(actions) if a.get("type") == "notification"),
         (None, None),
     )
+    if edge == "clear":
+        # Its condition went away: the alarm from its firing reads Cleared
+        # (DESIGN.md §13), whether or not the clear notifies anyone.
+        try:
+            await notifications_service.clear_alarms(
+                factory, tenant_id, kind="rule_fired", rule_id=rule.id
+            )
+        except Exception:
+            log.exception("clearing alarms failed for rule %s", rule.id)
     if edge == "fire" or notif is not None:
         message = notif["message"] if notif is not None else _default_message(rule, snapshot, edge)
         try:
