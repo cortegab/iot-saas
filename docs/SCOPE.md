@@ -343,6 +343,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Multi-tenant workspaces isolated by RLS; workspace switcher | ✅ | |
 | Roles: Owner, Admin, Viewer; owner guards; leave a workspace | ✅ | |
 | Invitations by email (7-day link) | ✅ | |
+| Sign in with Google (web) | 🚧 | Built: `POST /auth/google` checks the ID token against Google's keys, then signs in by Google id, links the account with that verified email, or makes one (with a workspace, or joining an invitation). Off until `GOOGLE_CLIENT_ID_WEB` is set; the app's button comes with its next release. |
 | Sign in, register, forgot / reset password, "Keep me signed in" | 🚧 | 15-minute access token, 30-day refresh token. No email verification on register. No MFA. No rate limit on sign-in (§6). |
 | API keys (`Authorization: Bearer`), Viewer or Admin, with expiry | ✅ | |
 | Workspace settings: time zone, alert recipients | ✅ | |

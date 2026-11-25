@@ -47,7 +47,7 @@ export default function PrivacyPage() {
           <ul className="flex max-w-[70ch] list-disc flex-col gap-1.5 pl-5">
             <li>
               <b>Your account:</b> name, email address and a hashed password (never the password itself), and the workspaces you belong to with your role
-              in each.
+              in each. If you sign in with Google, we also keep the id Google gives your Google account, and no password until you set one.
             </li>
             <li>
               <b>Your workspace&apos;s data:</b> devices and their settings, the readings they send, rules, commands sent to actuators, dashboards and
@@ -92,6 +92,10 @@ export default function PrivacyPage() {
           <ul className="flex max-w-[70ch] list-disc flex-col gap-1.5 pl-5">
             <li>
               <b>Google Firebase Cloud Messaging</b>, to deliver push notifications to phones that turned them on.
+            </li>
+            <li>
+              <b>Google Sign-In</b>, only if you choose <i>Continue with Google</i>: Google tells us your name, email address and that the address is
+              verified. We don&apos;t get your Google password or anything else from your Google account.
             </li>
             <li>
               <b>Our email provider</b>, to send the alert emails your rules ask for, and account emails such as invitations and password resets.

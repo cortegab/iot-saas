@@ -17,4 +17,7 @@ async def test_client_info_is_public_and_comes_from_settings(
         "min_mobile_version": "0.5.0",
         "latest_mobile_version": "0.6.1",
         "mobile_update_url": settings.mobile_update_url,
+        # Sign in with Google is off until a client id is set.
+        "google_client_id_web": None,
+        "google_client_id_android": None,
     }

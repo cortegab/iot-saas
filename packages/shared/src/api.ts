@@ -38,6 +38,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Google Sign In
+         * @description Sign in, or sign up, with a Google ID token (ease-of-use plan B5).
+         *     Off (404) until a Google client id is configured.
+         */
+        post: operations["google_sign_in_auth_google_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -1762,7 +1783,8 @@ export interface components {
         };
         /**
          * ClientInfoResponse
-         * @description What the mobile app checks at start (docs/mobile-release.md).
+         * @description What a client checks before sign-in: the mobile app's update gate
+         *     (docs/mobile-release.md) and which sign-in methods are on.
          */
         ClientInfoResponse: {
             /** Min Mobile Version */
@@ -1771,6 +1793,10 @@ export interface components {
             latest_mobile_version: string;
             /** Mobile Update Url */
             mobile_update_url: string;
+            /** Google Client Id Web */
+            google_client_id_web?: string | null;
+            /** Google Client Id Android */
+            google_client_id_android?: string | null;
         };
         /** CommandResponse */
         CommandResponse: {
@@ -2269,6 +2295,18 @@ export interface components {
         ForgotPasswordRequest: {
             /** Email */
             email: string;
+        };
+        /**
+         * GoogleSignInRequest
+         * @description Sign in (or sign up) with a Google ID token (ease-of-use plan B5).
+         */
+        GoogleSignInRequest: {
+            /** Id Token */
+            id_token: string;
+            /** Tenant Name */
+            tenant_name?: string | null;
+            /** Invitation Token */
+            invitation_token?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3411,6 +3449,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenPairResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    google_sign_in_auth_google_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleSignInRequest"];
             };
         };
         responses: {

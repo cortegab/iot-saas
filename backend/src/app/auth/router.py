@@ -9,12 +9,13 @@ import uuid
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth import service
+from app.auth import google, service
 from app.auth.deps import get_current_user
 from app.auth.models import User
 from app.auth.schemas import (
     AcceptInvitationRequest,
     ForgotPasswordRequest,
+    GoogleSignInRequest,
     InvitationPreviewResponse,
     LoginRequest,
     MembershipSummary,
@@ -94,6 +95,50 @@ async def login(
         ) from exc
     await service.clear_login_failures(body.email, client)
 
+    refresh_token = await service.issue_refresh_token(session, user.id)
+    return await _token_pair_response(session, user.id, refresh_token)
+
+
+@router.post("/google", response_model=TokenPairResponse)
+async def google_sign_in(
+    body: GoogleSignInRequest, session: AsyncSession = Depends(get_session, scope="function")
+) -> TokenPairResponse:
+    """Sign in, or sign up, with a Google ID token (ease-of-use plan B5).
+    Off (404) until a Google client id is configured."""
+    if not settings.google_audiences:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Google sign-in isn't set up here."
+        )
+    try:
+        identity = await google.verify_id_token(body.id_token, settings.google_audiences)
+    except google.InvalidGoogleTokenError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google sign-in didn't go through. Try again.",
+        ) from exc
+    preview = (
+        await _usable_invitation(session, body.invitation_token) if body.invitation_token else None
+    )
+    if preview is not None and preview.email.lower() != identity.email:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"This invitation is for {preview.email}. Use that Google account.",
+        )
+    first = (identity.name or identity.email.split("@")[0]).split()[0]
+    tenant_name = None if preview else (body.tenant_name or "").strip() or f"{first}'s workspace"
+    try:
+        user, _created = await service.user_for_google(session, identity, tenant_name)
+    except service.GoogleAccountMismatchError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This email's account is linked to another Google account. Sign in with your password.",
+        ) from exc
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="This account is disabled."
+        )
+    if preview is not None:
+        await tenants_service.accept_invitation(session, preview, user.id)
     refresh_token = await service.issue_refresh_token(session, user.id)
     return await _token_pair_response(session, user.id, refresh_token)
 
