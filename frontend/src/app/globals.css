@@ -155,11 +155,11 @@
   --radius-2xl: 1rem; /* 16px — large surfaces, dialogs */
 
   /* DESIGN.md §4/§12 shell, by window width: the icon rail from 641px
-     (`rail:`), the full sidebar from 1440px (`full:`); below 641px the phone
+     (`rail:`), the full sidebar from 1280px (`full:`); below 641px the phone
      top bar and tab bar. `shell:` / `wb:` are the rule editor's and editor
      frame's older breakpoints, until those move to container queries. */
   --breakpoint-rail: 641px;
-  --breakpoint-full: 1440px;
+  --breakpoint-full: 1280px;
   --breakpoint-shell: 1100px;
   --breakpoint-wb: 1200px;
 

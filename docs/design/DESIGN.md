@@ -157,8 +157,8 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
 
 | Width | Navigation |
 |---|---|
-| **≥ 1440 px** | The full **sidebar**, 256 px, always open. |
-| **641–1439 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. When the nav doesn't fit the height (short laptop screens) it scrolls **without a visible scrollbar**, so its icons stay centred under the logo, with a soft fade on the edge that has more; the sidebar's nav does the same. |
+| **≥ 1280 px** | The full **sidebar**, 256 px, open with labels, so a newcomer reads every destination on a common laptop (ease-of-use plan A5). Its collapse button turns it into the icon rail, remembered in that browser. |
+| **641–1279 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. When the nav doesn't fit the height (short laptop screens) it scrolls **without a visible scrollbar**, so its icons stay centred under the logo, with a soft fade on the edge that has more; the sidebar's nav does the same. |
 | **≤ 640 px** | A **top bar** (the mark, **IO Driven** over the workspace's name, which opens the workspace switcher as a bottom sheet, the live indicator only while reconnecting, search) and a **bottom tab bar**: Dashboards · Devices · **Alerts** (with the active-alert count) · Rules · **More**. More opens a bottom sheet with the user, the theme toggle, the live indicator and the rest of the nav. |
 
 - **Sidebar** (full form) is 256 px wide and sticky. From top to bottom:
@@ -842,7 +842,7 @@ path (CLAUDE.md §9.1).
 
   | Breakpoint | What changes |
   |---|---|
-  | window ≥ 1440 | Full sidebar (§4). |
+  | window ≥ 1280 | Full sidebar (§4), collapsible to the rail. |
   | window ≤ 640 | Top bar + bottom tab bar; sheets open from the bottom where §5 says so. |
   | content ≥ 1080 | The rule preview sits beside the editor (§9.2). |
   | window ≤ 960 | List toolbar filter menus collapse into one **Filters** button (a bottom sheet), so the primary action stays in row 1. |
@@ -911,7 +911,7 @@ Each step is a separate PR and leaves the app fully working.
 
 Steps 1–8 are built. **Demo H** follows, frontend first, one PR each:
 
-1. **Shell** (§4): icon rail, full sidebar from 1440 px, phone top bar + tab bar + More sheet,
+1. **Shell** (§4): icon rail, full sidebar from 1280 px, phone top bar + tab bar + More sheet,
    reconnecting banner, skip link; bottom Sheet placement.
 2. **Building blocks** (§5): Wizard, Line row, item sheet, Tabs with problem badges.
 3. **Lists** (§6): column folding, cards, the filter sheet; the Rules list KPI filters and Ladder view.
@@ -1133,3 +1133,4 @@ restyled.
 | 2026-11-24 | §8 Connect (ease-of-use plan A2), amending the 2026-10-27 rule for one case: a device **just created** gets its credential without a click (Add device → Connect `?fresh=1`, removed from the URL at once), and on the Install path Connect opens on Options. Revisits still start with Create credential / Rotate credential…; the credential is still held in the page only. |
 | 2026-11-24 | §3, §9.3 **one state per rule, plainer sentence** (ease-of-use plan A3): an enabled rule whose inputs have no fresh data is **Can't evaluate** (grey, hollow dot) *instead of* Armed, everywhere a rule's state shows (rules list, rule page, peek, device Rules tab, ladder overview, the app); Disabled and Latched still win. The rule page says why after it ("· temperature from bay1 is missing. Missing data never fires or clears it."), and the list's extra "can't evaluate" tag is gone. In the sentence, an on/off reading against 0 or 1 reads **is on / is off** (not "= 1"), and no hold time reads "…, **immediately** turn…" (not "for 0 s"); the same chip sets a hold time. |
 | 2026-11-24 | §8 device page (ease-of-use plan A4): **Controls lead Overview** (heading *Controls*, then the actuator rows, above the readouts), as a smart-home card puts the switch first; the old Controls tab becomes **Commands** (the command timeline only), and `?tab=controls` / `?tab=actuators` open Overview. A never-connected device says once, in its waiting callout, that commands wait in its desired state. **Health leads with one word** beside its heading for an online device: Healthy · Sensor not answering · Restarted after a fault · Weak Wi-Fi · Battery low (`@iodriven/shared/device-health`; offline and never connected stay the status beside the name). Firmware, uptime, memory, Wi-Fi rejoins and the MQTT id move under a **Details** disclosure. The app adopts the word with its next release. |
+| 2026-11-24 | §4, §12 shell (ease-of-use plan A5): the **full sidebar with labels starts at 1280 px** (was 1440), so a 1280–1439 px laptop reads every destination instead of nine unlabelled icons; from 1280 px its collapse button turns it into the rail, remembered in that browser (`localStorage`, a per-viewer convenience). Below 1280 px the rail and its pin are unchanged. Members and API keys stay in the nav: with labels showing, regrouping them under Settings wasn't needed. |

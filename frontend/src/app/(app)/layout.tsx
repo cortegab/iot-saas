@@ -12,16 +12,39 @@ import { PhoneTabBar, PhoneTopBar, ReconnectingBanner } from "@/components/shell
 import { ShellContext } from "@/components/shell/shell-context";
 import { cn } from "@/lib/cn";
 
-/** The app shell (DESIGN.md §4): the full 256px sidebar from 1440px; the
- * 64px icon rail from 641px, which a pin opens to the full sidebar over the
- * content; and on phones a top bar and a bottom tab bar. The content column
- * is 1120px wide. */
+/** The app shell (DESIGN.md §4): the full 256px sidebar, with labels, from
+ * 1280px (a person can collapse it to the rail, remembered in this browser);
+ * the 64px icon rail from 641px, which a pin opens to the full sidebar over
+ * the content; and on phones a top bar and a bottom tab bar. The content
+ * column is 1120px wide. */
+const NAV_COLLAPSED_KEY = "iod.nav.collapsed";
+
 export default function AppLayout({ children }: { children: ReactNode }) {
   const { status, currentTenantId } = useAuth();
   const realtime = useRealtime();
   const router = useRouter();
-  const isFull = useMediaQuery("(min-width: 1440px)");
+  const isFull = useMediaQuery("(min-width: 1280px)");
   const [pinned, setPinned] = useState(false);
+  // Wide screens show labels unless this person collapsed them (a per-browser
+  // convenience; read after mount so the server render matches).
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => {
+    try {
+      setCollapsed(localStorage.getItem(NAV_COLLAPSED_KEY) === "1");
+    } catch {
+      /* storage blocked: stay expanded */
+    }
+  }, []);
+  const toggleCollapsed = useCallback(() => {
+    setCollapsed((c) => {
+      try {
+        localStorage.setItem(NAV_COLLAPSED_KEY, c ? "0" : "1");
+      } catch {
+        /* storage blocked: the choice lasts this visit */
+      }
+      return !c;
+    });
+  }, []);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const mainRef = useRef<HTMLElement>(null);
 
@@ -72,7 +95,10 @@ export default function AppLayout({ children }: { children: ReactNode }) {
           from the previous workspace survives (see setCurrentTenantId). */}
       <div
         key={currentTenantId}
-        className="app-shell grid min-h-screen rail:grid-cols-[64px_minmax(0,1fr)] full:grid-cols-[256px_minmax(0,1fr)]"
+        className={cn(
+          "app-shell grid min-h-screen rail:grid-cols-[64px_minmax(0,1fr)]",
+          collapsed ? "full:grid-cols-[64px_minmax(0,1fr)]" : "full:grid-cols-[256px_minmax(0,1fr)]",
+        )}
       >
         <button
           type="button"
@@ -87,13 +113,13 @@ export default function AppLayout({ children }: { children: ReactNode }) {
             aria-label="Primary"
             className={cn(
               "sticky top-0 h-screen border-r border-border bg-sidebar transition-[width] duration-150",
-              isFull ? "w-64" : overlay ? "w-64 shadow-pop" : "w-16",
+              isFull ? (collapsed ? "w-16" : "w-64") : overlay ? "w-64 shadow-pop" : "w-16",
             )}
           >
             <AppSidebar
               realtime={realtime}
-              compact={!isFull && !pinned}
-              onTogglePin={isFull ? undefined : () => setPinned((p) => !p)}
+              compact={isFull ? collapsed : !pinned}
+              onTogglePin={isFull ? toggleCollapsed : () => setPinned((p) => !p)}
             />
           </aside>
         </div>

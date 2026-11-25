@@ -1,18 +1,17 @@
 import { expect } from "@playwright/test";
 import { test } from "./fixtures";
 
-// DESIGN.md §4: the full sidebar from 1440px, the icon rail from 641px, the
-// phone top bar + tab bar below. The default viewport (1280) is the rail.
+// DESIGN.md §4: the full sidebar (labels) from 1280px, the icon rail from
+// 641px, the phone top bar + tab bar below. The default viewport (1280) is full.
 
-test("from 1440px the full sidebar shows the grouped nav, and ⌘K navigates", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
+test("from 1280px the full sidebar shows the grouped nav, and ⌘K navigates", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/devices");
   const nav = page.getByRole("navigation", { name: "Main" });
   for (const group of ["Monitor", "Automate", "Configure", "Admin"]) {
     await expect(nav.getByText(group, { exact: true })).toBeVisible();
   }
   await expect(nav.getByRole("link", { name: /Devices/ })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("button", { name: /navigation$/ })).toHaveCount(0);
 
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Command palette" });
@@ -23,8 +22,23 @@ test("from 1440px the full sidebar shows the grouped nav, and ⌘K navigates", a
   await expect(palette).toBeHidden();
 });
 
-test("at laptop widths the icon rail labels its icons and pins open over the content", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
+test("a person can collapse the full sidebar to the rail, and it stays collapsed", async ({ page }) => {
+  await page.setViewportSize({ width: 1366, height: 800 });
+  await page.goto("/devices");
+  const sidebar = page.getByRole("complementary", { name: "Primary" });
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(256);
+  await sidebar.getByRole("button", { name: "Collapse navigation" }).click();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(64);
+  await page.reload();
+  await expect(sidebar.getByRole("button", { name: "Expand navigation" })).toBeVisible();
+  expect((await sidebar.boundingBox())?.width).toBe(64);
+  // Back to labels, for the tests that follow in this browser context.
+  await sidebar.getByRole("button", { name: "Expand navigation" }).click();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(256);
+});
+
+test("below 1280px the icon rail labels its icons and pins open over the content", async ({ page }) => {
+  await page.setViewportSize({ width: 1200, height: 800 });
   const sidebar = page.getByRole("complementary", { name: "Primary" });
   const nav = sidebar.getByRole("navigation", { name: "Main" });
   await expect(nav.getByText("Monitor", { exact: true })).toHaveCount(0);

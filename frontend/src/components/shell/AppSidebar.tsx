@@ -146,10 +146,10 @@ function useRailTips(enabled: boolean) {
 
 export interface AppSidebarProps {
   realtime: RealtimeStatus;
-  /** The 64px icon rail (641–1439px, not pinned open). */
+  /** The 64px icon rail (641–1279px when not pinned open; from 1280px when collapsed). */
   compact?: boolean;
-  /** Rail widths only: opens or closes the full sidebar over the content.
-   * Absent from 1440px, where the sidebar is always open. */
+  /** Below 1280px: opens or closes the full sidebar over the content. From
+   * 1280px: collapses the labelled sidebar to the rail, remembered. */
   onTogglePin?: () => void;
 }
 
