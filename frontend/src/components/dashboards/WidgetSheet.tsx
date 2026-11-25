@@ -146,6 +146,9 @@ function SourceFields({ w, src, onChange }: { w: Draft; src: Sources; onChange: 
           </Select>
         </Field>
       )}
+      <Field label="Title" optional hint="Left blank, it's the reading and the device.">
+        <Input value={w.title ?? ""} maxLength={60} placeholder={widgetTitle(w, src)} onChange={(e) => onChange({ ...w, title: e.target.value || null })} />
+      </Field>
       {spec.range && (
         <>
           <Field label="Min">

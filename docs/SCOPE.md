@@ -334,7 +334,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | A default dashboard per person | ✅ | Sign-in lands on it. The Dashboards link always opens the list. |
 | One landing decision after sign-in | ✅ | **Get started** checklist for a new workspace, **Welcome** with a generated starter dashboard for a newcomer, else the default or last dashboard. |
 | "Needs attention" strip above every dashboard | ✅ | Unread critical alerts, offline devices, latched rules, rules that can't evaluate. |
-| Widget titles | ⛔ | Titles are generated (reading · device). |
+| Widget titles | ✅ | Optional, up to 60 characters; blank = the generated *Reading · Device*. |
 
 ### Workspaces, people and access
 

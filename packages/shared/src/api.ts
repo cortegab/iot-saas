@@ -3443,6 +3443,8 @@ export interface components {
             min?: number | null;
             /** Max */
             max?: number | null;
+            /** Title */
+            title?: string | null;
         };
         /** ZoneCreateRequest */
         ZoneCreateRequest: {
