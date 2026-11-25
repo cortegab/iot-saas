@@ -16,7 +16,8 @@ import {
   initialsFor,
 } from "@/components/shell/AppSidebar";
 import { CreateWorkspaceDialog } from "@/components/shell/CreateWorkspaceDialog";
-import { MORE_ITEMS, TAB_ITEMS, activeHref } from "@/components/shell/nav-config";
+import { MORE_ITEMS, TAB_ITEMS, activeHref, navLabel, navVisible } from "@/components/shell/nav-config";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { useShell } from "@/components/shell/shell-context";
 import { useNavCounts } from "@/components/shell/useShellData";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
@@ -105,6 +106,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
   const active = activeHref(pathname);
   const { unreadCount } = useNavCounts();
   const [moreOpen, setMoreOpen] = useState(false);
+  const { simple } = useInterfaceMode();
   const moreActive = active != null && MORE_ITEMS.some((i) => i.href === active);
 
   useEffect(() => {
@@ -130,7 +132,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
               className={cn(cell, isActive && "text-accent-strong")}
             >
               <Icon aria-hidden size={20} />
-              <span>{item.tabLabel ?? item.label}</span>
+              <span>{item.tabLabel ?? navLabel(item, simple)}</span>
               {item.alertCount && unreadCount > 0 && (
                 <AlertCount count={unreadCount} className="absolute left-[calc(50%+5px)] top-[5px] min-w-[17px] px-1 text-xs leading-4" />
               )}
@@ -163,7 +165,8 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
   const { memberships, currentTenantId, logout } = useAuth();
   const current = memberships.find((m) => m.tenant_id === currentTenantId);
   const role = toRole(current?.role);
-  const items = MORE_ITEMS.filter((i) => !i.requires || can(i.requires));
+  const { simple } = useInterfaceMode();
+  const items = MORE_ITEMS.filter((i) => navVisible(i, can, simple));
 
   return (
     <>
@@ -206,7 +209,7 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
                   )}
                 >
                   <Icon aria-hidden size={17} className="text-ink-muted" />
-                  <span className="flex-1">{item.label}</span>
+                  <span className="flex-1">{navLabel(item, simple)}</span>
                   <ChevronRight aria-hidden size={15} className="text-ink-muted" />
                 </Link>
               );

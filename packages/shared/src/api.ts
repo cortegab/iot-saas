@@ -343,6 +343,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tenants/current/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get View
+         * @description Simple or Full, for this person in this workspace (DESIGN.md §15a).
+         */
+        get: operations["get_view_tenants_current_view_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update View
+         * @description Anyone picks their own view: it hides and rewords, it grants nothing.
+         */
+        patch: operations["update_view_tenants_current_view_patch"];
+        trace?: never;
+    };
     "/tenants/current/landing": {
         parameters: {
             query?: never;
@@ -3307,6 +3331,24 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * ViewResponse
+         * @description This person's view of the workspace (DESIGN.md §15a Simple view).
+         */
+        ViewResponse: {
+            /**
+             * Interface Mode
+             * @enum {string}
+             */
+            interface_mode: "simple" | "full";
+            /** Chosen */
+            chosen: boolean;
+        };
+        /** ViewUpdateRequest */
+        ViewUpdateRequest: {
+            /** Interface Mode */
+            interface_mode: ("simple" | "full") | null;
+        };
         /** WebhookAction */
         WebhookAction: {
             /**
@@ -4047,6 +4089,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_view_tenants_current_view_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_view_tenants_current_view_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViewUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewResponse"];
+                };
             };
             /** @description Validation Error */
             422: {

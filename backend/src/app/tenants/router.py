@@ -39,6 +39,8 @@ from app.tenants.schemas import (
     TenantCreateRequest,
     TenantResponse,
     TenantUpdateRequest,
+    ViewResponse,
+    ViewUpdateRequest,
 )
 from app.zones import service as zones_service
 
@@ -166,6 +168,31 @@ async def mark_welcomed(
     """The one-time Welcome was answered: sign-in stops landing on it."""
     assert ctx.user_id is not None  # people_only
     await service.mark_welcomed(session, ctx.tenant_id, ctx.user_id)
+
+
+@router.get("/current/view", response_model=ViewResponse)
+async def get_view(
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> ViewResponse:
+    """Simple or Full, for this person in this workspace (DESIGN.md §15a)."""
+    assert ctx.user_id is not None  # people_only
+    mode, chosen = await service.interface_mode(session, ctx.tenant_id, ctx.user_id)
+    return ViewResponse(interface_mode=mode, chosen=chosen)  # type: ignore[arg-type]
+
+
+@router.patch("/current/view", response_model=ViewResponse)
+async def update_view(
+    body: ViewUpdateRequest,
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER, people_only=True)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> ViewResponse:
+    """Anyone picks their own view: it hides and rewords, it grants nothing."""
+    assert ctx.user_id is not None  # people_only
+    mode, chosen = await service.set_interface_mode(
+        session, ctx.tenant_id, ctx.user_id, body.interface_mode
+    )
+    return ViewResponse(interface_mode=mode, chosen=chosen)  # type: ignore[arg-type]
 
 
 @router.get("/current/landing", response_model=LandingResponse)

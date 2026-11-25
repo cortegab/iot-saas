@@ -31,6 +31,7 @@ import { leafPredicates } from "@/components/rules/RuleSummary";
 import { ApiRequestError } from "@/lib/api-client";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
 import { HEALTH, healthKey, healthLabel } from "@/lib/device-health";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { webSerialSupported } from "@/lib/hardware/flasher";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { getDeviceActuators } from "@/lib/device-actuators";
@@ -122,7 +123,10 @@ export default function DeviceDetailPage() {
   const canWrite = can("devices.write");
 
   const tabParam = params.get("tab");
-  const tab: DeviceTab = (TABS as readonly string[]).includes(tabParam ?? "") ? (tabParam as DeviceTab) : "overview";
+  // Simple view (DESIGN.md §15a): Overview and Rules only.
+  const { simple } = useInterfaceMode();
+  const shownTabs: readonly DeviceTab[] = simple ? ["overview", "rules"] : TABS;
+  const tab: DeviceTab = (shownTabs as readonly string[]).includes(tabParam ?? "") ? (tabParam as DeviceTab) : "overview";
   function setTab(next: string) {
     const q = new URLSearchParams(params.toString());
     if (next === "overview") q.delete("tab");
@@ -198,9 +202,9 @@ export default function DeviceDetailPage() {
     { id: "overview", label: "Overview" },
     // The controls themselves lead Overview; this tab is what was sent.
     { id: "commands", label: "Commands" },
-    { id: "rules", label: "Rules", count: rules?.length },
+    { id: "rules", label: simple ? "Automations" : "Rules", count: rules?.length },
     { id: "settings", label: "Settings" },
-  ];
+  ].filter((t) => shownTabs.includes(t.id as DeviceTab));
 
   // Fills the window (main's bottom padding traded for its own) so the Settings
   // tab's save bar, once there's a change, lands at the bottom like every bar.
@@ -330,7 +334,7 @@ export default function DeviceDetailPage() {
               {/* One word first (ease-of-use A4); offline and never connected are said beside the name. */}
               <HealthWord device={device} />
             </div>
-            <Health device={device} />
+            <Health device={device} details={!simple} />
           </section>
         </div>
       </TabPanel>
@@ -407,7 +411,7 @@ function HealthWord({ device }: { device: DeviceResponse }) {
   return <Badge tone={h.tone} shape={h.shape} label={healthLabel(key, device)} />;
 }
 
-function Health({ device }: { device: DeviceResponse }) {
+function Health({ device, details: showDetails = true }: { device: DeviceResponse; details?: boolean }) {
   // Only what the device has reported; one line when it hasn't reported yet.
   const reported = device.last_status_at != null || device.rssi != null || device.fw_version != null || device.uptime_s != null;
   const faults = device.faults ?? [];
@@ -443,12 +447,14 @@ function Health({ device }: { device: DeviceResponse }) {
           ],
         ]}
       />
-      <details className="overflow-hidden rounded-lg border border-border">
-        <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">Details</summary>
-        <div className="p-4">
-          <FactList facts={details} />
-        </div>
-      </details>
+      {showDetails && (
+        <details className="overflow-hidden rounded-lg border border-border">
+          <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">Details</summary>
+          <div className="p-4">
+            <FactList facts={details} />
+          </div>
+        </details>
+      )}
     </div>
   );
 }

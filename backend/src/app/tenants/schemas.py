@@ -71,6 +71,22 @@ class SetupStatusResponse(BaseModel):
     first_device_name: str | None = None
 
 
+InterfaceMode = Literal["simple", "full"]
+
+
+class ViewResponse(BaseModel):
+    """This person's view of the workspace (DESIGN.md §15a Simple view)."""
+
+    interface_mode: InterfaceMode
+    # False while it's the role's default (Viewer: simple; Owner, Admin: full).
+    chosen: bool
+
+
+class ViewUpdateRequest(BaseModel):
+    # null goes back to the role's default.
+    interface_mode: InterfaceMode | None
+
+
 class LandingResponse(BaseModel):
     """Where this person goes after signing in (/home). `dashboard_id` is their
     default; without one the page picks the dashboard opened last on this
