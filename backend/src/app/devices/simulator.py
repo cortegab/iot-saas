@@ -121,7 +121,10 @@ def next_value(
         return current
     lo, hi = value_range(metric)
     span = hi - lo
-    phase = state.phases.setdefault(key, rng.random() * 2 * math.pi)
+    # A temperature starts mid-range and rising, so it passes a "too hot" limit
+    # within a few minutes of the device being made; others start anywhere.
+    start = 0.0 if _TEMPERATURE.search(_label(metric)) else rng.random() * 2 * math.pi
+    phase = state.phases.setdefault(key, start)
     wave = math.sin(2 * math.pi * (now - state.started) / WAVE_PERIOD_SECONDS + phase)
     value = lo + span * (0.5 + 0.375 * wave) + rng.uniform(-0.02, 0.02) * span
     if _TEMPERATURE.search(_label(metric)) and cooling_on(actuators, state):

@@ -95,3 +95,12 @@ def test_retained_desired_state_is_picked_up_but_a_command_wins() -> None:
 def test_status_reads_online_with_no_faults() -> None:
     body = json.loads(status_payload(SimState(started=100.0), 160.0))
     assert body["online"] is True and body["uptime_s"] == 60 and body["faults"] == []
+
+
+def test_a_temperature_starts_rising_to_its_peak_within_minutes() -> None:
+    state = SimState(started=0.0)
+    rng = random.Random(1)
+    first = next_value(TEMP, [], state, 0.0, rng)
+    at_peak = next_value(TEMP, [], state, 150.0, rng)
+    assert 25 <= first <= 35  # type: ignore[operator]
+    assert at_peak > 45  # the wave's top: 0.875 of 0-60 # type: ignore[operator]
