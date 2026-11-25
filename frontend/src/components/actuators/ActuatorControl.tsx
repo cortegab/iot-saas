@@ -323,11 +323,14 @@ export function ActuatorControl({
   catalogEntryId,
   wiring,
   automateHref,
+  only,
 }: {
   deviceId: string;
   deviceOnline: boolean;
   /** An on/off output's "Automate…" link (device page; ease-of-use B2). */
   automateHref?: (actuatorId: string) => string | undefined;
+  /** Just this actuator (a device tile shows its first on/off output). */
+  only?: string;
   /** A disabled device can't connect: its controls are off. */
   deviceDisabled?: boolean;
   catalogEntryId: string;
@@ -360,8 +363,9 @@ export function ActuatorControl({
   }
 
   return (
-    <div role="group" aria-label="Actuators" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
-      {actuators.map(({ id, label }) => (
+    // In a tile (`only`) the tile is already the card: no second border.
+    <div role="group" aria-label="Actuators" className={only ? "-mx-3.5 -mb-3.5 flex flex-col border-t border-border-soft" : "flex flex-col overflow-hidden rounded-xl border border-border bg-surface"}>
+      {(only ? actuators.filter((a) => a.id === only) : actuators).map(({ id, label }) => (
         <ActuatorRow
           key={id}
           deviceId={deviceId}

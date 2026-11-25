@@ -7,6 +7,9 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Badge";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { DeviceTile } from "@/components/devices/DeviceTile";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -43,7 +46,10 @@ export default function DevicesPage() {
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
   const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
 
-  const list = useListState({ status: "all", template: "all", zone: "all" }, { key: "name", dir: "asc" });
+  const list = useListState({ status: "all", template: "all", zone: "all", view: "auto" }, { key: "name", dir: "asc" });
+  // Tiles by zone (DESIGN.md §8, §15a): the default in Simple view, a toggle in Full.
+  const { simple } = useInterfaceMode();
+  const view = list.filters.view === "tiles" || list.filters.view === "table" ? list.filters.view : simple ? "tiles" : "table";
   const zoneName = useMemo(() => new Map((zones ?? []).map((z) => [z.id, z.name])), [zones]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -259,6 +265,17 @@ export default function DevicesPage() {
             placeholder="Search name or template"
             activeFilters={[list.filters.template, list.filters.zone].filter((v) => v !== "all").length}
             actions={addAction}
+            view={
+              <SegmentedControl
+                ariaLabel="Devices view"
+                value={view}
+                onChange={(v) => list.setFilter("view", v)}
+                options={[
+                  { value: "table", label: "Table" },
+                  { value: "tiles", label: "Tiles" },
+                ]}
+              />
+            }
             quick={{
               label: "Filter by status",
               value: list.filters.status,
@@ -322,6 +339,29 @@ export default function DevicesPage() {
 
           {filtered.length === 0 ? (
             <NoResults noun="devices" hidden={total} onClear={list.clearAll} />
+          ) : view === "tiles" ? (
+            <div className="flex flex-col gap-5">
+              {groupByZone(pageRows, zoneName).map((g) => (
+                <section key={g.key} aria-label={g.label} className="flex flex-col gap-2.5">
+                  <h2 className="text-sm font-semibold text-ink">{g.label}</h2>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-3">
+                    {g.devices.map((d) => (
+                      <DeviceTile key={d.id} device={d} template={templates?.find((t) => t.id === d.catalog_entry_id)} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+              <TableFooter
+                shown={filtered.length}
+                total={total}
+                noun={["device", "devices"]}
+                page={page}
+                pageCount={pageCount}
+                pageSize={list.pageSize}
+                onPage={list.setPage}
+                onPageSize={list.setPageSize}
+              />
+            </div>
           ) : (
             <div className="flex flex-col gap-2">
               <DataTable
@@ -356,4 +396,16 @@ export default function DevicesPage() {
       {actions.dialog}
     </>
   );
+}
+
+/** Tiles grouped by zone, in zone-name order, devices without one last. */
+function groupByZone(rows: DeviceResponse[], zoneName: Map<string, string>) {
+  const groups = new Map<string, { key: string; label: string; devices: DeviceResponse[] }>();
+  for (const d of rows) {
+    const key = d.zone_id && zoneName.has(d.zone_id) ? d.zone_id : "none";
+    const label = key === "none" ? "No zone" : zoneName.get(key)!;
+    if (!groups.has(key)) groups.set(key, { key, label, devices: [] });
+    groups.get(key)!.devices.push(d);
+  }
+  return [...groups.values()].sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : a.label.localeCompare(b.label)));
 }

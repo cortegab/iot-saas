@@ -18,8 +18,15 @@ test("Simple view hides set-up pages and rewords, and switches back", async ({ p
     await expect(nav.getByRole("link", { name: /API keys/ })).toHaveCount(0);
     await expect(nav.getByRole("link", { name: /Automations/ })).toBeVisible();
 
+    // Devices are tiles grouped by zone in Simple (C3), the table one toggle away.
+    await expect(page.getByRole("radio", { name: "Tiles" })).toBeChecked();
+    await expect(page.locator("main article").first()).toBeVisible();
+    await page.getByRole("radio", { name: "Table" }).click();
+    await expect(page.getByRole("table", { name: "Devices" })).toBeVisible();
+    await page.getByRole("radio", { name: "Tiles" }).click();
+
     // A device: Overview and Automations only.
-    await page.locator('main a[href^="/devices/"]:not([href="/devices/new"])').first().click();
+    await page.locator('main article a[href^="/devices/"]').first().click();
     const tabs = page.getByRole("tablist", { name: "Device sections" });
     await expect(tabs.getByRole("tab")).toHaveText(["Overview", /Automations/]);
 
