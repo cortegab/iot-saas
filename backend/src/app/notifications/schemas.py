@@ -12,6 +12,7 @@ NotificationKind = Literal[
     "rule_cleared",
     "rule_health",
     "device_offline",
+    "device_online",
     "device_health",
     "delivery_failed",
     "template_changed",

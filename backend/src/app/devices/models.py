@@ -68,6 +68,14 @@ class Device(Base):
     status: Mapped[str] = mapped_column(nullable=False, default=DeviceStatus.ACTIVE.value)
     # Readings made up by the worker (app.devices.simulator), published through
     # EMQX like a board's: for trying the platform without hardware.
+    # Alert settings (ease-of-use C6): no offline or health alerts until then
+    # (far future = until turned back on); a "back online" notice when set.
+    alerts_muted_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    notify_back_online: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     simulated: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )

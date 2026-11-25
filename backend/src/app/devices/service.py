@@ -328,6 +328,9 @@ async def update_device(
     hardware: dict[str, Any] | None = None,
     hardware_set: bool = False,
     stop_simulating: bool = False,
+    muted_until: datetime | None = None,
+    muted_set: bool = False,
+    notify_back_online: bool | None = None,
 ) -> Device:
     """Raises catalog_service.HardwareMappingError if `hardware` feeds a key
     the device's template doesn't declare."""
@@ -347,6 +350,10 @@ async def update_device(
         device.hardware = hardware
     if stop_simulating:
         device.simulated = False
+    if muted_set:
+        device.alerts_muted_until = muted_until
+    if notify_back_online is not None:
+        device.notify_back_online = notify_back_online
     await session.flush()
     return device
 
@@ -432,6 +439,35 @@ class StatusDiagnostics(NamedTuple):
     ota_state: dict[str, str] | None = None
     # The update keys the firmware trusts (1.0.1+), or None.
     ota_keys: list[str] | None = None
+
+
+class AlertSettings(NamedTuple):
+    muted: bool
+    notify_back_online: bool
+
+
+async def alert_settings(
+    factory: async_sessionmaker[AsyncSession], tenant_id: uuid.UUID, device_id: uuid.UUID
+) -> AlertSettings:
+    """A device's alert settings, for the worker's status path (not the
+    readings hot path). The tenant comes from the SECURITY DEFINER topic
+    lookup, the same trust boundary record_status_snapshot uses."""
+    async with factory() as session, session.begin():
+        await set_tenant_context(session, tenant_id)
+        row = (
+            await session.execute(
+                select(Device.alerts_muted_until, Device.notify_back_online).where(
+                    Device.id == device_id
+                )
+            )
+        ).one_or_none()
+    if row is None:
+        return AlertSettings(muted=False, notify_back_online=False)
+    muted_until, back = row
+    return AlertSettings(
+        muted=muted_until is not None and muted_until > datetime.now(UTC),
+        notify_back_online=bool(back),
+    )
 
 
 class StatusChange(NamedTuple):

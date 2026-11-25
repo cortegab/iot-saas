@@ -9,6 +9,7 @@ import { useChangeToast } from "@/hooks/useChangeToast";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Badge, Tag } from "@/components/ui/Badge";
 import { SimulatedNote } from "@/components/devices/SimulatedStart";
+import { DeviceAlertSettings, isMuted } from "@/components/devices/DeviceAlertSettings";
 import { buttonClassName } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { CopyButton } from "@/components/ui/SecretReveal";
@@ -219,6 +220,7 @@ export default function DeviceDetailPage() {
             {device.name}
             <Badge tone={st.tone} shape={st.shape} label={st.label} />
             {device.simulated && <Tag>Simulated</Tag>}
+            {isMuted(device) && <Tag>Alerts muted</Tag>}
           </>
         }
         actions={
@@ -360,6 +362,7 @@ export default function DeviceDetailPage() {
       <TabPanel id="settings" active={tab} className="flex-1">
         {/* The one place a device is edited (DESIGN.md §7): plain stacked
             sections; Delete is in the header's ⋯ menu. */}
+        <DeviceAlertSettings device={device} canWrite={canWrite} />
         <DeviceEditor
           deviceId={deviceId}
           embedded

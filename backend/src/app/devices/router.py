@@ -43,6 +43,8 @@ def _to_response(
         slug=device.slug,
         status=device.status,
         simulated=device.simulated,
+        alerts_muted_until=device.alerts_muted_until,
+        notify_back_online=device.notify_back_online,
         last_seen_at=device.last_seen_at,
         created_at=device.created_at,
         credential_rotated_at=device.credential_rotated_at,
@@ -165,6 +167,9 @@ async def update_device(
             hardware=body.hardware.model_dump(mode="json") if body.hardware else None,
             hardware_set="hardware" in body.model_fields_set,
             stop_simulating=body.simulated is False,
+            muted_until=body.alerts_muted_until,
+            muted_set="alerts_muted_until" in body.model_fields_set,
+            notify_back_online=body.notify_back_online,
         )
     except zones_service.ZoneNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found") from exc

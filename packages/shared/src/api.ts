@@ -2066,6 +2066,13 @@ export interface components {
              * @default false
              */
             simulated: boolean;
+            /** Alerts Muted Until */
+            alerts_muted_until?: string | null;
+            /**
+             * Notify Back Online
+             * @default false
+             */
+            notify_back_online: boolean;
             /** Last Seen At */
             last_seen_at: string | null;
             /**
@@ -2170,6 +2177,10 @@ export interface components {
             hardware?: components["schemas"]["HardwareConfig"] | null;
             /** Simulated */
             simulated?: false | null;
+            /** Alerts Muted Until */
+            alerts_muted_until?: string | null;
+            /** Notify Back Online */
+            notify_back_online?: boolean | null;
         };
         /**
          * DraftSimulateRequest
@@ -2685,7 +2696,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "rule_fired" | "rule_cleared" | "rule_health" | "device_offline" | "device_health" | "delivery_failed" | "template_changed";
+            kind: "rule_fired" | "rule_cleared" | "rule_health" | "device_offline" | "device_online" | "device_health" | "delivery_failed" | "template_changed";
             /**
              * Created At
              * Format: date-time

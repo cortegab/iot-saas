@@ -321,7 +321,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | In-app notifications | ✅ | Types: device offline, device health, rule fired / cleared, rule health, failed delivery, template changed. Repeats grouped; server-side paging; unread counts by type; read / unread, dismiss / undo. |
 | Failed deliveries list with reason and Retry | ✅ | |
 | Alarm lifecycle (acknowledge with who and a note, active / cleared state) | ⛔ | The UI is designed; the backend isn't built. |
-| "Back online" notification; muting per device | ⛔ | Offline alerts are fixed and on for every device. |
+| "Back online" notification; muting per device | ✅ | Device → Settings → Alerts: mute offline and health alerts for 1 h, 1 day or until turned back on (rules still run), and an opt-in back-online notice. |
 | Push notifications to the Android app | ✅ | Per phone: critical only, or warnings and critical (info never pushes). The payload carries **names only**, never readings or rule text, because FCM relays through Google. A tap opens the device or alert. |
 | SMS, Slack / Teams | ⛔ | Webhooks cover integrations for now. |
 

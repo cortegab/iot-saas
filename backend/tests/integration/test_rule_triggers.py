@@ -205,7 +205,9 @@ async def test_run_endpoint_role_gated(
 
     # Only a manual rule can be a scene.
     reading_rule = (
-        await client.post("/rules", json=_rule_body(device["device"]["id"], {"type": "metric"}), headers=headers)
+        await client.post(
+            "/rules", json=_rule_body(device["device"]["id"], {"type": "metric"}), headers=headers
+        )
     ).json()["id"]
     refused = await client.put(
         f"/rules/{reading_rule}/clients-can-run", json={"allowed": True}, headers=headers
