@@ -9,7 +9,7 @@ import { TrendChartWidget } from "@/components/dashboards/TrendChartWidget";
 import { DeviceStatusWidget } from "@/components/dashboards/DeviceStatusWidget";
 import { ActuatorControlWidget } from "@/components/dashboards/ActuatorControlWidget";
 import { GaugeWidget } from "@/components/dashboards/GaugeWidget";
-import { WidgetCard } from "@/components/dashboards/WidgetCard";
+import { WidgetCard, WidgetTitleContext } from "@/components/dashboards/WidgetCard";
 import { cn } from "@/lib/cn";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
@@ -104,6 +104,10 @@ export function DashboardGrid({
 
   // One widget's content, the same in the grid and in the phone column.
   function renderWidget(widget: Widget, fill: boolean) {
+    return <WidgetTitleContext.Provider value={widget.title?.trim() || null}>{renderWidgetBody(widget, fill)}</WidgetTitleContext.Provider>;
+  }
+
+  function renderWidgetBody(widget: Widget, fill: boolean) {
     const broken = brokenReason(widget, devices, templates);
     return broken ? (
       <WidgetCard title={WIDGET_LABEL[widget.type]}>

@@ -28,6 +28,8 @@ class Widget(BaseModel):
     # Required by gauge (the value range the arc scales against), unused otherwise.
     min: float | None = None
     max: float | None = None
+    # Its own title ("Bay 1 door"); null = the generated Reading · Device.
+    title: str | None = Field(default=None, max_length=60)
 
 
 class DashboardCreateRequest(BaseModel):

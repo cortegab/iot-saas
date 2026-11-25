@@ -81,11 +81,21 @@ async def test_update_dashboard_layout_and_name(client: httpx.AsyncClient) -> No
     assert resp.status_code == 200
     body = resp.json()
     assert body["name"] == "Renamed"
-    expected_widget = {**widget, "min": None, "max": None}
+    expected_widget = {**widget, "min": None, "max": None, "title": None}
     assert body["layout"] == [expected_widget]
 
     refetched = await client.get(f"/dashboards/{dashboard_id}", headers=headers)
     assert refetched.json()["layout"] == [expected_widget]
+
+    # Its own title (ease-of-use C8), up to 60 characters.
+    titled = await client.patch(
+        f"/dashboards/{dashboard_id}", json={"layout": [{**widget, "title": "Bay 1 door"}]}, headers=headers
+    )
+    assert titled.json()["layout"][0]["title"] == "Bay 1 door"
+    too_long = await client.patch(
+        f"/dashboards/{dashboard_id}", json={"layout": [{**widget, "title": "x" * 61}]}, headers=headers
+    )
+    assert too_long.status_code == 422
 
 
 async def test_delete_dashboard(client: httpx.AsyncClient) -> None:
