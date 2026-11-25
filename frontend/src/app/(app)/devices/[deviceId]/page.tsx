@@ -124,9 +124,11 @@ export default function DeviceDetailPage() {
   const canWrite = can("devices.write");
 
   const tabParam = params.get("tab");
-  // Simple view (DESIGN.md §15a): Overview and Rules only.
+  // Simple view (DESIGN.md §15a): Overview and Automations, plus Settings for
+  // whoever can edit devices: it's the one place a device and its alerts are
+  // changed, and a view never takes that away.
   const { simple } = useInterfaceMode();
-  const shownTabs: readonly DeviceTab[] = simple ? ["overview", "rules"] : TABS;
+  const shownTabs: readonly DeviceTab[] = simple ? (canWrite ? ["overview", "rules", "settings"] : ["overview", "rules"]) : TABS;
   const tab: DeviceTab = (shownTabs as readonly string[]).includes(tabParam ?? "") ? (tabParam as DeviceTab) : "overview";
   function setTab(next: string) {
     const q = new URLSearchParams(params.toString());

@@ -8,6 +8,7 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useStarterDashboard } from "@/components/dashboards/useStarterDashboard";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,6 +20,7 @@ import { ApiRequestError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatReading } from "@/lib/format-reading";
 import { HOME } from "@/lib/landing";
+import { words } from "@/lib/simple-words";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 
@@ -46,6 +48,10 @@ export default function GetStartedPage() {
   const toast = useToast();
   const { can } = usePermissions();
   const manages = can("workspace.setup");
+  // Simple view (DESIGN.md §15a) hides templates: Add device makes the
+  // device's own, so the list starts at the device and says "automation".
+  const { simple } = useInterfaceMode();
+  const w = words(simple);
   const build = useStarterDashboard();
   const { data: ws } = useWorkspace();
 
@@ -75,7 +81,7 @@ export default function GetStartedPage() {
   const header = (
     <PageHeader
       title="Get started"
-      description="Four steps to a working loop: a device's readings, checked by a rule, on your dashboard."
+      description={`${simple ? "Three" : "Four"} steps to a working loop: a device's readings, checked by ${simple ? "an" : "a"} ${w.rule}, on your dashboard.`}
       actions={
         manages && setup && !setup.complete ? (
           <Button variant="ghost" onClick={() => void dismiss()}>
@@ -109,7 +115,7 @@ export default function GetStartedPage() {
         <EmptyState
           icon={<Construction aria-hidden size={26} />}
           title="Your workspace is being set up"
-          description="An owner or admin is adding its devices and rules. What's there already is yours to look at."
+          description={`An owner or admin is adding its devices and ${w.rules}. What's there already is yours to look at.`}
           action={
             <Link href="/devices" className={buttonClassName({ variant: "secondary" })}>
               Look at devices
@@ -121,7 +127,7 @@ export default function GetStartedPage() {
   }
 
   const device = setup.first_device_id;
-  const steps: Step[] = [
+  const allSteps: Step[] = [
     { key: "template", title: "Create a device template", why: "What a kind of device sends and what it can switch.", href: "/templates/new", action: "New template" },
     {
       key: "device",
@@ -132,14 +138,15 @@ export default function GetStartedPage() {
     },
     {
       key: "rule",
-      title: "Create a rule",
+      title: `Create ${simple ? "an" : "a"} ${w.rule}`,
       why: "Checks every reading the moment it arrives and acts in under two seconds.",
       href: device ? `/rules/new?device=${device}` : "/rules/new",
-      action: "New rule",
+      action: `New ${w.rule}`,
       needs: setup.device ? undefined : "Needs a connected device",
     },
     { key: "dashboard", title: "Make a dashboard", why: "Your own view of the readings, live.", href: "/dashboards/new", action: "New dashboard" },
   ];
+  const steps = simple ? allSteps.filter((s) => s.key !== "template") : allSteps;
   const current = steps.find((s) => !setup[s.key])?.key;
 
   return (

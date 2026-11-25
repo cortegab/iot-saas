@@ -126,7 +126,8 @@ async def get_tenant_slug(session: AsyncSession, tenant_id: uuid.UUID) -> str:
 
 
 async def list_my_tenants(session: AsyncSession, user_id: uuid.UUID) -> list[tuple[Tenant, str]]:
-    """List every tenant the given user belongs to, with their role in each.
+    """List every tenant the given user belongs to, with their role in each,
+    the one joined first first.
 
     Relies on tenant_memberships' dual-predicate RLS policy's user_id branch,
     so the caller must have already called set_user_context in the same
@@ -137,6 +138,9 @@ async def list_my_tenants(session: AsyncSession, user_id: uuid.UUID) -> list[tup
         select(Tenant, TenantMembership.role)
         .join(TenantMembership, TenantMembership.tenant_id == Tenant.id)
         .where(TenantMembership.user_id == user_id)
+        # A fixed order (joined first, then by name): the sign-in chooser lists
+        # them this way, and the first is where a sign-in lands by default.
+        .order_by(TenantMembership.created_at, Tenant.name, Tenant.id)
     )
     return [(tenant, role) for tenant, role in result.all()]
 
