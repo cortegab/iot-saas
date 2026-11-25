@@ -355,7 +355,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 
 | Capability | Status | Notes |
 |---|---|---|
-| Sign in and stay signed in; workspace switch; the web's header (IO Driven, the workspace, then the page) | ✅ | App **0.6.2**. |
+| Sign in and stay signed in; workspace switch; the web's header (IO Driven, the workspace, then the page) | ✅ | App **0.8.0**. |
 | Devices: list, readings, trends, live updates, status and health | ✅ | |
 | Dashboards with the attention strip | ✅ | Read-only: editing stays on the web. |
 | Actuator controls on the device and on dashboard widgets | ✅ | |

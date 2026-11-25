@@ -6,6 +6,7 @@ import { useState } from "react";
 import { RefreshControl, ScrollView, StyleSheet, View } from "react-native";
 import { useSWRConfig } from "swr";
 import { AttentionStrip } from "@/dashboards/AttentionStrip";
+import { ScenesRow } from "@/dashboards/ScenesRow";
 import { readingOrder } from "@/dashboards/order";
 import { DashboardWidget } from "@/dashboards/widgets";
 import { useApiSWR } from "@/hooks/useApiSWR";
@@ -61,6 +62,7 @@ export default function DashboardScreen() {
         </Text>
       ) : null}
       <AttentionStrip />
+      <ScenesRow />
       {hasTrend ? (
         <Segmented
           accessibilityLabel="Time range"

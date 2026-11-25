@@ -1,4 +1,5 @@
 import { Redirect, Tabs } from "expo-router";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { Bell, Cpu, LayoutDashboard, ListChecks, Menu } from "lucide-react-native";
 import { AppState, View } from "react-native";
 import { SWRConfig } from "swr";
@@ -63,6 +64,8 @@ function AppFrame() {
 function AppTabs() {
   const theme = useTheme();
   const { unread } = useNotificationSummary();
+  // Simple view (DESIGN.md §15a): Rules reads Automations.
+  const { simple } = useInterfaceMode();
   return (
       <Tabs
         screenOptions={{
@@ -96,7 +99,7 @@ function AppTabs() {
         />
         <Tabs.Screen
           name="rules"
-          options={{ title: "Rules", headerShown: false, tabBarIcon: ({ color, size }) => <ListChecks color={color} size={size} /> }}
+          options={{ title: simple ? "Automations" : "Rules", headerShown: false, tabBarIcon: ({ color, size }) => <ListChecks color={color} size={size} /> }}
         />
         <Tabs.Screen name="more" options={{ title: "More", tabBarIcon: ({ color, size }) => <Menu color={color} size={size} /> }} />
       </Tabs>

@@ -7,6 +7,7 @@ import { Alert, ScrollView, StyleSheet, View } from "react-native";
 import { useAuth } from "@/auth/AuthProvider";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { openAppSettings, usePush } from "@/push/PushProvider";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { apiUrl, webUrl } from "@/lib/config";
 import { useTheme } from "@/theme/useTheme";
 import { Button } from "@/ui/Button";
@@ -28,6 +29,7 @@ export default function More() {
   const { memberships, currentTenantId, setCurrentTenantId, logout } = useAuth();
   const { data: me } = useApiSWR<UserResponse>("/auth/me");
   const push = usePush();
+  const view = useInterfaceMode();
 
   function confirmSignOut() {
     Alert.alert("Sign out?", "You'll need your email and password to sign in again on this phone.", [
@@ -55,6 +57,15 @@ export default function More() {
             right={m.tenant_id === currentTenantId ? <Check size={20} color={theme.accent} /> : null}
           />
         ))}
+      </Lines>
+
+      {/* DESIGN.md §15a: the same choice as the web's account menu, for this workspace. */}
+      <Lines label="View">
+        <Row
+          title="Simple view"
+          detail="Hides set-up pages and says things in plain words. Changes nothing you can do."
+          right={<Switch value={view.simple} onValueChange={(v) => void view.setSimple(v)} accessibilityLabel="Simple view" />}
+        />
       </Lines>
 
       <Lines label="Notifications">
