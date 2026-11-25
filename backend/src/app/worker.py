@@ -80,6 +80,7 @@ from app.commands.schemas import AckPayload
 from app.config import settings
 from app.db import session_factory
 from app.devices import service as devices_service
+from app.devices import simulator
 from app.devices.models import DeviceStatus
 from app.firmware import service as firmware_service
 from app.health import service as health_service
@@ -280,7 +281,15 @@ async def _handle_status(
             "ota": data.ota,
         },
     )
-    if resolved.status != DeviceStatus.DISABLED:
+    # Alert settings (ease-of-use C6): a muted device raises no offline or health alerts.
+    try:
+        alerts = await devices_service.alert_settings(
+            factory, resolved.tenant_id, resolved.device_id
+        )
+    except Exception:
+        log.exception("alert settings lookup failed for %s", resolved.device_id)
+        alerts = devices_service.AlertSettings(muted=False, notify_back_online=False)
+    if resolved.status != DeviceStatus.DISABLED and not alerts.muted:
         await _alert_device_health(
             factory, resolved.tenant_id, resolved.device_id, parsed.device_slug, data, change
         )
@@ -298,9 +307,27 @@ async def _handle_status(
                 )
             except Exception:
                 log.exception("clearing offline alarms failed for %s", resolved.device_id)
+            if (
+                alerts.notify_back_online
+                and not alerts.muted
+                and resolved.status != DeviceStatus.DISABLED
+            ):
+                try:
+                    await notifications_service.create_notification(
+                        factory,
+                        resolved.tenant_id,
+                        resolved.device_id,
+                        None,
+                        f"{parsed.device_slug} is back online",
+                        severity="info",
+                        kind="device_online",
+                        detail="It reconnected and sent its status.",
+                    )
+                except Exception:
+                    log.exception("back-online notification failed for %s", resolved.device_id)
         # A genuine flip to offline (never the first observation after a
         # restart, so retained LWTs don't re-alert) is a critical feed row.
-        if not data.online and resolved.status != DeviceStatus.DISABLED:
+        if not data.online and resolved.status != DeviceStatus.DISABLED and not alerts.muted:
             try:
                 await notifications_service.create_notification(
                     factory,
@@ -1197,6 +1224,8 @@ async def run() -> None:
         "heartbeat": heartbeat_loop,
         "command_expiry": lambda: command_expiry_loop(f),
         "pruning": lambda: pruning_loop(f),
+        # Made-up readings for simulated devices, published through EMQX like a board's.
+        "simulator": lambda: simulator.simulator_loop(f),
     }
     try:
         await asyncio.gather(*(supervise(name, start) for name, start in loops.items()))

@@ -84,6 +84,15 @@ notices), then replace every `CHANGE_ME` with a real value — `openssl rand -he
 **different** value each time. Do not reuse a value across two `CHANGE_ME` slots, and do not reuse
 any dev secret from `infra/.env`.
 
+`GOOGLE_CLIENT_ID_WEB` / `GOOGLE_CLIENT_ID_ANDROID` are public OAuth client ids from Google Cloud
+Console (APIs & Services → Credentials): a *Web application* client whose authorized JavaScript origin
+is the app's URL, and an *Android* client with the package name and the SHA-1 of each signing key
+(release APK and Play upload key). Empty keeps *Continue with Google* off.
+
+`MQTT_SIMULATOR_PASSWORD` is the one secret that may stay empty: empty keeps simulated devices
+(Add device → *No board yet*) off, and EMQX refuses the simulator's username. Set it to turn them
+on; the dev placeholder is refused on an https deployment.
+
 `infra/.env.prod` is git-ignored (see `.gitignore`) — unlike the dev `.env` files in this repo, it
 must never be committed. Its permissions (`chmod 600`) matter too; it's the credential, not just a
 config file.

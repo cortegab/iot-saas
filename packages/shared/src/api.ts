@@ -38,6 +38,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Google Sign In
+         * @description Sign in, or sign up, with a Google ID token (ease-of-use plan B5).
+         *     Off (404) until a Google client id is configured.
+         */
+        post: operations["google_sign_in_auth_google_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -320,6 +341,30 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/tenants/current/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get View
+         * @description Simple or Full, for this person in this workspace (DESIGN.md §15a).
+         */
+        get: operations["get_view_tenants_current_view_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update View
+         * @description Anyone picks their own view: it hides and rewords, it grants nothing.
+         */
+        patch: operations["update_view_tenants_current_view_patch"];
         trace?: never;
     };
     "/tenants/current/landing": {
@@ -887,9 +932,31 @@ export interface paths {
          * Run Rule
          * @description Manual "Run now" — publishes a one-shot run request; app.worker
          *     evaluates the condition against the live signal cache and fires only if
-         *     it's currently met.
+         *     it's currently met. Admins run any rule; a Viewer only a scene opened to
+         *     clients (a manual-trigger rule with clients_can_run, ease-of-use C5).
          */
         post: operations["run_rule_rules__rule_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/{rule_id}/clients-can-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Clients Can Run
+         * @description Open (or close) a manual-trigger rule to Viewers as a scene. Only a
+         *     manual rule: one on readings or a schedule runs by itself.
+         */
+        put: operations["set_clients_can_run_rules__rule_id__clients_can_run_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1762,7 +1829,8 @@ export interface components {
         };
         /**
          * ClientInfoResponse
-         * @description What the mobile app checks at start (docs/mobile-release.md).
+         * @description What a client checks before sign-in: the mobile app's update gate
+         *     (docs/mobile-release.md) and which sign-in methods are on.
          */
         ClientInfoResponse: {
             /** Min Mobile Version */
@@ -1771,6 +1839,15 @@ export interface components {
             latest_mobile_version: string;
             /** Mobile Update Url */
             mobile_update_url: string;
+            /** Google Client Id Web */
+            google_client_id_web?: string | null;
+            /** Google Client Id Android */
+            google_client_id_android?: string | null;
+        };
+        /** ClientsCanRunRequest */
+        ClientsCanRunRequest: {
+            /** Allowed */
+            allowed: boolean;
         };
         /** CommandResponse */
         CommandResponse: {
@@ -1939,6 +2016,11 @@ export interface components {
             new_template?: components["schemas"]["CatalogEntryCreateRequest"] | null;
             /** Zone Id */
             zone_id?: string | null;
+            /**
+             * Simulated
+             * @default false
+             */
+            simulated: boolean;
         };
         /** DeviceCreateResponse */
         DeviceCreateResponse: {
@@ -1979,6 +2061,18 @@ export interface components {
             slug: string;
             /** Status */
             status: string;
+            /**
+             * Simulated
+             * @default false
+             */
+            simulated: boolean;
+            /** Alerts Muted Until */
+            alerts_muted_until?: string | null;
+            /**
+             * Notify Back Online
+             * @default false
+             */
+            notify_back_online: boolean;
             /** Last Seen At */
             last_seen_at: string | null;
             /**
@@ -2081,6 +2175,12 @@ export interface components {
             /** Zone Id */
             zone_id?: string | null;
             hardware?: components["schemas"]["HardwareConfig"] | null;
+            /** Simulated */
+            simulated?: false | null;
+            /** Alerts Muted Until */
+            alerts_muted_until?: string | null;
+            /** Notify Back Online */
+            notify_back_online?: boolean | null;
         };
         /**
          * DraftSimulateRequest
@@ -2257,6 +2357,18 @@ export interface components {
         ForgotPasswordRequest: {
             /** Email */
             email: string;
+        };
+        /**
+         * GoogleSignInRequest
+         * @description Sign in (or sign up) with a Google ID token (ease-of-use plan B5).
+         */
+        GoogleSignInRequest: {
+            /** Id Token */
+            id_token: string;
+            /** Tenant Name */
+            tenant_name?: string | null;
+            /** Invitation Token */
+            invitation_token?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2584,7 +2696,7 @@ export interface components {
              * Kind
              * @enum {string}
              */
-            kind: "rule_fired" | "rule_cleared" | "rule_health" | "device_offline" | "device_health" | "delivery_failed" | "template_changed";
+            kind: "rule_fired" | "rule_cleared" | "rule_health" | "device_offline" | "device_online" | "device_health" | "delivery_failed" | "template_changed";
             /**
              * Created At
              * Format: date-time
@@ -2882,6 +2994,11 @@ export interface components {
             devices: components["schemas"]["RuleDeviceRef"][];
             /** Enabled */
             enabled: boolean;
+            /**
+             * Clients Can Run
+             * @default false
+             */
+            clients_can_run: boolean;
             /**
              * Created At
              * Format: date-time
@@ -3257,6 +3374,24 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
+        /**
+         * ViewResponse
+         * @description This person's view of the workspace (DESIGN.md §15a Simple view).
+         */
+        ViewResponse: {
+            /**
+             * Interface Mode
+             * @enum {string}
+             */
+            interface_mode: "simple" | "full";
+            /** Chosen */
+            chosen: boolean;
+        };
+        /** ViewUpdateRequest */
+        ViewUpdateRequest: {
+            /** Interface Mode */
+            interface_mode: ("simple" | "full") | null;
+        };
         /** WebhookAction */
         WebhookAction: {
             /**
@@ -3308,6 +3443,8 @@ export interface components {
             min?: number | null;
             /** Max */
             max?: number | null;
+            /** Title */
+            title?: string | null;
         };
         /** ZoneCreateRequest */
         ZoneCreateRequest: {
@@ -3399,6 +3536,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenPairResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    google_sign_in_auth_google_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleSignInRequest"];
             };
         };
         responses: {
@@ -3964,6 +4134,74 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_view_tenants_current_view_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_view_tenants_current_view_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ViewUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ViewResponse"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -5513,6 +5751,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_clients_can_run_rules__rule_id__clients_can_run_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientsCanRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleResponse"];
                 };
             };
             /** @description Validation Error */

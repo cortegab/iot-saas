@@ -31,7 +31,7 @@ export function FirstUse({
 }: {
   icon: ReactNode;
   title: string;
-  description: string;
+  description: ReactNode;
   action?: ReactNode;
   readOnlyNote?: string;
 }) {

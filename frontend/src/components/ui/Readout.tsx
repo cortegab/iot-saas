@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
@@ -32,6 +33,8 @@ export interface ReadoutProps {
   /** Card chrome (border, surface, padding). Off inside a widget that
    * already draws its own card. */
   framed?: boolean;
+  /** A small action in the foot (a reading's "Alert me…" on the device page). */
+  action?: ReactNode;
   className?: string;
 }
 
@@ -58,6 +61,7 @@ export function Readout({
   freshness,
   size = "md",
   framed = true,
+  action,
   className,
 }: ReadoutProps) {
   const numeric = typeof value === "number" ? value : Number(value);
@@ -124,6 +128,7 @@ export function Readout({
         ) : (
           <span className="text-xs text-ink-muted">{stamp}</span>
         ))}
+      {action && <span className="text-xs">{action}</span>}
     </div>
   );
 }

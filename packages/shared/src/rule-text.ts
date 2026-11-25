@@ -123,17 +123,22 @@ export function sharedActuators(rules: RuleResponse[]): Map<string, string[]> {
 }
 
 /** DESIGN.md §3 rule states available from the API today. */
-export type RuleStateKey = "armed" | "latched" | "disabled";
+export type RuleStateKey = "armed" | "stale" | "latched" | "disabled";
 
-export function ruleStateKey(r: Pick<RuleResponse, "enabled" | "latched">): RuleStateKey {
+/** One state per rule: an enabled rule whose inputs have no fresh data is
+ * "Can't evaluate", never "Armed" as well. Disabled and latched win, since
+ * they ask someone to act. `health` is optional for callers that lack it. */
+export function ruleStateKey(r: Pick<RuleResponse, "enabled" | "latched"> & { health?: { evaluatable: boolean } | null }): RuleStateKey {
   if (!r.enabled) return "disabled";
   if (r.latched) return "latched";
+  if (r.health && !r.health.evaluatable) return "stale";
   return "armed";
 }
 
 /** How each state reads as a badge (rules list, rule page, peek, device Rules tab). */
-export const RULE_STATE: Record<RuleStateKey, { label: string; tone: "online" | "pending" | "unknown"; shape: "solid" | "square" }> = {
+export const RULE_STATE: Record<RuleStateKey, { label: string; tone: "online" | "pending" | "unknown"; shape: "solid" | "square" | "hollow" }> = {
   armed: { label: "Armed", tone: "online", shape: "solid" },
+  stale: { label: "Can't evaluate", tone: "unknown", shape: "hollow" },
   latched: { label: "Latched", tone: "pending", shape: "square" },
   disabled: { label: "Disabled", tone: "unknown", shape: "square" },
 };

@@ -16,7 +16,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useFocusTrap } from "@/components/ui/Sheet";
-import { NAV_GROUPS } from "@/components/shell/nav-config";
+import { NAV_GROUPS, navLabel, navVisible } from "@/components/shell/nav-config";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { usePaletteData } from "@/components/shell/useShellData";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTheme } from "@/hooks/useTheme";
@@ -54,13 +55,14 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const listId = useId();
   useFocusTrap(ref, true);
 
+  const { simple } = useInterfaceMode();
   const commands = useMemo<Command[]>(() => {
     const go = (href: string) => () => router.push(href);
     const out: Command[] = [];
     for (const g of NAV_GROUPS) {
       for (const item of g.items) {
-        if (item.requires && !can(item.requires)) continue;
-        out.push({ id: `go:${item.href}`, group: "Go to", label: item.label, icon: item.icon, run: go(item.href) });
+        if (!navVisible(item, can, simple)) continue;
+        out.push({ id: `go:${item.href}`, group: "Go to", label: navLabel(item, simple), icon: item.icon, run: go(item.href) });
       }
     }
     const create: { label: string; href: string; icon: LucideIcon; requires: Action }[] = [
@@ -136,7 +138,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
       out.push({ id: `mem:${m.user_id}`, group: "Members", label: m.email, hint: m.role, icon: UserRound, run: go(`/members/${m.user_id}`) });
     }
     return out;
-  }, [can, data, router, setPreference, theme]);
+  }, [can, data, router, setPreference, simple, theme]);
 
   const q = query.trim().toLowerCase();
   // Without a query: navigation, a few records and actions; everything else once you type.

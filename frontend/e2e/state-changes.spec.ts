@@ -33,11 +33,19 @@ test("a device going online and offline while its page is open: one toast each, 
     status(true);
     await expect(page.getByText(`${name} is online`)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText("Waiting for its first message.")).toHaveCount(0);
+    // Online: Health says it in one word, the technical facts under Details.
+    const health = page.getByRole("region", { name: "Health" });
+    await expect(health.getByText("Healthy", { exact: true })).toBeVisible();
+    await expect(health.getByText("MQTT id")).toBeHidden();
+    await health.getByText("Details").click();
+    await expect(health.getByText("MQTT id")).toBeVisible();
 
     status(false);
     await expect(page.getByText(`${name} went offline`)).toBeVisible({ timeout: 15_000 });
     // Said once, in the header; no "Offline since …" callout on the Overview.
     await expect(page.getByText(/Offline since/)).toHaveCount(0);
+    // Offline is the status beside the name; Health adds no word of its own.
+    await expect(health.getByText("Healthy", { exact: true })).toHaveCount(0);
 
     // Reloaded while offline: the header says it beside the name, and no toast repeats it.
     await page.reload();

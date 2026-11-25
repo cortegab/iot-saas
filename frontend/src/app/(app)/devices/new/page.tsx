@@ -14,6 +14,7 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { Breadcrumbs, PageHeader } from "@/components/ui/PageHeader";
 import { Select } from "@/components/ui/Select";
+import { SimulatedStart } from "@/components/devices/SimulatedStart";
 import { TemplateEditor } from "@/components/catalog/TemplateEditor";
 import { templateGivesFacts } from "@/components/catalog/template-facts";
 import { ApiRequestError } from "@/lib/api-client";
@@ -24,7 +25,7 @@ type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-type Start = "same" | "new";
+type Start = "same" | "new" | "simulated";
 
 const RUNS: Record<"generic" | "own", RunsOn> = { generic: "generic_firmware", own: "own_code" };
 
@@ -39,21 +40,25 @@ export default function NewDevicePage() {
   const router = useRouter();
   const params = useSearchParams();
   const legacy = params.get("from") === "hardware";
-  const start: Start = legacy || params.get("from") === "new" ? "new" : "same";
+  const from = params.get("from");
+  const start: Start = legacy || from === "new" ? "new" : from === "simulated" ? "simulated" : "same";
   const runs = legacy ? "generic" : params.get("runs");
   const runsOn = runs === "generic" || runs === "own" ? RUNS[runs] : "generic_firmware";
   const cards = (
     <ChoiceCards<Start>
       ariaLabel="How to start"
       value={start}
-      onChange={(v) => router.replace(v === "new" ? "/devices/new?from=new" : "/devices/new")}
+      onChange={(v) => router.replace(v === "same" ? "/devices/new" : `/devices/new?from=${v}`)}
       options={[
         { value: "same", title: "From a template", description: "Another device like one you already have." },
         { value: "new", title: "Something new", description: "Say what it runs on and what it has; we make its template." },
+        // Ease-of-use B4: try rules and dashboards before any hardware.
+        { value: "simulated", title: "No board yet", description: "A simulated device with made-up readings, to try things out." },
       ]}
     />
   );
   if (start === "same") return <FromTemplate cards={cards} />;
+  if (start === "simulated") return <SimulatedStart cards={cards} />;
   return (
     <>
       <Breadcrumbs crumbs={[{ href: "/devices", label: "Devices" }]} />
@@ -103,7 +108,7 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
       void revalidate("/devices");
       // Connect starts by creating its credential (DESIGN.md §8): the one
       // made here is never shown.
-      router.push(`/devices/${result.device.id}/connect`);
+      router.push(`/devices/${result.device.id}/connect?fresh=1`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");
       setSubmitting(false);

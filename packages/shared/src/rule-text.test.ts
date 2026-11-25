@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actionsText, conditionText, sharedActuators, triggerText } from "./rule-text";
+import { RULE_STATE, actionsText, conditionText, ruleStateKey, sharedActuators, triggerText } from "./rule-text";
 import type { components } from "./api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -44,5 +44,25 @@ describe("rule text", () => {
     expect(shared.get("a")).toEqual(["fan1"]);
     expect(shared.get("b")).toEqual(["fan1"]);
     expect(shared.has("c")).toBe(false);
+  });
+});
+
+describe("ruleStateKey", () => {
+  const r = (o: { enabled?: boolean; latched?: boolean; evaluatable?: boolean }) => ({
+    enabled: o.enabled ?? true,
+    latched: o.latched ?? false,
+    health: { evaluatable: o.evaluatable ?? true },
+  });
+  it("gives each rule one state: can't evaluate replaces armed", () => {
+    expect(ruleStateKey(r({}))).toBe("armed");
+    expect(ruleStateKey(r({ evaluatable: false }))).toBe("stale");
+    expect(RULE_STATE.stale.label).toBe("Can't evaluate");
+  });
+  it("lets disabled and latched win, since they ask someone to act", () => {
+    expect(ruleStateKey(r({ enabled: false, evaluatable: false }))).toBe("disabled");
+    expect(ruleStateKey(r({ latched: true, evaluatable: false }))).toBe("latched");
+  });
+  it("reads armed when health isn't known", () => {
+    expect(ruleStateKey({ enabled: true, latched: false })).toBe("armed");
   });
 });

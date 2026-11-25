@@ -10,6 +10,7 @@ import { Callout } from "@/components/ui/Callout";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { AuthCard } from "@/components/auth/AuthCard";
+import { GoogleSignIn } from "@/components/auth/GoogleSignIn";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { ApiRequestError, apiClient } from "@/lib/api-client";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
@@ -107,6 +108,10 @@ export default function LoginPage() {
         </>
       }
     >
+      <GoogleSignIn
+        onSession={(data) => (data.memberships.length > 1 && !params.get("next") ? setChoosing(data) : enter(data))}
+        onError={setError}
+      />
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3.5">
         {params.get("reset") === "1" && <Callout>Password changed. Sign in with the new one.</Callout>}
         {error && (

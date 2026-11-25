@@ -38,6 +38,7 @@ import {
   blankTemplate,
   brokenUsages,
   draftToRequest,
+  EMPTY_TEMPLATE_WARNING,
   keepReading,
   keyedRows,
   matchingTemplate,
@@ -52,6 +53,7 @@ import {
   type TemplateDraft,
   type TemplateSectionId,
 } from "@/lib/template-draft";
+import { applyKit, kitsFor } from "@/lib/starter-kits";
 import type { components } from "@/types/api";
 import { NotFound, isNotFound } from "@/components/ui/NotFound";
 
@@ -237,7 +239,7 @@ export function TemplateEditor({
             });
             void revalidate("/devices");
             void revalidate("/catalog");
-            router.push(`/devices/${result.device.id}/connect`);
+            router.push(`/devices/${result.device.id}/connect?fresh=1`);
           } else if (isNew) {
             const created = await api.post<CatalogEntryResponse>("/catalog", { name: body.name, ...parts });
             if (!draft.enabled) await api.patch(`/catalog/${created.id}`, { status: "disabled" });
@@ -349,9 +351,44 @@ export function TemplateEditor({
       )}
     </WiringSection>
   );
+  // A new build with no parts yet can start from a kit (ease-of-use B3): the
+  // same parts Add part would add, on free pins, named, all still editable.
+  const kits = isNew && !readOnly && d.hardware && d.hardware.inputs.length + d.hardware.outputs.length === 0 ? kitsFor(catalog) : [];
+  const kitPicker = kits.length > 0 && catalog && (
+    <section aria-labelledby="kit-heading" className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-0.5">
+        <h3 id="kit-heading" className="text-sm font-semibold text-ink">
+          Start from a kit
+        </h3>
+        <p className="text-meta text-ink-muted">Common builds. It adds their parts on free pins; change anything after.</p>
+      </div>
+      <ul aria-label="Starter kits" className="grid gap-2.5 sm:grid-cols-2">
+        {kits.map((k) => (
+          <li key={k.id}>
+            <button
+              type="button"
+              onClick={() => {
+                set({ ...applyKit(d, k, catalog), device: d.device });
+                toast({ title: `${k.title} added`, detail: "Its parts are on free pins: check them against how the board is wired." });
+              }}
+              className="flex h-full w-full flex-col gap-1 rounded-xl border border-border bg-surface p-3.5 text-left shadow-card hover:border-[color-mix(in_srgb,var(--color-accent)_50%,var(--color-border))]"
+            >
+              <strong className="text-sm font-semibold text-ink">{k.title}</strong>
+              <span className="text-meta text-ink-muted">{k.description}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
   const body: Record<TemplateSectionId, ReactNode> = {
     general: <GeneralSection {...props} zones={zones} />,
-    hardware: wiring,
+    hardware: (
+      <>
+        {kitPicker}
+        {wiring}
+      </>
+    ),
     metrics: <MetricsSection {...props} />,
     actuators: <ActuatorsSection {...props} />,
   };
@@ -439,6 +476,11 @@ export function TemplateEditor({
           { label: "Actuators", value: none(d.actuators.length, "None") ?? d.actuators.map((a) => a.name || "Unnamed").join(", "), step: "data" },
         ]}
       />
+      {editor.warningFor(EMPTY_TEMPLATE_WARNING) && (
+        <Callout tone="warning">
+          <b className="font-medium">Nothing to read or switch.</b> {editor.warningFor(EMPTY_TEMPLATE_WARNING)}
+        </Callout>
+      )}
       {editor.visibleErrors.length > 0 && (
         <div role="alert">
           <Callout tone="error">

@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import {
   Check,
   ChevronsUpDown,
+  Eye,
   Globe,
   LogOut,
   Moon,
@@ -22,7 +23,8 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useTheme } from "@/hooks/useTheme";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
-import { NAV_GROUPS, activeHref } from "@/components/shell/nav-config";
+import { NAV_GROUPS, activeHref, navLabel, navVisible } from "@/components/shell/nav-config";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { useShell } from "@/components/shell/shell-context";
 import { useNavCounts } from "@/components/shell/useShellData";
 import { CreateWorkspaceDialog } from "@/components/shell/CreateWorkspaceDialog";
@@ -146,10 +148,10 @@ function useRailTips(enabled: boolean) {
 
 export interface AppSidebarProps {
   realtime: RealtimeStatus;
-  /** The 64px icon rail (641–1439px, not pinned open). */
+  /** The 64px icon rail (641–1279px when not pinned open; from 1280px when collapsed). */
   compact?: boolean;
-  /** Rail widths only: opens or closes the full sidebar over the content.
-   * Absent from 1440px, where the sidebar is always open. */
+  /** Below 1280px: opens or closes the full sidebar over the content. From
+   * 1280px: collapses the labelled sidebar to the rail, remembered. */
   onTogglePin?: () => void;
 }
 
@@ -195,6 +197,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
   const pathname = usePathname();
   const active = activeHref(pathname);
   const { can } = usePermissions();
+  const { simple } = useInterfaceMode();
   const { openPalette } = useShell();
   const { counts, unreadCount } = useNavCounts();
   const tips = useRailTips(compact);
@@ -269,7 +272,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
         )}
       >
         {NAV_GROUPS.map((group, gi) => {
-          const items = group.items.filter((i) => !i.requires || can(i.requires));
+          const items = group.items.filter((i) => navVisible(i, can, simple));
           if (items.length === 0) return null;
           return (
             <div
@@ -290,8 +293,8 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
                     key={item.href}
                     href={item.href}
                     aria-current={isActive ? "page" : undefined}
-                    aria-label={compact ? item.label : undefined}
-                    data-tip={compact ? item.label : undefined}
+                    aria-label={compact ? navLabel(item, simple) : undefined}
+                    data-tip={compact ? navLabel(item, simple) : undefined}
                     {...tips.handlers}
                     className={cn(
                       "relative flex items-center rounded-md text-sm transition-colors duration-150",
@@ -300,7 +303,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
                     )}
                   >
                     <Icon aria-hidden size={17} className={cn("shrink-0", isActive ? "text-accent" : "text-ink-muted")} />
-                    {!compact && <span className="min-w-0 flex-1 truncate">{item.label}</span>}
+                    {!compact && <span className="min-w-0 flex-1 truncate">{navLabel(item, simple)}</span>}
                     {item.alertCount
                       ? unreadCount > 0 && (
                           <AlertCount
@@ -500,6 +503,8 @@ function UserMenu({
             <MenuLink href="/settings#ps-account" icon={<UserRound size={15} />} label="Profile" />
             <MenuLink href="/" icon={<Globe size={15} />} label="Website" />
             <div className="my-1 h-px bg-border" role="separator" />
+            <SimpleViewItem />
+            <div className="my-1 h-px bg-border" role="separator" />
             <button
               type="button"
               role="menuitem"
@@ -553,6 +558,25 @@ export function ThemeButton({ withLabel = false }: { withLabel?: boolean }) {
     >
       {isDark ? <Sun aria-hidden size={16} /> : <Moon aria-hidden size={16} />}
       {withLabel && (isDark ? "Light theme" : "Dark theme")}
+    </button>
+  );
+}
+
+/** The account menu's Simple view switch (DESIGN.md §15a): yours alone, for
+ * this workspace; it hides set-up pages and rewords, it changes no rights. */
+function SimpleViewItem() {
+  const { simple, setMode } = useInterfaceMode();
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={simple}
+      onClick={() => void setMode(simple ? "full" : "simple")}
+      className="flex items-center gap-[9px] rounded-md px-2.5 py-[7px] text-left text-sm text-ink hover:bg-surface-raised focus-visible:bg-surface-raised focus-visible:outline-none"
+    >
+      <Eye aria-hidden size={15} className="text-ink-muted" />
+      <span className="flex-1">Simple view</span>
+      {simple && <Check aria-hidden size={15} className="text-accent" />}
     </button>
   );
 }

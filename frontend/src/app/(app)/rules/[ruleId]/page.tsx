@@ -12,7 +12,6 @@ import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { StateChip } from "@/components/ui/StateChip";
 import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import { MiniStrip } from "@/components/ui/MiniStrip";
 import { Callout } from "@/components/ui/Callout";
@@ -22,6 +21,9 @@ import { useRuleActions } from "@/components/rules/useRuleActions";
 import { RuleVersions } from "@/components/rules/RuleVersions";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { ApiRequestError } from "@/lib/api-client";
+import { useApi } from "@/hooks/useApi";
+import { useToast } from "@/components/ui/Toast";
+import { SwitchField } from "@/components/ui/Switch";
 import { upsertRuleInCache } from "@/lib/rule-cache";
 import { draftFromRule } from "@/lib/rule-draft";
 import { RULE_STATE, ruleStateKey } from "@/lib/rule-text";
@@ -133,11 +135,8 @@ export default function EditRulePage() {
                 <span className="flex flex-wrap items-center gap-x-1.5">
                   <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
                   {rule.trigger.type === "schedule" ? (lastFired ? `fired ${timeAgo(lastFired)}` : "never fired") : fired ? `fired ${fired}× in 24 h` : "quiet in 24 h"}
-                  {unhealthy && (
-                    <StateChip label="Can't evaluate" className="ml-1">
-                      <b className="font-medium">{unhealthy}.</b> Missing data never fires or clears it.
-                    </StateChip>
-                  )}
+                  {/* One state (Can't evaluate replaces Armed), and why, in words. */}
+                  {unhealthy && <span>· {unhealthy}. Missing data never fires or clears it.</span>}
                 </span>
               }
               title={rule.name}
@@ -184,6 +183,7 @@ export default function EditRulePage() {
           </>
         )}
           consequence={consequence(rule)}
+          basicsExtra={isAdmin && rule.trigger.type === "manual" ? <SceneSwitch rule={rule} onSaved={(saved) => upsertRuleInCache(saved)} /> : undefined}
           key={restored ? `${rule.id}-v${restored.version}` : rule.id}
           deviceId={seedDevice}
           existing={rule}
@@ -231,5 +231,39 @@ export default function EditRulePage() {
           }
         />
     </div>
+  );
+}
+
+/** A manual rule as a scene (DESIGN.md §15a; ease-of-use C5): opened to
+ * Viewers, it shows as a button on dashboards for everyone in the workspace. */
+function SceneSwitch({ rule, onSaved }: { rule: RuleResponse; onSaved: (saved: RuleResponse) => void }) {
+  const api = useApi();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function set(allowed: boolean) {
+    setBusy(true);
+    try {
+      const saved = await api.put<RuleResponse>(`/rules/${rule.id}/clients-can-run`, { allowed });
+      onSaved(saved);
+      void revalidate(`/rules/${rule.id}`);
+      void revalidate("/rules");
+      toast({ title: allowed ? "It's a scene now" : "Not a scene any more", detail: allowed ? "A button on every dashboard runs it, for viewers too." : undefined });
+    } catch (err) {
+      toast({ tone: "error", title: "Couldn't change it", detail: err instanceof ApiRequestError ? err.message : undefined });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <SwitchField
+      label="Scene"
+      checked={rule.clients_can_run ?? false}
+      onChange={(v) => void set(v)}
+      disabled={busy}
+      onLabel="Clients can run it"
+      offLabel="Admins only"
+      onHint="A button on every dashboard runs it, for viewers too."
+      offHint="Only owners and admins run it, from here."
+    />
   );
 }

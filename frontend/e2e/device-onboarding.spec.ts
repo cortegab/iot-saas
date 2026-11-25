@@ -46,6 +46,9 @@ test("something new on our firmware: parts make the template, readings are named
     await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\/connect$/);
     // Wired, so the Connect flow installs from the browser, no sketch.
     await expect(page.getByRole("list", { name: "Steps" })).toContainText("Install");
+    // Just created and installed from the browser: its credential is made for
+    // it and Install writes it, so Connect opens on Options.
+    await expect(page.getByRole("heading", { level: 2, name: "Options" })).toBeVisible();
     deviceId = page.url().match(/devices\/([0-9a-f-]{36})/)![1];
 
     const device = await (await request.get(`${API_URL}/devices/${deviceId}`, { headers })).json();
@@ -69,6 +72,46 @@ test("something new on our firmware: parts make the template, readings are named
   } finally {
     await cleanUp(request, headers, deviceId);
   }
+});
+
+test("a starter kit adds its parts on free pins, named, and the device is created with them", async ({ page, request }) => {
+  const { accessToken, tenantId } = await login(request);
+  const headers = { authorization: `Bearer ${accessToken}`, "x-tenant-id": tenantId };
+  let deviceId: string | undefined;
+  try {
+    await page.goto("/devices/new?from=new");
+    await page.getByLabel("Device name").fill(`E2E kit ${Date.now()}`);
+    await page.getByRole("button", { name: "Next: Hardware" }).click();
+    const kits = page.getByRole("list", { name: "Starter kits" });
+    await kits.getByRole("button", { name: /Greenhouse climate/ }).click();
+    // Its parts replace the picker; what they bring is named.
+    await expect(kits).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "What you'll see" })).toContainText("Air temperature, Humidity");
+    await expect(page.getByRole("region", { name: "What you'll see" })).toContainText("Fan");
+    await page.getByRole("button", { name: "Next: Data" }).click();
+    await page.getByRole("button", { name: "Next: Review" }).click();
+    await expect(page.getByText("Nothing to read or switch.")).toHaveCount(0);
+    await page.getByRole("button", { name: "Create device" }).click();
+    await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\/connect/);
+    deviceId = page.url().match(/devices\/([0-9a-f-]{36})/)![1];
+    const device = await (await request.get(`${API_URL}/devices/${deviceId}`, { headers })).json();
+    const template = await (await request.get(`${API_URL}/catalog/${device.catalog_entry_id}`, { headers })).json();
+    expect(template.metrics.map((m: { name: string }) => m.name)).toEqual(["Air temperature", "Humidity"]);
+    expect(template.actuators.map((a: { name: string }) => a.name)).toEqual(["Fan"]);
+  } finally {
+    await cleanUp(request, headers, deviceId);
+  }
+});
+
+test("a device with no parts gets a warning on Review, never a block", async ({ page }) => {
+  await page.goto("/devices/new?from=new");
+  await page.getByLabel("Device name").fill(`E2E bare ${Date.now()}`);
+  await page.getByRole("button", { name: "Next: Hardware" }).click();
+  await page.getByRole("button", { name: "Next: Data" }).click();
+  await page.getByRole("button", { name: "Next: Review" }).click();
+  await expect(page.getByText("Nothing to read or switch.")).toBeVisible();
+  await expect(page.getByText(/parts wired to the board on Hardware/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create device" })).toBeEnabled();
 });
 
 test("something new on its own code: no wiring, its data listed, it lands on the sketch", async ({ page, request }) => {

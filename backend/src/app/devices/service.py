@@ -24,6 +24,14 @@ from app.devices.schemas import ConnectionState
 from app.shared.slug import slugify
 from app.zones import service as zones_service
 
+# Simulated devices per workspace (ease-of-use plan B4): enough to try a
+# loop, few enough that the worker's made-up traffic stays negligible.
+MAX_SIMULATED_DEVICES = 3
+
+
+class SimulatedDeviceLimitError(Exception):
+    pass
+
 
 class DeviceNotFoundError(Exception):
     pass
@@ -80,8 +88,12 @@ async def create_device(
     name: str,
     catalog_entry_id: uuid.UUID,
     zone_id: uuid.UUID | None = None,
+    simulated: bool = False,
 ) -> tuple[Device, str]:
     """Create a device and return it with its one-time-shown credential secret.
+
+    A simulated device gets a credential too (a real board can take over
+    later); raises SimulatedDeviceLimitError past MAX_SIMULATED_DEVICES.
 
     Raises catalog_service.CatalogEntryNotFoundError if catalog_entry_id
     doesn't belong to this tenant — same existence+ownership check the
@@ -93,6 +105,8 @@ async def create_device(
         raise catalog_service.CatalogEntryDisabledError
     if zone_id is not None:
         await zones_service.get_zone(session, tenant_id, zone_id)
+    if simulated and await count_simulated_devices(session, tenant_id) >= MAX_SIMULATED_DEVICES:
+        raise SimulatedDeviceLimitError
 
     slug = await _unique_slug(session, tenant_id, name)
     secret = _generate_credential_secret()
@@ -105,6 +119,7 @@ async def create_device(
         token_hash=auth_service.hash_secret(secret),
         credential_rotated_at=datetime.now(UTC),
         status=DeviceStatus.ACTIVE.value,
+        simulated=simulated,
     )
     session.add(device)
     await session.flush()
@@ -201,6 +216,7 @@ async def create_device_with_template(
     hardware: dict[str, Any] | None,
     zone_id: uuid.UUID | None = None,
     runs_on: str | None = None,
+    simulated: bool = False,
 ) -> tuple[Device, str]:
     """A new template and its first device, in this session's transaction:
     if either fails, neither exists. Raises catalog_service.KEY_ERRORS for a
@@ -209,7 +225,58 @@ async def create_device_with_template(
         session, tenant_id, template_name, metrics, actuators, hardware=hardware, runs_on=runs_on
     )
     await session.flush()
-    return await create_device(session, tenant_id, name, entry.id, zone_id=zone_id)
+    return await create_device(
+        session, tenant_id, name, entry.id, zone_id=zone_id, simulated=simulated
+    )
+
+
+async def count_simulated_devices(session: AsyncSession, tenant_id: uuid.UUID) -> int:
+    result = await session.execute(
+        select(func.count())
+        .select_from(Device)
+        .where(Device.tenant_id == tenant_id, Device.simulated.is_(True))
+    )
+    return int(result.scalar_one())
+
+
+class SimulatedDeviceRow(NamedTuple):
+    tenant_id: uuid.UUID
+    tenant_slug: str
+    device_id: uuid.UUID
+    device_slug: str
+    metrics: list[dict[str, Any]]
+    actuators: list[dict[str, Any]]
+
+
+async def is_simulated_device(session: AsyncSession, tenant_slug: str, device_slug: str) -> bool:
+    """Whether {tenant}/{device} is an active simulated device: the EMQX
+    authorize callback's check for the simulator's MQTT identity."""
+    result = await session.execute(
+        text("SELECT 1 FROM list_simulated_devices() WHERE tenant_slug = :t AND device_slug = :d"),
+        {"t": tenant_slug, "d": device_slug},
+    )
+    return result.first() is not None
+
+
+async def list_simulated_devices(
+    factory: async_sessionmaker[AsyncSession],
+) -> list[SimulatedDeviceRow]:
+    """Every active simulated device in every workspace, for the worker's
+    simulator (app.devices.simulator). Through the list_simulated_devices
+    SECURITY DEFINER function: the worker has no single tenant context."""
+    async with factory() as session:
+        result = await session.execute(text("SELECT * FROM list_simulated_devices()"))
+        return [
+            SimulatedDeviceRow(
+                tenant_id=r["tenant_id"],
+                tenant_slug=r["tenant_slug"],
+                device_id=r["device_id"],
+                device_slug=r["device_slug"],
+                metrics=list(r["metrics"] or []),
+                actuators=list(r["actuators"] or []),
+            )
+            for r in result.mappings().all()
+        ]
 
 
 async def list_device_ids_for_catalog_entry(
@@ -260,6 +327,10 @@ async def update_device(
     zone_set: bool = False,
     hardware: dict[str, Any] | None = None,
     hardware_set: bool = False,
+    stop_simulating: bool = False,
+    muted_until: datetime | None = None,
+    muted_set: bool = False,
+    notify_back_online: bool | None = None,
 ) -> Device:
     """Raises catalog_service.HardwareMappingError if `hardware` feeds a key
     the device's template doesn't declare."""
@@ -277,6 +348,12 @@ async def update_device(
         device.zone_id = zone_id
     if hardware_set:
         device.hardware = hardware
+    if stop_simulating:
+        device.simulated = False
+    if muted_set:
+        device.alerts_muted_until = muted_until
+    if notify_back_online is not None:
+        device.notify_back_online = notify_back_online
     await session.flush()
     return device
 
@@ -362,6 +439,35 @@ class StatusDiagnostics(NamedTuple):
     ota_state: dict[str, str] | None = None
     # The update keys the firmware trusts (1.0.1+), or None.
     ota_keys: list[str] | None = None
+
+
+class AlertSettings(NamedTuple):
+    muted: bool
+    notify_back_online: bool
+
+
+async def alert_settings(
+    factory: async_sessionmaker[AsyncSession], tenant_id: uuid.UUID, device_id: uuid.UUID
+) -> AlertSettings:
+    """A device's alert settings, for the worker's status path (not the
+    readings hot path). The tenant comes from the SECURITY DEFINER topic
+    lookup, the same trust boundary record_status_snapshot uses."""
+    async with factory() as session, session.begin():
+        await set_tenant_context(session, tenant_id)
+        row = (
+            await session.execute(
+                select(Device.alerts_muted_until, Device.notify_back_online).where(
+                    Device.id == device_id
+                )
+            )
+        ).one_or_none()
+    if row is None:
+        return AlertSettings(muted=False, notify_back_online=False)
+    muted_until, back = row
+    return AlertSettings(
+        muted=muted_until is not None and muted_until > datetime.now(UTC),
+        notify_back_online=bool(back),
+    )
 
 
 class StatusChange(NamedTuple):

@@ -280,6 +280,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Device health: retained status, Last-Will offline, RSSI, battery, firmware version, uptime; per-sensor staleness | ✅ | |
 | Device diagnostics: last restart and why, sensors not answering, memory, Wi-Fi rejoins | ✅ | Health card on the device page. A *device health* alert fires for a restart after a crash, watchdog or brown-out, and for each newly failing sensor; power-ons and reset-button restarts don't alert. |
 | HTTP REST ingest as a fallback to MQTT | ✅ | `POST /ingest`. |
+| Simulated devices (Add device → *No board yet*) | ✅ | Up to 3 per workspace, from a starter kit. The worker makes up readings every 5 s and acks commands, publishing through EMQX under its own MQTT identity, which may only touch simulated devices' topics; ingestion and rules don't change. Off unless `MQTT_SIMULATOR_PASSWORD` is set (prod). |
 | Gateways / edge connectors | 🚧 | Work only as a plain device (§7). |
 
 ### Telemetry and storage
@@ -320,7 +321,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | In-app notifications | ✅ | Types: device offline, device health, rule fired / cleared, rule health, failed delivery, template changed. Repeats grouped; server-side paging; unread counts by type; read / unread, dismiss / undo. |
 | Failed deliveries list with reason and Retry | ✅ | |
 | Alarm lifecycle (acknowledge with who and a note, active / cleared state) | ⛔ | The UI is designed; the backend isn't built. |
-| "Back online" notification; muting per device | ⛔ | Offline alerts are fixed and on for every device. |
+| "Back online" notification; muting per device | ✅ | Device → Settings → Alerts: mute offline and health alerts for 1 h, 1 day or until turned back on (rules still run), and an opt-in back-online notice. |
 | Push notifications to the Android app | ✅ | Per phone: critical only, or warnings and critical (info never pushes). The payload carries **names only**, never readings or rule text, because FCM relays through Google. A tap opens the device or alert. |
 | SMS, Slack / Teams | ⛔ | Webhooks cover integrations for now. |
 
@@ -333,7 +334,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | A default dashboard per person | ✅ | Sign-in lands on it. The Dashboards link always opens the list. |
 | One landing decision after sign-in | ✅ | **Get started** checklist for a new workspace, **Welcome** with a generated starter dashboard for a newcomer, else the default or last dashboard. |
 | "Needs attention" strip above every dashboard | ✅ | Unread critical alerts, offline devices, latched rules, rules that can't evaluate. |
-| Widget titles | ⛔ | Titles are generated (reading · device). |
+| Widget titles | ✅ | Optional, up to 60 characters; blank = the generated *Reading · Device*. |
 
 ### Workspaces, people and access
 
@@ -342,9 +343,11 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Multi-tenant workspaces isolated by RLS; workspace switcher | ✅ | |
 | Roles: Owner, Admin, Viewer; owner guards; leave a workspace | ✅ | |
 | Invitations by email (7-day link) | ✅ | |
+| Sign in with Google (web) | 🚧 | Built: `POST /auth/google` checks the ID token against Google's keys, then signs in by Google id, links the account with that verified email, or makes one (with a workspace, or joining an invitation). Off until `GOOGLE_CLIENT_ID_WEB` is set; the app's button comes with its next release. |
 | Sign in, register, forgot / reset password, "Keep me signed in" | 🚧 | 15-minute access token, 30-day refresh token. No email verification on register. No MFA. No rate limit on sign-in (§6). |
 | API keys (`Authorization: Bearer`), Viewer or Admin, with expiry | ✅ | |
 | Workspace settings: time zone, alert recipients | ✅ | |
+| Simple view (per person per workspace; Viewers start in it) | 🚧 | Hides set-up pages (templates, zones, members, keys), the ladder and device details; Rules reads *Automations*. Tiles, scenes and plain words are next (ease-of-use plan C3–C5). |
 | Command palette, responsive shell (icon rail, full sidebar, phone tab bar) | ✅ | Accessibility audited with axe: zero violations across 36+ pages at the last audit. |
 | SSO (SAML / OIDC), audit log of who changed what | ⛔ | Rule versions record who edited a rule; nothing else is audited. |
 
@@ -352,7 +355,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 
 | Capability | Status | Notes |
 |---|---|---|
-| Sign in and stay signed in; workspace switch; the web's header (IO Driven, the workspace, then the page) | ✅ | App **0.6.2**. |
+| Sign in and stay signed in; workspace switch; the web's header (IO Driven, the workspace, then the page) | ✅ | App **0.8.0**. |
 | Devices: list, readings, trends, live updates, status and health | ✅ | |
 | Dashboards with the attention strip | ✅ | Read-only: editing stays on the web. |
 | Actuator controls on the device and on dashboard widgets | ✅ | |
@@ -377,7 +380,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Capability | Status | Notes |
 |---|---|---|
 | Billing, plans, quotas, usage metering | ⛔ | |
-| Public demo workspace | ⛔ | |
+| Public demo workspace | ⛔ | Simulated devices (§4 *Devices and onboarding*) let any workspace try the platform without hardware. |
 
 ---
 

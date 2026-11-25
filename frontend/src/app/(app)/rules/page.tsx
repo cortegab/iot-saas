@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { MiniStrip, type StripCell } from "@/components/ui/MiniStrip";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { DataTable, NameCell, type DataColumn } from "@/components/list/DataTable";
@@ -59,6 +60,7 @@ function devicesLine(rule: RuleResponse): string {
 
 export default function RulesPage() {
   const { can } = usePermissions();
+  const { simple } = useInterfaceMode();
   const canWrite = can("rules.write");
   // refreshInterval: rule health is time-based (a signal crosses its staleness
   // bound with no user action), and the rule_health realtime event only fires
@@ -88,7 +90,6 @@ export default function RulesPage() {
     const c = { armed: 0, latched: 0, disabled: 0, stale: 0, fired: 0 };
     for (const r of rules ?? []) {
       c[ruleStateKey(r)] += 1;
-      if (r.enabled && !r.health.evaluatable) c.stale += 1;
       if (firedIn24h(r)) c.fired += 1;
     }
     return c;
@@ -97,13 +98,13 @@ export default function RulesPage() {
   const filtered = useMemo(() => {
     const rows = (rules ?? []).filter((r) => {
       const st = list.filters.state;
-      if (st === "stale" ? !(r.enabled && !r.health.evaluatable) : st === "fired" ? !firedIn24h(r) : st !== "all" && ruleStateKey(r) !== st) return false;
+      if (st === "fired" ? !firedIn24h(r) : st !== "all" && ruleStateKey(r) !== st) return false;
       if (list.filters.trigger !== "all" && triggerType(r) !== list.filters.trigger) return false;
       if (list.filters.device !== "all" && !ruleDevices(r).some((d) => d.id === list.filters.device)) return false;
       return matchesQuery(list.q, r.name, devicesLine(r), triggerText(r), actionsText(r.actions));
     });
     return sortRows(rows, list.sort, (r, key) => {
-      if (key === "state") return ["armed", "latched", "disabled"].indexOf(ruleStateKey(r));
+      if (key === "state") return ["armed", "stale", "latched", "disabled"].indexOf(ruleStateKey(r));
       if (key === "trigger") return triggerText(r);
       return r.name;
     });
@@ -116,7 +117,8 @@ export default function RulesPage() {
   const actions = useRuleActions();
 
   /** Under the name (demo H): the last 24 hours as a strip and "fired N×",
-   * or the schedule, then what needs a look (shares an actuator / can't evaluate). */
+   * or the schedule, then what needs a look (shares an actuator). Can't evaluate
+   * is the State column's one state, not said twice. */
   function activityLine(r: RuleResponse) {
     const a = activityByRule.get(r.id);
     const schedule = r.trigger.type === "schedule";
@@ -133,7 +135,6 @@ export default function RulesPage() {
             shares {x}
           </Tag>
         ))}
-        {!shared.has(r.id) && r.enabled && !r.health.evaluatable && <Tag size="sm">can&apos;t evaluate</Tag>}
       </span>
     );
   }
@@ -181,7 +182,7 @@ export default function RulesPage() {
   const chips: FilterChip[] = [];
   if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
   if (list.filters.state !== "all" && !showFailed) {
-    const label = list.filters.state === "stale" ? "Can't evaluate" : list.filters.state === "fired" ? "Fired in 24 h" : RULE_STATE[list.filters.state as RuleStateKey]?.label;
+    const label = list.filters.state === "fired" ? "Fired in 24 h" : RULE_STATE[list.filters.state as RuleStateKey]?.label;
     chips.push({ id: "state", label: `State: ${label}`, onRemove: () => list.setFilter("state", "all") });
   }
   if (list.filters.device !== "all") {
@@ -207,7 +208,7 @@ export default function RulesPage() {
           holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
         inline
-        title="Rules"
+        title={simple ? "Automations" : "Rules"}
         description="Every reading is checked against these the moment it arrives."
         actions={!error && rules && total > 0 ? undefined : newAction}
       />
@@ -253,7 +254,8 @@ export default function RulesPage() {
               ],
             }}
             view={
-              showFailed ? undefined : <SegmentedControl
+              // Simple view (DESIGN.md §15a) has no ladder.
+              showFailed || simple ? undefined : <SegmentedControl
                 ariaLabel="Rules view"
                 value={list.filters.view === "ladder" ? "ladder" : "list"}
                 onChange={(v) => list.setFilter("view", v)}
@@ -302,7 +304,7 @@ export default function RulesPage() {
             <FailedActionsList />
           ) : filtered.length === 0 ? (
             <NoResults noun="rules" hidden={total} onClear={list.clearAll} />
-          ) : list.filters.view === "ladder" ? (
+          ) : list.filters.view === "ladder" && !simple ? (
             <div className="flex flex-col gap-2">
               <LadderOverview rules={pageRows} />
               <TableFooter

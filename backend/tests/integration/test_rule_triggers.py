@@ -184,6 +184,36 @@ async def test_run_endpoint_role_gated(
     forbidden = await client.post(f"/rules/{rule_id}/run", headers=viewer_headers)
     assert forbidden.status_code == 403
 
+    # A scene (ease-of-use C5): an admin opens the manual rule to clients, and
+    # the Viewer can run it; closing it again takes that away.
+    assert (
+        await client.put(
+            f"/rules/{rule_id}/clients-can-run", json={"allowed": True}, headers=viewer_headers
+        )
+    ).status_code == 403
+    opened = await client.put(
+        f"/rules/{rule_id}/clients-can-run", json={"allowed": True}, headers=headers
+    )
+    assert opened.status_code == 200 and opened.json()["clients_can_run"] is True
+    _mock_redis_publish.reset_mock()
+    assert (await client.post(f"/rules/{rule_id}/run", headers=viewer_headers)).status_code == 202
+    assert any(
+        c.args[0] == rules_service.RULES_MANUAL_CHANNEL for c in _mock_redis_publish.call_args_list
+    )
+    await client.put(f"/rules/{rule_id}/clients-can-run", json={"allowed": False}, headers=headers)
+    assert (await client.post(f"/rules/{rule_id}/run", headers=viewer_headers)).status_code == 403
+
+    # Only a manual rule can be a scene.
+    reading_rule = (
+        await client.post(
+            "/rules", json=_rule_body(device["device"]["id"], {"type": "metric"}), headers=headers
+        )
+    ).json()["id"]
+    refused = await client.put(
+        f"/rules/{reading_rule}/clients-can-run", json={"allowed": True}, headers=headers
+    )
+    assert refused.status_code == 422
+
 
 async def _prime_signal(
     factory: async_sessionmaker[AsyncSession],

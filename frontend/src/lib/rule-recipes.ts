@@ -44,7 +44,7 @@ export interface Recipe {
   title: string;
   /** One line on what it does, with this device's names. */
   description: string;
-  icon: "fan" | "door" | "droplet" | "pump" | "offline" | "clock";
+  icon: "fan" | "door" | "droplet" | "pump" | "offline" | "clock" | "bell";
   tags: RecipeTag[];
   draft: RuleDraft;
 }
@@ -220,6 +220,14 @@ export function recipeStarts(timezone = "UTC", device?: RecipeDevice): Recipe[] 
     d.actions = [{ ...emptyAction("email", ""), subject: "Left open", body: "It has been open for 2 minutes." } as RuleDraft["actions"][number]];
     d.name = "Door open too long";
     generic.push({ id: "door-open", title: "Alert when a door stays open", description: "Emails the workspace's alert recipients after 2 minutes open.", icon: "door", tags: ["email"], draft: d });
+  }
+  {
+    // Reached from a reading's "Alert me…" (ease-of-use B2), which fills the reading and a limit.
+    const d = base();
+    d.condition = { ...emptyContact(""), operator: ">", value: 30, hysteresis: DEFAULT_HYSTERESIS };
+    d.actions = [{ ...emptyAction("notification", ""), message: "A reading went above its limit." } as RuleDraft["actions"][number]];
+    d.name = "Reading too high";
+    generic.push({ id: "reading-high", title: "Notify me when a reading is too high", description: "Above a limit for 10 s, add a notification.", icon: "bell", tags: [], draft: d });
   }
   {
     const d = base();

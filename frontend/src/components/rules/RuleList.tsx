@@ -6,7 +6,7 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { TableFooter } from "@/components/list/TableFooter";
 import { usePager } from "@/components/list/usePager";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Badge, Tag } from "@/components/ui/Badge";
+import { Badge } from "@/components/ui/Badge";
 import { buttonClassName } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -65,7 +65,6 @@ export function RuleList({ deviceId }: { deviceId: string }) {
                 </span>
               </span>
               <span className="flex shrink-0 items-center gap-2.5 text-xs text-ink-muted">
-                {r.enabled && !r.health.evaluatable && <Tag tone="warn">Can&apos;t evaluate</Tag>}
                 <Badge tone={s.tone} shape={s.shape} label={s.label} />
                 <ChevronRight aria-hidden size={15} />
               </span>

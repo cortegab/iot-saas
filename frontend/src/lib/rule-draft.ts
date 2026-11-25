@@ -170,6 +170,16 @@ export const OPERATOR_SYMBOL: Record<string, string> = {
   decreased: "falls",
 };
 
+/** An on/off reading compared with a fixed 0 or 1 reads as a state ("is on",
+ * "is off") instead of "= 1" (DESIGN.md §9.3). Anything else returns null and
+ * keeps the symbol. */
+export function onOffPhrase(c: Pick<ContactDraft, "operator" | "rhsKind" | "value">, dataType: string | null | undefined): "is on" | "is off" | null {
+  if (dataType !== "bool" || c.rhsKind !== "static" || (c.value !== 0 && c.value !== 1)) return null;
+  if (c.operator === "==") return c.value === 1 ? "is on" : "is off";
+  if (c.operator === "!=") return c.value === 1 ? "is off" : "is on";
+  return null;
+}
+
 export const OPERATOR_ARITY: Record<string, OperatorArity> = {
   ">": "one",
   ">=": "one",
@@ -767,4 +777,41 @@ export function updateContact(
 export function setGroupOp(root: DraftNode | null, id: string, op: Combinator): DraftNode | null {
   if (root === null) return null;
   return normalize(mapNode(root, (n) => (n.id === id && n.kind === "group" ? { ...n, op } : n)));
+}
+
+/** "10 s", "a minute", "5 min", "an hour", "2 h": a duration as it's said. */
+export function spokenDuration(seconds: number): string {
+  if (seconds < 60 || seconds % 60 !== 0) return `${seconds} s`;
+  const minutes = seconds / 60;
+  if (minutes === 1) return "a minute";
+  if (minutes < 60 || minutes % 60 !== 0) return `${minutes} min`;
+  const hours = minutes / 60;
+  return hours === 1 ? "an hour" : `${hours} h`;
+}
+
+/**
+ * The rule's safety settings by what they do (DESIGN.md §9.7, §15a;
+ * ease-of-use C4): "It waits 10 s before acting, re-arms only once the
+ * reading is 1 °C back past the limit, and acts at most once a minute."
+ * The same numbers as the fields, said once in words.
+ */
+export function behaviourSentence(draft: RuleDraft, unitOf?: (c: ContactDraft) => string | null | undefined): string {
+  const parts: string[] = [];
+  if (isReadingRule(draft)) {
+    parts.push(draft.forDuration > 0 ? `waits ${spokenDuration(draft.forDuration)} before acting` : "acts as soon as it's true");
+    const h = contacts(draft.condition).find((c) => c.hysteresis > 0);
+    if (h) {
+      const unit = unitOf?.(h);
+      parts.push(`re-arms only once the reading is ${h.hysteresis}${unit ? ` ${unit}` : ""} back past the limit`);
+    }
+  }
+  if (draft.cooldown > 0) {
+    const every = spokenDuration(draft.cooldown);
+    parts.push(every === "a minute" || every === "an hour" ? `acts at most once ${every}` : `acts at most once every ${every}`);
+  }
+  if (isReadingRule(draft) && draft.behaviour === "latch") parts.push("then stays latched until someone resets it");
+  if (canClear(draft) && draft.clearDelay > 0) parts.push(`counts as clear once it's been false for ${spokenDuration(draft.clearDelay)}`);
+  if (parts.length === 0) return "It acts every time it's true.";
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
+  return `It ${list}.`;
 }

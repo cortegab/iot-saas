@@ -7,6 +7,10 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { usePermissions } from "@/hooks/usePermissions";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Badge";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
+import { DeviceTile } from "@/components/devices/DeviceTile";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
+import { capital, words } from "@/lib/simple-words";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -43,7 +47,11 @@ export default function DevicesPage() {
   const { data: rules } = useApiSWR<RuleResponse[]>("/rules");
   const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
 
-  const list = useListState({ status: "all", template: "all", zone: "all" }, { key: "name", dir: "asc" });
+  const list = useListState({ status: "all", template: "all", zone: "all", view: "auto" }, { key: "name", dir: "asc" });
+  // Tiles by zone (DESIGN.md §8, §15a): the default in Simple view, a toggle in Full.
+  const { simple } = useInterfaceMode();
+  const w = words(simple);
+  const view = list.filters.view === "tiles" || list.filters.view === "table" ? list.filters.view : simple ? "tiles" : "table";
   const zoneName = useMemo(() => new Map((zones ?? []).map((z) => [z.id, z.name])), [zones]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -107,9 +115,12 @@ export default function DevicesPage() {
       cell: (d) => (
         <NameCell
           name={
-            <Link href={`/devices/${d.id}`} className="hover:underline hover:underline-offset-[3px]">
-              {d.name}
-            </Link>
+            <span className="flex items-center gap-2">
+              <Link href={`/devices/${d.id}`} className="hover:underline hover:underline-offset-[3px]">
+                {d.name}
+              </Link>
+              {d.simulated && <Tag size="sm">Simulated</Tag>}
+            </span>
           }
           // demo H: the name in the UI face, its MQTT id under it in mono.
           sub={<span className="font-mono text-xs">{d.slug}</span>}
@@ -118,7 +129,7 @@ export default function DevicesPage() {
     },
     {
       id: "template",
-      header: "Template",
+      header: capital(w.template),
       sortable: true,
       hideOnPhone: true,
       priority: 3,
@@ -136,7 +147,7 @@ export default function DevicesPage() {
     },
     {
       id: "zone",
-      header: "Zone",
+      header: capital(w.zone),
       sortable: true,
       hideOnPhone: true,
       priority: 2,
@@ -168,7 +179,7 @@ export default function DevicesPage() {
   if (list.filters.zone !== "all") {
     chips.push({
       id: "zone",
-      label: `Zone: ${list.filters.zone === "none" ? "No zone" : (zoneName.get(list.filters.zone) ?? "unknown")}`,
+      label: `${capital(w.zone)}: ${list.filters.zone === "none" ? `No ${w.zone}` : (zoneName.get(list.filters.zone) ?? "unknown")}`,
       onRemove: () => list.setFilter("zone", "all"),
     });
   }
@@ -214,7 +225,16 @@ export default function DevicesPage() {
         <FirstUse
           icon={<Cpu aria-hidden size={28} />}
           title="No devices yet"
-          description="Add a device, then install its firmware from a computer over USB, no code needed. Its readings show up here as soon as it's online."
+          description={
+            <>
+              Add a device, then install its firmware from a computer over USB, no code needed. Its readings show up here as soon as
+              it&apos;s online. No board yet?{" "}
+              <Link href="/devices/new?from=simulated" className="link-inline">
+                Try a simulated device
+              </Link>
+              .
+            </>
+          }
           action={addAction ?? undefined}
           readOnlyNote="Ask an admin to add the first device."
         />
@@ -244,9 +264,20 @@ export default function DevicesPage() {
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
-            placeholder="Search name or template"
+            placeholder={`Search name or ${w.template}`}
             activeFilters={[list.filters.template, list.filters.zone].filter((v) => v !== "all").length}
             actions={addAction}
+            view={
+              <SegmentedControl
+                ariaLabel="Devices view"
+                value={view}
+                onChange={(v) => list.setFilter("view", v)}
+                options={[
+                  { value: "table", label: "Table" },
+                  { value: "tiles", label: "Tiles" },
+                ]}
+              />
+            }
             quick={{
               label: "Filter by status",
               value: list.filters.status,
@@ -261,12 +292,12 @@ export default function DevicesPage() {
             }}
           >
             <Select
-              aria-label="Filter by template"
+              aria-label={`Filter by ${w.template}`}
               value={list.filters.template}
               onChange={(e) => list.setFilter("template", e.target.value)}
               className="w-auto min-w-[170px]"
             >
-              <option value="all">All templates</option>
+              <option value="all">All {w.templates}</option>
               {(templates ?? []).map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -274,18 +305,18 @@ export default function DevicesPage() {
               ))}
             </Select>
             <Select
-              aria-label="Filter by zone"
+              aria-label={`Filter by ${w.zone}`}
               value={list.filters.zone}
               onChange={(e) => list.setFilter("zone", e.target.value)}
               className="w-auto min-w-[150px]"
             >
-              <option value="all">All zones</option>
+              <option value="all">All {w.zones}</option>
               {(zones ?? []).map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.name}
                 </option>
               ))}
-              <option value="none">No zone</option>
+              <option value="none">No {w.zone}</option>
             </Select>
           </ListToolbar>
 
@@ -310,6 +341,29 @@ export default function DevicesPage() {
 
           {filtered.length === 0 ? (
             <NoResults noun="devices" hidden={total} onClear={list.clearAll} />
+          ) : view === "tiles" ? (
+            <div className="flex flex-col gap-5">
+              {groupByZone(pageRows, zoneName, `No ${w.zone}`).map((g) => (
+                <section key={g.key} aria-label={g.label} className="flex flex-col gap-2.5">
+                  <h2 className="text-sm font-semibold text-ink">{g.label}</h2>
+                  <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-3">
+                    {g.devices.map((d) => (
+                      <DeviceTile key={d.id} device={d} template={templates?.find((t) => t.id === d.catalog_entry_id)} />
+                    ))}
+                  </div>
+                </section>
+              ))}
+              <TableFooter
+                shown={filtered.length}
+                total={total}
+                noun={["device", "devices"]}
+                page={page}
+                pageCount={pageCount}
+                pageSize={list.pageSize}
+                onPage={list.setPage}
+                onPageSize={list.setPageSize}
+              />
+            </div>
           ) : (
             <div className="flex flex-col gap-2">
               <DataTable
@@ -344,4 +398,16 @@ export default function DevicesPage() {
       {actions.dialog}
     </>
   );
+}
+
+/** Tiles grouped by zone, in zone-name order, devices without one last. */
+function groupByZone(rows: DeviceResponse[], zoneName: Map<string, string>, noZone: string) {
+  const groups = new Map<string, { key: string; label: string; devices: DeviceResponse[] }>();
+  for (const d of rows) {
+    const key = d.zone_id && zoneName.has(d.zone_id) ? d.zone_id : "none";
+    const label = key === "none" ? noZone : zoneName.get(key)!;
+    if (!groups.has(key)) groups.set(key, { key, label, devices: [] });
+    groups.get(key)!.devices.push(d);
+  }
+  return [...groups.values()].sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : a.label.localeCompare(b.label)));
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { draftFromRule } from "@/lib/rule-draft";
+import { RULE_STATE, ruleStateKey } from "@/lib/rule-text";
 import { useRuleCatalog } from "@/components/rules/editor/useRuleCatalog";
 import type { components } from "@/types/api";
 import { ResponsiveRung } from "./LadderRung";
@@ -28,10 +29,9 @@ export function LadderOverview({ rules }: { rules: RuleResponse[] }) {
               <Link href={`/rules/${rule.id}`} className="text-sm font-medium text-ink hover:text-accent">
                 {rule.name}
               </Link>
-              {!rule.enabled && <Badge tone="unknown" variant="dot" label="Disabled" />}
-              {rule.latched && <Badge tone="pending" variant="dot" label="Latched" />}
-              {rule.enabled && !rule.health.evaluatable && (
-                <Badge tone="pending" variant="dot" label="Can't evaluate" />
+              {/* One state per rule, as everywhere (only Armed goes unsaid here). */}
+              {ruleStateKey(rule) !== "armed" && (
+                <Badge tone={RULE_STATE[ruleStateKey(rule)].tone} shape={RULE_STATE[ruleStateKey(rule)].shape} variant="dot" label={RULE_STATE[ruleStateKey(rule)].label} />
               )}
             </div>
             <Link

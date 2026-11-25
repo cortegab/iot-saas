@@ -137,3 +137,20 @@ test("default dashboard: set from the row menu, tagged, removed from its page", 
     if (before) await request.put(`${API_URL}/dashboards/${before}/default`, { headers });
   }
 });
+
+test("a widget can have its own title instead of Reading · Device", async ({ page, request }) => {
+  const { accessToken, tenantId } = await login(request);
+  const headers = { authorization: `Bearer ${accessToken}`, "x-tenant-id": tenantId };
+  const devices = await (await request.get(`${API_URL}/devices`, { headers })).json();
+  const dashboard = await (await request.post(`${API_URL}/dashboards`, { headers, data: { name: `E2E titles ${Date.now()}` } })).json();
+  try {
+    await request.patch(`${API_URL}/dashboards/${dashboard.id}`, {
+      headers,
+      data: { layout: [{ id: "w1", type: "device_status", x: 0, y: 0, w: 4, h: 2, device_id: devices[0].id, title: "Pump house" }] },
+    });
+    await page.goto(`/dashboards/${dashboard.id}`);
+    await expect(page.locator(".widget-title").first()).toHaveText("Pump house");
+  } finally {
+    await request.delete(`${API_URL}/dashboards/${dashboard.id}`, { headers });
+  }
+});

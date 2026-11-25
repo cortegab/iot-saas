@@ -7,6 +7,7 @@ import {
   blankMetric,
   blankTemplate,
   brokenUsages,
+  EMPTY_TEMPLATE_WARNING,
   draftToRequest,
   keepReading,
   matchingTemplate,
@@ -74,6 +75,19 @@ describe("template draft", () => {
     expect(errors["metrics.2.key"]).toMatch(/Already used/);
     const legacy = { ...d, metrics: [{ ...d.metrics[0], key: "room temp", origKey: "room temp" }] };
     expect(validateTemplate(legacy, ctx).errors["metrics.0.key"]).toBeUndefined();
+  });
+
+  it("warns, without blocking, when it has nothing to read or switch", () => {
+    const empty = { ...blankTemplate("generic_firmware"), name: "Bare board" };
+    const v = validateTemplate(empty, ctx);
+    expect(v.warnings[EMPTY_TEMPLATE_WARNING]).toMatch(/parts wired to the board on Hardware/);
+    expect(Object.keys(v.errors)).toEqual([]);
+    const own = { ...blankTemplate("own_code"), name: "Bare", metrics: [] };
+    expect(validateTemplate(own, ctx).warnings[EMPTY_TEMPLATE_WARNING]).toMatch(/metric or an actuator on Data/);
+    const filled = blankTemplate("own_code");
+    filled.name = "One metric";
+    filled.metrics[0] = { ...filled.metrics[0], name: "Temp", key: "temp" };
+    expect(validateTemplate(filled, ctx).warnings[EMPTY_TEMPLATE_WARNING]).toBeUndefined();
   });
 
   it("warns on renaming a used key and lists broken usages", () => {

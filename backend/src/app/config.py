@@ -50,6 +50,20 @@ class Settings(BaseSettings):
     mqtt_worker_username: str = "__worker__"
     mqtt_worker_password: SecretStr = SecretStr("dev-only-change-me")
 
+    # The simulator's MQTT identity (app.devices.simulator; ease-of-use B4),
+    # apart from the worker's so the worker still can't publish telemetry:
+    # it may only publish readings, status and acks for devices flagged
+    # `simulated`, and read their cmd/state. Off (EMQX refuses it, the loop
+    # idles) while the password is empty, or the dev placeholder on a public
+    # https deployment.
+    # Sign in with Google (ease-of-use plan B5): the OAuth client ids an ID
+    # token may be for (its `aud`). Public values. Both empty = off.
+    google_client_id_web: str = ""
+    google_client_id_android: str = ""
+
+    mqtt_simulator_username: str = "__simulator__"
+    mqtt_simulator_password: SecretStr = SecretStr("dev-only-change-me")
+
     # Storage-path batched writer (app/worker.py) tuning: flush whichever comes
     # first — batch size or flush interval.
     telemetry_batch_size: int = 500
@@ -166,6 +180,23 @@ class Settings(BaseSettings):
                 f"{', '.join(placeholders)} still {'has' if len(placeholders) == 1 else 'have'} "
                 f"the development placeholder; set real secrets for {self.app_base_url}"
             )
+
+    @property
+    def google_audiences(self) -> list[str]:
+        return [
+            c
+            for c in (self.google_client_id_web.strip(), self.google_client_id_android.strip())
+            if c
+        ]
+
+    @property
+    def simulator_enabled(self) -> bool:
+        secret = self.mqtt_simulator_password.get_secret_value()
+        if not secret:
+            return False
+        base = self.app_base_url.lower()
+        public = base.startswith("https://") and "localhost" not in base and "127.0.0.1" not in base
+        return not (public and secret == DEV_PLACEHOLDER_SECRET)
 
     @property
     def cors_allow_origins_list(self) -> list[str]:

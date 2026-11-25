@@ -59,6 +59,10 @@ class TenantMembership(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "user_id", name="uq_tenant_memberships_tenant_user"),
         CheckConstraint("role IN ('owner', 'admin', 'viewer')", name="ck_tenant_memberships_role"),
+        CheckConstraint(
+            "interface_mode IS NULL OR interface_mode IN ('simple', 'full')",
+            name="ck_tenant_memberships_interface_mode",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -77,6 +81,9 @@ class TenantMembership(Base):
     )
     # The one-time Welcome was answered (built a dashboard or looked around).
     welcomed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # This person's view of this workspace (DESIGN.md §15a): "simple" or
+    # "full"; null = their role's default (see tenants.service.interface_mode).
+    interface_mode: Mapped[str | None] = mapped_column(nullable=True)
 
 
 class Invitation(Base):

@@ -17,7 +17,8 @@ const rule = (over: Partial<RuleResponse>) =>
 describe("rules list", () => {
   it("counts states like the web's filter", () => {
     const rules = [rule({}), rule({ latched: true }), rule({ enabled: false }), rule({ health: { evaluatable: false, signals: [] } })];
-    expect(ruleCounts(rules)).toEqual({ all: 4, armed: 2, latched: 1, disabled: 1, stale: 1 });
+    // One state per rule: the rule that can't evaluate is no longer counted as armed too.
+    expect(ruleCounts(rules)).toEqual({ all: 4, armed: 1, latched: 1, disabled: 1, stale: 1 });
     expect(rules.filter((r) => matchesFilter(r, "stale"))).toHaveLength(1);
     expect(rules.filter((r) => matchesFilter(r, "latched"))).toHaveLength(1);
   });

@@ -26,7 +26,7 @@ test("the command timeline pages past the old 100-row cap, filters on the server
       .poll(async () => Number((await request.get(`${API_URL}/devices/${deviceId}/commands?limit=1`, { headers })).headers()["x-total-count"]), { timeout: 60_000 })
       .toBe(120);
 
-    await page.goto(`/devices/${deviceId}?tab=controls`);
+    await page.goto(`/devices/${deviceId}?tab=commands`);
     const timeline = page.getByRole("list", { name: "Commands" });
     await expect(timeline.getByRole("listitem").first()).toBeVisible();
     await expandCommandRuns(timeline);

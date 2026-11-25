@@ -19,6 +19,8 @@ test("a new workspace lands on Get started; dismissing it lands elsewhere", asyn
   await expect(steps).toHaveCount(4);
   // Nothing has reported yet: the rule waits for a connected device.
   await expect(steps.nth(2)).toContainText("Needs a connected device");
+  // Add device's Something new makes the template, so the device step never waits on it.
+  await expect(steps.nth(1)).not.toContainText("Needs a template");
   await expect(steps.nth(1).getByRole("link", { name: "Add device" })).toHaveAttribute("href", "/devices/new");
   await expect(page.getByRole("list", { name: "Optional steps" })).toContainText("Invite your team");
 

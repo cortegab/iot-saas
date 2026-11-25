@@ -79,3 +79,13 @@ test("register: the workspace is created with the account", async ({ page }) => 
   await page.getByRole("button", { name: "Create account" }).click();
   await landed(page);
 });
+
+test("Continue with Google stays hidden until the API has a Google client id", async ({ page, request }) => {
+  const meta = await (await request.get(`${process.env.E2E_API_URL ?? "http://localhost:8000"}/meta/client`)).json();
+  test.skip(meta.google_client_id_web != null, "this stack has Google sign-in configured");
+  for (const path of ["/login", "/register"]) {
+    await page.goto(path);
+    await expect(page.getByRole("button", { name: /Sign in|Create account/ })).toBeVisible();
+    await expect(page.getByText("or with your email")).toHaveCount(0);
+  }
+});

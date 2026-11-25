@@ -8,7 +8,7 @@ import { timeAgo } from "@iodriven/shared/time-ago";
 import { wireId } from "@iodriven/shared/wire-id";
 import { useRouter } from "expo-router";
 import { AlertTriangle } from "lucide-react-native";
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import Svg, { Path, Text as SvgText } from "react-native-svg";
 import { ActuatorControl } from "@/actuators/ActuatorControl";
@@ -40,9 +40,13 @@ function useLatest(deviceId: string, metric?: string | null) {
 
 /** A widget's frame: its title, the device it reads (opens the device), the
  * body. */
-function WidgetCard({ title, device, children }: { title: string; device?: DeviceResponse; children: ReactNode }) {
+/** A widget's own title (ease-of-use C8), set around each widget. */
+const WidgetTitle = createContext<string | null>(null);
+
+function WidgetCard({ title: generated, device, children }: { title: string; device?: DeviceResponse; children: ReactNode }) {
   const theme = useTheme();
   const router = useRouter();
+  const title = useContext(WidgetTitle) ?? generated;
   return (
     <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
       <View style={styles.cardHead}>
@@ -206,6 +210,10 @@ function Actuators({ w }: { w: Widget }) {
 }
 
 export function DashboardWidget({ w, rangeMs }: { w: Widget; rangeMs: number }) {
+  return <WidgetTitle.Provider value={w.title?.trim() || null}>{widgetBody(w, rangeMs)}</WidgetTitle.Provider>;
+}
+
+function widgetBody(w: Widget, rangeMs: number) {
   switch (w.type) {
     case "value_card":
       return <ValueCard w={w} />;

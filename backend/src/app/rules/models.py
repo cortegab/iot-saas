@@ -44,7 +44,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint, false, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -99,6 +99,10 @@ class Rule(Base):
     # engine never reads it.
     editor_graph: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     enabled: Mapped[bool] = mapped_column(nullable=False, default=True)
+    # A scene (manual trigger) a Viewer may run too (ease-of-use C5).
+    clients_can_run: Mapped[bool] = mapped_column(
+        nullable=False, default=False, server_default=false()
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

@@ -157,8 +157,8 @@ The shell has three forms, chosen by the width of the app (breakpoints in §12):
 
 | Width | Navigation |
 |---|---|
-| **≥ 1440 px** | The full **sidebar**, 256 px, always open. |
-| **641–1439 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. When the nav doesn't fit the height (short laptop screens) it scrolls **without a visible scrollbar**, so its icons stay centred under the logo, with a soft fade on the edge that has more; the sidebar's nav does the same. |
+| **≥ 1280 px** | The full **sidebar**, 256 px, open with labels, so a newcomer reads every destination on a common laptop (ease-of-use plan A5). Its collapse button turns it into the icon rail, remembered in that browser. |
+| **641–1279 px** | An **icon rail**, 64 px: workspace logo, search, one icon per nav item (groups separated by a hairline), the avatar with a live dot. Each icon shows its label in a floating tooltip on hover and focus. A pin button opens the full sidebar **over** the content (it never pushes it) until it is pinned closed again. Counts hide; the red alert count stays on its icon. When the nav doesn't fit the height (short laptop screens) it scrolls **without a visible scrollbar**, so its icons stay centred under the logo, with a soft fade on the edge that has more; the sidebar's nav does the same. |
 | **≤ 640 px** | A **top bar** (the mark, **IO Driven** over the workspace's name, which opens the workspace switcher as a bottom sheet, the live indicator only while reconnecting, search) and a **bottom tab bar**: Dashboards · Devices · **Alerts** (with the active-alert count) · Rules · **More**. More opens a bottom sheet with the user, the theme toggle, the live indicator and the rest of the nav. |
 
 - **Sidebar** (full form) is 256 px wide and sticky. From top to bottom:
@@ -445,7 +445,12 @@ edits a whole record, and there is no "Expand" toggle.
     the Credential step shows **Create credential** (never connected) or **Rotate credential…**
     (with its confirm), and only then **Store its credential**: Username and Password as read-only
     fields with Copy, "It won't be shown again", **I've stored it**, Continue in the bottom bar.
-    Add device doesn't carry its credential over. The credential is held **in the page only**
+    Add device doesn't carry its credential over. **Exception for a device just created**
+    (ease-of-use plan A2, 2026-11-24): arriving from Add device (`?fresh=1`, dropped from the URL at
+    once), Connect creates the credential without a click, since no board has one yet; on the
+    Install path it opens on **Options** (Credential shown done, still openable), because Install
+    writes the password itself. Any later visit keeps the explicit button, since a board installed
+    but not yet reported would be locked out by a new one. The credential is held **in the page only**
     (never stored in the browser): a reload or leaving drops it, and the next visit creates or
     rotates again. Leaving or reloading before it is stored asks first ("Leave before storing the
     password? It's shown only once…").
@@ -548,11 +553,26 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
   - Warn when humidity drops
   - Stop the pump when the tank is low (latches)
   - Switch something on a schedule
+  - Notify me when a reading is too high (2026-11-24; what a reading's *Alert me…* opens)
+- **Shortcuts** (ease-of-use plan B2): on the device page, each reading's foot has **Alert me…**
+  (a number: *Notify me when a reading is too high*, limit at ¾ of its range; on/off: *Alert when a
+  door stays open*) and each on/off output row has **Automate…** (*Turn something on when it's too
+  hot*). Both open the recipe's one screen with that reading or output filled in
+  (`/rules/new?recipe=…&device=…&metric=…` / `&actuatorDevice=…&actuator=…`), for people who can
+  write rules. **Recipes** drops the prefill.
 - A recipe arrives with its parts in place (the comparison and a sensible limit, the action and
   its value, behaviour and timings) and **no device**: each reading, switch and watched device is
   picked in the When / If / Then steps, whose Next waits until it is. Each recipe suggests a
   name ("Device offline", "Humidity low"; from a device page with its names), changed on Review.
-- Picking a recipe or Start blank opens the **new-rule wizard**: **When → If → Then → Behaviour →
+- **Picking a recipe opens its one screen** (ease-of-use plan B1, 2026-11-24): the recipe's title and
+  line, the sentence, then only its blanks as fields: *Device it reads* + *Reading*, *When it's
+  above / below* (the limit, in the reading's unit), *Device it switches on / off* + *Output*, or
+  *Which device* for an offline recipe; a schedule recipe says when it runs. Then **Name** (the
+  recipe's suggestion) and one muted line with the safety settings it keeps, changed in Customize.
+  The bar: *Not created yet* · **Recipes** · **Customize** (the wizard below, on this draft) ·
+  **Create rule**, which names the first missing blank instead of creating. Devices are still never
+  picked before the recipe, and the name is still asked once.
+- **Start blank**, or **Customize** from a recipe, opens the **new-rule wizard**: **When → If → Then → Behaviour →
   Review**, without Behaviour for a rule not on a reading (§9.7). Each step asks its question ("What starts it?", "What has to be true?", "What should happen?", "How
   should it behave?") and uses the same section body as the matching edit tab. The sentence stays
   on top and fills in as you go; the preview is behind its button (§9.2). Review holds the name
@@ -770,7 +790,8 @@ path (CLAUDE.md §9.1).
 - Each row: a numbered circle (a ✓ once done; the next step in accent with the 3 px accent bar),
   the title, one sentence, or what it's waiting for ("Needs a connected device") in its place, and
   one button that opens the real page (the next step's is primary; a done step's says **Open**).
-  Rows waiting on an earlier step stay clickable.
+  Rows waiting on an earlier step stay clickable. **Connect a device** never waits on the template
+  step: Add device's *Something new* makes the template too (and ticks that step).
 - **Live finish:** once a device has reported, its row shows the latest reading ("bay1 ·
   temperature 24.1, just now"). The rule step opens the recipes with that device (`?device=`).
 - **Done:** a "Setup complete" callout with **Open your dashboard**; sign-in lands there from then on.
@@ -836,7 +857,7 @@ path (CLAUDE.md §9.1).
 
   | Breakpoint | What changes |
   |---|---|
-  | window ≥ 1440 | Full sidebar (§4). |
+  | window ≥ 1280 | Full sidebar (§4), collapsible to the rail. |
   | window ≤ 640 | Top bar + bottom tab bar; sheets open from the bottom where §5 says so. |
   | content ≥ 1080 | The rule preview sits beside the editor (§9.2). |
   | window ≤ 960 | List toolbar filter menus collapse into one **Filters** button (a bottom sheet), so the primary action stays in row 1. |
@@ -905,7 +926,7 @@ Each step is a separate PR and leaves the app fully working.
 
 Steps 1–8 are built. **Demo H** follows, frontend first, one PR each:
 
-1. **Shell** (§4): icon rail, full sidebar from 1440 px, phone top bar + tab bar + More sheet,
+1. **Shell** (§4): icon rail, full sidebar from 1280 px, phone top bar + tab bar + More sheet,
    reconnecting banner, skip link; bottom Sheet placement.
 2. **Building blocks** (§5): Wizard, Line row, item sheet, Tabs with problem badges.
 3. **Lists** (§6): column folding, cards, the filter sheet; the Rules list KPI filters and Ladder view.
@@ -1003,6 +1024,33 @@ restyled.
   shows only a full screen: "Update required", one sentence naming the installed and the latest
   version, and **Get the update** (the Play listing, or the test releases until then). A failed
   check never blocks; the app opens as usual.
+
+## 15a. Simple view (for an integrator's clients)
+
+Ease-of-use plan C, user decisions 2026-11-24: integrators set a system up; their clients use it. One
+platform, one codebase: **Simple view hides and rewords, it never changes what anything does** and is
+not a permission (the API still enforces roles).
+
+- **Who:** a choice per person per workspace (`tenant_memberships.interface_mode`: `simple` | `full`,
+  null = the role's default: **Viewer → Simple**, Owner and Admin → Full). The account menu (web) and
+  More (app) have **Simple view** as a Switch; it applies at once and is remembered on the server.
+- **Navigation in Simple:** Dashboards · Devices · Notifications · Rules (labelled *Automations*).
+  Hidden: Device templates, Zones, Members, API keys (Workspace settings stays for owners and admins).
+  The command palette offers the same set.
+- **Devices in Simple:** tiles grouped by zone (§8 *Device tiles*): each tile has the name, its state
+  in words, the main reading and a Switch for its first on/off output. The table is one toggle away
+  in Full.
+- **A device page in Simple:** Overview and Rules only. Controls lead, readings follow, Health shows
+  its one word; Details, Commands, Settings, wiring and MQTT ids are hidden.
+- **Rules in Simple ("Automations"):** the list and each rule's sentence; the editor opens on Basics
+  and the sentence. Hidden: the Ladder view and the Behaviour tab's numbers, which read as one line
+  ("Waits 10 s, then acts at most once a minute.").
+- **Words in Simple** (§11 glossary, Simple column): metric → *sensor reading*, actuator →
+  *output*, rule → *automation*, template → *device type*, zone → *area*, credential and MQTT are
+  never shown.
+- **Scenes:** rules with a manual trigger that an admin marked *Clients can run it* show as buttons on
+  dashboards and in the app (§8 *Scene button*). That is the one thing Simple can do that Full can't
+  already: run a rule its role couldn't otherwise run.
 
 ## 16. Reference and changelog
 
@@ -1123,3 +1171,21 @@ restyled.
 | 2026-11-19 | §8, §15 **actuator rows tell the truth** (platform audit U3): until the device confirms, the row says "Requested Off · not confirmed, last confirmed On" (the newest acknowledged command), so a control showing what was asked never passes for the device's state; **No response** now also comes from the server (commands.expired_at). The confirm names any enabled rule that also switches the actuator ("The rule Too hot also switches it and may switch it back."). A manual command says who sent it ("sent by Ana", "by you"; commands.requested_by). Web and app. |
 | 2026-11-19 | §8, §13, §15 **alarm lifecycle** (platform audit U2): an alert row and its sheet say *Acknowledged by Ana, 5 min ago: "on my way"* or *Cleared 2 min ago*; owners and admins get **Acknowledge** (row menu; the sheet's primary button, with an optional note) and keep **Dismiss**, viewers read only. The state filter gains **Needs attention** (not acknowledged, not cleared); the attention strip says "critical alarms" and links there. The app's Alerts tab matches (Acknowledge in the sheet and the row's ⋯). |
 | 2026-11-20 | §4, §12, §15 **app parity and accessibility** (platform audit U5): the app shows the web's **Reconnecting… / Live updates are off** banner under the brand bar (after 1.5 s down); the device screen's **Health** has the web's facts (signal in words, last restart, sensors with failing ones in the error colour, memory, Wi-Fi rejoins), stale reading values are dimmed, and **Controls** is left out when the device has no actuators; the device list says its status in words beside the dot; a disabled button shows muted colours instead of fading to 55 %; the Switch sits in a 44 px target; the rule sheet says **Enabled / Disabled**. |
+| 2026-11-24 | §8, §10.1 **a first device is never empty by accident** (ease-of-use plan A1): the template wizard's Review (also Add device → Something new) shows a warning callout "Nothing to read or switch" when it has no metrics and no actuators; it never blocks Create. Get started's **Connect a device** no longer says "Needs a template". |
+| 2026-11-24 | §8 Connect (ease-of-use plan A2), amending the 2026-10-27 rule for one case: a device **just created** gets its credential without a click (Add device → Connect `?fresh=1`, removed from the URL at once), and on the Install path Connect opens on Options. Revisits still start with Create credential / Rotate credential…; the credential is still held in the page only. |
+| 2026-11-24 | §3, §9.3 **one state per rule, plainer sentence** (ease-of-use plan A3): an enabled rule whose inputs have no fresh data is **Can't evaluate** (grey, hollow dot) *instead of* Armed, everywhere a rule's state shows (rules list, rule page, peek, device Rules tab, ladder overview, the app); Disabled and Latched still win. The rule page says why after it ("· temperature from bay1 is missing. Missing data never fires or clears it."), and the list's extra "can't evaluate" tag is gone. In the sentence, an on/off reading against 0 or 1 reads **is on / is off** (not "= 1"), and no hold time reads "…, **immediately** turn…" (not "for 0 s"); the same chip sets a hold time. |
+| 2026-11-24 | §8 device page (ease-of-use plan A4): **Controls lead Overview** (heading *Controls*, then the actuator rows, above the readouts), as a smart-home card puts the switch first; the old Controls tab becomes **Commands** (the command timeline only), and `?tab=controls` / `?tab=actuators` open Overview. A never-connected device says once, in its waiting callout, that commands wait in its desired state. **Health leads with one word** beside its heading for an online device: Healthy · Sensor not answering · Restarted after a fault · Weak Wi-Fi · Battery low (`@iodriven/shared/device-health`; offline and never connected stay the status beside the name). Firmware, uptime, memory, Wi-Fi rejoins and the MQTT id move under a **Details** disclosure. The app adopts the word with its next release. |
+| 2026-11-24 | §4, §12 shell (ease-of-use plan A5): the **full sidebar with labels starts at 1280 px** (was 1440), so a 1280–1439 px laptop reads every destination instead of nine unlabelled icons; from 1280 px its collapse button turns it into the rail, remembered in that browser (`localStorage`, a per-viewer convenience). Below 1280 px the rail and its pin are unchanged. Members and API keys stay in the nav: with labels showing, regrouping them under Settings wasn't needed. |
+| 2026-11-24 | §9.1 new rule (ease-of-use plan B1): **a recipe opens as one screen**, not the five steps: its blanks as plain fields (the device it reads and the reading, the limit in its unit, the device and output it switches, or the device it watches), the rule's sentence above them (its chips still edit in place), the name, and one line saying the safety settings it keeps ("waits 10 s before acting, re-arms only once the reading is 1 °C back past the limit, acts at most once every 60 s"). The save bar has **Recipes** · **Customize** (the steps, on the same draft) · **Create rule**; Create says what's missing instead of creating. *Start blank* still opens the steps. |
+| 2026-11-24 | §8, §9.1 rule shortcuts (ease-of-use plan B2): a reading's **Alert me…** and an on/off output's **Automate…** on the device page open a recipe's one screen already filled with that reading or output; a seventh recipe, *Notify me when a reading is too high*. No shortcut on offline alerts: they already arrive for every device. |
+| 2026-11-24 | §8 template wizard and Add device → Something new (ease-of-use plan B3): while a new build on our firmware has no parts, the Hardware step opens with **Start from a kit**: four cards (Greenhouse climate: DHT22 + fan relay · Tank level: HC-SR04 + pump relay · Door contact: digital input · Cold room: DS18B20). A kit adds its parts exactly as Add part does (free pins, the board's checks) and names what they bring ("Air temperature", "Fan"); a toast says to check the pins against the real wiring. The cards leave once there are parts; everything stays editable. Kits live in `frontend/src/lib/starter-kits.ts` (no backend). |
+| 2026-11-24 | §8, §10.1 **simulated devices** (ease-of-use plan B4): Add device has a third start, **No board yet** (`?from=simulated`): pick a kit (B3's four), name it ("Greenhouse climate (simulated)"), **Create simulated device**; it opens on the device page. A simulated device carries a **Simulated** tag beside its status (device page title, devices list), and its Overview opens with an info callout: "Simulated. The platform makes up its readings every 5 seconds and answers its commands; switching a fan on cools it." with **Try a rule on it** (the matching recipe, filled: B2) and **Stop simulating** (admins). Its header shows no Install. The devices list's first-use text and Get started's device step point to it. At most three per workspace. |
+| 2026-11-24 | §10 sign-in (ease-of-use plan B5): **Continue with Google** on Sign in, Create your account and an invitation's new-account form, above the email form with a divider "or with your email". It is **Google's own button** (rendered by Google Identity Services, outline, large, full width), a deliberate exception to "one button pattern": Google's brand rules require it. It shows only when the API has a Google client id (`GET /meta/client`). Sign-up takes the typed workspace name, else "Ana's workspace"; an invitation needs the invited email's Google account. |
+| 2026-11-24 | §15a **Simple view** (ease-of-use plan C, docs first): a per-person, per-workspace view (Viewer default Simple, Owner/Admin Full) that hides templates, zones, members, keys, the ladder, wiring and ids, shows devices as tiles and rules as *Automations*, and adds scene buttons an admin opens to clients. It hides and rewords only; roles still decide what anyone can do. The code follows in C2–C9. |
+| 2026-11-24 | §15a Simple view, first part (ease-of-use plan C2): **Simple view** in the account menu (a checkable item, remembered on the server per person per workspace; Viewer default on). In Simple the nav, phone More and command palette drop Device templates, Zones, Members and API keys, and Rules reads **Automations**; a device page shows Overview and Automations, its Health without Details; the rules list and editor have no Ladder. Tiles, scenes and the Simple words follow (C3–C5). |
+| 2026-11-24 | §8 **device tiles** (ease-of-use plan C3): Devices has a **Table · Tiles** switch in the toolbar (`?view=`), Tiles by default in Simple view. Tiles are grouped under each zone's name (zones in name order, *No zone* last); each tile: the name (link), *Simulated* when it is, the status badge; the main reading (first number, else first reading) large with its unit and "just now" / "Last value, 3 min ago" dimmed when offline; and its first on/off output as the device page's own control row (one control pattern), flush with the tile. Same filters, search and pager as the table. |
+| 2026-11-25 | §9.7, §15a **plain words** (ease-of-use plan C4): a rule's Behaviour opens with its safety settings said once by what they do ("It waits 10 s before acting, re-arms only once the reading is 1 °C back past the limit and acts at most once a minute."; `behaviourSentence`), in both views and on a recipe's one screen; in Simple view the fields sit under **Change the timings**, unchanged and never bypassable (§9.7). The Simple glossary (`@iodriven/shared/simple-words`: device type, area, automation, reading, output) starts on Devices (columns, filters, tile groups). |
+| 2026-11-25 | §15a **scenes** (ease-of-use plan C5): a manual-trigger rule's Basics has **Scene** (a SwitchField: *Clients can run it* / *Admins only*, admins only). A scene shows in a **Scenes** row under the attention strip on every dashboard: small secondary buttons with ▶ and the rule's name; pressing one asks ("Run Night mode?" with what it does) and then runs it. Viewers may run only scenes (the API checks). Shown as a row, not a widget: widgets belong to one device and a scene doesn't. |
+| 2026-11-25 | §8 device **Alerts** (ease-of-use plan C6): the device's Settings tab opens with an *Alerts* section, applied at once (no save bar): **Offline and health alerts** On / Mute for 1 hour / 1 day / until I turn them back on (hint says until when, and that rules still run), and **Back online** (*Tell me when it's back online*: an info notification, which never pushes). A muted device shows an *Alerts muted* tag beside its status. |
+| 2026-11-25 | §8 **widget titles** (ease-of-use plan C8; §13's "widget titles" backend need): the widget sheet has an optional **Title** (≤ 60 characters, placeholder = the generated *Reading · Device*); a set title replaces the generated one in the widget's header, on the web (the app with its next release). |
+| 2026-11-25 | §15 app **0.8.0** (ease-of-use plan C9): More → **View → Simple view** (the same per-workspace choice as the web); in Simple the Rules tab reads *Automations*, Devices groups by area and rows drop the area, a device's Health keeps only its one word. Everywhere: the device screen opens with Controls, Health leads with its one word (*Overall*), Details say *Device type / Area* in Simple and *Simulated* when it is; admins get **Alerts** (offline and health alerts on/off, where off mutes until turned back on; *Tell me when it's back online*); dashboards show the **Scenes** row and widgets' own titles. Google sign-in in the app waits for the Android OAuth client. |
