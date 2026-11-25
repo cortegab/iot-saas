@@ -280,6 +280,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Device health: retained status, Last-Will offline, RSSI, battery, firmware version, uptime; per-sensor staleness | ✅ | |
 | Device diagnostics: last restart and why, sensors not answering, memory, Wi-Fi rejoins | ✅ | Health card on the device page. A *device health* alert fires for a restart after a crash, watchdog or brown-out, and for each newly failing sensor; power-ons and reset-button restarts don't alert. |
 | HTTP REST ingest as a fallback to MQTT | ✅ | `POST /ingest`. |
+| Simulated devices (Add device → *No board yet*) | ✅ | Up to 3 per workspace, from a starter kit. The worker makes up readings every 5 s and acks commands, publishing through EMQX under its own MQTT identity, which may only touch simulated devices' topics; ingestion and rules don't change. Off unless `MQTT_SIMULATOR_PASSWORD` is set (prod). |
 | Gateways / edge connectors | 🚧 | Work only as a plain device (§7). |
 
 ### Telemetry and storage
@@ -377,7 +378,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Capability | Status | Notes |
 |---|---|---|
 | Billing, plans, quotas, usage metering | ⛔ | |
-| Public demo workspace | ⛔ | |
+| Public demo workspace | ⛔ | Simulated devices (§4 *Devices and onboarding*) let any workspace try the platform without hardware. |
 
 ---
 

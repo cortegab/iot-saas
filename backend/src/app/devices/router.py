@@ -42,6 +42,7 @@ def _to_response(
         hardware=HardwareConfig.model_validate(device.hardware) if device.hardware else None,
         slug=device.slug,
         status=device.status,
+        simulated=device.simulated,
         last_seen_at=device.last_seen_at,
         created_at=device.created_at,
         credential_rotated_at=device.credential_rotated_at,
@@ -94,11 +95,17 @@ async def create_device(
                 t.hardware.model_dump(mode="json") if t.hardware else None,
                 zone_id=body.zone_id,
                 runs_on=t.runs_on,
+                simulated=body.simulated,
             )
         else:
             assert body.catalog_entry_id is not None  # DeviceCreateRequest checks one is set
             device, secret = await service.create_device(
-                session, ctx.tenant_id, body.name, body.catalog_entry_id, zone_id=body.zone_id
+                session,
+                ctx.tenant_id,
+                body.name,
+                body.catalog_entry_id,
+                zone_id=body.zone_id,
+                simulated=body.simulated,
             )
     except catalog_service.KEY_ERRORS as exc:
         raise HTTPException(
@@ -115,6 +122,11 @@ async def create_device(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="This device template is disabled. Enable it or pick another template.",
+        ) from exc
+    except service.SimulatedDeviceLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"A workspace can have {service.MAX_SIMULATED_DEVICES} simulated devices. Delete one first.",
         ) from exc
     tenant_slug = await tenants_service.get_tenant_slug(session, ctx.tenant_id)
     return DeviceCreateResponse(
@@ -152,6 +164,7 @@ async def update_device(
             zone_set="zone_id" in body.model_fields_set,
             hardware=body.hardware.model_dump(mode="json") if body.hardware else None,
             hardware_set="hardware" in body.model_fields_set,
+            stop_simulating=body.simulated is False,
         )
     except zones_service.ZoneNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Zone not found") from exc

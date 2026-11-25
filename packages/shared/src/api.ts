@@ -1939,6 +1939,11 @@ export interface components {
             new_template?: components["schemas"]["CatalogEntryCreateRequest"] | null;
             /** Zone Id */
             zone_id?: string | null;
+            /**
+             * Simulated
+             * @default false
+             */
+            simulated: boolean;
         };
         /** DeviceCreateResponse */
         DeviceCreateResponse: {
@@ -1979,6 +1984,11 @@ export interface components {
             slug: string;
             /** Status */
             status: string;
+            /**
+             * Simulated
+             * @default false
+             */
+            simulated: boolean;
             /** Last Seen At */
             last_seen_at: string | null;
             /**
@@ -2081,6 +2091,8 @@ export interface components {
             /** Zone Id */
             zone_id?: string | null;
             hardware?: components["schemas"]["HardwareConfig"] | null;
+            /** Simulated */
+            simulated?: false | null;
         };
         /**
          * DraftSimulateRequest
