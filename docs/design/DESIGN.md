@@ -445,7 +445,12 @@ edits a whole record, and there is no "Expand" toggle.
     the Credential step shows **Create credential** (never connected) or **Rotate credential…**
     (with its confirm), and only then **Store its credential**: Username and Password as read-only
     fields with Copy, "It won't be shown again", **I've stored it**, Continue in the bottom bar.
-    Add device doesn't carry its credential over. The credential is held **in the page only**
+    Add device doesn't carry its credential over. **Exception for a device just created**
+    (ease-of-use plan A2, 2026-11-24): arriving from Add device (`?fresh=1`, dropped from the URL at
+    once), Connect creates the credential without a click, since no board has one yet; on the
+    Install path it opens on **Options** (Credential shown done, still openable), because Install
+    writes the password itself. Any later visit keeps the explicit button, since a board installed
+    but not yet reported would be locked out by a new one. The credential is held **in the page only**
     (never stored in the browser): a reload or leaving drops it, and the next visit creates or
     rotates again. Leaving or reloading before it is stored asks first ("Leave before storing the
     password? It's shown only once…").
@@ -1125,3 +1130,4 @@ restyled.
 | 2026-11-19 | §8, §13, §15 **alarm lifecycle** (platform audit U2): an alert row and its sheet say *Acknowledged by Ana, 5 min ago: "on my way"* or *Cleared 2 min ago*; owners and admins get **Acknowledge** (row menu; the sheet's primary button, with an optional note) and keep **Dismiss**, viewers read only. The state filter gains **Needs attention** (not acknowledged, not cleared); the attention strip says "critical alarms" and links there. The app's Alerts tab matches (Acknowledge in the sheet and the row's ⋯). |
 | 2026-11-20 | §4, §12, §15 **app parity and accessibility** (platform audit U5): the app shows the web's **Reconnecting… / Live updates are off** banner under the brand bar (after 1.5 s down); the device screen's **Health** has the web's facts (signal in words, last restart, sensors with failing ones in the error colour, memory, Wi-Fi rejoins), stale reading values are dimmed, and **Controls** is left out when the device has no actuators; the device list says its status in words beside the dot; a disabled button shows muted colours instead of fading to 55 %; the Switch sits in a 44 px target; the rule sheet says **Enabled / Disabled**. |
 | 2026-11-24 | §8, §10.1 **a first device is never empty by accident** (ease-of-use plan A1): the template wizard's Review (also Add device → Something new) shows a warning callout "Nothing to read or switch" when it has no metrics and no actuators; it never blocks Create. Get started's **Connect a device** no longer says "Needs a template". |
+| 2026-11-24 | §8 Connect (ease-of-use plan A2), amending the 2026-10-27 rule for one case: a device **just created** gets its credential without a click (Add device → Connect `?fresh=1`, removed from the URL at once), and on the Install path Connect opens on Options. Revisits still start with Create credential / Rotate credential…; the credential is still held in the page only. |

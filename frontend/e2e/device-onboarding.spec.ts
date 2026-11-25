@@ -46,6 +46,9 @@ test("something new on our firmware: parts make the template, readings are named
     await expect(page).toHaveURL(/\/devices\/[0-9a-f-]{36}\/connect$/);
     // Wired, so the Connect flow installs from the browser, no sketch.
     await expect(page.getByRole("list", { name: "Steps" })).toContainText("Install");
+    // Just created and installed from the browser: its credential is made for
+    // it and Install writes it, so Connect opens on Options.
+    await expect(page.getByRole("heading", { level: 2, name: "Options" })).toBeVisible();
     deviceId = page.url().match(/devices\/([0-9a-f-]{36})/)![1];
 
     const device = await (await request.get(`${API_URL}/devices/${deviceId}`, { headers })).json();

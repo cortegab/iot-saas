@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useAuth } from "@/hooks/useAuth";
+import { usePermissions } from "@/hooks/usePermissions";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/components/ui/Toast";
 import { ApiRequestError } from "@/lib/api-client";
@@ -90,6 +91,36 @@ export function useConnectFlow(deviceId: string) {
   // right in production; on a dev machine it's localhost, which a board can't reach.
   const [host, setHost] = useState(() => (typeof window !== "undefined" ? window.location.hostname : ""));
 
+  // A device just created (Add device sends `?fresh=1`) gets its credential
+  // without asking (DESIGN.md §8): no board has one yet, so nothing is
+  // interrupted. Only then: a later visit may follow an install that hasn't
+  // reported yet, and a new credential would lock that board out, so it keeps
+  // the explicit Create credential. The marker leaves the URL at once, so a
+  // reload can't repeat it.
+  const { role, can } = usePermissions();
+  const canWrite = can("devices.write");
+  const pathname = usePathname();
+  const fresh = useSearchParams().get("fresh") === "1";
+  const autoCredential = useRef<"idle" | "started" | "done" | "advanced">("idle");
+  useEffect(() => {
+    // Wait for the device and for who's asking (the role loads with the session).
+    if (!fresh || autoCredential.current !== "idle" || !device || role == null) return;
+    router.replace(pathname);
+    if (!canWrite || device.connection_state !== "never_connected") return;
+    autoCredential.current = "started";
+    setRotating(true);
+    api
+      .post<DeviceCreateResponse>(`/devices/${deviceId}/rotate-credential`)
+      .then((result) => {
+        setCredential(result.credential);
+        setStored(false);
+        autoCredential.current = "done";
+      })
+      // Step 1 still offers Create credential, and says why it failed.
+      .catch((err: unknown) => toast({ tone: "error", title: "Couldn't create the credential", detail: err instanceof ApiRequestError ? err.message : undefined }))
+      .finally(() => setRotating(false));
+  }, [api, canWrite, device, deviceId, fresh, pathname, role, router, toast]);
+
   // DESIGN.md §8: leaving (or reloading) before the one-time password is
   // stored asks first, since it's gone after.
   const guard = useUnsavedGuard(!!credential && !stored, "this device", LEAVE_UNSTORED);
@@ -118,6 +149,17 @@ export function useConnectFlow(deviceId: string) {
       });
     }
   });
+
+  // Install writes the auto-made credential onto the board itself, so there's
+  // nothing to store by hand: go straight to Options. (The sketch path stays on
+  // step 1, where the password is shown to store.) Credential stays in the
+  // stepper, done, and can be opened to see it.
+  useEffect(() => {
+    if (autoCredential.current !== "done" || !credential || !installable || step !== 1) return;
+    autoCredential.current = "advanced";
+    setStored(true);
+    setStep(2);
+  }, [credential, installable, step]);
 
   if (error) return { kind: "error" as const, error };
   if (!device || !template) return { kind: "loading" as const };
