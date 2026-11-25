@@ -19,6 +19,7 @@ import {
   contactProblem,
   emptyAction,
   emptyContact,
+  behaviourSentence,
   findNode,
   flappingRisk,
   insertBeside,
@@ -36,7 +37,8 @@ import {
 } from "@/lib/rule-draft";
 import { conditionText } from "@/lib/rule-text";
 import { ActionFields, AddActionMenu, ContactFields, NumberSafetyField, WhenFields, actionLabel } from "./fields";
-import type { RuleCatalog } from "./useRuleCatalog";
+import { useRuleCatalog, type RuleCatalog } from "./useRuleCatalog";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 
 type Update = (next: RuleDraft) => void;
 
@@ -416,9 +418,30 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
   const reading = isReadingRule(draft);
   const clearing = canClear(draft);
   const hardware = switchesHardware(draft);
+  const catalog = useRuleCatalog();
+  // Simple view (DESIGN.md §15a): the sentence, the numbers one click away.
+  const { simple } = useInterfaceMode();
+  const fields = <BehaviourFieldsBody draft={draft} update={update} reading={reading} clearing={clearing} hardware={hardware} />;
 
   return (
     <div className="@container flex flex-col gap-6">
+      {/* The numbers below, said once by what they do (ease-of-use C4). */}
+      <p className="text-sm text-ink">{behaviourSentence(draft, (c) => catalog.metricFor(c.deviceId, c.metric)?.unit)}</p>
+      {simple ? (
+        <details className="overflow-hidden rounded-lg border border-border">
+          <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">Change the timings</summary>
+          <div className="flex flex-col gap-6 p-4">{fields}</div>
+        </details>
+      ) : (
+        fields
+      )}
+    </div>
+  );
+}
+
+function BehaviourFieldsBody({ draft, update, reading, clearing, hardware }: { draft: RuleDraft; update: Update; reading: boolean; clearing: boolean; hardware: boolean }) {
+  return (
+    <>
       {reading && (
         <div className="flex flex-col gap-2">
           <span className="text-meta font-medium text-ink">After it fires</span>
@@ -470,7 +493,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
         </div>
       </div>
       {clearing ? <ClearFields draft={draft} update={update} /> : reading && <p className="text-meta text-ink-muted">Actions on clear are for reading rules that re-arm.</p>}
-    </div>
+    </>
   );
 }
 

@@ -21,6 +21,8 @@ test("Simple view hides set-up pages and rewords, and switches back", async ({ p
     // Devices are tiles grouped by zone in Simple (C3), the table one toggle away.
     await expect(page.getByRole("radio", { name: "Tiles" })).toBeChecked();
     await expect(page.locator("main article").first()).toBeVisible();
+    // Simple words (C4): areas and device types, not zones and templates.
+    await expect(page.getByLabel("Filter by device type")).toBeVisible();
     await page.getByRole("radio", { name: "Table" }).click();
     await expect(page.getByRole("table", { name: "Devices" })).toBeVisible();
     await page.getByRole("radio", { name: "Tiles" }).click();

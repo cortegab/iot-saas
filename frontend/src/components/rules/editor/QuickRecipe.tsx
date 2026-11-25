@@ -13,7 +13,7 @@ import { EditableSentence } from "@/components/rules/editor/EditableSentence";
 import { useRuleCatalog, type RuleCatalog } from "@/components/rules/editor/useRuleCatalog";
 import { EDITOR_COLUMN, SAVE_BAR } from "@/components/editor/save-bar";
 import { ApiRequestError } from "@/lib/api-client";
-import { OPERATORS, contacts, draftToRequest, isReadingRule, validateDraft, type ActuatorActionDraft, type ContactDraft, type DraftNode, type RuleDraft } from "@/lib/rule-draft";
+import { OPERATORS, behaviourSentence, contacts, draftToRequest, validateDraft, type ActuatorActionDraft, type ContactDraft, type DraftNode, type RuleDraft } from "@/lib/rule-draft";
 import { sectionIssues } from "@/lib/rule-preview";
 import { cronHuman } from "@/lib/schedule";
 import type { Recipe } from "@/lib/rule-recipes";
@@ -212,19 +212,8 @@ export function QuickRecipe({
     );
   });
 
-  // The safety settings the recipe chose, in one line (they stay on; Customize changes them).
-  const safety = isReadingRule(draft)
-    ? [
-        draft.forDuration > 0 ? `waits ${draft.forDuration} s before acting` : "acts at once",
-        (() => {
-          const c = leafs.find((x) => x.hysteresis > 0);
-          if (!c) return null;
-          const unit = c.deviceId ? catalog.metricFor(c.deviceId, c.metric)?.unit : undefined;
-          return `re-arms only once the reading is ${c.hysteresis}${unit ? ` ${unit}` : ""} back past the limit`;
-        })(),
-        draft.cooldown > 0 ? `acts at most once every ${draft.cooldown} s` : null,
-      ].filter(Boolean)
-    : [];
+  // The safety settings the recipe chose, said by what they do (C4's sentence).
+  const safety = behaviourSentence(draft, (c) => (c.deviceId ? catalog.metricFor(c.deviceId, c.metric)?.unit : undefined));
 
   const shownIssues = tried ? blocking : [];
 
@@ -246,11 +235,7 @@ export function QuickRecipe({
           <Input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
         </Field>
 
-        {safety.length > 0 && (
-          <p className="text-meta text-ink-muted">
-            To protect what it switches, it {safety.join(", ")}. Change these in Customize.
-          </p>
-        )}
+        <p className="text-meta text-ink-muted">{safety} Change these in Customize.</p>
 
         {shownIssues.length > 0 && (
           <div role="alert">
