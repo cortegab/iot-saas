@@ -14,7 +14,7 @@ import { CopyButton } from "@/components/ui/SecretReveal";
 import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { Card } from "@/components/ui/Card";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { FactList } from "@/components/ui/FactList";
+import { FactList, type Fact } from "@/components/ui/FactList";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Readout } from "@/components/ui/Readout";
@@ -29,6 +29,7 @@ import { CommandHistory } from "@/components/actuators/CommandHistory";
 import { leafPredicates } from "@/components/rules/RuleSummary";
 import { ApiRequestError } from "@/lib/api-client";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
+import { HEALTH, healthKey, healthLabel } from "@/lib/device-health";
 import { webSerialSupported } from "@/lib/hardware/flasher";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { getDeviceActuators } from "@/lib/device-actuators";
@@ -45,7 +46,7 @@ type RuleResponse = components["schemas"]["RuleResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
 
-const TABS = ["overview", "controls", "rules", "settings"] as const;
+const TABS = ["overview", "commands", "rules", "settings"] as const;
 type DeviceTab = (typeof TABS)[number];
 
 /** One readout per declared metric (demo H): value, unit, a Live / Stale /
@@ -145,10 +146,10 @@ export default function DeviceDetailPage() {
     return map;
   }, [rules, deviceId]);
 
-  // An old ?tab=metrics / ?tab=actuators link lands on its new home.
+  // An old ?tab=metrics / ?tab=actuators / ?tab=controls link lands on its new
+  // home: the controls are on Overview now (ease-of-use A4).
   useEffect(() => {
-    if (tabParam === "metrics") setTab("overview");
-    if (tabParam === "actuators") setTab("controls");
+    if (tabParam === "metrics" || tabParam === "actuators" || tabParam === "controls") setTab("overview");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabParam]);
 
@@ -179,7 +180,8 @@ export default function DeviceDetailPage() {
 
   const tabs: TabItem[] = [
     { id: "overview", label: "Overview" },
-    { id: "controls", label: "Controls", count: actuators.length },
+    // The controls themselves lead Overview; this tab is what was sent.
+    { id: "commands", label: "Commands" },
     { id: "rules", label: "Rules", count: rules?.length },
     { id: "settings", label: "Settings" },
   ];
@@ -237,6 +239,7 @@ export default function DeviceDetailPage() {
                     Connect it
                   </Link>{" "}
                   to see readings here.
+                  {actuators.length > 0 && " Commands wait in its desired state and apply when it connects, if still within their time limit."}
                   {!installHere && (
                     <>
                       {" "}
@@ -246,26 +249,35 @@ export default function DeviceDetailPage() {
                   )}
                 </>
               ) : (
-                "Readings show up here once it connects."
+                `Readings show up here once it connects.${actuators.length > 0 ? " Commands wait in its desired state and apply when it connects, if still within their time limit." : ""}`
               )}
             </Callout>
           ) : null}
+
+          {/* The switch first, as on a phone's smart-home card (ease-of-use A4).
+              The offline note is said once, above the rows (demo H). */}
+          {actuators.length > 0 && (
+            <section aria-labelledby="device-controls" className="flex flex-col gap-3">
+              <h2 id="device-controls" className="text-section font-semibold text-ink">
+                Controls
+              </h2>
+              {/* Never connected says it once, in the waiting callout above. */}
+              {!online && !(neverConnected && !disabled) && (
+                <Callout tone="warning">
+                  {disabled
+                    ? "The device is disabled. It can't connect, so commands can't be sent until it's enabled."
+                    : `The device is ${st.label.toLowerCase()}. Commands wait in its desired state and apply when it reconnects, if still within their time limit.`}
+                </Callout>
+              )}
+              <ActuatorControl deviceId={deviceId} deviceOnline={online} deviceDisabled={disabled} catalogEntryId={device.catalog_entry_id} wiring={device.hardware} />
+            </section>
+          )}
 
           {latest && (metrics.length > 0 || hasReadings) ? (
             <Readouts device={device} metrics={metrics} latest={latest} thresholds={thresholdsByMetric} />
           ) : !latestLoading && template && metrics.length === 0 ? (
             <p className="text-sm text-ink-muted">
-              {actuators.length > 0 ? (
-                <>
-                  It has nothing to read: it&apos;s switched from the{" "}
-                  <button type="button" onClick={() => setTab("controls")} className="link-inline">
-                    Controls tab
-                  </button>
-                  .
-                </>
-              ) : (
-                "Its template has no metrics."
-              )}
+              {actuators.length > 0 ? "It has nothing to read, only the controls above." : "Its template has no metrics."}
             </p>
           ) : null}
 
@@ -281,26 +293,21 @@ export default function DeviceDetailPage() {
           )}
 
           {/* A plain section with its facts (DESIGN.md §5, §7), not a card of dashes. */}
-          <section className="flex flex-col gap-3">
-            <h2 className="text-section font-semibold text-ink">Health</h2>
+          <section aria-labelledby="device-health" className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 id="device-health" className="text-section font-semibold text-ink">
+                Health
+              </h2>
+              {/* One word first (ease-of-use A4); offline and never connected are said beside the name. */}
+              <HealthWord device={device} />
+            </div>
             <Health device={device} />
           </section>
         </div>
       </TabPanel>
 
-      <TabPanel id="controls" active={tab}>
-        <div className="flex flex-col gap-5">
-          {/* Said once, here — not on every row (demo H). */}
-          {!online && actuators.length > 0 && (
-            <Callout tone="warning">
-              {disabled
-                ? "The device is disabled. It can't connect, so commands can't be sent until it's enabled."
-                : `The device is ${st.label.toLowerCase()}. Commands wait in its desired state and apply when it reconnects, if still within their time limit.`}
-            </Callout>
-          )}
-          <ActuatorControl deviceId={deviceId} deviceOnline={online} deviceDisabled={disabled} catalogEntryId={device.catalog_entry_id} wiring={device.hardware} />
-          <CommandHistory deviceId={deviceId} labels={actuatorNames} />
-        </div>
+      <TabPanel id="commands" active={tab}>
+        <CommandHistory deviceId={deviceId} labels={actuatorNames} />
       </TabPanel>
 
       <TabPanel id="rules" active={tab}>
@@ -364,37 +371,55 @@ const kb = (bytes: number) => `${Math.round(bytes / 1024)} KB`;
 /** The device's own report (demo H Health): when it last sent anything, then
  * signal, power, firmware, uptime,
  * its diagnostics (generic firmware 0.14.0+) and the id it uses in MQTT topics. */
+function HealthWord({ device }: { device: DeviceResponse }) {
+  const key = healthKey(device);
+  if (!key) return null;
+  const h = HEALTH[key];
+  return <Badge tone={h.tone} shape={h.shape} label={healthLabel(key, device)} />;
+}
+
 function Health({ device }: { device: DeviceResponse }) {
   // Only what the device has reported; one line when it hasn't reported yet.
   const reported = device.last_status_at != null || device.rssi != null || device.fw_version != null || device.uptime_s != null;
   const faults = device.faults ?? [];
+  // What a person acts on first; the rest (versions, memory, ids) under Details.
+  const details: (Fact | false)[] = [
+    device.fw_version != null && ["Firmware", device.fw_version],
+    device.uptime_s != null && ["Uptime", uptime(device.uptime_s)],
+    device.heap_free != null && ["Memory", `${kb(device.heap_free)} free${device.heap_min != null ? ` · lowest ${kb(device.heap_min)}` : ""}`],
+    device.wifi_reconnects != null && ["Wi-Fi rejoins", `${device.wifi_reconnects} since it started`],
+    ["MQTT id", <span key="id" className="font-mono">{device.slug}</span>],
+  ];
   return (
-    <FactList
-      facts={[
-        ["Last message", device.last_seen_at ? timeAgo(device.last_seen_at) : "Never"],
-        !reported && ["Report", <span key="r" className="text-ink-muted">Not reported yet</span>],
-        device.rssi != null && ["Signal", signalLabel(device.rssi)],
-        reported && ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : "Not reported"],
-        device.fw_version != null && ["Firmware", device.fw_version],
-        device.uptime_s != null && ["Uptime", uptime(device.uptime_s)],
-        device.boot_count != null && [
-          "Last restart",
-          `${RESTART_REASON[device.reset_reason ?? ""] ?? "Unknown"} · boot ${device.boot_count}`,
-        ],
-        device.faults != null && [
-          "Sensors",
-          faults.length === 0 ? (
-            "All answering"
-          ) : (
-            <span key="f" className="text-status-error">
-              {faults.join("; ")}
-            </span>
-          ),
-        ],
-        device.heap_free != null && ["Memory", `${kb(device.heap_free)} free${device.heap_min != null ? ` · lowest ${kb(device.heap_min)}` : ""}`],
-        device.wifi_reconnects != null && ["Wi-Fi rejoins", `${device.wifi_reconnects} since it started`],
-        ["MQTT id", <span key="id" className="font-mono">{device.slug}</span>],
-      ]}
-    />
+    <div className="flex flex-col gap-3">
+      <FactList
+        facts={[
+          ["Last message", device.last_seen_at ? timeAgo(device.last_seen_at) : "Never"],
+          !reported && ["Report", <span key="r" className="text-ink-muted">Not reported yet</span>],
+          device.rssi != null && ["Signal", signalLabel(device.rssi)],
+          reported && ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : "Not reported"],
+          device.faults != null && [
+            "Sensors",
+            faults.length === 0 ? (
+              "All answering"
+            ) : (
+              <span key="f" className="text-status-error">
+                {faults.join("; ")}
+              </span>
+            ),
+          ],
+          device.boot_count != null && [
+            "Last restart",
+            `${RESTART_REASON[device.reset_reason ?? ""] ?? "Unknown"} · boot ${device.boot_count}`,
+          ],
+        ]}
+      />
+      <details className="overflow-hidden rounded-lg border border-border">
+        <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">Details</summary>
+        <div className="p-4">
+          <FactList facts={details} />
+        </div>
+      </details>
+    </div>
   );
 }

@@ -25,10 +25,10 @@ test("controls: warn when offline, count down, acknowledged by the device, then 
   const latest = async () => (await (await request.get(`${API_URL}/devices/${device.id}/commands`, { headers })).json())[0] as { id: string };
 
   try {
-    await page.goto(`/devices/${device.id}?tab=controls`);
+    await page.goto(`/devices/${device.id}`);
     // Never connected, so offline: the send says so first.
-    // One offline callout above the rows; an on/off actuator is a Switch.
-    await expect(page.getByText(/The device is never connected. Commands wait in its desired state/)).toBeVisible();
+    // One callout (the waiting one says commands wait too); an on/off actuator is a Switch.
+    await expect(page.getByText(/Commands wait in its desired state and apply when it connects/)).toBeVisible();
     const fan = page.getByRole("switch", { name: "Fan" });
     await expect(page.getByText("Nothing sent yet")).toBeVisible();
     await fan.click();
@@ -54,7 +54,8 @@ test("controls: warn when offline, count down, acknowledged by the device, then 
     await expect(page.getByText(/Sending…|Waiting for the device…/).first()).toBeVisible();
     await expect(page.getByText(/Waiting for the device…/)).toBeVisible({ timeout: 15_000 });
 
-    // The timeline filters by result.
+    // The timeline (the Commands tab; the controls lead Overview) filters by result.
+    await page.getByRole("tab", { name: "Commands" }).click();
     const timeline = page.getByRole("list", { name: "Commands" });
     // Rows keep landing (the retry); open any folded run until all three show.
     await expect(async () => {
@@ -98,7 +99,7 @@ test("controls: a number is typed in and Set within its range; the requested val
   });
 
   try {
-    await page.goto(`/devices/${device.id}?tab=controls`);
+    await page.goto(`/devices/${device.id}`);
     const speed = page.getByRole("textbox", { name: "Set Speed" });
     const set = page.getByRole("button", { name: "Set", exact: true });
     await expect(page.getByText("0–100", { exact: true })).toBeVisible();

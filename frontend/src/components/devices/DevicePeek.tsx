@@ -129,7 +129,7 @@ export function DevicePeek({
               );
             })}
           </ul>
-          <Link href={`/devices/${device.id}?tab=controls`} className="w-fit text-sm text-accent hover:underline">
+          <Link href={`/devices/${device.id}`} className="w-fit text-sm text-accent hover:underline">
             Open controls
           </Link>
         </PeekSection>
