@@ -5,7 +5,9 @@ import { timeAgo } from "@iodriven/shared/time-ago";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { useMemo, useState } from "react";
-import { FlatList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { SectionList, Pressable, RefreshControl, StyleSheet, View } from "react-native";
+import { words } from "@iodriven/shared/simple-words";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { touchTarget } from "@/theme/tokens";
 import { useTheme } from "@/theme/useTheme";
@@ -42,6 +44,19 @@ export default function Devices() {
 
   const counts = useMemo(() => statusCounts(devices ?? []), [devices]);
   const rows = useMemo(() => visibleDevices(devices ?? [], filter, query), [devices, filter, query]);
+  // Simple view (DESIGN.md §15a): grouped by area, as the web's tiles; Full: one list.
+  const { simple } = useInterfaceMode();
+  const w = words(simple);
+  const sections = useMemo(() => {
+    if (!simple) return rows.length ? [{ key: "all", title: "", data: rows }] : [];
+    const groups = new Map<string, { key: string; title: string; data: DeviceResponse[] }>();
+    for (const d of rows) {
+      const key = d.zone_id && zoneName.has(d.zone_id) ? d.zone_id : "none";
+      if (!groups.has(key)) groups.set(key, { key, title: key === "none" ? `No ${w.zone}` : zoneName.get(key)!, data: [] });
+      groups.get(key)!.data.push(d);
+    }
+    return [...groups.values()].sort((a, b) => (a.key === "none" ? 1 : b.key === "none" ? -1 : a.title.localeCompare(b.title)));
+  }, [rows, simple, zoneName, w.zone]);
 
   const options = [
     { value: "all" as Filter, label: `All ${devices?.length ?? ""}`.trim() },
@@ -68,9 +83,17 @@ export default function Devices() {
     <>
       {/* Scan is in the top bar, on every screen (DESIGN.md §15). */}
       <Stack.Screen options={{ title: "Devices" }} />
-      <FlatList
-        data={rows}
+      <SectionList
+        sections={sections}
         keyExtractor={(d) => d.id}
+        stickySectionHeadersEnabled={false}
+        renderSectionHeader={({ section }) =>
+          section.title ? (
+            <Text size="meta" weight="semibold" style={styles.sectionHead} accessibilityRole="header">
+              {section.title}
+            </Text>
+          ) : null
+        }
         contentContainerStyle={styles.page}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={theme.inkMuted} />}
@@ -81,10 +104,11 @@ export default function Devices() {
           </View>
         }
         ListEmptyComponent={<View style={styles.empty}>{empty}</View>}
-        renderItem={({ item: d, index }) => {
+        renderItem={({ item: d, index, section }) => {
           const key = deviceStatusKey(d);
           const s = DEVICE_STATUS[key];
-          const where = [templateName.get(d.catalog_entry_id), d.zone_id ? zoneName.get(d.zone_id) : null].filter(Boolean).join(" · ");
+          // In Simple the area is the section's heading, so only the device type stays.
+          const where = [templateName.get(d.catalog_entry_id), !simple && d.zone_id ? zoneName.get(d.zone_id) : null].filter(Boolean).join(" · ");
           const seen = key === "never" ? "Never connected" : `last message ${timeAgo(d.last_seen_at)}`;
           return (
             <Pressable
@@ -95,7 +119,7 @@ export default function Devices() {
                 styles.row,
                 { backgroundColor: pressed ? theme.surfaceRaised : theme.surface, borderColor: theme.border },
                 index === 0 && styles.first,
-                index === rows.length - 1 && styles.last,
+                index === section.data.length - 1 && styles.last,
               ]}
             >
               <StatusDot tone={s.tone} shape={s.shape} />
@@ -135,4 +159,5 @@ const styles = StyleSheet.create({
   first: { borderTopLeftRadius: 12, borderTopRightRadius: 12 },
   last: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
   text: { flex: 1, gap: 2 },
+  sectionHead: { marginTop: 8, marginBottom: 8 },
 });

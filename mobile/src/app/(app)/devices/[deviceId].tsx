@@ -20,6 +20,11 @@ import { Chips } from "@/ui/Chips";
 import { StatusDot } from "@/ui/StatusDot";
 import { Text } from "@/ui/Text";
 import { signalLabel } from "@iodriven/shared/signal";
+import { healthKey, healthLabel } from "@iodriven/shared/device-health";
+import { capital, words } from "@iodriven/shared/simple-words";
+import { AlertSettings } from "@/devices/AlertSettings";
+import { useCan } from "@/hooks/useCan";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -66,6 +71,8 @@ export default function DeviceScreen() {
   const { data: zones } = useApiSWR<ZoneResponse[]>("/zones");
   const { data: latest, mutate: mutateLatest } = useApiSWR<TelemetryLatestResponse[]>(`/devices/${deviceId}/latest`, { refreshInterval: 30_000 });
   const [selected, setSelected] = useState<string | null>(null);
+  const { simple } = useInterfaceMode();
+  const canWrite = useCan("devices.write");
   const [refreshing, setRefreshing] = useState(false);
 
   if (!device) {
@@ -85,9 +92,11 @@ export default function DeviceScreen() {
   const metrics = template?.metrics ?? [];
   const chartKey = selected ?? (metrics[0] ? wireId(metrics[0]) : null);
   const zone = device.zone_id ? zones?.find((z) => z.id === device.zone_id)?.name : null;
+  const w = words(simple);
   const details: [string, string][] = [
-    ["Template", template?.name ?? "—"],
-    ["Zone", zone ?? "No zone"],
+    [capital(w.template), template?.name ?? "—"],
+    [capital(w.zone), zone ?? `No ${w.zone}`],
+    ...(device.simulated ? [["Readings", "Simulated: made up by the platform"] as [string, string]] : []),
     ["Last message", device.last_seen_at ? timeAgo(device.last_seen_at) : "Never"],
   ];
   // The web's Health facts (DESIGN.md §8), so a device-health push lands on
@@ -110,6 +119,8 @@ export default function DeviceScreen() {
     ...(device.wifi_reconnects != null ? [["Wi-Fi rejoins", `${device.wifi_reconnects} since it started`] as [string, string]] : []),
   ];
   const hasActuators = (template?.actuators.length ?? 0) > 0;
+  const hk = healthKey(device);
+  const healthWord = hk ? { key: hk, label: healthLabel(hk, device) } : null;
 
   async function onRefresh() {
     setRefreshing(true);
@@ -142,6 +153,18 @@ export default function DeviceScreen() {
           ),
         }}
       />
+
+      {/* Controls first, as on the web (ease-of-use A4). */}
+      {hasActuators && (
+        <View style={styles.section}>
+          <Text size="section" weight="semibold" accessibilityRole="header">
+            Controls
+          </Text>
+          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
+            <ActuatorControl device={device} />
+          </View>
+        </View>
+      )}
 
       <View style={styles.section}>
         <Text size="section" weight="semibold" accessibilityRole="header">
@@ -220,30 +243,29 @@ export default function DeviceScreen() {
         </View>
       )}
 
-      {hasActuators && (
-        <View style={styles.section}>
-          <Text size="section" weight="semibold" accessibilityRole="header">
-            Controls
-          </Text>
-          <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
-            <ActuatorControl device={device} />
-          </View>
-        </View>
-      )}
-
       <Lines label="Details">
         {details.map(([label, value]) => (
           <Row key={label} title={label} right={<Text color="inkMuted">{value}</Text>} />
         ))}
       </Lines>
 
-      {health.length > 0 && (
+      {/* The web's one word first (ease-of-use A4), then the facts; Simple keeps just the word. */}
+      {(healthWord || health.length > 0) && (
         <Lines label="Health">
-          {health.map(([label, value, bad]) => (
+          {healthWord ? (
+            <Row
+              key="overall"
+              title="Overall"
+              right={<Text weight="medium" color={healthWord.key === "healthy" ? "statusOnline" : healthWord.key === "faults" ? "statusError" : "statusPending"}>{healthWord.label}</Text>}
+            />
+          ) : null}
+          {(simple ? [] : health).map(([label, value, bad]) => (
             <Row key={label} title={label} right={<Text color={bad ? "statusError" : "inkMuted"}>{value}</Text>} />
           ))}
         </Lines>
       )}
+
+      {canWrite && <AlertSettings device={device} onSaved={() => void mutate()} />}
 
       <Lines>
         <Row
