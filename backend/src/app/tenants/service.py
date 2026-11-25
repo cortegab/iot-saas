@@ -361,6 +361,32 @@ async def attention(session: AsyncSession, tenant_id: uuid.UUID) -> Attention:
     )
 
 
+def default_interface_mode(role: str) -> str:
+    """Viewers (usually an integrator's clients) start in Simple; people who
+    set the workspace up start in Full (DESIGN.md §15a)."""
+    return "simple" if role == "viewer" else "full"
+
+
+async def interface_mode(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> tuple[str, bool]:
+    """This person's view of the workspace, and whether they chose it."""
+    membership = await _membership(session, tenant_id, user_id)
+    if membership.interface_mode is not None:
+        return membership.interface_mode, True
+    return default_interface_mode(membership.role), False
+
+
+async def set_interface_mode(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID, mode: str | None
+) -> tuple[str, bool]:
+    """Choose Simple or Full for yourself; None goes back to the role's default."""
+    membership = await _membership(session, tenant_id, user_id)
+    membership.interface_mode = mode
+    await session.flush()
+    return await interface_mode(session, tenant_id, user_id)
+
+
 async def mark_welcomed(session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID) -> None:
     """The one-time Welcome was answered (built a dashboard or looked around)."""
     membership = await _membership(session, tenant_id, user_id)

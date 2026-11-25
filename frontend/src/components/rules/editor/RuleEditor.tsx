@@ -40,6 +40,7 @@ import { BehaviourSection, ConditionSection, IntervalField, ThenSection, WhenSec
 import { RulePreview } from "./RulePreview";
 import { SAVE_BAR } from "@/components/editor/save-bar";
 import { useRuleCatalog } from "./useRuleCatalog";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
@@ -125,7 +126,10 @@ export function RuleEditor({
   // existing rule) starts as unsaved changes against it.
   const [baseline, setBaseline] = useState<RuleDraft>(() => (existing ? draftFromRule(existing) : (initialDraft ?? emptyDraft(deviceId ?? ""))));
   const [draft, setDraft] = useState<RuleDraft>(() => (existing && initialDraft ? initialDraft : baseline));
-  const [mode, setMode] = useState<EditorMode>("form");
+  const [storedMode, setMode] = useState<EditorMode>("form");
+  // Simple view (DESIGN.md §15a): the form only, never the ladder.
+  const { simple } = useInterfaceMode();
+  const mode: EditorMode = simple ? "form" : storedMode;
   const [selection, setSelection] = useState<EditorSelection>({ kind: "when" });
   const [previewOpen, setPreviewOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -363,7 +367,7 @@ export function RuleEditor({
   // (past the 760px column), so a wide rung stays legible.
   const canvasWide = mode === "ladder" && (tab === "if" || tab === "then");
   const tabIssues = (t: RuleTab) => issues.filter((i) => tabOf(i.section) === t);
-  const modeSwitch = (
+  const modeSwitch = simple ? null : (
     <div className="flex flex-wrap items-center gap-2.5">
       <SegmentedControl
         ariaLabel="Editor view"

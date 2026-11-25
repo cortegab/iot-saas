@@ -347,6 +347,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | Sign in, register, forgot / reset password, "Keep me signed in" | 🚧 | 15-minute access token, 30-day refresh token. No email verification on register. No MFA. No rate limit on sign-in (§6). |
 | API keys (`Authorization: Bearer`), Viewer or Admin, with expiry | ✅ | |
 | Workspace settings: time zone, alert recipients | ✅ | |
+| Simple view (per person per workspace; Viewers start in it) | 🚧 | Hides set-up pages (templates, zones, members, keys), the ladder and device details; Rules reads *Automations*. Tiles, scenes and plain words are next (ease-of-use plan C3–C5). |
 | Command palette, responsive shell (icon rail, full sidebar, phone tab bar) | ✅ | Accessibility audited with axe: zero violations across 36+ pages at the last audit. |
 | SSO (SAML / OIDC), audit log of who changed what | ⛔ | Rule versions record who edited a rule; nothing else is audited. |
 

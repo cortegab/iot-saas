@@ -11,6 +11,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { MiniStrip, type StripCell } from "@/components/ui/MiniStrip";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Select } from "@/components/ui/Select";
 import { DataTable, NameCell, type DataColumn } from "@/components/list/DataTable";
@@ -59,6 +60,7 @@ function devicesLine(rule: RuleResponse): string {
 
 export default function RulesPage() {
   const { can } = usePermissions();
+  const { simple } = useInterfaceMode();
   const canWrite = can("rules.write");
   // refreshInterval: rule health is time-based (a signal crosses its staleness
   // bound with no user action), and the rule_health realtime event only fires
@@ -206,7 +208,7 @@ export default function RulesPage() {
           holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
         inline
-        title="Rules"
+        title={simple ? "Automations" : "Rules"}
         description="Every reading is checked against these the moment it arrives."
         actions={!error && rules && total > 0 ? undefined : newAction}
       />
@@ -252,7 +254,8 @@ export default function RulesPage() {
               ],
             }}
             view={
-              showFailed ? undefined : <SegmentedControl
+              // Simple view (DESIGN.md §15a) has no ladder.
+              showFailed || simple ? undefined : <SegmentedControl
                 ariaLabel="Rules view"
                 value={list.filters.view === "ladder" ? "ladder" : "list"}
                 onChange={(v) => list.setFilter("view", v)}
@@ -301,7 +304,7 @@ export default function RulesPage() {
             <FailedActionsList />
           ) : filtered.length === 0 ? (
             <NoResults noun="rules" hidden={total} onClear={list.clearAll} />
-          ) : list.filters.view === "ladder" ? (
+          ) : list.filters.view === "ladder" && !simple ? (
             <div className="flex flex-col gap-2">
               <LadderOverview rules={pageRows} />
               <TableFooter
