@@ -19,7 +19,9 @@ test("new rule: a recipe opens the workbench with its checks passing", async ({ 
   await page.goto("/rules/new");
   await expect(page.getByRole("list", { name: "Recipes" })).toBeVisible();
   await page.getByRole("button", { name: /Tell me when a device goes offline/ }).click();
-  await page.getByLabel("Watched device").selectOption({ index: 1 });
+  // A recipe opens as one screen; Customize opens the steps on the same draft.
+  await page.getByLabel("Which device").selectOption({ index: 1 });
+  await page.getByRole("button", { name: "Customize" }).click();
   // Creating is a wizard (DESIGN.md §9.1): steps, and the first question.
   await expect(page.getByRole("list", { name: "Steps" })).toContainText("Review");
   await expect(page.getByRole("heading", { name: "What starts it?" })).toBeVisible();

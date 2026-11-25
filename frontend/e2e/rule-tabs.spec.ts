@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { test } from "./fixtures";
+import { API_URL, login, test } from "./fixtures";
 
 // DESIGN.md §9.2–9.3 (demo H): the sentence is the header's description,
 // then tabs Basics · When · If · Then · Behaviour · Activity; conditions and
@@ -88,6 +88,8 @@ test("walking a recipe to Review creates nothing until Create rule", async ({ pa
   // No device on the first page: recipe, then the device in the When step.
   await expect(page.getByLabel("Device", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: /Tell me when a device goes offline/ }).click();
+  // The recipe's one screen; Customize walks the steps instead.
+  await page.getByRole("button", { name: "Customize" }).click();
   await page.getByLabel("Watched device").selectOption({ index: 1 });
   // Not on a reading, so no Behaviour step: its one timer is in Then.
   await expect(page.getByRole("list", { name: "Steps" })).not.toContainText("Behaviour");
@@ -104,4 +106,25 @@ test("walking a recipe to Review creates nothing until Create rule", async ({ pa
   await expect(page.getByText(/ created$/)).toHaveCount(0);
   await expect(page.getByLabel("Name", { exact: true })).toHaveValue("E2E offline recipe");
   await expect(page.getByRole("button", { name: "Create rule" })).toBeEnabled();
+});
+
+test("a recipe is one screen: pick its device, Create, and it lands on the rule", async ({ page, request }) => {
+  await page.goto("/rules/new");
+  await page.getByRole("button", { name: /Tell me when a device goes offline/ }).click();
+  const quick = page.getByRole("region", { name: "Quick rule" });
+  await expect(quick.getByRole("heading", { name: "Tell me when a device goes offline" })).toBeVisible();
+  // Create without the blank filled says what's missing, and creates nothing.
+  await page.getByRole("button", { name: "Create rule" }).click();
+  await expect(quick.getByRole("alert")).toContainText("Pick the device to watch.");
+  await quick.getByLabel("Which device").selectOption({ index: 1 });
+  await quick.getByLabel("Name", { exact: true }).fill(`E2E quick ${Date.now()}`);
+  // The sentence follows the picks.
+  await expect(page.getByLabel("Rule sentence")).toContainText("disconnects");
+  await page.getByRole("button", { name: "Create rule" }).click();
+  await expect(page).toHaveURL(/\/rules\/[0-9a-f-]{36}$/);
+  const id = page.url().split("/rules/")[1];
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("E2E quick");
+  // Clean up now rather than wait for the teardown.
+  const { accessToken, tenantId } = await login(request);
+  await request.delete(`${API_URL}/rules/${id}`, { headers: { authorization: `Bearer ${accessToken}`, "x-tenant-id": tenantId } });
 });
