@@ -19,6 +19,7 @@ import { NameDialog } from "@/components/ui/NameDialog";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Tag } from "@/components/ui/Badge";
 import { AttentionStrip } from "@/components/dashboards/AttentionStrip";
+import { ScenesRow } from "@/components/dashboards/ScenesRow";
 import { defaultNote, useDefaultDashboard } from "@/components/dashboards/useDefaultDashboard";
 import { useToast } from "@/components/ui/Toast";
 import { DashboardGrid, WIDGET_LABEL } from "@/components/dashboards/DashboardGrid";
@@ -277,6 +278,7 @@ export default function DashboardDetailPage() {
       />
 
       {!editing && <AttentionStrip />}
+      {!editing && <ScenesRow />}
 
       {editing && (
         <p role="status" className="flex items-center gap-2 rounded-md border border-accent/40 bg-accent-muted px-3.5 py-2.5 text-meta text-ink">
