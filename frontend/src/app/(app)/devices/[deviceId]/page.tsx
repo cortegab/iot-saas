@@ -7,7 +7,8 @@ import { Plus, Wrench, Zap } from "lucide-react";
 import { useApiSWR } from "@/hooks/useApiSWR";
 import { useChangeToast } from "@/hooks/useChangeToast";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Badge } from "@/components/ui/Badge";
+import { Badge, Tag } from "@/components/ui/Badge";
+import { SimulatedNote } from "@/components/devices/SimulatedStart";
 import { buttonClassName } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { CopyButton } from "@/components/ui/SecretReveal";
@@ -213,6 +214,7 @@ export default function DeviceDetailPage() {
           <>
             {device.name}
             <Badge tone={st.tone} shape={st.shape} label={st.label} />
+            {device.simulated && <Tag>Simulated</Tag>}
           </>
         }
         actions={
@@ -225,7 +227,8 @@ export default function DeviceDetailPage() {
           ) : (
             // Installing needs USB from a computer's Chrome or Edge: the
             // button shows only there; ⋯ always has "Install or reconnect…".
-            installHere && (
+            // A simulated device has no board to install (⋯ still offers it, for when one takes over).
+            installHere && !device.simulated && (
               <Link href={`/devices/${deviceId}/connect`} className={buttonClassName({ variant: "secondary" })}>
                 <Wrench aria-hidden size={15} />
                 Install
@@ -268,6 +271,10 @@ export default function DeviceDetailPage() {
               )}
             </Callout>
           ) : null}
+
+          {device.simulated && (
+            <SimulatedNote device={device} metrics={metrics} actuators={template?.actuators ?? []} canWrite={canWrite} canWriteRules={can("rules.write")} />
+          )}
 
           {/* The switch first, as on a phone's smart-home card (ease-of-use A4).
               The offline note is said once, above the rows (demo H). */}

@@ -117,6 +117,11 @@ async def emqx_authenticate(
             body.password.encode(), settings.mqtt_worker_password.get_secret_value().encode()
         )
         return EmqxAuthenticateResponse(result="allow" if allowed else "deny")
+    if body.username == settings.mqtt_simulator_username:
+        allowed = settings.simulator_enabled and hmac.compare_digest(
+            body.password.encode(), settings.mqtt_simulator_password.get_secret_value().encode()
+        )
+        return EmqxAuthenticateResponse(result="allow" if allowed else "deny")
 
     try:
         device_id = uuid.UUID(body.username)
@@ -148,6 +153,29 @@ def _is_device_publish_topic(topic: str, own_subtree: str) -> bool:
     if len(rest) == 1:
         return rest[0] not in ingestion_service.PLATFORM_TO_DEVICE_SEGMENTS
     return len(rest) == 2 and rest[0] == "ack"
+
+
+def _simulator_topic(topic: str, action: str) -> tuple[str, str] | None:
+    """The {tenant}/{device} a simulator request is for, when its shape is one
+    the simulator may use (ease-of-use B4): publish a reading or status
+    ({tenant}/{device}/{metric}) or an ack ({tenant}/{device}/ack/{actuator});
+    subscribe to {tenant}/{device}/cmd/+ and .../state/+. The caller checks the
+    device is a simulated one."""
+    parts = topic.split("/")
+    if len(parts) < 3 or not all(parts[:2]):
+        return None
+    if action == "publish":
+        rest = parts[2:]
+        if not all(rest):
+            return None
+        ok = (len(rest) == 1 and rest[0] not in ingestion_service.PLATFORM_TO_DEVICE_SEGMENTS) or (
+            len(rest) == 2 and rest[0] == "ack"
+        )
+    elif action == "subscribe":
+        ok = len(parts) == 4 and parts[2] in ("cmd", "state") and parts[3] == "+"
+    else:
+        ok = False
+    return (parts[0], parts[1]) if ok else None
 
 
 def _is_worker_publish_topic(topic: str) -> bool:
@@ -186,6 +214,12 @@ async def emqx_authorize(
             allowed = _is_worker_publish_topic(body.topic)
         else:
             allowed = False
+        return EmqxAuthorizeResponse(result="allow" if allowed else "deny")
+
+    if body.username == settings.mqtt_simulator_username:
+        # Only simulated devices' own topics, never a real board's (CLAUDE.md §4).
+        target = _simulator_topic(body.topic, body.action) if settings.simulator_enabled else None
+        allowed = target is not None and await devices_service.is_simulated_device(session, *target)
         return EmqxAuthorizeResponse(result="allow" if allowed else "deny")
 
     try:

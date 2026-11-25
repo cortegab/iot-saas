@@ -433,3 +433,61 @@ async def test_sign_in_is_throttled_after_repeated_failures(
         "/auth/login", json={"email": "other@example.com", "password": "hunter2hunter2"}
     )
     assert ok.status_code == 200
+
+
+async def test_emqx_simulator_identity_reaches_only_simulated_devices(
+    client: httpx.AsyncClient,
+) -> None:
+    """The simulator's MQTT identity (ease-of-use B4) authenticates with its own
+    secret and may publish readings/status/acks and read cmd/state only for
+    devices flagged simulated, never a real board's topics."""
+    owner = await _register(client, "simauth@example.com", "Sim Auth")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    catalog_entry_id = (await client.get("/catalog", headers=headers)).json()[0]["id"]
+    sim = (
+        await client.post(
+            "/devices",
+            json={"name": "Sim", "catalog_entry_id": catalog_entry_id, "simulated": True},
+            headers=headers,
+        )
+    ).json()
+    real = await _create_device(client, headers, "Real")
+    slug = sim["tenant_slug"]
+    s, r = sim["device"]["slug"], real["device"]["slug"]
+    user = settings.mqtt_simulator_username
+
+    authn = await client.post(
+        "/ingestion/emqx/authenticate",
+        json={"username": user, "password": settings.mqtt_simulator_password.get_secret_value()},
+        headers=EMQX_HEADERS,
+    )
+    assert authn.json()["result"] == "allow"
+    wrong = await client.post(
+        "/ingestion/emqx/authenticate",
+        json={"username": user, "password": "nope"},
+        headers=EMQX_HEADERS,
+    )
+    assert wrong.json()["result"] == "deny"
+
+    async def authz(topic: str, action: str) -> str:
+        resp = await client.post(
+            "/ingestion/emqx/authorize",
+            json={"username": user, "topic": topic, "action": action},
+            headers=EMQX_HEADERS,
+        )
+        result: str = resp.json()["result"]
+        return result
+
+    assert await authz(f"{slug}/{s}/temperature", "publish") == "allow"
+    assert await authz(f"{slug}/{s}/status", "publish") == "allow"
+    assert await authz(f"{slug}/{s}/ack/fan", "publish") == "allow"
+    assert await authz(f"{slug}/{s}/cmd/+", "subscribe") == "allow"
+    assert await authz(f"{slug}/{s}/state/+", "subscribe") == "allow"
+    # Never what the platform sends a device, never wildcards across devices.
+    assert await authz(f"{slug}/{s}/cmd/fan", "publish") == "deny"
+    assert await authz(f"{slug}/{s}/config", "publish") == "deny"
+    assert await authz("+/+/+", "subscribe") == "deny"
+    # Never a real board's topics.
+    assert await authz(f"{slug}/{r}/temperature", "publish") == "deny"
+    assert await authz(f"{slug}/{r}/cmd/+", "subscribe") == "deny"

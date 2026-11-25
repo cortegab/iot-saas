@@ -107,9 +107,12 @@ export default function DevicesPage() {
       cell: (d) => (
         <NameCell
           name={
-            <Link href={`/devices/${d.id}`} className="hover:underline hover:underline-offset-[3px]">
-              {d.name}
-            </Link>
+            <span className="flex items-center gap-2">
+              <Link href={`/devices/${d.id}`} className="hover:underline hover:underline-offset-[3px]">
+                {d.name}
+              </Link>
+              {d.simulated && <Tag size="sm">Simulated</Tag>}
+            </span>
           }
           // demo H: the name in the UI face, its MQTT id under it in mono.
           sub={<span className="font-mono text-xs">{d.slug}</span>}
@@ -214,7 +217,16 @@ export default function DevicesPage() {
         <FirstUse
           icon={<Cpu aria-hidden size={28} />}
           title="No devices yet"
-          description="Add a device, then install its firmware from a computer over USB, no code needed. Its readings show up here as soon as it's online."
+          description={
+            <>
+              Add a device, then install its firmware from a computer over USB, no code needed. Its readings show up here as soon as
+              it&apos;s online. No board yet?{" "}
+              <Link href="/devices/new?from=simulated" className="link-inline">
+                Try a simulated device
+              </Link>
+              .
+            </>
+          }
           action={addAction ?? undefined}
           readOnlyNote="Ask an admin to add the first device."
         />

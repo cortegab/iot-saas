@@ -126,7 +126,7 @@ export default function GetStartedPage() {
     {
       key: "device",
       title: "Connect a device",
-      why: "Done when it sends its first reading. Installing its firmware takes a computer with Chrome or Edge and a USB cable.",
+      why: "Done when it sends its first reading. Installing its firmware takes a computer with Chrome or Edge and a USB cable. No board yet? Add device offers a simulated one.",
       href: "/devices/new",
       action: "Add device",
     },

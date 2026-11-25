@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, UniqueConstraint, false, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -66,6 +66,11 @@ class Device(Base):
         DateTime(timezone=True), nullable=True
     )
     status: Mapped[str] = mapped_column(nullable=False, default=DeviceStatus.ACTIVE.value)
+    # Readings made up by the worker (app.devices.simulator), published through
+    # EMQX like a board's: for trying the platform without hardware.
+    simulated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=false()
+    )
     last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Tier A device-health snapshot — written synchronously from a retained
     # {tenant}/{device}/status message (app.worker._handle_status), not

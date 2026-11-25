@@ -297,3 +297,67 @@ async def test_new_tenant_gets_legacy_catalog_entry(client: httpx.AsyncClient) -
     assert entries[0]["is_legacy"] is True
     assert entries[0]["metrics"] == []
     assert entries[0]["actuators"] == []
+
+
+async def test_simulated_devices_are_flagged_listed_for_the_worker_and_capped(
+    client: httpx.AsyncClient, app_session_factory: Any
+) -> None:
+    from app.devices import service as devices_service
+
+    owner = await _register(client, "sim@example.com", "Sim Co")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    template = (
+        await client.post(
+            "/catalog",
+            json={"name": "Climate", "metrics": [{"name": "Temperature", "key": "temperature"}]},
+            headers=headers,
+        )
+    ).json()
+
+    ids = []
+    for i in range(devices_service.MAX_SIMULATED_DEVICES):
+        resp = await client.post(
+            "/devices",
+            json={"name": f"Sim {i}", "catalog_entry_id": template["id"], "simulated": True},
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        assert resp.json()["device"]["simulated"] is True
+        ids.append(resp.json()["device"]["id"])
+
+    # One more is refused, with what to do instead.
+    resp = await client.post(
+        "/devices",
+        json={"name": "Sim extra", "catalog_entry_id": template["id"], "simulated": True},
+        headers=headers,
+    )
+    assert resp.status_code == 409
+    assert "Delete one first" in resp.json()["detail"]
+    # A real device isn't counted against it.
+    resp = await client.post(
+        "/devices", json={"name": "Real", "catalog_entry_id": template["id"]}, headers=headers
+    )
+    assert resp.status_code == 201 and resp.json()["device"]["simulated"] is False
+
+    # The worker's cross-tenant list (SECURITY DEFINER) has them with their template.
+    rows = await devices_service.list_simulated_devices(app_session_factory)
+    mine = [r for r in rows if str(r.tenant_id) == tenant_id]
+    assert sorted(str(r.device_id) for r in mine) == sorted(ids)
+    assert mine[0].tenant_slug == "sim-co"
+    assert [m["key"] for m in mine[0].metrics] == ["temperature"]
+
+    # Stop simulating one: it leaves the list and frees a slot.
+    resp = await client.patch(f"/devices/{ids[0]}", json={"simulated": False}, headers=headers)
+    assert resp.status_code == 200 and resp.json()["simulated"] is False
+    rows = await devices_service.list_simulated_devices(app_session_factory)
+    assert ids[0] not in [str(r.device_id) for r in rows]
+    resp = await client.post(
+        "/devices",
+        json={"name": "Sim again", "catalog_entry_id": template["id"], "simulated": True},
+        headers=headers,
+    )
+    assert resp.status_code == 201
+    # It can't be turned back on later.
+    resp = await client.patch(f"/devices/{ids[0]}", json={"simulated": True}, headers=headers)
+    assert resp.status_code == 422

@@ -80,6 +80,7 @@ from app.commands.schemas import AckPayload
 from app.config import settings
 from app.db import session_factory
 from app.devices import service as devices_service
+from app.devices import simulator
 from app.devices.models import DeviceStatus
 from app.firmware import service as firmware_service
 from app.health import service as health_service
@@ -1197,6 +1198,8 @@ async def run() -> None:
         "heartbeat": heartbeat_loop,
         "command_expiry": lambda: command_expiry_loop(f),
         "pruning": lambda: pruning_loop(f),
+        # Made-up readings for simulated devices, published through EMQX like a board's.
+        "simulator": lambda: simulator.simulator_loop(f),
     }
     try:
         await asyncio.gather(*(supervise(name, start) for name, start in loops.items()))

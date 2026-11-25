@@ -23,6 +23,9 @@ class DeviceCreateRequest(BaseModel):
     # onboarding "from the hardware". Exactly one of the two.
     new_template: CatalogEntryCreateRequest | None = None
     zone_id: uuid.UUID | None = None
+    # Its readings are made up by the platform (app.devices.simulator), for
+    # trying things without a board. At most MAX_SIMULATED_DEVICES per workspace.
+    simulated: bool = False
 
     @model_validator(mode="after")
     def _one_template(self) -> Self:
@@ -39,6 +42,9 @@ class DeviceUpdateRequest(BaseModel):
     # This device's own wiring. Explicit null goes back to the template's;
     # omitted leaves it unchanged.
     hardware: HardwareConfig | None = None
+    # false stops simulating it (a real board takes over); a device is never
+    # turned into a simulated one after it's made.
+    simulated: Literal[False] | None = None
 
 
 class DeviceResponse(BaseModel):
@@ -50,6 +56,8 @@ class DeviceResponse(BaseModel):
     hardware: HardwareConfig | None = None
     slug: str
     status: str
+    # Readings made up by the platform, not a board (ease-of-use plan B4).
+    simulated: bool = False
     last_seen_at: datetime | None
     created_at: datetime
     # When its credential was last made (create or rotate): the connect flow
