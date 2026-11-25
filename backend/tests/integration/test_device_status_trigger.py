@@ -269,3 +269,70 @@ async def test_going_offline_writes_a_critical_notification_once(
     assert [(n.kind, n.severity) for n in rows] == [("device_offline", "critical")]
     assert rows[0].message == f"{device['device']['slug']} went offline"
     assert str(rows[0].device_id) == device["device"]["id"]
+
+
+async def test_alert_settings_mute_offline_and_announce_back_online(
+    client: httpx.AsyncClient,
+    app_session_factory: async_sessionmaker[AsyncSession],
+    admin_session: AsyncSession,
+    mock_mqtt_client: AsyncMock,
+) -> None:
+    """Ease-of-use C6: a muted device raises no offline alert; with
+    notify_back_online it says when it's back (info, so it never pushes)."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.notifications.models import Notification
+
+    owner = await _register(client, "owner-ds-mute@example.com", "AcmeDSMute")
+    tenant_id = owner["memberships"][0]["tenant_id"]
+    headers = _auth_headers(owner, tenant_id)
+    device = await _create_device(client, headers)
+    device_id = device["device"]["id"]
+
+    async def kinds() -> list[tuple[str, str]]:
+        rows = (
+            (await admin_session.execute(select(Notification).order_by(Notification.created_at)))
+            .scalars()
+            .all()
+        )
+        return [(n.kind, n.severity) for n in rows]
+
+    resp = await client.patch(
+        f"/devices/{device_id}",
+        json={
+            "notify_back_online": True,
+            "alerts_muted_until": (datetime.now(UTC) + timedelta(hours=1)).isoformat(),
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["notify_back_online"] is True and resp.json()["alerts_muted_until"]
+
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=True)  # baseline
+    await _send_status(
+        app_session_factory, mock_mqtt_client, device, online=False
+    )  # muted: nothing
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=True)  # muted: nothing
+    assert await kinds() == []
+
+    # Unmuted (explicit null): offline alerts again, and back online is said.
+    resp = await client.patch(
+        f"/devices/{device_id}", json={"alerts_muted_until": None}, headers=headers
+    )
+    assert resp.json()["alerts_muted_until"] is None
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=False)
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=True)
+    assert await kinds() == [("device_offline", "critical"), ("device_online", "info")]
+
+    # A mute that has run out doesn't count.
+    await client.patch(
+        f"/devices/{device_id}",
+        json={
+            "alerts_muted_until": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+            "notify_back_online": False,
+        },
+        headers=headers,
+    )
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=False)
+    await _send_status(app_session_factory, mock_mqtt_client, device, online=True)
+    assert [k for k, _ in await kinds()] == ["device_offline", "device_online", "device_offline"]

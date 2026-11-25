@@ -45,6 +45,9 @@ class DeviceUpdateRequest(BaseModel):
     # false stops simulating it (a real board takes over); a device is never
     # turned into a simulated one after it's made.
     simulated: Literal[False] | None = None
+    # Alert settings: explicit null unmutes; omitted leaves them unchanged.
+    alerts_muted_until: datetime | None = None
+    notify_back_online: bool | None = None
 
 
 class DeviceResponse(BaseModel):
@@ -58,6 +61,9 @@ class DeviceResponse(BaseModel):
     status: str
     # Readings made up by the platform, not a board (ease-of-use plan B4).
     simulated: bool = False
+    # Alert settings (ease-of-use C6).
+    alerts_muted_until: datetime | None = None
+    notify_back_online: bool = False
     last_seen_at: datetime | None
     created_at: datetime
     # When its credential was last made (create or rotate): the connect flow
