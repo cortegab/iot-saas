@@ -10,6 +10,7 @@ import { Tag } from "@/components/ui/Badge";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { DeviceTile } from "@/components/devices/DeviceTile";
 import { useInterfaceMode } from "@/hooks/useInterfaceMode";
+import { capital, words } from "@/lib/simple-words";
 import { DeviceStatusPill } from "@/components/ui/ConnectionBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
@@ -49,6 +50,7 @@ export default function DevicesPage() {
   const list = useListState({ status: "all", template: "all", zone: "all", view: "auto" }, { key: "name", dir: "asc" });
   // Tiles by zone (DESIGN.md §8, §15a): the default in Simple view, a toggle in Full.
   const { simple } = useInterfaceMode();
+  const w = words(simple);
   const view = list.filters.view === "tiles" || list.filters.view === "table" ? list.filters.view : simple ? "tiles" : "table";
   const zoneName = useMemo(() => new Map((zones ?? []).map((z) => [z.id, z.name])), [zones]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -127,7 +129,7 @@ export default function DevicesPage() {
     },
     {
       id: "template",
-      header: "Template",
+      header: capital(w.template),
       sortable: true,
       hideOnPhone: true,
       priority: 3,
@@ -145,7 +147,7 @@ export default function DevicesPage() {
     },
     {
       id: "zone",
-      header: "Zone",
+      header: capital(w.zone),
       sortable: true,
       hideOnPhone: true,
       priority: 2,
@@ -177,7 +179,7 @@ export default function DevicesPage() {
   if (list.filters.zone !== "all") {
     chips.push({
       id: "zone",
-      label: `Zone: ${list.filters.zone === "none" ? "No zone" : (zoneName.get(list.filters.zone) ?? "unknown")}`,
+      label: `${capital(w.zone)}: ${list.filters.zone === "none" ? `No ${w.zone}` : (zoneName.get(list.filters.zone) ?? "unknown")}`,
       onRemove: () => list.setFilter("zone", "all"),
     });
   }
@@ -262,7 +264,7 @@ export default function DevicesPage() {
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
-            placeholder="Search name or template"
+            placeholder={`Search name or ${w.template}`}
             activeFilters={[list.filters.template, list.filters.zone].filter((v) => v !== "all").length}
             actions={addAction}
             view={
@@ -290,12 +292,12 @@ export default function DevicesPage() {
             }}
           >
             <Select
-              aria-label="Filter by template"
+              aria-label={`Filter by ${w.template}`}
               value={list.filters.template}
               onChange={(e) => list.setFilter("template", e.target.value)}
               className="w-auto min-w-[170px]"
             >
-              <option value="all">All templates</option>
+              <option value="all">All {w.templates}</option>
               {(templates ?? []).map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -303,18 +305,18 @@ export default function DevicesPage() {
               ))}
             </Select>
             <Select
-              aria-label="Filter by zone"
+              aria-label={`Filter by ${w.zone}`}
               value={list.filters.zone}
               onChange={(e) => list.setFilter("zone", e.target.value)}
               className="w-auto min-w-[150px]"
             >
-              <option value="all">All zones</option>
+              <option value="all">All {w.zones}</option>
               {(zones ?? []).map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.name}
                 </option>
               ))}
-              <option value="none">No zone</option>
+              <option value="none">No {w.zone}</option>
             </Select>
           </ListToolbar>
 
@@ -341,7 +343,7 @@ export default function DevicesPage() {
             <NoResults noun="devices" hidden={total} onClear={list.clearAll} />
           ) : view === "tiles" ? (
             <div className="flex flex-col gap-5">
-              {groupByZone(pageRows, zoneName).map((g) => (
+              {groupByZone(pageRows, zoneName, `No ${w.zone}`).map((g) => (
                 <section key={g.key} aria-label={g.label} className="flex flex-col gap-2.5">
                   <h2 className="text-sm font-semibold text-ink">{g.label}</h2>
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-3">
@@ -399,11 +401,11 @@ export default function DevicesPage() {
 }
 
 /** Tiles grouped by zone, in zone-name order, devices without one last. */
-function groupByZone(rows: DeviceResponse[], zoneName: Map<string, string>) {
+function groupByZone(rows: DeviceResponse[], zoneName: Map<string, string>, noZone: string) {
   const groups = new Map<string, { key: string; label: string; devices: DeviceResponse[] }>();
   for (const d of rows) {
     const key = d.zone_id && zoneName.has(d.zone_id) ? d.zone_id : "none";
-    const label = key === "none" ? "No zone" : zoneName.get(key)!;
+    const label = key === "none" ? noZone : zoneName.get(key)!;
     if (!groups.has(key)) groups.set(key, { key, label, devices: [] });
     groups.get(key)!.devices.push(d);
   }

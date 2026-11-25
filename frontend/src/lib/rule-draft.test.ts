@@ -10,6 +10,7 @@ import {
   flappingRisk,
   insertBeside,
   onOffPhrase,
+  behaviourSentence,
   removeNode,
   setGroupOp,
   validateDraft,
@@ -365,5 +366,31 @@ describe("onOffPhrase", () => {
     expect(onOffPhrase(c("==", 2), "bool")).toBeNull();
     expect(onOffPhrase(c("==", 1, "metric"), "bool")).toBeNull();
     expect(onOffPhrase(c("==", 1), undefined)).toBeNull();
+  });
+});
+
+describe("behaviourSentence", () => {
+  const reading = (over: Partial<RuleDraft> = {}): RuleDraft => {
+    const d = emptyDraft("dev");
+    d.condition = { ...emptyContact("dev"), metric: "temperature", operator: ">", value: 30, hysteresis: 1 };
+    return { ...d, forDuration: 10, cooldown: 60, ...over };
+  };
+  it("says the safety settings by what they do", () => {
+    expect(behaviourSentence(reading(), () => "°C")).toBe(
+      "It waits 10 s before acting, re-arms only once the reading is 1 °C back past the limit and acts at most once a minute.",
+    );
+  });
+  it("covers latch, clear delay, longer intervals and no hold", () => {
+    const d = reading({ forDuration: 0, cooldown: 300, behaviour: "latch" });
+    expect(behaviourSentence(d)).toBe(
+      "It acts as soon as it's true, re-arms only once the reading is 1 back past the limit, acts at most once every 5 min and then stays latched until someone resets it.",
+    );
+    expect(behaviourSentence(reading({ cooldown: 3600 }))).toMatch(/acts at most once an hour/);
+  });
+  it("an event rule has only its interval", () => {
+    const d = emptyDraft("dev");
+    d.when = { ...d.when, type: "device_status", statusDeviceId: "dev", transition: "disconnected" };
+    expect(behaviourSentence({ ...d, cooldown: 60 })).toBe("It acts at most once a minute.");
+    expect(behaviourSentence({ ...d, cooldown: 0 })).toBe("It acts every time it's true.");
   });
 });
