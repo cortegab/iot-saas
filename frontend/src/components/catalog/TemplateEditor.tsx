@@ -38,6 +38,7 @@ import {
   blankTemplate,
   brokenUsages,
   draftToRequest,
+  EMPTY_TEMPLATE_WARNING,
   keepReading,
   keyedRows,
   matchingTemplate,
@@ -439,6 +440,11 @@ export function TemplateEditor({
           { label: "Actuators", value: none(d.actuators.length, "None") ?? d.actuators.map((a) => a.name || "Unnamed").join(", "), step: "data" },
         ]}
       />
+      {editor.warningFor(EMPTY_TEMPLATE_WARNING) && (
+        <Callout tone="warning">
+          <b className="font-medium">Nothing to read or switch.</b> {editor.warningFor(EMPTY_TEMPLATE_WARNING)}
+        </Callout>
+      )}
       {editor.visibleErrors.length > 0 && (
         <div role="alert">
           <Callout tone="error">

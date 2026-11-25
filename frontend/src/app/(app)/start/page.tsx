@@ -129,7 +129,6 @@ export default function GetStartedPage() {
       why: "Done when it sends its first reading. Installing its firmware takes a computer with Chrome or Edge and a USB cable.",
       href: "/devices/new",
       action: "Add device",
-      needs: setup.template ? undefined : "Needs a template",
     },
     {
       key: "rule",
