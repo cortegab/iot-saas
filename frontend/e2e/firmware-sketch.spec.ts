@@ -147,19 +147,27 @@ test("rotating the credential makes a new QR", async ({ page, context, throwaway
   expect(after.pop).not.toBe(before.pop);
 });
 
-test("connect always starts by creating the credential, held in the page only", async ({ page, request }) => {
-  const name = `E2E add ${Date.now()}`;
-  await page.goto("/devices/new");
-  await page.getByLabel("Device name").fill(name);
+test("connect creates a new device's credential at once, held in the page only", async ({ page, request }) => {
+  // Custom firmware, so Connect takes the sketch path (whatever template the
+  // workspace would otherwise default to): the password is shown to store.
+  const stamp = Date.now();
+  await page.goto("/devices/new?from=new&runs=own");
+  await page.getByLabel("Device name").fill(`E2E add ${stamp}`);
+  await page.getByRole("button", { name: "Next: Data" }).click();
+  await page.getByRole("button", { name: /Unnamed/ }).click();
+  await page.getByRole("dialog").getByLabel("Name", { exact: true }).fill("Flow");
+  await page.getByRole("dialog").getByLabel(/^Key/).fill(`e2e-add-${stamp}`);
+  await page.getByRole("dialog").getByRole("button", { name: "Done" }).click();
+  await page.getByRole("button", { name: "Next: Review" }).click();
   await page.getByRole("button", { name: "Create device" }).click();
   await expect(page).toHaveURL(/\/devices\/[0-9a-f-]+\/connect$/);
   const deviceId = page.url().split("/devices/")[1].split("/")[0];
   try {
-    // DESIGN.md §8: nothing is carried over from Add device; Create comes first.
+    // DESIGN.md §8: a device just created gets its credential without a click
+    // (nothing runs on it yet); the one-time marker leaves the URL.
     const username = page.getByLabel("Username", { exact: true });
-    await expect(username).toHaveCount(0);
-    await page.getByRole("button", { name: "Create credential" }).click();
     await expect(username).toHaveValue(deviceId);
+    await expect(page).toHaveURL(/\/connect$/);
     expect(await page.evaluate(() => [...Object.keys(localStorage), ...Object.keys(sessionStorage)].filter((k) => k.includes("credential")))).toEqual([]);
 
     // On a phone: "Step n of N", and nothing scrolls sideways.

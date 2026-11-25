@@ -103,7 +103,7 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
       void revalidate("/devices");
       // Connect starts by creating its credential (DESIGN.md §8): the one
       // made here is never shown.
-      router.push(`/devices/${result.device.id}/connect`);
+      router.push(`/devices/${result.device.id}/connect?fresh=1`);
     } catch (err) {
       setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");
       setSubmitting(false);

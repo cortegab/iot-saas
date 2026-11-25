@@ -238,7 +238,7 @@ export function TemplateEditor({
             });
             void revalidate("/devices");
             void revalidate("/catalog");
-            router.push(`/devices/${result.device.id}/connect`);
+            router.push(`/devices/${result.device.id}/connect?fresh=1`);
           } else if (isNew) {
             const created = await api.post<CatalogEntryResponse>("/catalog", { name: body.name, ...parts });
             if (!draft.enabled) await api.patch(`/catalog/${created.id}`, { status: "disabled" });
