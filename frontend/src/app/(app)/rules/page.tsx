@@ -88,7 +88,6 @@ export default function RulesPage() {
     const c = { armed: 0, latched: 0, disabled: 0, stale: 0, fired: 0 };
     for (const r of rules ?? []) {
       c[ruleStateKey(r)] += 1;
-      if (r.enabled && !r.health.evaluatable) c.stale += 1;
       if (firedIn24h(r)) c.fired += 1;
     }
     return c;
@@ -97,13 +96,13 @@ export default function RulesPage() {
   const filtered = useMemo(() => {
     const rows = (rules ?? []).filter((r) => {
       const st = list.filters.state;
-      if (st === "stale" ? !(r.enabled && !r.health.evaluatable) : st === "fired" ? !firedIn24h(r) : st !== "all" && ruleStateKey(r) !== st) return false;
+      if (st === "fired" ? !firedIn24h(r) : st !== "all" && ruleStateKey(r) !== st) return false;
       if (list.filters.trigger !== "all" && triggerType(r) !== list.filters.trigger) return false;
       if (list.filters.device !== "all" && !ruleDevices(r).some((d) => d.id === list.filters.device)) return false;
       return matchesQuery(list.q, r.name, devicesLine(r), triggerText(r), actionsText(r.actions));
     });
     return sortRows(rows, list.sort, (r, key) => {
-      if (key === "state") return ["armed", "latched", "disabled"].indexOf(ruleStateKey(r));
+      if (key === "state") return ["armed", "stale", "latched", "disabled"].indexOf(ruleStateKey(r));
       if (key === "trigger") return triggerText(r);
       return r.name;
     });
@@ -116,7 +115,8 @@ export default function RulesPage() {
   const actions = useRuleActions();
 
   /** Under the name (demo H): the last 24 hours as a strip and "fired N×",
-   * or the schedule, then what needs a look (shares an actuator / can't evaluate). */
+   * or the schedule, then what needs a look (shares an actuator). Can't evaluate
+   * is the State column's one state, not said twice. */
   function activityLine(r: RuleResponse) {
     const a = activityByRule.get(r.id);
     const schedule = r.trigger.type === "schedule";
@@ -133,7 +133,6 @@ export default function RulesPage() {
             shares {x}
           </Tag>
         ))}
-        {!shared.has(r.id) && r.enabled && !r.health.evaluatable && <Tag size="sm">can&apos;t evaluate</Tag>}
       </span>
     );
   }
@@ -181,7 +180,7 @@ export default function RulesPage() {
   const chips: FilterChip[] = [];
   if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
   if (list.filters.state !== "all" && !showFailed) {
-    const label = list.filters.state === "stale" ? "Can't evaluate" : list.filters.state === "fired" ? "Fired in 24 h" : RULE_STATE[list.filters.state as RuleStateKey]?.label;
+    const label = list.filters.state === "fired" ? "Fired in 24 h" : RULE_STATE[list.filters.state as RuleStateKey]?.label;
     chips.push({ id: "state", label: `State: ${label}`, onRemove: () => list.setFilter("state", "all") });
   }
   if (list.filters.device !== "all") {

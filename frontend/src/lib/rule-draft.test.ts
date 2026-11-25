@@ -9,6 +9,7 @@ import {
   emptyDraft,
   flappingRisk,
   insertBeside,
+  onOffPhrase,
   removeNode,
   setGroupOp,
   validateDraft,
@@ -347,5 +348,22 @@ describe("emptyDraft", () => {
   it("starts schedules in the workspace time zone, UTC by default", () => {
     expect(emptyDraft(DEV_A).when.timezone).toBe("UTC");
     expect(emptyDraft(DEV_A, "Europe/Madrid").when.timezone).toBe("Europe/Madrid");
+  });
+});
+
+describe("onOffPhrase", () => {
+  const c = (operator: string, value: number, rhsKind: "static" | "metric" = "static") => ({ operator, value, rhsKind });
+  it("reads an on/off reading against 0 or 1 as a state", () => {
+    expect(onOffPhrase(c("==", 1), "bool")).toBe("is on");
+    expect(onOffPhrase(c("==", 0), "bool")).toBe("is off");
+    expect(onOffPhrase(c("!=", 1), "bool")).toBe("is off");
+    expect(onOffPhrase(c("!=", 0), "bool")).toBe("is on");
+  });
+  it("keeps the symbol for numbers, other operators or another reading", () => {
+    expect(onOffPhrase(c("==", 1), "float")).toBeNull();
+    expect(onOffPhrase(c(">", 0), "bool")).toBeNull();
+    expect(onOffPhrase(c("==", 2), "bool")).toBeNull();
+    expect(onOffPhrase(c("==", 1, "metric"), "bool")).toBeNull();
+    expect(onOffPhrase(c("==", 1), undefined)).toBeNull();
   });
 });

@@ -12,7 +12,6 @@ import { DropdownMenu } from "@/components/ui/DropdownMenu";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { StateChip } from "@/components/ui/StateChip";
 import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import { MiniStrip } from "@/components/ui/MiniStrip";
 import { Callout } from "@/components/ui/Callout";
@@ -133,11 +132,8 @@ export default function EditRulePage() {
                 <span className="flex flex-wrap items-center gap-x-1.5">
                   <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
                   {rule.trigger.type === "schedule" ? (lastFired ? `fired ${timeAgo(lastFired)}` : "never fired") : fired ? `fired ${fired}× in 24 h` : "quiet in 24 h"}
-                  {unhealthy && (
-                    <StateChip label="Can't evaluate" className="ml-1">
-                      <b className="font-medium">{unhealthy}.</b> Missing data never fires or clears it.
-                    </StateChip>
-                  )}
+                  {/* One state (Can't evaluate replaces Armed), and why, in words. */}
+                  {unhealthy && <span>· {unhealthy}. Missing data never fires or clears it.</span>}
                 </span>
               }
               title={rule.name}

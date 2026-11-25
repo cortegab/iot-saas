@@ -8,5 +8,7 @@ test("a rule referencing a metric with no telemetry shows the can't-evaluate bad
 
   const row = page.getByRole("row", { name: ruleUnderTest.name });
   await expect(row).toBeVisible();
-  await expect(row.getByText("Can't evaluate")).toBeVisible();
+  // One state per rule: Can't evaluate replaces Armed, and isn't repeated.
+  await expect(row.getByText("Can't evaluate", { exact: true })).toHaveCount(1);
+  await expect(row.getByText("Armed", { exact: true })).toHaveCount(0);
 });
