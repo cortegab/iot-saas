@@ -770,7 +770,8 @@ path (CLAUDE.md §9.1).
 - Each row: a numbered circle (a ✓ once done; the next step in accent with the 3 px accent bar),
   the title, one sentence, or what it's waiting for ("Needs a connected device") in its place, and
   one button that opens the real page (the next step's is primary; a done step's says **Open**).
-  Rows waiting on an earlier step stay clickable.
+  Rows waiting on an earlier step stay clickable. **Connect a device** never waits on the template
+  step: Add device's *Something new* makes the template too (and ticks that step).
 - **Live finish:** once a device has reported, its row shows the latest reading ("bay1 ·
   temperature 24.1, just now"). The rule step opens the recipes with that device (`?device=`).
 - **Done:** a "Setup complete" callout with **Open your dashboard**; sign-in lands there from then on.
@@ -1123,3 +1124,4 @@ restyled.
 | 2026-11-19 | §8, §15 **actuator rows tell the truth** (platform audit U3): until the device confirms, the row says "Requested Off · not confirmed, last confirmed On" (the newest acknowledged command), so a control showing what was asked never passes for the device's state; **No response** now also comes from the server (commands.expired_at). The confirm names any enabled rule that also switches the actuator ("The rule Too hot also switches it and may switch it back."). A manual command says who sent it ("sent by Ana", "by you"; commands.requested_by). Web and app. |
 | 2026-11-19 | §8, §13, §15 **alarm lifecycle** (platform audit U2): an alert row and its sheet say *Acknowledged by Ana, 5 min ago: "on my way"* or *Cleared 2 min ago*; owners and admins get **Acknowledge** (row menu; the sheet's primary button, with an optional note) and keep **Dismiss**, viewers read only. The state filter gains **Needs attention** (not acknowledged, not cleared); the attention strip says "critical alarms" and links there. The app's Alerts tab matches (Acknowledge in the sheet and the row's ⋯). |
 | 2026-11-20 | §4, §12, §15 **app parity and accessibility** (platform audit U5): the app shows the web's **Reconnecting… / Live updates are off** banner under the brand bar (after 1.5 s down); the device screen's **Health** has the web's facts (signal in words, last restart, sensors with failing ones in the error colour, memory, Wi-Fi rejoins), stale reading values are dimmed, and **Controls** is left out when the device has no actuators; the device list says its status in words beside the dot; a disabled button shows muted colours instead of fading to 55 %; the Switch sits in a 44 px target; the rule sheet says **Enabled / Disabled**. |
+| 2026-11-24 | §8, §10.1 **a first device is never empty by accident** (ease-of-use plan A1): the template wizard's Review (also Add device → Something new) shows a warning callout "Nothing to read or switch" when it has no metrics and no actuators; it never blocks Create. Get started's **Connect a device** no longer says "Needs a template". |

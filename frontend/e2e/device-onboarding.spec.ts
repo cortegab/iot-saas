@@ -71,6 +71,17 @@ test("something new on our firmware: parts make the template, readings are named
   }
 });
 
+test("a device with no parts gets a warning on Review, never a block", async ({ page }) => {
+  await page.goto("/devices/new?from=new");
+  await page.getByLabel("Device name").fill(`E2E bare ${Date.now()}`);
+  await page.getByRole("button", { name: "Next: Hardware" }).click();
+  await page.getByRole("button", { name: "Next: Data" }).click();
+  await page.getByRole("button", { name: "Next: Review" }).click();
+  await expect(page.getByText("Nothing to read or switch.")).toBeVisible();
+  await expect(page.getByText(/parts wired to the board on Hardware/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create device" })).toBeEnabled();
+});
+
 test("something new on its own code: no wiring, its data listed, it lands on the sketch", async ({ page, request }) => {
   const { accessToken, tenantId } = await login(request);
   const headers = { authorization: `Bearer ${accessToken}`, "x-tenant-id": tenantId };

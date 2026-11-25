@@ -29,6 +29,9 @@ export const KEY_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 /** Reserved device-contract segments (CLAUDE.md §4). */
 export const RESERVED_METRIC_KEYS = ["status", "config", "ota"];
 
+/** Warning path for a template with no metrics and no actuators (shown on Review). */
+export const EMPTY_TEMPLATE_WARNING = "review.empty";
+
 export interface MetricDraft {
   uid: string;
   name: string;
@@ -323,6 +326,13 @@ export function validateTemplate(
     }
     if (a.value_type === "string" && !a.allowed.trim()) errors[p + "allowed"] = "List the values it accepts, separated by commas.";
   });
+
+  // Allowed (a template can be filled in later), but a device on it shows nothing and has nothing to switch.
+  if (d.metrics.length === 0 && d.actuators.length === 0)
+    warnings[EMPTY_TEMPLATE_WARNING] =
+      d.runsOn === "own_code"
+        ? "It won't send readings or switch anything yet. Add a metric or an actuator on Data."
+        : "It won't send readings or switch anything yet. Add the parts wired to the board on Hardware.";
 
   return { errors, warnings };
 }
