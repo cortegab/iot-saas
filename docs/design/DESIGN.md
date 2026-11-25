@@ -553,6 +553,13 @@ The most complex screen. It presents the rule model from `lib/rule-draft.ts` and
   - Warn when humidity drops
   - Stop the pump when the tank is low (latches)
   - Switch something on a schedule
+  - Notify me when a reading is too high (2026-11-24; what a reading's *Alert me…* opens)
+- **Shortcuts** (ease-of-use plan B2): on the device page, each reading's foot has **Alert me…**
+  (a number: *Notify me when a reading is too high*, limit at ¾ of its range; on/off: *Alert when a
+  door stays open*) and each on/off output row has **Automate…** (*Turn something on when it's too
+  hot*). Both open the recipe's one screen with that reading or output filled in
+  (`/rules/new?recipe=…&device=…&metric=…` / `&actuatorDevice=…&actuator=…`), for people who can
+  write rules. **Recipes** drops the prefill.
 - A recipe arrives with its parts in place (the comparison and a sensible limit, the action and
   its value, behaviour and timings) and **no device**: each reading, switch and watched device is
   picked in the When / If / Then steps, whose Next waits until it is. Each recipe suggests a
@@ -1143,3 +1150,4 @@ restyled.
 | 2026-11-24 | §8 device page (ease-of-use plan A4): **Controls lead Overview** (heading *Controls*, then the actuator rows, above the readouts), as a smart-home card puts the switch first; the old Controls tab becomes **Commands** (the command timeline only), and `?tab=controls` / `?tab=actuators` open Overview. A never-connected device says once, in its waiting callout, that commands wait in its desired state. **Health leads with one word** beside its heading for an online device: Healthy · Sensor not answering · Restarted after a fault · Weak Wi-Fi · Battery low (`@iodriven/shared/device-health`; offline and never connected stay the status beside the name). Firmware, uptime, memory, Wi-Fi rejoins and the MQTT id move under a **Details** disclosure. The app adopts the word with its next release. |
 | 2026-11-24 | §4, §12 shell (ease-of-use plan A5): the **full sidebar with labels starts at 1280 px** (was 1440), so a 1280–1439 px laptop reads every destination instead of nine unlabelled icons; from 1280 px its collapse button turns it into the rail, remembered in that browser (`localStorage`, a per-viewer convenience). Below 1280 px the rail and its pin are unchanged. Members and API keys stay in the nav: with labels showing, regrouping them under Settings wasn't needed. |
 | 2026-11-24 | §9.1 new rule (ease-of-use plan B1): **a recipe opens as one screen**, not the five steps: its blanks as plain fields (the device it reads and the reading, the limit in its unit, the device and output it switches, or the device it watches), the rule's sentence above them (its chips still edit in place), the name, and one line saying the safety settings it keeps ("waits 10 s before acting, re-arms only once the reading is 1 °C back past the limit, acts at most once every 60 s"). The save bar has **Recipes** · **Customize** (the steps, on the same draft) · **Create rule**; Create says what's missing instead of creating. *Start blank* still opens the steps. |
+| 2026-11-24 | §8, §9.1 rule shortcuts (ease-of-use plan B2): a reading's **Alert me…** and an on/off output's **Automate…** on the device page open a recipe's one screen already filled with that reading or output; a seventh recipe, *Notify me when a reading is too high*. No shortcut on offline alerts: they already arrive for every device. |

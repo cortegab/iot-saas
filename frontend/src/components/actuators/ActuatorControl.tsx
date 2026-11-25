@@ -118,6 +118,7 @@ function ActuatorRow({
   sender,
   ruleName,
   onSent,
+  automateHref,
 }: {
   deviceId: string;
   /** The stable wire id — sent to the API and matched against CommandResponse.actuator. */
@@ -140,6 +141,7 @@ function ActuatorRow({
   ruleName: (id: string) => string | undefined;
   /** Re-fetches the device's commands; resolves with the fresh list. */
   onSent: () => Promise<CommandResponse[] | undefined>;
+  automateHref?: string;
 }) {
   const api = useApi();
   const { confirm, dialog } = useConfirm();
@@ -270,6 +272,11 @@ function ActuatorRow({
           )}
         </span>
         {error && <span className="text-xs text-status-error">{error}</span>}
+        {automateHref && kind === "switch" && (
+          <Link href={automateHref} className="link-inline w-fit text-xs" aria-label={`Automate ${actuatorLabel}`}>
+            Automate…
+          </Link>
+        )}
       </div>
       {isAdmin &&
         (kind === "switch" ? (
@@ -315,9 +322,12 @@ export function ActuatorControl({
   deviceDisabled = false,
   catalogEntryId,
   wiring,
+  automateHref,
 }: {
   deviceId: string;
   deviceOnline: boolean;
+  /** An on/off output's "Automate…" link (device page; ease-of-use B2). */
+  automateHref?: (actuatorId: string) => string | undefined;
   /** A disabled device can't connect: its controls are off. */
   deviceDisabled?: boolean;
   catalogEntryId: string;
@@ -368,6 +378,7 @@ export function ActuatorControl({
           sender={(c) => manualSender(c, members, me?.id)}
           ruleName={(rid) => ruleNames.get(rid)}
           onSent={() => mutateCommands()}
+          automateHref={automateHref?.(id)}
         />
       ))}
     </div>

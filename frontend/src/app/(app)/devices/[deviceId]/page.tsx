@@ -58,11 +58,14 @@ function Readouts({
   metrics,
   latest,
   thresholds,
+  canAutomate,
 }: {
   device: DeviceResponse;
   metrics: CatalogMetric[];
   latest: TelemetryLatestResponse[];
   thresholds: Record<string, ChartThreshold[]>;
+  /** Offer "Alert me…" (rules.write): opens a recipe filled with this reading. */
+  canAutomate: boolean;
 }) {
   const byMetric = new Map(latest.map((l) => [l.metric, l]));
   // Undeclared metrics a device still publishes (legacy templates) come after.
@@ -90,6 +93,18 @@ function Readouts({
             freshness={readingFreshness(!stale, meta, reading?.time)}
             stale={!!reading && stale}
             stamp={!reading ? "Nothing received yet" : stale ? `Last value, ${timeAgo(reading.time)}` : timeAgo(reading.time)}
+            action={
+              canAutomate && meta ? (
+                // A number: notify above a limit; an on/off reading: alert when it stays on (ease-of-use B2).
+                <Link
+                  href={`/rules/new?recipe=${numeric ? "reading-high" : "door-open"}&device=${device.id}&metric=${encodeURIComponent(id)}`}
+                  className="link-inline"
+                  aria-label={`Alert me about ${meta.name}`}
+                >
+                  Alert me…
+                </Link>
+              ) : undefined
+            }
           />
         );
       })}
@@ -269,12 +284,19 @@ export default function DeviceDetailPage() {
                     : `The device is ${st.label.toLowerCase()}. Commands wait in its desired state and apply when it reconnects, if still within their time limit.`}
                 </Callout>
               )}
-              <ActuatorControl deviceId={deviceId} deviceOnline={online} deviceDisabled={disabled} catalogEntryId={device.catalog_entry_id} wiring={device.hardware} />
+              <ActuatorControl
+                deviceId={deviceId}
+                deviceOnline={online}
+                deviceDisabled={disabled}
+                catalogEntryId={device.catalog_entry_id}
+                wiring={device.hardware}
+                automateHref={can("rules.write") ? (actuator) => `/rules/new?recipe=too-hot&actuatorDevice=${deviceId}&actuator=${encodeURIComponent(actuator)}` : undefined}
+              />
             </section>
           )}
 
           {latest && (metrics.length > 0 || hasReadings) ? (
-            <Readouts device={device} metrics={metrics} latest={latest} thresholds={thresholdsByMetric} />
+            <Readouts device={device} metrics={metrics} latest={latest} thresholds={thresholdsByMetric} canAutomate={can("rules.write")} />
           ) : !latestLoading && template && metrics.length === 0 ? (
             <p className="text-sm text-ink-muted">
               {actuators.length > 0 ? "It has nothing to read, only the controls above." : "Its template has no metrics."}

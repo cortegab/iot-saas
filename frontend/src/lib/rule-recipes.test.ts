@@ -60,7 +60,7 @@ describe("recipesFor", () => {
 describe("recipeStarts", () => {
   it("offers every recipe without a device, its devices left to pick", () => {
     const all = recipeStarts("UTC");
-    expect(all.map((r) => r.id)).toEqual(["offline", "too-hot", "door-open", "humidity-low", "tank-low", "schedule"]);
+    expect(all.map((r) => r.id)).toEqual(["offline", "too-hot", "door-open", "reading-high", "humidity-low", "tank-low", "schedule"]);
     for (const r of all) {
       const c = r.draft.condition;
       if (c?.kind === "contact") expect(c.deviceId).toBe("");
@@ -73,7 +73,7 @@ describe("recipeStarts", () => {
 
   it("from a device page, puts what that device can run first, filled with it", () => {
     const ids = recipeStarts("UTC", pumphouse).map((r) => r.id);
-    expect(ids).toEqual(["offline", "too-hot", "tank-low", "schedule", "door-open", "humidity-low"]);
+    expect(ids).toEqual(["offline", "too-hot", "tank-low", "schedule", "door-open", "reading-high", "humidity-low"]);
     const tank = recipeStarts("UTC", pumphouse).find((r) => r.id === "tank-low")!;
     expect(tank.draft.actions[0]).toMatchObject({ kind: "actuator", deviceId: pumphouse.id });
     expect(recipeStarts("UTC", pumphouse).find((r) => r.id === "door-open")!.draft.condition).toMatchObject({ deviceId: "" });
