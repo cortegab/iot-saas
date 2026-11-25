@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     # `simulated`, and read their cmd/state. Off (EMQX refuses it, the loop
     # idles) while the password is empty, or the dev placeholder on a public
     # https deployment.
+    # Sign in with Google (ease-of-use plan B5): the OAuth client ids an ID
+    # token may be for (its `aud`). Public values. Both empty = off.
+    google_client_id_web: str = ""
+    google_client_id_android: str = ""
+
     mqtt_simulator_username: str = "__simulator__"
     mqtt_simulator_password: SecretStr = SecretStr("dev-only-change-me")
 
@@ -175,6 +180,14 @@ class Settings(BaseSettings):
                 f"{', '.join(placeholders)} still {'has' if len(placeholders) == 1 else 'have'} "
                 f"the development placeholder; set real secrets for {self.app_base_url}"
             )
+
+    @property
+    def google_audiences(self) -> list[str]:
+        return [
+            c
+            for c in (self.google_client_id_web.strip(), self.google_client_id_android.strip())
+            if c
+        ]
 
     @property
     def simulator_enabled(self) -> bool:

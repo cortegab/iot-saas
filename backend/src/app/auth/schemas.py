@@ -13,6 +13,17 @@ class RegisterRequest(BaseModel):
     name: str | None = Field(default=None, max_length=200)
 
 
+class GoogleSignInRequest(BaseModel):
+    """Sign in (or sign up) with a Google ID token (ease-of-use plan B5)."""
+
+    id_token: str = Field(min_length=20, max_length=8192)
+    # A new account's first workspace (Register's field); ignored for an
+    # existing account or when joining by invitation.
+    tenant_name: str | None = Field(default=None, max_length=100)
+    # Join that invitation's workspace (its email must be the Google one).
+    invitation_token: str | None = Field(default=None, max_length=200)
+
+
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=320)
     password: str

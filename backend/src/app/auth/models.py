@@ -27,7 +27,10 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(nullable=False, unique=True)
     name: Mapped[str | None] = mapped_column(nullable=True)
-    password_hash: Mapped[str] = mapped_column(nullable=False)
+    # Null for an account made with Google until a password is set (forgot password).
+    password_hash: Mapped[str | None] = mapped_column(nullable=True)
+    # Google's stable id for this person (an ID token's `sub`), once they sign in with Google.
+    google_sub: Mapped[str | None] = mapped_column(nullable=True, unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

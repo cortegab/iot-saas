@@ -19,6 +19,7 @@ from argon2 import exceptions as argon2_exceptions
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.auth.google import GoogleIdentity
 from app.auth.models import PasswordResetToken, RefreshToken, User
 from app.config import settings
 from app.redis import redis_client
@@ -30,6 +31,10 @@ _hasher = PasswordHasher()
 
 class EmailAlreadyRegisteredError(Exception):
     pass
+
+
+class GoogleAccountMismatchError(Exception):
+    """The email belongs to an account already linked to a different Google account."""
 
 
 class InvalidCredentialsError(Exception):
@@ -130,13 +135,46 @@ async def register_user(
     return user, tenant
 
 
+async def user_for_google(
+    session: AsyncSession, identity: GoogleIdentity, tenant_name: str | None
+) -> tuple[User, bool]:
+    """The account a verified Google identity signs in to, and whether it was
+    just made (ease-of-use plan B5). By Google's `sub` first; else the account
+    with that email, which gets linked (Google verified the address); else a
+    new account with no password, plus a workspace named `tenant_name` when
+    given (sign-up; an invitation supplies the workspace instead)."""
+    result = await session.execute(select(User).where(User.google_sub == identity.sub))
+    user = result.scalar_one_or_none()
+    if user is not None:
+        return user, False
+    user = await get_user_by_email(session, identity.email)
+    if user is not None:
+        if user.google_sub is not None:
+            raise GoogleAccountMismatchError(identity.email)
+        user.google_sub = identity.sub
+        await session.flush()
+        return user, False
+    user = User(
+        email=identity.email, name=identity.name, password_hash=None, google_sub=identity.sub
+    )
+    session.add(user)
+    await session.flush()
+    if tenant_name:
+        await tenants_service.create_tenant_with_owner(session, user_id=user.id, name=tenant_name)
+    return user, True
+
+
 async def authenticate_user(session: AsyncSession, email: str, password: str) -> User:
     normalized_email = email.strip().lower()
     result = await session.execute(select(User).where(User.email == normalized_email))
     user = result.scalar_one_or_none()
     # Generic failure for both "no such user" and "wrong password" — no
     # enumeration signal either way.
-    if user is None or not verify_password(password, user.password_hash):
+    if (
+        user is None
+        or user.password_hash is None
+        or not verify_password(password, user.password_hash)
+    ):
         raise InvalidCredentialsError
     return user
 

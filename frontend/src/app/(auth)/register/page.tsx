@@ -9,13 +9,14 @@ import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { AuthCard } from "@/components/auth/AuthCard";
+import { GoogleSignIn } from "@/components/auth/GoogleSignIn";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { ApiRequestError } from "@/lib/api-client";
 
 /** Create an account (DESIGN.md §10): the workspace is created in the same
  * step, so onboarding goes straight to adding a device. */
 export default function RegisterPage() {
-  const { register } = useAuth();
+  const { register, adoptSession } = useAuth();
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -56,6 +57,16 @@ export default function RegisterPage() {
         </>
       }
     >
+      {/* The workspace name, if typed already, names the new workspace (else "Ana's workspace"). */}
+      <GoogleSignIn
+        text="signup_with"
+        extra={tenantName.trim() ? { tenant_name: tenantName.trim() } : undefined}
+        onSession={(data) => {
+          adoptSession(data);
+          router.replace(HOME);
+        }}
+        onError={setError}
+      />
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3.5">
         <Field label="Workspace name" hint="Your company or site. You can rename it later.">
           <Input required autoComplete="organization" value={tenantName} onChange={(e) => setTenantName(e.target.value)} placeholder="e.g. Northfield Greenhouses" />

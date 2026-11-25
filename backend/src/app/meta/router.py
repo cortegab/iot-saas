@@ -19,4 +19,6 @@ async def client_info() -> ClientInfoResponse:
         min_mobile_version=settings.min_mobile_version,
         latest_mobile_version=settings.latest_mobile_version,
         mobile_update_url=settings.mobile_update_url,
+        google_client_id_web=settings.google_client_id_web.strip() or None,
+        google_client_id_android=settings.google_client_id_android.strip() or None,
     )

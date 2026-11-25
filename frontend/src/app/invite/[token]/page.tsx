@@ -10,6 +10,7 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { AuthCard, AuthScreen } from "@/components/auth/AuthCard";
+import { GoogleSignIn } from "@/components/auth/GoogleSignIn";
 import { ApiRequestError, apiClient } from "@/lib/api-client";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import type { components } from "@/types/api";
@@ -148,6 +149,16 @@ export default function InvitePage() {
     } else {
       body = (
         <AuthCard title={`Join ${preview.tenant_name}`} description={intro}>
+          {/* With the Google account for this email: no password to choose. */}
+          <GoogleSignIn
+            extra={{ invitation_token: token }}
+            onSession={(data) => {
+              const joined = data.memberships.find((m) => m.tenant_name === preview.tenant_name) ?? data.memberships[0];
+              adoptSession(data, joined?.tenant_id);
+              router.replace(HOME);
+            }}
+            onError={setError}
+          />
           <form onSubmit={(e) => void accept(e)} className="flex flex-col gap-3.5">
             <Field label="Email">
               <Input value={preview.email} disabled />
