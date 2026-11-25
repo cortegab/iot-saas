@@ -170,6 +170,16 @@ export const OPERATOR_SYMBOL: Record<string, string> = {
   decreased: "falls",
 };
 
+/** An on/off reading compared with a fixed 0 or 1 reads as a state ("is on",
+ * "is off") instead of "= 1" (DESIGN.md §9.3). Anything else returns null and
+ * keeps the symbol. */
+export function onOffPhrase(c: Pick<ContactDraft, "operator" | "rhsKind" | "value">, dataType: string | null | undefined): "is on" | "is off" | null {
+  if (dataType !== "bool" || c.rhsKind !== "static" || (c.value !== 0 && c.value !== 1)) return null;
+  if (c.operator === "==") return c.value === 1 ? "is on" : "is off";
+  if (c.operator === "!=") return c.value === 1 ? "is off" : "is on";
+  return null;
+}
+
 export const OPERATOR_ARITY: Record<string, OperatorArity> = {
   ">": "one",
   ">=": "one",

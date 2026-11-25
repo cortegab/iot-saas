@@ -10,6 +10,7 @@ import {
   canClear,
   OPERATOR_ARITY,
   OPERATOR_SYMBOL,
+  onOffPhrase,
   OPERATORS,
   type ActuatorActionDraft,
   type ContactDraft,
@@ -144,8 +145,14 @@ export function EditableSentence({
 
   function contactChip(c: ContactDraft) {
     const simple = OPERATOR_ARITY[c.operator] === "one" && c.rhsKind === "static";
-    const unit = catalog.metricFor(c.deviceId, c.metric)?.unit;
-    const label = (
+    const metric = catalog.metricFor(c.deviceId, c.metric);
+    const unit = metric?.unit;
+    const state = onOffPhrase(c, metric?.data_type);
+    const label = state ? (
+      <>
+        {metricName(c)} on {deviceName(c.deviceId)} {state}
+      </>
+    ) : (
       <>
         {metricName(c)} on {deviceName(c.deviceId)} {OPERATOR_SYMBOL[c.operator] ?? c.operator}
         {OPERATOR_ARITY[c.operator] === "one" ? ` ${c.rhsKind === "metric" ? "another reading" : `${c.value}${unit ? ` ${unit}` : ""}`}` : ""}
@@ -225,7 +232,9 @@ export function EditableSentence({
     <Root className={inline ? "leading-[1.9]" : "text-section leading-[2] text-ink"} aria-label="Rule sentence">
       <span>When </span>
       {when ?? <span className="text-ink-muted">…</span>}
-      {w.type === "metric" && (
+      {/* No hold time reads "…, immediately turn…" instead of "for 0 s"; the
+          same chip sets one. */}
+      {w.type === "metric" && draft.forDuration > 0 && (
         <>
           <span> for </span>
           <Chip label={`${draft.forDuration} s`}>
@@ -234,6 +243,14 @@ export function EditableSentence({
         </>
       )}
       <span>, </span>
+      {w.type === "metric" && draft.forDuration === 0 && (
+        <>
+          <Chip label="immediately">
+            {(close) => <DurationEditor seconds={draft.forDuration} close={close} onApply={(forDuration) => update({ ...draft, forDuration })} />}
+          </Chip>
+          <span> </span>
+        </>
+      )}
       {draft.actions.length ? draft.actions.map(actionPhrase) : <span className="text-ink-muted">do nothing yet</span>}
       {clearPhrase && <span>; {clearPhrase}</span>}
       <span>.</span>

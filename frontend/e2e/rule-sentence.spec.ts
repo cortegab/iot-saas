@@ -13,7 +13,8 @@ test("sentence chips edit the threshold and hold in place, and the save toast li
   await expect(sentence.getByRole("button", { name: /= 2$/ })).toBeVisible();
 
   // The hold chip; Esc cancels and returns focus to the chip.
-  const hold = sentence.getByRole("button", { name: /^\d+ s$/ });
+  // No hold time reads "immediately"; the same chip sets one.
+  const hold = sentence.getByRole("button", { name: /^(\d+ s|immediately)$/ });
   await hold.click();
   await page.keyboard.press("Escape");
   await expect(hold).toBeFocused();

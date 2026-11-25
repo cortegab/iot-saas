@@ -4,11 +4,10 @@ import { actionsText, ruleStateKey, triggerText, type RuleStateKey } from "@iodr
 type RuleResponse = components["schemas"]["RuleResponse"];
 
 /** The rules list's filter (the web's state filter, DESIGN.md §6 / §8). */
-export type RuleFilter = "all" | RuleStateKey | "stale";
+export type RuleFilter = "all" | RuleStateKey;
 
 export function matchesFilter(r: RuleResponse, filter: RuleFilter): boolean {
   if (filter === "all") return true;
-  if (filter === "stale") return r.enabled && !r.health.evaluatable;
   return ruleStateKey(r) === filter;
 }
 
@@ -16,7 +15,6 @@ export function ruleCounts(rules: RuleResponse[]): Record<RuleFilter, number> {
   const c: Record<RuleFilter, number> = { all: rules.length, armed: 0, latched: 0, disabled: 0, stale: 0 };
   for (const r of rules) {
     c[ruleStateKey(r)] += 1;
-    if (r.enabled && !r.health.evaluatable) c.stale += 1;
   }
   return c;
 }

@@ -117,6 +117,9 @@ export function PageHeader({
 }: PageHeaderProps) {
   const crumbs = breadcrumbs ?? (back ? [{ label: back.label, href: back.href }] : undefined);
   const desc = description ?? subtitle;
+  // A rich description (the rule page's editable sentence holds a <fieldset>)
+  // can't sit in a <p>: that breaks hydration.
+  const Desc = typeof desc === "string" ? "p" : "div";
   const h1 = (
     <h1 className="flex flex-wrap items-center gap-3 text-title font-semibold leading-[1.2] tracking-[-0.015em] text-ink">{title}</h1>
   );
@@ -129,7 +132,7 @@ export function PageHeader({
           inline ? (
             <div className="flex min-w-0 flex-wrap items-baseline gap-x-4 gap-y-1">
               {h1}
-              {desc && <p className="max-w-[64ch] text-ink-muted">{desc}</p>}
+              {desc && <Desc className="max-w-[64ch] text-ink-muted">{desc}</Desc>}
             </div>
           ) : (
             h1
@@ -138,7 +141,7 @@ export function PageHeader({
         actions={actions}
         menu={menu}
       >
-        {desc && !inline && <p className="mt-1 max-w-[64ch] text-ink-muted">{desc}</p>}
+        {desc && !inline && <Desc className="mt-1 max-w-[64ch] text-ink-muted">{desc}</Desc>}
         {meta && (
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-meta text-ink-muted [&_b]:font-medium [&_b]:text-ink">
             {meta}
