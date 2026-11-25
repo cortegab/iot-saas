@@ -1025,6 +1025,33 @@ restyled.
   version, and **Get the update** (the Play listing, or the test releases until then). A failed
   check never blocks; the app opens as usual.
 
+## 15a. Simple view (for an integrator's clients)
+
+Ease-of-use plan C, user decisions 2026-11-24: integrators set a system up; their clients use it. One
+platform, one codebase: **Simple view hides and rewords, it never changes what anything does** and is
+not a permission (the API still enforces roles).
+
+- **Who:** a choice per person per workspace (`tenant_memberships.interface_mode`: `simple` | `full`,
+  null = the role's default: **Viewer → Simple**, Owner and Admin → Full). The account menu (web) and
+  More (app) have **Simple view** as a Switch; it applies at once and is remembered on the server.
+- **Navigation in Simple:** Dashboards · Devices · Notifications · Rules (labelled *Automations*).
+  Hidden: Device templates, Zones, Members, API keys (Workspace settings stays for owners and admins).
+  The command palette offers the same set.
+- **Devices in Simple:** tiles grouped by zone (§8 *Device tiles*): each tile has the name, its state
+  in words, the main reading and a Switch for its first on/off output. The table is one toggle away
+  in Full.
+- **A device page in Simple:** Overview and Rules only. Controls lead, readings follow, Health shows
+  its one word; Details, Commands, Settings, wiring and MQTT ids are hidden.
+- **Rules in Simple ("Automations"):** the list and each rule's sentence; the editor opens on Basics
+  and the sentence. Hidden: the Ladder view and the Behaviour tab's numbers, which read as one line
+  ("Waits 10 s, then acts at most once a minute.").
+- **Words in Simple** (§11 glossary, Simple column): metric → *sensor reading*, actuator →
+  *output*, rule → *automation*, template → *device type*, zone → *area*, credential and MQTT are
+  never shown.
+- **Scenes:** rules with a manual trigger that an admin marked *Clients can run it* show as buttons on
+  dashboards and in the app (§8 *Scene button*). That is the one thing Simple can do that Full can't
+  already: run a rule its role couldn't otherwise run.
+
 ## 16. Reference and changelog
 
 **Reference demos** (open locally in a browser; no build needed):
@@ -1154,3 +1181,4 @@ restyled.
 | 2026-11-24 | §8 template wizard and Add device → Something new (ease-of-use plan B3): while a new build on our firmware has no parts, the Hardware step opens with **Start from a kit**: four cards (Greenhouse climate: DHT22 + fan relay · Tank level: HC-SR04 + pump relay · Door contact: digital input · Cold room: DS18B20). A kit adds its parts exactly as Add part does (free pins, the board's checks) and names what they bring ("Air temperature", "Fan"); a toast says to check the pins against the real wiring. The cards leave once there are parts; everything stays editable. Kits live in `frontend/src/lib/starter-kits.ts` (no backend). |
 | 2026-11-24 | §8, §10.1 **simulated devices** (ease-of-use plan B4): Add device has a third start, **No board yet** (`?from=simulated`): pick a kit (B3's four), name it ("Greenhouse climate (simulated)"), **Create simulated device**; it opens on the device page. A simulated device carries a **Simulated** tag beside its status (device page title, devices list), and its Overview opens with an info callout: "Simulated. The platform makes up its readings every 5 seconds and answers its commands; switching a fan on cools it." with **Try a rule on it** (the matching recipe, filled: B2) and **Stop simulating** (admins). Its header shows no Install. The devices list's first-use text and Get started's device step point to it. At most three per workspace. |
 | 2026-11-24 | §10 sign-in (ease-of-use plan B5): **Continue with Google** on Sign in, Create your account and an invitation's new-account form, above the email form with a divider "or with your email". It is **Google's own button** (rendered by Google Identity Services, outline, large, full width), a deliberate exception to "one button pattern": Google's brand rules require it. It shows only when the API has a Google client id (`GET /meta/client`). Sign-up takes the typed workspace name, else "Ana's workspace"; an invitation needs the invited email's Google account. |
+| 2026-11-24 | §15a **Simple view** (ease-of-use plan C, docs first): a per-person, per-workspace view (Viewer default Simple, Owner/Admin Full) that hides templates, zones, members, keys, the ladder, wiring and ids, shows devices as tiles and rules as *Automations*, and adds scene buttons an admin opens to clients. It hides and rewords only; roles still decide what anyone can do. The code follows in C2–C9. |
