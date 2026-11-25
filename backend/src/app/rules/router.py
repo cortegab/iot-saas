@@ -25,6 +25,7 @@ from app.rules.deps import get_rule_or_404
 from app.rules.models import Rule
 from app.rules.schemas import (
     ActionExecutionResponse,
+    ClientsCanRunRequest,
     ConditionNode,
     DeviceRuleCreateRequest,
     DraftSimulateRequest,
@@ -80,6 +81,7 @@ def _to_response(
             for row in device_rows
         ],
         enabled=rule.enabled,
+        clients_can_run=rule.clients_can_run,
         created_at=rule.created_at,
         health=health,
         # A stale set entry (strategy since changed) must not show a latch.
@@ -298,13 +300,39 @@ async def get_rule(
 @router.post("/rules/{rule_id}/run", status_code=status.HTTP_202_ACCEPTED)
 async def run_rule(
     rule: Rule = Depends(get_rule_or_404),
-    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    ctx: TenantContext = Depends(require_role(TenantRole.VIEWER)),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> None:
     """Manual "Run now" — publishes a one-shot run request; app.worker
     evaluates the condition against the live signal cache and fires only if
-    it's currently met."""
+    it's currently met. Admins run any rule; a Viewer only a scene opened to
+    clients (a manual-trigger rule with clients_can_run, ease-of-use C5)."""
+    if ctx.role == TenantRole.VIEWER and not (
+        rule.clients_can_run and rule.enabled and (rule.trigger or {}).get("type") == "manual"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only owners and admins can run this rule.",
+        )
     await service.request_manual_run(session, ctx.tenant_id, rule.id)
+
+
+@router.put("/rules/{rule_id}/clients-can-run", response_model=RuleResponse)
+async def set_clients_can_run(
+    body: ClientsCanRunRequest,
+    rule: Rule = Depends(get_rule_or_404),
+    ctx: TenantContext = Depends(require_role(TenantRole.ADMIN)),
+    session: AsyncSession = Depends(get_session, scope="function"),
+) -> RuleResponse:
+    """Open (or close) a manual-trigger rule to Viewers as a scene. Only a
+    manual rule: one on readings or a schedule runs by itself."""
+    if body.allowed and (rule.trigger or {}).get("type") != "manual":
+        raise HTTPException(
+            status_code=422, detail="Only a rule that runs manually can be a scene."
+        )
+    rule.clients_can_run = body.allowed
+    await session.flush()
+    return await _response(session, ctx.tenant_id, rule)
 
 
 @router.post("/rules/{rule_id}/reset", status_code=status.HTTP_202_ACCEPTED)

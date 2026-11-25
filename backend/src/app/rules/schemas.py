@@ -276,6 +276,10 @@ class DeviceRuleCreateRequest(BaseModel):
     enabled: bool = True
 
 
+class ClientsCanRunRequest(BaseModel):
+    allowed: bool
+
+
 class RuleUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=2000)
@@ -338,6 +342,8 @@ class RuleResponse(BaseModel):
     # device relationship a rule has.
     devices: list[RuleDeviceRef]
     enabled: bool
+    # A manual-trigger rule an admin opened to Viewers: a scene (ease-of-use C5).
+    clients_can_run: bool = False
     created_at: datetime
     # Computed per request: can this rule currently evaluate (all inputs fresh)?
     health: RuleHealth

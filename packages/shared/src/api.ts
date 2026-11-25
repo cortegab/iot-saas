@@ -932,9 +932,31 @@ export interface paths {
          * Run Rule
          * @description Manual "Run now" — publishes a one-shot run request; app.worker
          *     evaluates the condition against the live signal cache and fires only if
-         *     it's currently met.
+         *     it's currently met. Admins run any rule; a Viewer only a scene opened to
+         *     clients (a manual-trigger rule with clients_can_run, ease-of-use C5).
          */
         post: operations["run_rule_rules__rule_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/rules/{rule_id}/clients-can-run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Clients Can Run
+         * @description Open (or close) a manual-trigger rule to Viewers as a scene. Only a
+         *     manual rule: one on readings or a schedule runs by itself.
+         */
+        put: operations["set_clients_can_run_rules__rule_id__clients_can_run_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1821,6 +1843,11 @@ export interface components {
             google_client_id_web?: string | null;
             /** Google Client Id Android */
             google_client_id_android?: string | null;
+        };
+        /** ClientsCanRunRequest */
+        ClientsCanRunRequest: {
+            /** Allowed */
+            allowed: boolean;
         };
         /** CommandResponse */
         CommandResponse: {
@@ -2956,6 +2983,11 @@ export interface components {
             devices: components["schemas"]["RuleDeviceRef"][];
             /** Enabled */
             enabled: boolean;
+            /**
+             * Clients Can Run
+             * @default false
+             */
+            clients_can_run: boolean;
             /**
              * Created At
              * Format: date-time
@@ -5706,6 +5738,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_clients_can_run_rules__rule_id__clients_can_run_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+                "X-Tenant-Id"?: string | null;
+            };
+            path: {
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ClientsCanRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleResponse"];
                 };
             };
             /** @description Validation Error */

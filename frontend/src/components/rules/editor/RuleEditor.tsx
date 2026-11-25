@@ -98,6 +98,7 @@ export function RuleEditor({
   activity,
   header,
   consequence,
+  basicsExtra,
   readOnly = false,
 }: {
   /** Seeds the first condition and action device for a new rule. */
@@ -116,6 +117,8 @@ export function RuleEditor({
   header?: (sentence: ReactNode) => ReactNode;
   /** A saved rule's "what saving touches", under Basics. */
   consequence?: string;
+  /** More for a saved rule's Basics (a manual rule's "Clients can run it"). */
+  basicsExtra?: ReactNode;
   /** Viewers (no rules.write): every field shows, nothing can change, no
    * save bar (DESIGN.md §7's view-only editor). */
   readOnly?: boolean;
@@ -481,6 +484,7 @@ export function RuleEditor({
                 <>
                   <div className="grid items-start gap-x-4 gap-y-3 @min-[640px]:grid-cols-2">{nameFields}</div>
                   {consequence && <p className="text-meta text-ink-muted">{consequence}</p>}
+                  {basicsExtra}
                 </>,
               )}
             {panel("when", <WhenSection draft={draft} catalog={catalog} update={setDraft} />)}

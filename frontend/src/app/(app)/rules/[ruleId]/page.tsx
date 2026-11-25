@@ -21,6 +21,9 @@ import { useRuleActions } from "@/components/rules/useRuleActions";
 import { RuleVersions } from "@/components/rules/RuleVersions";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { ApiRequestError } from "@/lib/api-client";
+import { useApi } from "@/hooks/useApi";
+import { useToast } from "@/components/ui/Toast";
+import { SwitchField } from "@/components/ui/Switch";
 import { upsertRuleInCache } from "@/lib/rule-cache";
 import { draftFromRule } from "@/lib/rule-draft";
 import { RULE_STATE, ruleStateKey } from "@/lib/rule-text";
@@ -180,6 +183,7 @@ export default function EditRulePage() {
           </>
         )}
           consequence={consequence(rule)}
+          basicsExtra={isAdmin && rule.trigger.type === "manual" ? <SceneSwitch rule={rule} onSaved={(saved) => upsertRuleInCache(saved)} /> : undefined}
           key={restored ? `${rule.id}-v${restored.version}` : rule.id}
           deviceId={seedDevice}
           existing={rule}
@@ -227,5 +231,39 @@ export default function EditRulePage() {
           }
         />
     </div>
+  );
+}
+
+/** A manual rule as a scene (DESIGN.md §15a; ease-of-use C5): opened to
+ * Viewers, it shows as a button on dashboards for everyone in the workspace. */
+function SceneSwitch({ rule, onSaved }: { rule: RuleResponse; onSaved: (saved: RuleResponse) => void }) {
+  const api = useApi();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  async function set(allowed: boolean) {
+    setBusy(true);
+    try {
+      const saved = await api.put<RuleResponse>(`/rules/${rule.id}/clients-can-run`, { allowed });
+      onSaved(saved);
+      void revalidate(`/rules/${rule.id}`);
+      void revalidate("/rules");
+      toast({ title: allowed ? "It's a scene now" : "Not a scene any more", detail: allowed ? "A button on every dashboard runs it, for viewers too." : undefined });
+    } catch (err) {
+      toast({ tone: "error", title: "Couldn't change it", detail: err instanceof ApiRequestError ? err.message : undefined });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <SwitchField
+      label="Scene"
+      checked={rule.clients_can_run ?? false}
+      onChange={(v) => void set(v)}
+      disabled={busy}
+      onLabel="Clients can run it"
+      offLabel="Admins only"
+      onHint="A button on every dashboard runs it, for viewers too."
+      offHint="Only owners and admins run it, from here."
+    />
   );
 }
