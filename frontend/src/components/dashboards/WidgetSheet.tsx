@@ -13,6 +13,8 @@ import { WIDGET_LABEL } from "@/components/dashboards/DashboardGrid";
 import { isBoolMetric } from "@/lib/format-reading";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
+import { richT } from "@/lib/i18n";
 
 type Widget = components["schemas"]["Widget"];
 type WidgetType = Widget["type"];
@@ -32,11 +34,11 @@ export const WIDGET_TYPES: {
   w: number;
   h: number;
 }[] = [
-  { type: "value_card", icon: Activity, what: "One live reading", metric: true, w: 4, h: 2 },
-  { type: "trend_chart", icon: LineChart, what: "A reading over time", metric: true, w: 8, h: 4 },
-  { type: "gauge", icon: Gauge, what: "A number against its range", metric: true, numeric: true, range: true, w: 4, h: 3 },
-  { type: "device_status", icon: Cpu, what: "Online, last seen, signal", w: 4, h: 2 },
-  { type: "actuator_control", icon: ToggleRight, what: "Switch it On or Off", actuators: true, w: 4, h: 3 },
+  { type: "value_card", icon: Activity, get what() { return tr("wsheet.whatValue"); }, metric: true, w: 4, h: 2 },
+  { type: "trend_chart", icon: LineChart, get what() { return tr("wsheet.whatTrend"); }, metric: true, w: 8, h: 4 },
+  { type: "gauge", icon: Gauge, get what() { return tr("wsheet.whatGauge"); }, metric: true, numeric: true, range: true, w: 4, h: 3 },
+  { type: "device_status", icon: Cpu, get what() { return tr("wsheet.whatStatus"); }, w: 4, h: 2 },
+  { type: "actuator_control", icon: ToggleRight, get what() { return tr("wsheet.whatControl"); }, actuators: true, w: 4, h: 3 },
 ];
 
 /** DESIGN.md §8 widget sizes (of 12 columns). On a phone every widget is full width. */
@@ -44,7 +46,7 @@ export const WIDGET_SIZES = [
   { w: 3, label: "S" },
   { w: 4, label: "M" },
   { w: 8, label: "L" },
-  { w: 12, label: "Full" },
+  { w: 12, get label() { return tr("wsheet.full"); } },
 ] as const;
 
 type Draft = Omit<Widget, "x" | "y">;
@@ -101,13 +103,13 @@ function problemOf(w: Draft, src: Sources): string | null {
   const spec = specOf(w.type);
   const device = devicesFor(w.type, src).find((d) => d.id === w.device_id);
   if (!device) {
-    if (spec.actuators) return "No device here has actuators.";
-    if (spec.numeric && src.devices.length > 0) return "No device here has a numeric metric. On/off metrics show as a Value card or a Trend chart.";
-    return "Add a device first.";
+    if (spec.actuators) return tr("wsheet.noActuators");
+    if (spec.numeric && src.devices.length > 0) return tr("wsheet.noNumeric");
+    return tr("wsheet.addDevice");
   }
-  if (spec.metric && !w.metric) return `${device.name}'s template declares no metric to show.`;
-  if (spec.range && (w.min == null || w.max == null || Number.isNaN(w.min) || Number.isNaN(w.max))) return "Min and max must be numbers.";
-  if (spec.range && (w.max ?? 0) <= (w.min ?? 0)) return "Max must be above min.";
+  if (spec.metric && !w.metric) return tr("wsheet.noMetric", { device: device.name });
+  if (spec.range && (w.min == null || w.max == null || Number.isNaN(w.min) || Number.isNaN(w.max))) return tr("wsheet.rangeNumbers");
+  if (spec.range && (w.max ?? 0) <= (w.min ?? 0)) return tr("wsheet.maxAbove");
   return null;
 }
 
@@ -126,7 +128,7 @@ function SourceFields({ w, src, onChange }: { w: Draft; src: Sources; onChange: 
   const metrics = metricsOf(w.type, src.devices.find((d) => d.id === w.device_id), src.templates);
   return (
     <div className="grid gap-3 @min-[420px]:grid-cols-2">
-      <Field label="Device">
+      <Field label={tr("wsheet.device")}>
         <Select value={w.device_id} disabled={eligible.length === 0} onChange={(e) => onChange(fixWidget({ ...w, device_id: e.target.value }, src))}>
           {eligible.map((d) => (
             <option key={d.id} value={d.id}>
@@ -136,7 +138,7 @@ function SourceFields({ w, src, onChange }: { w: Draft; src: Sources; onChange: 
         </Select>
       </Field>
       {spec.metric && (
-        <Field label="Reading">
+        <Field label={tr("wsheet.reading")}>
           <Select value={w.metric ?? ""} disabled={metrics.length === 0} onChange={(e) => onChange(fixWidget({ ...w, metric: e.target.value }, src))}>
             {metrics.map((m) => (
               <option key={wireId(m)} value={wireId(m)}>
@@ -146,15 +148,15 @@ function SourceFields({ w, src, onChange }: { w: Draft; src: Sources; onChange: 
           </Select>
         </Field>
       )}
-      <Field label="Title" optional hint="Left blank, it's the reading and the device.">
+      <Field label={tr("wsheet.title")} optional hint={tr("wsheet.titleHint")}>
         <Input value={w.title ?? ""} maxLength={60} placeholder={widgetTitle(w, src)} onChange={(e) => onChange({ ...w, title: e.target.value || null })} />
       </Field>
       {spec.range && (
         <>
-          <Field label="Min">
+          <Field label={tr("wsheet.min")}>
             <Input inputMode="decimal" value={String(w.min ?? "")} onChange={(e) => onChange({ ...w, min: e.target.value === "" ? null : Number(e.target.value) })} />
           </Field>
-          <Field label="Max">
+          <Field label={tr("wsheet.max")}>
             <Input inputMode="decimal" value={String(w.max ?? "")} onChange={(e) => onChange({ ...w, max: e.target.value === "" ? null : Number(e.target.value) })} />
           </Field>
         </>
@@ -165,9 +167,9 @@ function SourceFields({ w, src, onChange }: { w: Draft; src: Sources; onChange: 
 
 function SizeField({ w, onChange }: { w: number; onChange: (w: number) => void }) {
   return (
-    <Field label="Size" hint="On a phone every widget is full width.">
+    <Field label={tr("wsheet.size")} hint={tr("wsheet.sizeHint")}>
       <SegmentedControl
-        ariaLabel="Size"
+        ariaLabel={tr("wsheet.size")}
         value={String(w)}
         onChange={(v) => onChange(Number(v))}
         options={WIDGET_SIZES.map((s) => ({ value: String(s.w), label: s.label }))}
@@ -191,7 +193,7 @@ export function WidgetSheet({
   onRemove: (id: string) => void;
   onClose: () => void;
 }) {
-  if (!widget) return <ItemSheet open={false} onClose={onClose} title="Widget">{null}</ItemSheet>;
+  if (!widget) return <ItemSheet open={false} onClose={onClose} title={tr("wsheet.widget")}>{null}</ItemSheet>;
   const set = (next: Draft) => onChange({ ...widget, ...next });
   const problem = problemOf(widget, src);
   return (
@@ -199,7 +201,7 @@ export function WidgetSheet({
       open
       onClose={onClose}
       title={widgetTitle(widget, src)}
-      sub="Widget · changes apply as you make them"
+      sub={tr("wsheet.widgetSub")}
       footer={
         <>
           <Button
@@ -210,14 +212,14 @@ export function WidgetSheet({
               onClose();
             }}
           >
-            Remove widget
+            {tr("wsheet.remove")}
           </Button>
-          <Button onClick={onClose}>Done</Button>
+          <Button onClick={onClose}>{tr("wsheet.done")}</Button>
         </>
       }
     >
       <div className="flex flex-col gap-4">
-        <Field label="Type">
+        <Field label={tr("wsheet.type")}>
           <Select
             value={widget.type}
             onChange={(e) => {
@@ -263,13 +265,13 @@ export function AddWidgetSheet({
     setDraft(null);
     onClose();
   };
-  const steps = ["Type", "Source", "Size"];
+  const steps = [tr("wsheet.type"), tr("wsheet.source"), tr("wsheet.size")];
   const problem = draft ? problemOf(draft, src) : null;
 
   let body;
   if (step === 0 || !draft) {
     body = (
-      <Lines label="Widget type">
+      <Lines label={tr("wsheet.widgetType")}>
         {WIDGET_TYPES.map((t) => (
           <LineRow
             key={t.type}
@@ -291,7 +293,7 @@ export function AddWidgetSheet({
       <div className="flex flex-col gap-3">
         <SizeField w={draft.w} onChange={(w) => setDraft({ ...draft, w })} />
         <p className="text-sm text-ink-muted">
-          Adds <b className="font-medium text-ink">{widgetTitle(draft, src)}</b> as a {WIDGET_LABEL[draft.type].toLowerCase()}.
+          {richT(tr, "wsheet.adds", { title: <b className="font-medium text-ink">{widgetTitle(draft, src)}</b> }, { type: WIDGET_LABEL[draft.type].toLowerCase() })}
         </p>
       </div>
     );
@@ -301,19 +303,19 @@ export function AddWidgetSheet({
     <ItemSheet
       open={open}
       onClose={close}
-      title="Add a widget"
-      sub={`Step ${step + 1} of 3 · ${steps[step]}`}
+      title={tr("wsheet.addTitle")}
+      sub={tr("wsheet.step", { n: step + 1, name: steps[step] })}
       footer={
         <>
           {step > 0 && (
             <Button variant="ghost" className="mr-auto" onClick={() => setStep(step - 1)}>
               <ChevronLeft aria-hidden size={15} />
-              Back
+              {tr("wsheet.back")}
             </Button>
           )}
           {step === 1 && (
             <Button disabled={!!problem} onClick={() => setStep(2)}>
-              Next: Size
+              {tr("wsheet.nextSize")}
               <ChevronRight aria-hidden size={15} />
             </Button>
           )}
@@ -325,12 +327,12 @@ export function AddWidgetSheet({
                 close();
               }}
             >
-              Add widget
+              {tr("wsheet.add")}
             </Button>
           )}
           {step === 0 && (
             <Button variant="ghost" onClick={close}>
-              Cancel
+              {tr("wsheet.cancel")}
             </Button>
           )}
         </>

@@ -61,7 +61,7 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
   return (
     <button
       type="button"
-      aria-label={copied ? `${label} copied` : `Copy ${label}`}
+      aria-label={copied ? t("apik.labelCopied", { label }) : t("ui.copyValue", { label })}
       onClick={() =>
         void copyText(value).then((ok) => {
           if (!ok) return;

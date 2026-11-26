@@ -22,12 +22,14 @@ import { ActionFields, AddActionMenu, ContactFields, WhenFields, actionLabel } f
 import type { RuleCatalog } from "@/components/rules/editor/useRuleCatalog";
 import { ItemSheet } from "@/components/ui/ItemSheet";
 import { ResponsiveRung, type LadderSelection } from "./LadderRung";
+import { tActive as tr } from "@iodriven/shared/i18n";
+import { richT } from "@/lib/i18n";
 
 type Update = (next: RuleDraft) => void;
 
 const BLOCK_HINT: Record<Combinator, string> = {
-  AND: "Series: every element must be true (AND).",
-  OR: "Parallel: any one branch is enough (OR).",
+  get AND() { return tr("ladder.blockAnd"); },
+  get OR() { return tr("ladder.blockOr"); },
 };
 
 /** "Rung › Series › Parallel" — the blocks enclosing an element (demo G's
@@ -35,11 +37,11 @@ const BLOCK_HINT: Record<Combinator, string> = {
 function Crumb({ draft, id, leaf, select }: { draft: RuleDraft; id?: string; leaf?: string; select: (s: LadderSelection) => void }) {
   const self = id ? findNode(draft.condition, id) : null;
   const blocks = (id ? ancestry(draft.condition, id) : []).filter((p) => p.kind === "group" && p.id !== id);
-  const word = (n: DraftNode) => (n.kind === "group" && n.op === "OR" ? "Parallel" : "Series");
+  const word = (n: DraftNode) => (n.kind === "group" && n.op === "OR" ? tr("ladder.parallel") : tr("ladder.series"));
   return (
-    <nav aria-label="Where this sits" className="flex flex-wrap items-center gap-1 font-mono text-xs text-ink-muted">
+    <nav aria-label={tr("ladder.whereSits")} className="flex flex-wrap items-center gap-1 font-mono text-xs text-ink-muted">
       <button type="button" onClick={() => select(null)} className="hover:text-ink">
-        Rung
+        {tr("ladder.rung")}
       </button>
       {blocks.map((b) => (
         <span key={b.id} className="flex items-center gap-1">
@@ -90,9 +92,9 @@ function InspectorBody({
   if (selection === null) {
     return (
       <>
-        <Title show={titled}>Rule</Title>
+        <Title show={titled}>{tr("ladder.rule")}</Title>
         <p className="text-meta text-ink-muted">
-          Select the trigger, a contact, a block, the timer or a coil on the rung to edit it. Use <strong>+</strong> to add a contact at the end or another coil.
+          {richT(tr, "ladder.ruleLead", { plus: <strong>+</strong> })}
         </p>
       </>
     );
@@ -100,8 +102,8 @@ function InspectorBody({
   if (selection.kind === "when") {
     return (
       <>
-        <Crumb draft={draft} leaf="Trigger" select={select} />
-        <Title show={titled}>Trigger</Title>
+        <Crumb draft={draft} leaf={tr("ladder.trigger")} select={select} />
+        <Title show={titled}>{tr("ladder.trigger")}</Title>
         <WhenFields when={draft.when} catalog={catalog} onChange={(when) => update({ ...draft, when })} />
       </>
     );
@@ -109,8 +111,8 @@ function InspectorBody({
   if (selection.kind === "timing") {
     return (
       <>
-        <Crumb draft={draft} leaf="Timer" select={select} />
-        <Title show={titled}>Behaviour</Title>
+        <Crumb draft={draft} leaf={tr("ladder.timer")} select={select} />
+        <Title show={titled}>{tr("ladder.behaviour")}</Title>
         <BehaviourFields draft={draft} update={update} />
       </>
     );
@@ -118,9 +120,9 @@ function InspectorBody({
   if (selection.kind === "add-action") {
     return (
       <>
-        <Crumb draft={draft} leaf="Coil" select={select} />
-        <Title show={titled}>New coil</Title>
-        <p className="text-meta text-ink-muted">It runs together with the other coils when the rule fires.</p>
+        <Crumb draft={draft} leaf={tr("ladder.coil")} select={select} />
+        <Title show={titled}>{tr("ladder.newCoil")}</Title>
+        <p className="text-meta text-ink-muted">{tr("ladder.newCoilLead")}</p>
         <AddActionMenu
           onAdd={(kind) => {
             const action = emptyAction(kind, lastDevice(draft));
@@ -147,23 +149,23 @@ function InspectorBody({
     const addButtons = (
       <div className="flex flex-wrap gap-1.5">
         <Button type="button" size="sm" variant="secondary" onClick={() => add("AND")}>
-          Add in series
+          {tr("ladder.addSeries")}
         </Button>
         <Button type="button" size="sm" variant="secondary" onClick={() => add("OR")}>
-          Add in parallel
+          {tr("ladder.addParallel")}
         </Button>
       </div>
     );
     if (node.kind === "contact") {
       return (
         <>
-          <Crumb draft={draft} id={id} leaf="Contact" select={select} />
-          <Title show={titled}>Contact</Title>
+          <Crumb draft={draft} id={id} leaf={tr("ladder.contact")} select={select} />
+          <Title show={titled}>{tr("ladder.contact")}</Title>
           <ContactFields contact={node} catalog={catalog} onChange={(patch) => setCondition(updateContact(draft.condition, id, patch))} />
           {addButtons}
           <div>
             <Button type="button" size="sm" variant="link-danger" onClick={remove}>
-              <Trash2 size={13} aria-hidden /> Remove
+              <Trash2 size={13} aria-hidden /> {tr("ladder.remove")}
             </Button>
           </div>
         </>
@@ -172,24 +174,24 @@ function InspectorBody({
     return (
       <>
         <Crumb draft={draft} id={id} select={select} />
-        <Title show={titled}>{node.op === "AND" ? "Series block" : "Parallel block"}</Title>
+        <Title show={titled}>{node.op === "AND" ? tr("ladder.seriesBlock") : tr("ladder.parallelBlock")}</Title>
         <SegmentedControl
-          ariaLabel="Block type"
+          ariaLabel={tr("ladder.blockType")}
           value={node.op}
           onChange={(op) => setCondition(setGroupOp(draft.condition, id, op))}
           options={[
-            { value: "AND", label: "Series: all true" },
-            { value: "OR", label: "Parallel: any true" },
+            { value: "AND", label: tr("ladder.seriesAll") },
+            { value: "OR", label: tr("ladder.parallelAny") },
           ]}
         />
         <p className="text-meta text-ink-muted">
-          {BLOCK_HINT[node.op]} {node.children.length} elements; changing the type keeps every contact.
+          {BLOCK_HINT[node.op]} {tr("ladder.elements", { count: node.children.length })}
         </p>
         {addButtons}
         {node.id !== draft.condition?.id && (
           <div>
             <Button type="button" size="sm" variant="link-danger" onClick={remove}>
-              <Trash2 size={13} aria-hidden /> Remove block
+              <Trash2 size={13} aria-hidden /> {tr("ladder.removeBlock")}
             </Button>
           </div>
         )}
@@ -202,7 +204,7 @@ function InspectorBody({
   const canRemove = draft.actions.length > 1 || draft.preserved.actions.length > 0;
   return (
     <>
-      <Crumb draft={draft} leaf="Coil" select={select} />
+      <Crumb draft={draft} leaf={tr("ladder.coil")} select={select} />
       <Title show={titled}>{actionLabel(action, catalog).title}</Title>
       <ActionFields
         action={action}
@@ -221,7 +223,7 @@ function InspectorBody({
             select(null);
           }}
         >
-          <Trash2 size={13} aria-hidden /> Remove coil
+          <Trash2 size={13} aria-hidden /> {tr("ladder.removeCoil")}
         </Button>
       </div>
     </>
@@ -229,11 +231,11 @@ function InspectorBody({
 }
 
 const LEGEND: { glyph: string; text: string }[] = [
-  { glyph: "[ ]", text: "condition (contact)" },
-  { glyph: "[/]", text: "on/off input is OFF" },
-  { glyph: "( )", text: "actuator, turns back when cleared" },
-  { glyph: "(P)", text: "actuator, set only" },
-  { glyph: "(S)", text: "latched until reset" },
+  { glyph: "[ ]", get text() { return tr("ladder.legendContact"); } },
+  { glyph: "[/]", get text() { return tr("ladder.legendNc"); } },
+  { glyph: "( )", get text() { return tr("ladder.legendRevert"); } },
+  { glyph: "(P)", get text() { return tr("ladder.legendPulse"); } },
+  { glyph: "(S)", get text() { return tr("ladder.legendLatch"); } },
 ];
 
 /** What the rule editor has selected: a rung element, or the rule itself
@@ -279,11 +281,11 @@ export function LadderCanvas({
           selection={selection?.kind === "name" ? null : selection}
           onSelect={onSelect}
           onAddSeriesAtEnd={addSeriesAtEnd}
-          ariaLabel="Rule rung editor"
+          ariaLabel={tr("ladder.editorAria")}
         />
       </div>
       <p className="text-meta text-ink-muted">
-        Series contacts must all be true; parallel branches need any one. Select an element to open it; the arrow keys move between them. The ladder and the form edit the same rule.
+        {tr("ladder.help")}
       </p>
       <ul className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
         {LEGEND.map((l) => (
@@ -313,17 +315,17 @@ export function LadderSheet({
   onSelect: (s: EditorSelection) => void;
 }) {
   const open = selection?.kind === "node" || selection?.kind === "action" || selection?.kind === "add-action";
-  let title = "Rung";
-  if (selection?.kind === "add-action") title = "New coil";
+  let title = tr("ladder.rung");
+  if (selection?.kind === "add-action") title = tr("ladder.newCoil");
   else if (selection?.kind === "action") {
     const a = draft.actions.find((x) => x.id === selection.id);
-    title = a ? actionLabel(a, catalog).title : "Coil";
+    title = a ? actionLabel(a, catalog).title : tr("ladder.coil");
   } else if (selection?.kind === "node") {
     const n = findNode(draft.condition, selection.id);
-    title = n?.kind === "group" ? (n.op === "AND" ? "Series block" : "Parallel block") : "Condition";
+    title = n?.kind === "group" ? (n.op === "AND" ? tr("ladder.seriesBlock") : tr("ladder.parallelBlock")) : tr("ladder.condition");
   }
   return (
-    <ItemSheet open={open} onClose={() => onSelect(null)} title={title} sub="On the rung">
+    <ItemSheet open={open} onClose={() => onSelect(null)} title={title} sub={tr("ladder.onRung")}>
       <div className="flex flex-col gap-3">
         {open && <InspectorBody selection={selection} draft={draft} catalog={catalog} update={update} select={onSelect} titled={false} />}
       </div>

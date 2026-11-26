@@ -6,6 +6,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { ApiRequestError } from "@/lib/api-client";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 /** A one-field dialog for naming a record — "New dashboard", "Rename",
  * "Duplicate". `onSubmit` may throw; its message shows under the field. */
@@ -14,7 +15,7 @@ export function NameDialog({
   onClose,
   title,
   description,
-  label = "Name",
+  label = tr("dpeek.name"),
   initial = "",
   placeholder,
   confirmLabel,
@@ -44,7 +45,7 @@ export function NameDialog({
   async function submit() {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Enter a name.");
+      setError(tr("dpeek.enterName"));
       return;
     }
     setBusy(true);
@@ -53,7 +54,7 @@ export function NameDialog({
       await onSubmit(trimmed);
       onClose();
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");
+      setError(err instanceof ApiRequestError ? err.message : tr("dpeek.failed"));
     } finally {
       setBusy(false);
     }
@@ -69,10 +70,10 @@ export function NameDialog({
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {tr("dpeek.cancel")}
           </Button>
           <Button type="submit" disabled={busy}>
-            {busy ? "Saving…" : confirmLabel}
+            {busy ? tr("dpeek.saving") : confirmLabel}
           </Button>
         </>
       }

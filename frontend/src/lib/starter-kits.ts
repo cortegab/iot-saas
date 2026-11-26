@@ -8,6 +8,7 @@
 import { findDriver } from "@/lib/hardware/driver-catalog";
 import { blankBinding, blankHardware, syncI2c, type HardwareCatalog, type HardwareDraft } from "@/lib/hardware/hardware-draft";
 import { reconcileParts, renamed, type TemplateDraft } from "@/lib/template-draft";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 export interface KitPart {
   driver: string;
@@ -27,36 +28,44 @@ export interface StarterKit {
 export const STARTER_KITS: StarterKit[] = [
   {
     id: "greenhouse",
-    title: "Greenhouse climate",
-    description: "Temperature and humidity (DHT22), and a fan on a relay.",
-    parts: [
-      { driver: "dht22", names: { temperature: "Air temperature", humidity: "Humidity" } },
-      { driver: "relay", names: { value: "Fan" } },
-    ],
+    get title() { return tr("kits.greenhouse"); },
+    get description() { return tr("kits.greenhouseDesc"); },
+    get parts(): KitPart[] {
+      return [
+        { driver: "dht22", names: { temperature: tr("kits.airTemp"), humidity: tr("kits.humidity") } },
+        { driver: "relay", names: { value: tr("kits.fan") } },
+      ];
+    },
     recipe: "too-hot",
   },
   {
     id: "tank",
-    title: "Tank level",
-    description: "Distance to the water from the top (HC-SR04), and a pump on a relay.",
-    parts: [
-      { driver: "hcsr04", names: { distance_cm: "Distance to water" } },
-      { driver: "relay", names: { value: "Pump" } },
-    ],
+    get title() { return tr("kits.tank"); },
+    get description() { return tr("kits.tankDesc"); },
+    get parts(): KitPart[] {
+      return [
+        { driver: "hcsr04", names: { distance_cm: tr("kits.distance") } },
+        { driver: "relay", names: { value: tr("kits.pump") } },
+      ];
+    },
     recipe: "reading-high",
   },
   {
     id: "door",
-    title: "Door contact",
-    description: "A door or reed switch on a digital input.",
-    parts: [{ driver: "digital_in", names: { value: "Door open" } }],
+    get title() { return tr("kits.door"); },
+    get description() { return tr("kits.doorDesc"); },
+    get parts(): KitPart[] {
+      return [{ driver: "digital_in", names: { value: tr("kits.doorOpen") } }];
+    },
     recipe: "door-open",
   },
   {
     id: "cold-room",
-    title: "Cold room",
-    description: "A waterproof temperature probe (DS18B20); up to four on one pin.",
-    parts: [{ driver: "ds18b20", names: { temp_1: "Cold room temperature" } }],
+    get title() { return tr("kits.cold"); },
+    get description() { return tr("kits.coldDesc"); },
+    get parts(): KitPart[] {
+      return [{ driver: "ds18b20", names: { temp_1: tr("kits.coldTemp") } }];
+    },
     recipe: "reading-high",
   },
 ];

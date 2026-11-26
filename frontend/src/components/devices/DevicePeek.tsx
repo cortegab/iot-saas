@@ -11,6 +11,7 @@ import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -18,7 +19,6 @@ type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
 type CommandResponse = components["schemas"]["CommandResponse"];
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** A device at a glance (demo H peek): status and last message, where it is,
  * what it reports right now as Line rows, then Open device. Its readings,
@@ -60,35 +60,35 @@ export function DevicePeek({
       eyebrow={
         <DeviceStatusPill device={device} />
       }
-      description={`Last message ${device.last_seen_at ? timeAgo(device.last_seen_at) : "never"}`}
+      description={tr("dpeek.lastMessage", { when: device.last_seen_at ? timeAgo(device.last_seen_at) : tr("dpeek.never") })}
       facts={[
         [
-          "Template",
+          tr("dpeek.template"),
           template ? (
             <>
               <Link href={`/templates?peek=${template.id}`} className="text-accent hover:underline">
                 {template.name}
               </Link>
-              {device.hardware ? " · Own wiring" : ""}
+              {device.hardware ? tr("dpeek.ownWiring") : ""}
             </>
           ) : null,
         ],
-        ["Zone", zoneName ?? "No zone"],
-        ["Rules", ruleCount ? plural(ruleCount, "rule") : "None"],
-        ["Firmware", device.fw_version],
-        ["Signal", device.rssi != null ? `${device.rssi} dBm` : null],
-        ["Battery", device.battery_pct != null ? `${device.battery_pct} %` : null],
+        [tr("dpeek.zone"), zoneName ?? tr("dpeek.noZone")],
+        [tr("dpeek.rules"), ruleCount ? tr("dpeek.ruleCount", { count: ruleCount }) : tr("dpeek.none")],
+        [tr("dpeek.firmware"), device.fw_version],
+        [tr("dpeek.signal"), device.rssi != null ? `${device.rssi} dBm` : null],
+        [tr("dpeek.battery"), device.battery_pct != null ? `${device.battery_pct} %` : null],
       ]}
       primary={<PeekOpen href={`/devices/${device.id}`} noun="device" />}
       menu={menu(device)}
       onClose={onClose}
     >
       {rows.length > 0 && (
-        <PeekSection title={stale ? "Last readings" : "Latest readings"}>
+        <PeekSection title={stale ? tr("dpeek.lastReadings") : tr("dpeek.latestReadings")}>
           {!latest ? (
             <LoadingSkeleton rows={2} rowClassName="h-6" />
           ) : (
-            <ul aria-label="Readings" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+            <ul aria-label={tr("dpeek.readings")} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
               {rows.map(({ id, meta }) => {
                 const r = byMetric.get(id);
                 return (
@@ -100,7 +100,7 @@ export function DevicePeek({
                         {meta?.unit && !isBoolMetric(meta) && <span className="ml-1 text-xs text-ink-muted">{meta.unit}</span>}
                       </span>
                     ) : (
-                      <span className="text-ink-muted">No data</span>
+                      <span className="text-ink-muted">{tr("dpeek.noData")}</span>
                     )}
                   </li>
                 );
@@ -110,8 +110,8 @@ export function DevicePeek({
         </PeekSection>
       )}
       {actuators.length > 0 && (
-        <PeekSection title="Controls">
-          <ul aria-label="Controls" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+        <PeekSection title={tr("dpeek.controls")}>
+          <ul aria-label={tr("dpeek.controls")} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
             {actuators.map((a) => {
               const last = commands?.find((c) => c.actuator === wireId(a));
               return (
@@ -119,18 +119,18 @@ export function DevicePeek({
                   <b className="truncate font-medium text-ink">{a.name}</b>
                   {last ? (
                     <span className="whitespace-nowrap tabular-nums text-ink" title={timeAgo(last.issued_at)}>
-                      {typeof last.value === "boolean" ? (last.value ? "On" : "Off") : String(last.value)}
+                      {typeof last.value === "boolean" ? (last.value ? tr("dpeek.on") : tr("dpeek.off")) : String(last.value)}
                       <span className="ml-1.5 text-xs text-ink-muted">{timeAgo(last.issued_at)}</span>
                     </span>
                   ) : (
-                    <span className="text-ink-muted">{commands ? "Not commanded yet" : "…"}</span>
+                    <span className="text-ink-muted">{commands ? tr("dpeek.notCommanded") : "…"}</span>
                   )}
                 </li>
               );
             })}
           </ul>
           <Link href={`/devices/${device.id}`} className="w-fit text-sm text-accent hover:underline">
-            Open controls
+            {tr("dpeek.openControls")}
           </Link>
         </PeekSection>
       )}

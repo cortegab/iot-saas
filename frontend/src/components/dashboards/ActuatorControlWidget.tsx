@@ -4,6 +4,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ActuatorControl } from "@/components/actuators/ActuatorControl";
 import { WidgetCard } from "@/components/dashboards/WidgetCard";
 import { useWidgetDevice } from "@/components/dashboards/widget-common";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 export function ActuatorControlWidget({ deviceId }: { deviceId: string }) {
   const { device, isLoading } = useWidgetDevice(deviceId);
@@ -16,7 +17,7 @@ export function ActuatorControlWidget({ deviceId }: { deviceId: string }) {
         <div className="flex flex-col gap-2">
           {/* Said once, as on the device's Controls tab (DESIGN.md §8). */}
           {!online && device.status === "active" && (
-            <p className="text-xs text-status-pending">Offline. Commands wait in its desired state and apply when it reconnects.</p>
+            <p className="text-xs text-status-pending">{tr("wsheet.offlineControl")}</p>
           )}
           <ActuatorControl
             deviceId={deviceId}

@@ -12,6 +12,7 @@ import { useRecordEditor, type Validation } from "@/components/editor/useRecordE
 import { useUnsavedGuard } from "@/components/editor/useUnsavedGuard";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type DashboardResponse = components["schemas"]["DashboardResponse"];
 
@@ -31,8 +32,8 @@ export function DashboardEditor() {
   const validate = useCallback((d: DashboardDraft): Validation => {
     const errors: Record<string, string> = {};
     const name = d.name.trim();
-    if (!name) errors["dashboard.name"] = "Give the dashboard a name.";
-    else if (name.length > 100) errors["dashboard.name"] = "Keep the name to 100 characters.";
+    if (!name) errors["dashboard.name"] = tr("wsheet.nameRequired");
+    else if (name.length > 100) errors["dashboard.name"] = tr("wsheet.nameLong");
     return { errors };
   }, []);
   const editor = useRecordEditor({ source, isNew: true, validate });
@@ -44,10 +45,10 @@ export function DashboardEditor() {
         try {
           const created = await api.post<DashboardResponse>("/dashboards", { name: d.name.trim() });
           void revalidate("/dashboards");
-          toast({ title: "Dashboard created", detail: "Add widgets: value cards, charts, gauges and controls." });
+          toast({ title: tr("wsheet.created"), detail: tr("wsheet.createdDetail") });
           router.replace(`/dashboards/${created.id}?edit=1`);
         } catch (err) {
-          toast({ tone: "error", title: "The server rejected the change", detail: err instanceof ApiRequestError ? err.message : undefined });
+          toast({ tone: "error", title: tr("wsheet.rejected"), detail: err instanceof ApiRequestError ? err.message : undefined });
           throw err;
         }
       })
@@ -61,17 +62,17 @@ export function DashboardEditor() {
       <EditorFrame
         mode="page"
         noun="dashboard"
-        title={d.name.trim() || "New dashboard"}
-        consequence="Everyone in the workspace sees it. Next you add widgets for the devices you watch most."
-        sections={[{ id: "dashboard", label: "Dashboard" }]}
+        title={d.name.trim() || tr("wsheet.newDashboard")}
+        consequence={tr("wsheet.consequence")}
+        sections={[{ id: "dashboard", label: tr("wsheet.dashboard") }]}
         status={editor}
-        saveLabel="Create dashboard"
+        saveLabel={tr("wsheet.create")}
         onSave={onSave}
         onDiscard={editor.discard}
       >
-        <EditorSection id="dashboard" title="Dashboard">
-          <Field label="Name" error={editor.errorFor("dashboard.name")}>
-            <Input autoFocus value={d.name} placeholder="e.g. Greenhouse overview" onChange={(e) => editor.set({ ...d, name: e.target.value })} onBlur={() => editor.touch("dashboard.name")} />
+        <EditorSection id="dashboard" title={tr("wsheet.dashboard")}>
+          <Field label={tr("wsheet.name")} error={editor.errorFor("dashboard.name")}>
+            <Input autoFocus value={d.name} placeholder={tr("wsheet.namePlaceholder")} onChange={(e) => editor.set({ ...d, name: e.target.value })} onBlur={() => editor.touch("dashboard.name")} />
           </Field>
         </EditorSection>
       </EditorFrame>
