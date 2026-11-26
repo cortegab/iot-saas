@@ -322,6 +322,13 @@ async def _handle_status(
                         severity="info",
                         kind="device_online",
                         detail="It reconnected and sent its status.",
+                        i18n={
+                            "message": {
+                                "key": "device.online",
+                                "params": {"device": parsed.device_slug},
+                            },
+                            "detail": {"key": "device.onlineDetail", "params": {}},
+                        },
                     )
                 except Exception:
                     log.exception("back-online notification failed for %s", resolved.device_id)
@@ -338,6 +345,13 @@ async def _handle_status(
                     severity="critical",
                     kind="device_offline",
                     detail="Its last will arrived: the connection dropped without a goodbye.",
+                    i18n={
+                        "message": {
+                            "key": "device.offline",
+                            "params": {"device": parsed.device_slug},
+                        },
+                        "detail": {"key": "device.offlineDetail", "params": {}},
+                    },
                 )
             except Exception:
                 log.exception("offline notification failed for %s", resolved.device_id)
@@ -1160,6 +1174,18 @@ async def _handle_expired_command(
                 f"The device didn't answer in time, so {kept}. Check that it's online, "
                 "then send the command again."
             ),
+            i18n={
+                "message": {
+                    "key": "command.unconfirmed",
+                    "params": {"device": expired.device_slug, "actuator": expired.actuator},
+                },
+                "detail": {
+                    "key": "command.unconfirmedKept"
+                    if expired.has_acked_value
+                    else "command.unconfirmedNothing",
+                    "params": {},
+                },
+            },
         )
     except Exception:
         log.exception("expired-command notification failed for %s", expired.command_id)

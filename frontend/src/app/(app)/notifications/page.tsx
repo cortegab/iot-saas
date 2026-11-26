@@ -31,6 +31,7 @@ import { cn } from "@/lib/cn";
 import { formatWhen, timeAgo } from "@/lib/time-ago";
 import type { components, operations } from "@/types/api";
 import { tActive as t } from "@iodriven/shared/i18n";
+import { notificationText } from "@iodriven/shared/notification-text";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -294,14 +295,14 @@ export default function NotificationsPage() {
                           <button type="button" onClick={() => openSheet(g)} aria-haspopup="dialog" className="min-w-0 text-left text-ink">
                             <span className="sr-only">{sev.label}{unread ? t("alerts.unreadPrefix") : ""}: </span>
                             {/* Unread is the accent bar and a bold title (DESIGN.md §8). */}
-                            <strong className={unread ? "font-semibold" : "font-normal"}>{n.message}</strong>
+                            <strong className={unread ? "font-semibold" : "font-normal"}>{notificationText(n).message}</strong>
                             {g.count > 1 && (
                               <Tag size="sm" className="ml-2">
                                 ×{g.count}
                               </Tag>
                             )}
                           </button>
-                          {n.detail && <span className="text-xs text-ink-muted">{n.detail}</span>}
+                          {notificationText(n).detail && <span className="text-xs text-ink-muted">{notificationText(n).detail}</span>}
                           {alarmState(n, who) && (
                             <span className={cn("text-xs", n.cleared_at ? "text-status-online" : "text-ink-muted")}>{alarmState(n, who)}</span>
                           )}
@@ -313,7 +314,7 @@ export default function NotificationsPage() {
                       </div>
                       <div className="ml-auto shrink-0">
                         <DropdownMenu
-                          label={`Actions for ${n.message}`}
+                          label={t("devices.actionsFor", { name: notificationText(n).message })}
                           groups={[
                             [
                               unread
@@ -349,7 +350,7 @@ export default function NotificationsPage() {
       <ItemSheet
         open={open != null}
         onClose={() => setOpen(null)}
-        title={open?.latest.message ?? t("alerts.notification")}
+        title={open ? notificationText(open.latest).message : t("alerts.notification")}
         sub={open ? `${SEVERITY[open.latest.severity].label}${open.count > 1 ? ` · ${t("alerts.times", { count: open.count })}` : ""}` : undefined}
         footer={
           open ? (
@@ -375,7 +376,7 @@ export default function NotificationsPage() {
       >
         {open && (
           <div className="flex flex-col gap-4">
-            {open.latest.detail && <p className="text-sm text-ink">{open.latest.detail}</p>}
+            {notificationText(open.latest).detail && <p className="text-sm text-ink">{notificationText(open.latest).detail}</p>}
             {alarmState(open.latest, who) ? (
               <p className={cn("text-sm", open.latest.cleared_at ? "text-status-online" : "text-ink-muted")}>{alarmState(open.latest, who)}</p>
             ) : (

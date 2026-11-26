@@ -203,6 +203,47 @@ def _default_message(rule: Rule, snapshot: MetricSnapshot, edge: Edge = "fire") 
     return f"{rule.name}."
 
 
+def _condition_i18n(node: dict[str, Any], snapshot: MetricSnapshot) -> dict[str, Any]:
+    """The condition as the clients word it: its tree, each leaf with the
+    value that triggered it."""
+    if node["kind"] == "leaf":
+        current = snapshot.get(_leaf_signal_key(node))
+        return {
+            "kind": "leaf",
+            "metric": node["metric"],
+            "operator": node["operator"],
+            "rhs": node.get("rhs"),
+            "current": current.value if current is not None else None,
+        }
+    return {
+        "kind": "group",
+        "op": node["op"],
+        "predicates": [_condition_i18n(child, snapshot) for child in node["predicates"]],
+    }
+
+
+def _default_message_i18n(rule: Rule, snapshot: MetricSnapshot, edge: Edge) -> dict[str, Any]:
+    """_default_message's keys and values (DESIGN.md §11a; Spanish plan L8)."""
+    if rule.condition is not None:
+        key = "rule.cleared" if edge == "clear" else "rule.fired"
+        return {
+            "message": {
+                "key": key,
+                "params": {"condition": _condition_i18n(rule.condition, snapshot)},
+            }
+        }
+    trigger = rule.trigger or {}
+    if trigger.get("type") == "device_status":
+        connected = trigger.get("transition") == "connected"
+        return {
+            "message": {
+                "key": "rule.deviceConnected" if connected else "rule.deviceDisconnected",
+                "params": {},
+            }
+        }
+    return {"message": {"key": "rule.named", "params": {"rule": rule.name}}}
+
+
 def _stamp_condition_device(node: dict[str, Any], device_id: uuid.UUID) -> dict[str, Any]:
     """Fill in a leaf's `device_id` from the path device (the device-scoped
     wrapper endpoint) — a canonical POST /rules leaf already carries its own.
@@ -1126,6 +1167,9 @@ async def _dispatch_actions(
                 message,
                 severity="warning" if edge == "fire" else "info",
                 kind="rule_fired" if edge == "fire" else "rule_cleared",
+                # A person's own message stays as written; the default is
+                # worded by each reader's client (DESIGN.md §11a).
+                i18n=None if notif is not None else _default_message_i18n(rule, snapshot, edge),
             )
             outcomes.append(
                 _ActionOutcome("notification", notif_index, "success", {"message": message}, None)
