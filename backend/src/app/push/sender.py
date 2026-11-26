@@ -20,6 +20,7 @@ import httpx
 import redis.asyncio as redis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app import i18n
 from app.config import settings
 from app.db import set_tenant_context
 from app.devices import service as devices_service
@@ -47,22 +48,26 @@ def compose(
     rule_id: uuid.UUID | None,
     device_name: str | None,
     rule_name: str | None,
+    locale: str | None = None,
 ) -> dict[str, Any]:
-    """The FCM message for one alert, without the token. Names only."""
-    rule = rule_name or "A rule"
-    device = device_name or "A device"
-    titles = {
-        "rule_fired": f"{rule} fired",
-        "device_offline": f"{device} went offline",
-        "device_online": f"{device} is back online",
-        "device_health": f"{device} needs a look",
-        "rule_health": f"{rule} can't evaluate",
-        "delivery_failed": f"A delivery failed for {rule}",
+    """The FCM message for one alert, without the token. Names only, in the
+    phone owner's language (DESIGN.md §11a)."""
+    rule = rule_name or i18n.t(locale, "push.aRule")
+    device = device_name or i18n.t(locale, "push.aDevice")
+    known = {
+        "rule_fired",
+        "device_offline",
+        "device_online",
+        "device_health",
+        "rule_health",
+        "delivery_failed",
     }
-    title = titles.get(kind, "New alert")
-    body = (
-        device_name if kind == "rule_fired" and device_name else "Open IO Driven for the details."
+    title = (
+        i18n.t(locale, f"push.{kind}", rule=rule, device=device)
+        if kind in known
+        else i18n.t(locale, "push.newAlert")
     )
+    body = device_name if kind == "rule_fired" and device_name else i18n.t(locale, "push.openApp")
     data = {
         "notification_id": str(notification_id),
         "tenant_id": str(tenant_id),
@@ -118,18 +123,23 @@ async def deliver(
                 rule_name = (await rules_service.get_rule(session, tenant_id, n.rule_id)).name
             except rules_service.RuleNotFoundError:
                 pass
-    message = compose(
-        notification_id=n.id,
-        tenant_id=tenant_id,
-        kind=n.kind,
-        severity=n.severity,
-        device_id=n.device_id,
-        rule_id=n.rule_id,
-        device_name=device_name,
-        rule_name=rule_name,
-    )
+    messages = {
+        loc: compose(
+            notification_id=n.id,
+            tenant_id=tenant_id,
+            kind=n.kind,
+            severity=n.severity,
+            device_id=n.device_id,
+            rule_id=n.rule_id,
+            device_name=device_name,
+            rule_name=rule_name,
+            locale=loc,
+        )
+        for loc in {t.locale for t in targets}
+    }
     results = await asyncio.gather(
-        *(client.send({**message, "token": t.token}) for t in targets), return_exceptions=True
+        *(client.send({**messages[t.locale], "token": t.token}) for t in targets),
+        return_exceptions=True,
     )
     gone = [t.id for t, r in zip(targets, results, strict=True) if r is SendResult.GONE]
     for r in results:

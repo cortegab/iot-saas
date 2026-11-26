@@ -5,8 +5,11 @@ serves OpenAPI at /docs, and gives the frontend something to call. Real modules
 (auth, tenants, devices, ...) are added per docs/history/PLAN.md.
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exception_handlers import http_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api_keys.router import router as api_keys_router
 from app.auth.router import router as auth_router
@@ -17,6 +20,7 @@ from app.contact.router import router as contact_router
 from app.dashboards.router import router as dashboards_router
 from app.devices.router import router as devices_router
 from app.firmware.router import router as firmware_router
+from app.i18n import locale_from_header, translate_detail
 from app.ingestion.router import router as ingestion_router
 from app.logging_config import configure_logging
 from app.meta.router import router as meta_router
@@ -33,6 +37,19 @@ from app.zones.router import router as zones_router
 configure_logging()
 
 app = FastAPI(title="IO Driven API", version="0.0.1")
+
+
+@app.exception_handler(StarletteHTTPException)
+async def _localized_http_exception(request: Request, exc: StarletteHTTPException) -> Response:
+    """Error messages in the language the client shows (Accept-Language;
+    DESIGN.md §11a). The fixed English messages have a Spanish version;
+    anything else is sent as written."""
+    if isinstance(exc.detail, str):
+        exc.detail = translate_detail(
+            locale_from_header(request.headers.get("accept-language")), exc.detail
+        )
+    return await http_exception_handler(request, exc)
+
 
 # Allowed browser origins come from settings.cors_allow_origins (CORS_ALLOW_ORIGINS
 # env var) — defaults to the local Next.js dev server, set to the real frontend

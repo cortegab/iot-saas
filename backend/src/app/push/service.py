@@ -14,6 +14,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import service as auth_service
 from app.push.models import PushDevice
 from app.tenants import service as tenants_service
 
@@ -119,6 +120,8 @@ async def unregister(session: AsyncSession, device: PushDevice) -> None:
 class Target:
     id: uuid.UUID
     token: str
+    # The phone owner's saved language; None follows the phone (sent in English).
+    locale: str | None = None
 
 
 async def targets_for(session: AsyncSession, tenant_id: uuid.UUID, severity: str) -> list[Target]:
@@ -129,11 +132,13 @@ async def targets_for(session: AsyncSession, tenant_id: uuid.UUID, severity: str
     result = await session.execute(
         select(PushDevice).where(PushDevice.tenant_id == tenant_id, PushDevice.enabled.is_(True))
     )
-    return [
-        Target(d.id, d.token)
+    phones = [
+        d
         for d in result.scalars().all()
         if d.user_id in members and receives(d.min_severity, severity)
     ]
+    locales = await auth_service.get_locales_by_user_ids(session, list({d.user_id for d in phones}))
+    return [Target(d.id, d.token, locales.get(d.user_id)) for d in phones]
 
 
 async def forget_tokens(session: AsyncSession, tenant_id: uuid.UUID, ids: list[uuid.UUID]) -> None:
