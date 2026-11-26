@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createT, isLocale, pickLocale, setRegion, type Locale, type T } from "@iodriven/shared/i18n";
 
 export { type Locale, type MessageKey, type T } from "@iodriven/shared/i18n";
@@ -93,4 +93,17 @@ export function useApplyLocale(): (choice: Locale | null) => void {
 /** A saved account choice, if it's a language we speak. */
 export function savedLocale(value: unknown): Locale | null {
   return isLocale(value) ? value : null;
+}
+
+/**
+ * A translated sentence with React nodes in its placeholders ("You're
+ * invited to {workspace} as {role}." with both bold), so word order stays
+ * the translation's. Plain `params` still format as in `t`.
+ */
+export function richT(t: T, key: Parameters<T>[0], nodes: Record<string, ReactNode>, params: Record<string, string | number> = {}): ReactNode[] {
+  const marks: Record<string, string> = {};
+  for (const name of Object.keys(nodes)) marks[name] = `\u0000${name}\u0000`;
+  return t(key, { ...params, ...marks })
+    .split("\u0000")
+    .map((part, i) => (i % 2 === 1 && part in nodes ? <Fragment key={i}>{nodes[part]}</Fragment> : part));
 }

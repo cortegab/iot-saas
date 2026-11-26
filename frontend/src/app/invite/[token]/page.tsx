@@ -12,8 +12,9 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { AuthCard, AuthScreen } from "@/components/auth/AuthCard";
 import { GoogleSignIn } from "@/components/auth/GoogleSignIn";
 import { ApiRequestError, apiClient } from "@/lib/api-client";
-import { ROLE_LABEL, toRole } from "@/lib/permissions";
+import { toRole } from "@/lib/permissions";
 import type { components } from "@/types/api";
+import { richT, useT } from "@/lib/i18n";
 
 type Preview = components["schemas"]["InvitationPreviewResponse"];
 type TokenPairResponse = components["schemas"]["TokenPairResponse"];
@@ -23,6 +24,7 @@ type TokenPairResponse = components["schemas"]["TokenPairResponse"];
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
   const router = useRouter();
+  const t = useT();
   const { status, accessToken, adoptSession, logout } = useAuth();
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -36,7 +38,8 @@ export default function InvitePage() {
     apiClient
       .get<Preview>(`/auth/invitations/${token}`)
       .then(setPreview)
-      .catch((err) => setLoadError(err instanceof ApiRequestError ? err.message : "Couldn't open this invitation."));
+      .catch((err) => setLoadError(err instanceof ApiRequestError ? err.message : t("auth.invite.openFailed")));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   useEffect(() => {
@@ -62,7 +65,7 @@ export default function InvitePage() {
       adoptSession(data, joined?.tenant_id);
       router.replace(HOME);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't accept the invitation. Try again.");
+      setError(err instanceof ApiRequestError ? err.message : t("auth.invite.acceptFailed"));
     } finally {
       setBusy(false);
     }
@@ -72,11 +75,11 @@ export default function InvitePage() {
   if (loadError) {
     body = (
       <AuthCard
-        title="This invitation can't be used"
+        title={t("auth.invite.unusableTitle")}
         description={loadError}
         footer={
           <Link href="/login" className="font-medium text-accent hover:underline">
-            Go to sign in
+            {t("auth.invite.goSignIn")}
           </Link>
         }
       >
@@ -84,7 +87,7 @@ export default function InvitePage() {
     );
   } else if (!preview || status === "loading") {
     body = (
-      <AuthCard title="Opening your invitation…">
+      <AuthCard title={t("auth.invite.opening")}>
         <LoadingSkeleton rows={2} rowClassName="h-10" />
       </AuthCard>
     );
@@ -92,32 +95,34 @@ export default function InvitePage() {
     const role = toRole(preview.role);
     const intro = (
       <>
-        You&apos;re invited to <strong className="text-ink">{preview.tenant_name}</strong> as{" "}
-        <strong className="text-ink">{role ? ROLE_LABEL[role] : preview.role}</strong>.
+        {richT(t, "auth.invite.intro", {
+          workspace: <strong className="text-ink">{preview.tenant_name}</strong>,
+          role: <strong className="text-ink">{role ? t(`roles.${role}`) : preview.role}</strong>,
+        })}
       </>
     );
     if (status === "authenticated") {
       const matches = me != null && me.toLowerCase() === preview.email.toLowerCase();
       body = (
-        <AuthCard title={`Join ${preview.tenant_name}`} description={intro}>
+        <AuthCard title={t("auth.invite.join", { workspace: preview.tenant_name })} description={intro}>
           {me == null ? (
             <LoadingSkeleton rows={1} rowClassName="h-10" />
           ) : matches ? (
             <>
-              <p className="text-sm text-ink-muted">Signed in as {me}.</p>
+              <p className="text-sm text-ink-muted">{t("auth.invite.signedInAs", { email: me })}</p>
               {error && (
                 <p role="alert" className="text-sm text-status-error">
                   {error}
                 </p>
               )}
               <Button onClick={() => void accept()} disabled={busy} className="w-full">
-                {busy ? "Joining…" : "Accept invitation"}
+                {busy ? t("auth.invite.joining") : t("auth.invite.accept")}
               </Button>
             </>
           ) : (
             <>
               <p className="text-sm text-ink">
-                This invitation is for <strong>{preview.email}</strong>, but you&apos;re signed in as {me}.
+                {richT(t, "auth.invite.wrongAccount", { invited: <strong>{preview.email}</strong> }, { me })}
               </p>
               <Button
                 variant="secondary"
@@ -126,7 +131,7 @@ export default function InvitePage() {
                 onClick={() => void logout()}
                 className="w-full"
               >
-                Sign out to accept as {preview.email}
+                {t("auth.invite.signOutToAccept", { email: preview.email })}
               </Button>
             </>
           )}
@@ -134,21 +139,19 @@ export default function InvitePage() {
       );
     } else if (preview.account_exists) {
       body = (
-        <AuthCard title={`Join ${preview.tenant_name}`} description={intro}>
-          <p className="text-sm text-ink-muted">
-            {preview.email} already has an account. Sign in to accept.
-          </p>
+        <AuthCard title={t("auth.invite.join", { workspace: preview.tenant_name })} description={intro}>
+          <p className="text-sm text-ink-muted">{t("auth.invite.hasAccount", { email: preview.email })}</p>
           <Link
             href={`/login?next=${encodeURIComponent(`/invite/${token}`)}`}
             className="grid h-11 place-items-center rounded-md bg-accent text-section font-medium text-on-accent hover:bg-accent-strong"
           >
-            Sign in to accept
+            {t("auth.invite.signInToAccept")}
           </Link>
         </AuthCard>
       );
     } else {
       body = (
-        <AuthCard title={`Join ${preview.tenant_name}`} description={intro}>
+        <AuthCard title={t("auth.invite.join", { workspace: preview.tenant_name })} description={intro}>
           {/* With the Google account for this email: no password to choose. */}
           <GoogleSignIn
             extra={{ invitation_token: token }}
@@ -160,13 +163,13 @@ export default function InvitePage() {
             onError={setError}
           />
           <form onSubmit={(e) => void accept(e)} className="flex flex-col gap-3.5">
-            <Field label="Email">
+            <Field label={t("auth.email")}>
               <Input value={preview.email} disabled />
             </Field>
-            <Field label="Your name" optional>
+            <Field label={t("auth.yourName")} optional>
               <Input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
             </Field>
-            <Field label="Choose a password" hint="At least 8 characters.">
+            <Field label={t("auth.invite.choosePassword")} hint={t("auth.atLeast8")}>
               <Input
                 type="password"
                 required
@@ -182,7 +185,7 @@ export default function InvitePage() {
               </p>
             )}
             <Button type="submit" disabled={busy || password.length < 8} className="w-full">
-              {busy ? "Joining…" : "Create account and join"}
+              {busy ? t("auth.invite.joining") : t("auth.invite.createAndJoin")}
             </Button>
           </form>
         </AuthCard>

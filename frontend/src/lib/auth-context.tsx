@@ -13,6 +13,7 @@ import {
 import { mutate } from "swr";
 import { apiClient, ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
+import { browserLocale } from "@/lib/i18n";
 
 type TokenPairResponse = components["schemas"]["TokenPairResponse"];
 type MembershipSummary = components["schemas"]["MembershipSummary"];
@@ -176,6 +177,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
         tenant_name: tenantName,
         name: name?.trim() || undefined,
+        // The new workspace's email language (DESIGN.md §11a).
+        locale: browserLocale(),
       });
       applySession(data);
     },

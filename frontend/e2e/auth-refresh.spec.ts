@@ -1,5 +1,5 @@
 import type { BrowserContext, Page } from "@playwright/test";
-import { API_URL, expect, landed, test } from "./fixtures";
+import { API_URL, chooseWorkspaceIfAsked, expect, landed, test } from "./fixtures";
 
 // Refresh tokens rotate, and the API revokes the whole session when a rotated
 // one comes back (a replay). These pin the frontend to one refresh at a time:
@@ -74,6 +74,7 @@ test("two tabs on one kept session refresh in turn, without revoking it", async 
     await a.getByLabel("Password", { exact: true }).fill(process.env.E2E_PASSWORD!);
     await a.getByLabel("Keep me signed in on this device").check();
     await a.getByRole("button", { name: "Sign in", exact: true }).click();
+    await chooseWorkspaceIfAsked(a);
     await landed(a);
     await a.goto("/devices");
     await b.goto("/devices");

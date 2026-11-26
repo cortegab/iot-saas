@@ -55,14 +55,11 @@ export const test = base.extend<{ ruleUnderTest: RuleFixture }>({
   page: async ({ page }, use) => {
     const { email, password } = credentials();
     await page.goto("/login");
-    await page.getByLabel("Email").fill(email);
-    await page.getByLabel("Password", { exact: true }).fill(password);
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    // An account in several workspaces chooses one first: the first, the
-    // same one login() puts in X-Tenant-Id (memberships[0]).
-    const chooser = page.getByRole("list", { name: "Workspaces" });
-    await Promise.race([chooser.waitFor({ timeout: 15_000 }).catch(() => {}), landed(page).catch(() => {})]);
-    if (await chooser.isVisible()) await chooser.getByRole("button").first().click();
+    // By field type, not label: the page can be in Spanish (e2e/spanish.spec.ts).
+    await page.locator('input[type="email"]').fill(email);
+    await page.locator('input[autocomplete="current-password"]').fill(password);
+    await page.locator('form button[type="submit"]').click();
+    await chooseWorkspaceIfAsked(page);
     await landed(page);
     await use(page);
   },
@@ -123,6 +120,14 @@ export const test = base.extend<{ ruleUnderTest: RuleFixture }>({
 });
 
 export { expect } from "@playwright/test";
+
+/** An account in several workspaces chooses one after signing in: take the
+ * first, the same one login() puts in X-Tenant-Id (memberships[0]). */
+export async function chooseWorkspaceIfAsked(page: Page): Promise<void> {
+  const chooser = page.getByRole("list", { name: /^(Workspaces|Espacios de trabajo)$/ });
+  await Promise.race([chooser.waitFor({ timeout: 15_000 }).catch(() => {}), landed(page).catch(() => {})]);
+  if (await chooser.isVisible()) await chooser.getByRole("button").first().click();
+}
 
 /** The timeline folds runs of like commands into one ×N row; open them all to count rows. */
 export async function expandCommandRuns(timeline: Locator) {
