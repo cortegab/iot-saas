@@ -27,6 +27,7 @@ import { ApiRequestError } from "@/lib/api-client";
 import { KEY_STATUS_LABEL, KEY_STATUS_TONE, keyStatus, type ApiKey } from "@/lib/api-key-status";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, timeAgo } from "@/lib/time-ago";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 /** API keys (DESIGN.md §6/§8): Key · Role · Last used · Expires · Status.
  * A row peeks; keys are created on /keys/new (the one-time secret) and are
@@ -63,7 +64,7 @@ export default function KeysPage() {
   const columns: DataColumn<ApiKey>[] = [
     {
       id: "name",
-      header: "Key",
+      header: tr("lists.keys.key"),
       sortable: true,
       cell: (k) => (
         <NameCell
@@ -82,17 +83,17 @@ export default function KeysPage() {
     },
     {
       id: "role",
-      header: "Scope",
+      header: tr("lists.keys.scope"),
       cell: (k) => {
         const r = toRole(k.role);
         return <Tag tone="neutral">{r ? ROLE_LABEL[r] : k.role}</Tag>;
       },
     },
-    { id: "used", header: "Last used", sortable: true, hideOnPhone: true, priority: 3, fold: (k) => (k.last_used_at ? `Used ${timeAgo(k.last_used_at)}` : "Never used"), cell: (k) => <span className="text-ink-muted">{k.last_used_at ? timeAgo(k.last_used_at) : "Never"}</span> },
-    { id: "expires", header: "Expires", sortable: true, hideOnPhone: true, priority: 2, fold: (k) => (k.expires_at ? `Expires ${formatDate(k.expires_at)}` : null), cell: (k) => <span className="whitespace-nowrap text-ink-muted">{k.expires_at ? formatDate(k.expires_at) : "Never"}</span> },
+    { id: "used", header: tr("lists.keys.lastUsed"), sortable: true, hideOnPhone: true, priority: 3, fold: (k) => (k.last_used_at ? tr("lists.keys.usedAgo", { ago: timeAgo(k.last_used_at) }) : tr("lists.keys.neverUsed")), cell: (k) => <span className="text-ink-muted">{k.last_used_at ? timeAgo(k.last_used_at) : tr("lists.keys.never")}</span> },
+    { id: "expires", header: tr("lists.keys.expires"), sortable: true, hideOnPhone: true, priority: 2, fold: (k) => (k.expires_at ? tr("lists.keys.expiresOn", { date: formatDate(k.expires_at) }) : null), cell: (k) => <span className="whitespace-nowrap text-ink-muted">{k.expires_at ? formatDate(k.expires_at) : tr("lists.keys.never")}</span> },
     {
       id: "status",
-      header: "Status",
+      header: tr("lists.keys.status"),
       cell: (k) => {
         const st = keyStatus(k);
         return <Badge tone={KEY_STATUS_TONE[st]} label={KEY_STATUS_LABEL[st]} />;
@@ -102,15 +103,15 @@ export default function KeysPage() {
 
   const rowMenu = (k: ApiKey): DropdownMenuItem[][] => [
     [
-      { label: "Open", icon: <Eye size={15} />, onClick: () => router.push(`/keys/${k.id}`) },
+      { label: tr("lists.keys.open"), icon: <Eye size={15} />, onClick: () => router.push(`/keys/${k.id}`) },
       {
-        label: "Copy prefix",
+        label: tr("lists.keys.copyPrefix"),
         icon: <Copy size={15} />,
         onClick: () =>
           void navigator.clipboard
             .writeText(k.key_prefix)
-            .then(() => toast({ tone: "info", title: "Prefix copied", detail: `${k.key_prefix}… identifies the key in logs.` }))
-            .catch(() => toast({ tone: "error", title: "Couldn't reach the clipboard", detail: k.key_prefix })),
+            .then(() => toast({ tone: "info", title: tr("lists.keys.prefixCopied"), detail: tr("lists.keys.prefixDetail", { prefix: k.key_prefix }) }))
+            .catch(() => toast({ tone: "error", title: tr("lists.keys.clipboard"), detail: k.key_prefix })),
       },
     ],
     ...endItems(k, () => peek.peekId === k.id && peek.close()),
@@ -119,8 +120,8 @@ export default function KeysPage() {
   if (!canManage) {
     return (
       <>
-        <PageHeader title="API keys" />
-        <EmptyState icon={<Lock aria-hidden size={24} />} title="Admins manage API keys" description="Ask an admin if an integration needs access." />
+        <PageHeader title={tr("lists.keys.title")} />
+        <EmptyState icon={<Lock aria-hidden size={24} />} title={tr("lists.keys.adminsOnly")} description={tr("lists.keys.adminsOnlyBody")} />
       </>
     );
   }
@@ -130,7 +131,7 @@ export default function KeysPage() {
   const newButton = (
     <Link href="/keys/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
-      New key
+      {tr("lists.keys.new")}
     </Link>
   );
 
@@ -140,17 +141,17 @@ export default function KeysPage() {
           holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
         inline
-        title="API keys"
-        description="For scripts and other systems: Authorization: Bearer."
+        title={tr("lists.keys.title")}
+        description={tr("lists.keys.description")}
         actions={!error && keys && total > 0 ? undefined : newButton}
       />
       {error ? (
-        <ErrorState title="Couldn't load API keys" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
+        <ErrorState title={tr("lists.keys.loadFailed")} message={error instanceof ApiRequestError ? error.message : tr("devices.apiDown")} onRetry={() => void mutate()} />
       ) : isLoading || !keys ? (
         <TableSkeleton rows={3} columns={5} />
       ) : (
         <ListWithPeek
-          label="API key"
+          label={tr("lists.keys.label")}
           onClose={peek.close}
           nav={peek.nav}
           peek={
@@ -162,8 +163,8 @@ export default function KeysPage() {
           {total === 0 ? (
             <FirstUse
               icon={<KeyRound aria-hidden size={26} />}
-              title="No API keys yet"
-              description="Create a key for a script or integration — Grafana, an ERP sync, a CI job. It authenticates as Authorization: Bearer with the role you pick."
+              title={tr("lists.keys.emptyTitle")}
+              description={tr("lists.keys.emptyBody")}
               action={newButton}
             />
           ) : (
@@ -171,26 +172,26 @@ export default function KeysPage() {
               <ListToolbar
                 query={list.q}
                 onQuery={list.setQuery}
-                placeholder="Search keys"
+                placeholder={tr("lists.keys.search")}
                 actions={newButton}
                 quick={{
-                  label: "Show",
+                  label: tr("lists.members.show"),
                   value: list.filters.show,
                   onChange: (v) => list.setFilter("show", v),
                   options: [
-                    { value: "all", label: "All", count: counts.all },
-                    { value: "active", label: "Active", count: counts.active, tone: "online", hint: "Can authenticate" },
-                    { value: "inactive", label: "Revoked or expired", count: counts.inactive, tone: "unknown", shape: "square", hint: "Can't authenticate any more" },
+                    { value: "all", label: tr("devices.all"), count: counts.all },
+                    { value: "active", label: tr("lists.keys.active"), count: counts.active, tone: "online", hint: tr("lists.keys.activeHint") },
+                    { value: "inactive", label: tr("lists.keys.inactive"), count: counts.inactive, tone: "unknown", shape: "square", hint: tr("lists.keys.inactiveHint") },
                   ],
                 }}
               />
               <FilterChips chips={chips} onClearAll={list.clearAll} />
               {filtered.length === 0 ? (
-                <NoResults noun="keys" onClear={list.clearAll} />
+                <NoResults noun={tr("lists.keys.nounMany")} onClear={list.clearAll} />
               ) : (
                 <div className="flex flex-col gap-2">
                   <DataTable
-                    label="API keys"
+                    label={tr("lists.keys.title")}
                     columns={columns}
                     rows={pageRows}
                     rowKey={(k) => k.id}
@@ -206,7 +207,7 @@ export default function KeysPage() {
                   <TableFooter
                     shown={filtered.length}
                     total={total}
-                    noun={["key", "keys"]}
+                    noun={[tr("lists.keys.nounOne"), tr("lists.keys.nounMany")]}
                     page={page}
                     pageCount={pageCount}
                     pageSize={list.pageSize}
