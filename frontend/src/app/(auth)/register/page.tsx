@@ -12,12 +12,14 @@ import { AuthCard } from "@/components/auth/AuthCard";
 import { GoogleSignIn } from "@/components/auth/GoogleSignIn";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { ApiRequestError } from "@/lib/api-client";
+import { browserLocale, useT } from "@/lib/i18n";
 
 /** Create an account (DESIGN.md §10): the workspace is created in the same
  * step, so onboarding goes straight to adding a device. */
 export default function RegisterPage() {
   const { register, adoptSession } = useAuth();
   const router = useRouter();
+  const t = useT();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +28,7 @@ export default function RegisterPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const shortPassword = touched && password.length > 0 && password.length < 8 ? "Use at least 8 characters." : null;
+  const shortPassword = touched && password.length > 0 && password.length < 8 ? t("auth.use8") : null;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -38,7 +40,7 @@ export default function RegisterPage() {
       await register(email.trim(), password, tenantName.trim(), name);
       router.replace(HOME);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't create the account. Try again in a moment.");
+      setError(err instanceof ApiRequestError ? err.message : t("auth.register.failed"));
     } finally {
       setSubmitting(false);
     }
@@ -46,13 +48,13 @@ export default function RegisterPage() {
 
   return (
     <AuthCard
-      title="Create your account"
-      description="Your workspace is created in the same step."
+      title={t("auth.register.title")}
+      description={t("auth.register.description")}
       footer={
         <>
-          Already have an account?{" "}
+          {t("auth.register.haveAccount")}{" "}
           <Link href="/login" className="font-medium text-accent hover:underline">
-            Sign in
+            {t("auth.signIn")}
           </Link>
         </>
       }
@@ -60,7 +62,7 @@ export default function RegisterPage() {
       {/* The workspace name, if typed already, names the new workspace (else "Ana's workspace"). */}
       <GoogleSignIn
         text="signup_with"
-        extra={tenantName.trim() ? { tenant_name: tenantName.trim() } : undefined}
+        extra={{ ...(tenantName.trim() ? { tenant_name: tenantName.trim() } : {}), locale: browserLocale() }}
         onSession={(data) => {
           adoptSession(data);
           router.replace(HOME);
@@ -68,16 +70,16 @@ export default function RegisterPage() {
         onError={setError}
       />
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3.5">
-        <Field label="Workspace name" hint="Your company or site. You can rename it later.">
-          <Input required autoComplete="organization" value={tenantName} onChange={(e) => setTenantName(e.target.value)} placeholder="e.g. Northfield Greenhouses" />
+        <Field label={t("auth.register.workspaceName")} hint={t("auth.register.workspaceHint")}>
+          <Input required autoComplete="organization" value={tenantName} onChange={(e) => setTenantName(e.target.value)} placeholder={t("auth.register.workspacePlaceholder")} />
         </Field>
-        <Field label="Your name" optional>
+        <Field label={t("auth.yourName")} optional>
           <Input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="Email">
+        <Field label={t("auth.email")}>
           <Input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
-        <Field label="Password" hint="At least 8 characters." error={shortPassword}>
+        <Field label={t("auth.password")} hint={t("auth.atLeast8")} error={shortPassword}>
           <PasswordInput required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} onBlur={() => setTouched(true)} />
         </Field>
         {error && (
@@ -86,7 +88,7 @@ export default function RegisterPage() {
           </p>
         )}
         <Button type="submit" disabled={submitting} className="w-full">
-          {submitting ? "Creating…" : "Create account"}
+          {submitting ? t("auth.register.creating") : t("auth.register.create")}
         </Button>
       </form>
     </AuthCard>

@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Textarea } from "@/components/ui/Textarea";
 import { ApiRequestError, apiClient } from "@/lib/api-client";
+import { marketingCopy } from "@/lib/marketing-copy";
+import { useLocale } from "@/lib/i18n";
 
 export type Deployment = "cloud" | "dedicated" | "on_prem" | "not_sure";
 
@@ -29,6 +31,8 @@ export function TalkToUsDialog({ open, onClose, deployment }: { open: boolean; o
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
+  const c = marketingCopy(useLocale());
+  const k = c.talk;
 
   useEffect(() => {
     if (open) {
@@ -40,11 +44,11 @@ export function TalkToUsDialog({ open, onClose, deployment }: { open: boolean; o
   }, [open, deployment]);
 
   const problem = !name.trim()
-    ? { field: "name", text: "Tell us your name." }
+    ? { field: "name", text: k.needName }
     : !EMAIL.test(email.trim())
-      ? { field: "email", text: "Enter a work email we can reply to." }
+      ? { field: "email", text: k.needEmail }
       : !company.trim()
-        ? { field: "company", text: "Which company or site is this for?" }
+        ? { field: "company", text: k.needCompany }
         : null;
 
   async function submit(e: FormEvent) {
@@ -57,7 +61,7 @@ export function TalkToUsDialog({ open, onClose, deployment }: { open: boolean; o
       await apiClient.post("/public/contact", {}, { name: name.trim(), email: email.trim(), company: company.trim(), deployment: deploy, devices, message: message.trim(), website });
       setSent(true);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't send it. Try again in a moment.");
+      setError(err instanceof ApiRequestError ? err.message : k.failed);
     } finally {
       setBusy(false);
     }
@@ -67,10 +71,10 @@ export function TalkToUsDialog({ open, onClose, deployment }: { open: boolean; o
 
   if (sent) {
     return (
-      <Dialog open={open} onClose={onClose} title="Thanks, we've got it" footer={<Button onClick={onClose}>Close</Button>}>
+      <Dialog open={open} onClose={onClose} title={k.thanks} footer={<Button onClick={onClose}>{k.close}</Button>}>
         <p className="flex gap-2.5 text-sm text-ink">
           <CheckCircle2 aria-hidden size={18} className="mt-0.5 shrink-0 text-status-online" />
-          We reply within one working day, to {email.trim()}.
+          {k.replyTo.replace("{email}", email.trim())}
         </p>
       </Dialog>
     );
@@ -81,49 +85,49 @@ export function TalkToUsDialog({ open, onClose, deployment }: { open: boolean; o
       open={open}
       onClose={onClose}
       wide
-      title="Talk to us about deployment"
-      description="Tell us a little about your sites. We reply within one working day."
+      title={k.title}
+      description={k.description}
       onSubmit={(e) => void submit(e)}
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>
-            Cancel
+            {k.cancel}
           </Button>
           <Button type="submit" disabled={busy}>
-            {busy ? "Sending…" : "Send"}
+            {busy ? k.sending : k.send}
           </Button>
         </>
       }
     >
       <div className="grid gap-3.5 sm:grid-cols-2">
-        <Field label="Name" error={err("name")}>
+        <Field label={k.name} error={err("name")}>
           <Input autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
-        <Field label="Work email" error={err("email")}>
+        <Field label={k.email} error={err("email")}>
           <Input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
-        <Field label="Company or site" error={err("company")}>
+        <Field label={k.company} error={err("company")}>
           <Input autoComplete="organization" value={company} onChange={(e) => setCompany(e.target.value)} />
         </Field>
-        <Field label="Interested in">
+        <Field label={k.interested}>
           <Select value={deploy} onChange={(e) => setDeploy(e.target.value as Deployment)}>
-            <option value="cloud">Cloud</option>
-            <option value="dedicated">Dedicated cloud</option>
-            <option value="on_prem">On-premise</option>
-            <option value="not_sure">Not sure yet</option>
+            <option value="cloud">{c.deployment.options.cloud.name}</option>
+            <option value="dedicated">{c.deployment.options.dedicated.name}</option>
+            <option value="on_prem">{c.deployment.options.on_prem.name}</option>
+            <option value="not_sure">{k.notSure}</option>
           </Select>
         </Field>
-        <Field label="Devices, roughly">
+        <Field label={k.devices}>
           <Select value={devices} onChange={(e) => setDevices(e.target.value)}>
-            <option value="<100">Fewer than 100</option>
-            <option value="100-500">100 to 500</option>
-            <option value="500-1000">500 to 1,000</option>
-            <option value=">1000">More than 1,000</option>
+            <option value="<100">{k.sizes[0]}</option>
+            <option value="100-500">{k.sizes[1]}</option>
+            <option value="500-1000">{k.sizes[2]}</option>
+            <option value=">1000">{k.sizes[3]}</option>
           </Select>
         </Field>
         <div className="sm:col-span-2">
-          <Field label="Anything else" optional>
-            <Textarea rows={3} value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Sites, equipment (OPC UA, Modbus…), network constraints" />
+          <Field label={k.else} optional>
+            <Textarea rows={3} value={message} onChange={(e) => setMessage(e.target.value)} placeholder={k.elsePlaceholder} />
           </Field>
         </div>
         {/* Honeypot: off-screen and out of the tab order. */}

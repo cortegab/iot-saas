@@ -1,10 +1,9 @@
 import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import "./globals.css";
-import { cookies, headers } from "next/headers";
-import { parseAcceptLanguage, pickLocale } from "@iodriven/shared/i18n";
+import { serverLocale } from "@/lib/i18n-server";
 import { AuthProvider } from "@/lib/auth-context";
-import { I18nProvider, LANG_COOKIE } from "@/lib/i18n";
+import { I18nProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/components/ui/Toast";
 
 /* Type system (docs/design/DESIGN.md §3): Geist for display, UI and readouts;
@@ -46,8 +45,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
   // DESIGN.md §11a: the saved language (cookie), else the browser's, so the
   // first paint is already in the reader's language. Reading the request
   // makes pages render per request rather than at build time.
-  const [jar, head] = await Promise.all([cookies(), headers()]);
-  const locale = pickLocale(jar.get(LANG_COOKIE)?.value, parseAcceptLanguage(head.get("accept-language")));
+  const locale = await serverLocale();
   return (
     <html lang={locale} className={`${Geist.variable} ${GeistMono.variable}`} suppressHydrationWarning>
       <body className="m-0 min-h-screen">

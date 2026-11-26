@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { serverLocale } from "@/lib/i18n-server";
 
 export const metadata = {
   title: "Privacy · IO Driven",
@@ -21,7 +22,10 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 /** The privacy policy (DESIGN.md §10): a plain document page on the app's
  * tokens, linked from the landing footer, the sign-in page and the Play
  * Store listing. */
-export default function PrivacyPage() {
+export default async function PrivacyPage() {
+  // The policy is English only until a reviewed legal translation exists
+  // (DESIGN.md §11a); Spanish readers are told so.
+  const spanish = (await serverLocale()) === "es";
   return (
     <div className="min-h-screen bg-canvas">
       <header className="night-bg border-b border-[rgba(148,163,184,0.14)]">
@@ -37,6 +41,11 @@ export default function PrivacyPage() {
           <h1 className="text-title font-semibold tracking-[-0.02em]">Privacy</h1>
           <p className="text-meta text-ink-muted">Last updated {UPDATED}</p>
         </div>
+        {spanish && (
+          <p lang="es" className="rounded-lg border border-border bg-surface px-3.5 py-2.5 text-meta text-ink-muted">
+            Esta política de privacidad está disponible solo en inglés por ahora. Si tienes preguntas, escríbenos y te respondemos en español.
+          </p>
+        )}
 
         <p className="max-w-[70ch]">
           IO Driven (iodriven.tech) runs an IoT platform: devices send readings, rules act on them, and people watch and control them on the web and in

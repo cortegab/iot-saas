@@ -6,71 +6,39 @@ import { Badge, Tag } from "@/components/ui/Badge";
 import { MiniStrip, type StripCell } from "@/components/ui/MiniStrip";
 import { Readout } from "@/components/ui/Readout";
 import { cn } from "@/lib/cn";
+import { marketingCopy } from "@/lib/marketing-copy";
+import { useLocale } from "@/lib/i18n";
 
 /** The landing's product tour (demo G): tabs over illustrative screens built
  * from the app's real components with fixture data. Inert — it's a picture. */
+// Each area's icon; the words are in lib/marketing-copy.ts.
 const TOUR = {
-  dashboards: {
-    label: "Dashboards",
-    icon: LayoutDashboard,
-    title: "Live readings, trends and controls on one page",
-    points: [
-      "Value cards, trend charts, gauges, device status and actuator switches.",
-      "Readings stream over WebSocket; charts read 1-minute rollups, never raw rows.",
-      "Dashboards are shared by the whole workspace. Offline devices show their last value, marked stale.",
-    ],
-  },
-  devices: {
-    label: "Devices",
-    icon: Cpu,
-    title: "Every device, its state and its last reading",
-    points: [
-      "Online, offline, never connected and disabled at a glance, with filters and bulk actions.",
-      "Per-device MQTT credentials, stored hashed with argon2id and shown once.",
-      "Commands to an offline device become its desired state, delivered on reconnect within the TTL.",
-    ],
-  },
-  rules: {
-    label: "Rules",
-    icon: ListChecks,
-    title: "Rules you can read out loud",
-    points: [
-      "Conditions across devices with ALL / ANY groups, edited as a form or as a ladder.",
-      "Hold time, hysteresis and cooldown on every rule; hardware rules are checked before they save.",
-      "Preview unsaved edits, replay the last 24 hours, and latch until someone resets.",
-    ],
-  },
-  templates: {
-    label: "Device templates",
-    icon: Box,
-    title: "Describe a kind of device once",
-    points: [
-      "Metrics, units, ranges and publish cadence; actuators and their values.",
-      "Keys become MQTT topic segments, validated so topics can't break.",
-      "Renaming a key used by rules or widgets warns you before it breaks them.",
-    ],
-  },
+  dashboards: LayoutDashboard,
+  devices: Cpu,
+  rules: ListChecks,
+  templates: Box,
 } as const;
 type TourKey = keyof typeof TOUR;
 
 const strip = (fires: number[]): StripCell[] => Array.from({ length: 48 }, (_, i) => (fires.includes(i) ? "fired" : "idle"));
 
 function Screen({ tab }: { tab: TourKey }) {
+  const sc = marketingCopy(useLocale()).tour.screen;
   if (tab === "dashboards") {
     return (
       <div className="grid gap-3 sm:grid-cols-3">
-        <Readout label="Temperature · bay1" value={27.4} unit="°C" min={10} max={40} threshold={30} stamp="live" />
-        <Readout label="Humidity · bay1" value={64} unit="%" min={0} max={100} stamp="live" />
-        <Readout label="Tank level · pumphouse" value={41} unit="%" min={0} max={100} threshold={20} stamp="Last value, 3 min ago" stale />
+        <Readout label={sc.temperature} value={27.4} unit="°C" min={10} max={40} threshold={30} stamp="live" />
+        <Readout label={sc.humidity} value={64} unit="%" min={0} max={100} stamp="live" />
+        <Readout label={sc.tank} value={41} unit="%" min={0} max={100} threshold={20} stamp={sc.lastValue} stale />
       </div>
     );
   }
   if (tab === "devices") {
     const rows: [string, "online" | "offline" | "unknown", string, string][] = [
-      ["bay1-climate", "online", "Climate sensor", "27.4 °C"],
-      ["bay2-climate", "online", "Climate sensor", "26.1 °C"],
-      ["pumphouse", "offline", "Tank + pump", "41 %"],
-      ["door-north", "unknown", "Door contact", "—"],
+      ["bay1-climate", "online", sc.climate, "27.4 °C"],
+      ["bay2-climate", "online", sc.climate, "26.1 °C"],
+      ["pumphouse", "offline", sc.tankPump, "41 %"],
+      ["door-north", "unknown", sc.door, "—"],
     ];
     return (
       <ul className="flex flex-col divide-y divide-border rounded-xl border border-border bg-surface">
@@ -78,7 +46,7 @@ function Screen({ tab }: { tab: TourKey }) {
           <li key={name} className="flex items-center gap-3 px-3.5 py-2.5 text-sm">
             <span className="min-w-0 flex-1 truncate font-mono text-ink">{name}</span>
             <span className="hidden text-ink-muted sm:inline">{tpl}</span>
-            <Badge tone={tone} label={tone === "online" ? "Online" : tone === "offline" ? "Offline" : "Never connected"} shape={tone === "unknown" ? "hollow" : "solid"} />
+            <Badge tone={tone} label={tone === "online" ? sc.online : tone === "offline" ? sc.offline : sc.never} shape={tone === "unknown" ? "hollow" : "solid"} />
             <span className="w-16 text-right tabular-nums text-ink">{last}</span>
           </li>
         ))}
@@ -86,20 +54,18 @@ function Screen({ tab }: { tab: TourKey }) {
     );
   }
   if (tab === "rules") {
-    const rules: [string, string, number[]][] = [
-      ["Too hot → fan on", "When temperature on bay1 is above 30 °C for 10 s, turn fan1 on; when that's no longer true, turn fan1 back off.", [19, 21, 33]],
-      ["Tank low → stop pump", "When tank level on pumphouse is below 20 % for 10 s, turn pump1 off and latch until reset.", [40]],
-    ];
+    const fires = [[19, 21, 33], [40]];
+    const rules: [string, string, number[]][] = sc.rules.map(([name, sentence], i) => [name, sentence, fires[i]]);
     return (
       <div className="flex flex-col gap-3">
         {rules.map(([name, sentence, fires]) => (
           <div key={name} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3.5">
             <div className="flex items-center justify-between gap-2">
               <strong className="text-sm text-ink">{name}</strong>
-              <Badge tone="online" label="Armed" />
+              <Badge tone="online" label={sc.armed} />
             </div>
             <p className="text-[13px] text-ink">{sentence}</p>
-            <MiniStrip cells={strip(fires)} label={`Fired ${fires.length} times in 24 h`} />
+            <MiniStrip cells={strip(fires)} label={sc.fired.replace("{count}", String(fires.length))} />
           </div>
         ))}
       </div>
@@ -108,13 +74,13 @@ function Screen({ tab }: { tab: TourKey }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       {[
-        ["Climate sensor", ["temperature · °C", "humidity · %"], ["fan1"]],
-        ["Tank + pump", ["tank_level · %", "flow_rate · l/min"], ["pump1"]],
+        [sc.climate, ["temperature · °C", "humidity · %"], ["fan1"]],
+        [sc.tankPump, ["tank_level · %", "flow_rate · l/min"], ["pump1"]],
       ].map(([name, metrics, acts]) => (
         <div key={name as string} className="flex flex-col gap-2 rounded-xl border border-border bg-surface p-3.5 text-[13px]">
           <strong className="text-sm text-ink">{name as string}</strong>
           <span className="flex flex-wrap items-center gap-1.5">
-            <span className="text-ink-muted">Publishes</span>
+            <span className="text-ink-muted">{sc.publishes}</span>
             {(metrics as string[]).map((m) => (
               <Tag key={m} mono size="sm">
                 {m}
@@ -122,7 +88,7 @@ function Screen({ tab }: { tab: TourKey }) {
             ))}
           </span>
           <span className="flex flex-wrap items-center gap-1.5">
-            <span className="text-ink-muted">Controls</span>
+            <span className="text-ink-muted">{sc.controls}</span>
             {(acts as string[]).map((a) => (
               <Tag key={a} mono size="sm">
                 {a}
@@ -138,12 +104,13 @@ function Screen({ tab }: { tab: TourKey }) {
 
 export function ProductTour() {
   const [tab, setTab] = useState<TourKey>("dashboards");
-  const t = TOUR[tab];
+  const copy = marketingCopy(useLocale()).tour;
+  const t = copy.tabs[tab];
   return (
     <div className="flex flex-col gap-7">
-      <div role="tablist" aria-label="Product areas" className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
+      <div role="tablist" aria-label={copy.tabsLabel} className="flex gap-1.5 overflow-x-auto [scrollbar-width:none]">
         {(Object.keys(TOUR) as TourKey[]).map((k) => {
-          const Icon = TOUR[k].icon;
+          const Icon = TOUR[k];
           return (
             <button
               key={k}
@@ -157,7 +124,7 @@ export function ProductTour() {
               )}
             >
               <Icon aria-hidden size={16} />
-              {TOUR[k].label}
+              {copy.tabs[k].label}
             </button>
           );
         })}
@@ -174,7 +141,7 @@ export function ProductTour() {
             ))}
           </ul>
         </div>
-        <div className="overflow-hidden rounded-xl border border-border bg-canvas shadow-pop" aria-label={`${t.label}, illustrated`}>
+        <div className="overflow-hidden rounded-xl border border-border bg-canvas shadow-pop" aria-label={copy.illustrated.replace("{label}", t.label)}>
           <div className="flex items-center gap-1.5 border-b border-border bg-surface px-3 py-2">
             <i className="h-2.5 w-2.5 rounded-full bg-border" />
             <i className="h-2.5 w-2.5 rounded-full bg-border" />

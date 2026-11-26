@@ -49,6 +49,23 @@ test.describe("a Spanish browser", () => {
   });
 });
 
+test.describe("signed out, a Spanish browser", () => {
+
+  test("gets the landing page and sign-in in Spanish", async ({ browser }) => {
+    const ctx = await browser.newContext({ locale: "es-AR" });
+    const page = await ctx.newPage();
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Tus sensores reportan.");
+    await expect(page).toHaveTitle(/sensores que reportan/);
+    await page.goto("/login");
+    await expect(page.getByRole("heading", { name: "Iniciar sesión" })).toBeVisible();
+    await expect(page.getByLabel("Correo electrónico")).toBeVisible();
+    await page.goto("/register");
+    await expect(page.getByRole("heading", { name: "Crea tu cuenta" })).toBeVisible();
+    await ctx.close();
+  });
+});
+
 test.describe("a browser in a language we don't speak", () => {
   test.use({ locale: "fr-FR" });
 
