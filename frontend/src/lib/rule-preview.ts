@@ -3,6 +3,7 @@
  * the safety checks shown while typing, and the exact messages a draft
  * would send.
  */
+import { tActive as t } from "@iodriven/shared/i18n";
 import {
   actionProblem,
   canClear,
@@ -37,38 +38,38 @@ export function ruleChecks(d: RuleDraft): Check[] {
   const leafs = contacts(d.condition);
   const conditionProblem =
     reading && d.condition === null
-      ? "A rule that runs on each reading needs at least one condition."
+      ? t("editor.rules.readingNeeds")
       : (leafs.map(contactProblem).find(Boolean) ?? null);
   const actionsProblem =
-    d.actions.length === 0 && d.preserved.actions.length === 0 ? "Add at least one action." : (d.actions.map(actionProblem).find(Boolean) ?? null);
+    d.actions.length === 0 && d.preserved.actions.length === 0 ? t("editor.rules.addAction") : (d.actions.map(actionProblem).find(Boolean) ?? null);
   const checks: Check[] = [
-    { id: "conditions", label: "Conditions complete", ok: !conditionProblem, blocking: true, detail: conditionProblem ?? undefined },
-    { id: "actions", label: "Actions complete", ok: !actionsProblem, blocking: true, detail: actionsProblem ?? undefined },
+    { id: "conditions", label: t("editor.rules.conditionsComplete"), ok: !conditionProblem, blocking: true, detail: conditionProblem ?? undefined },
+    { id: "actions", label: t("editor.rules.actionsComplete"), ok: !actionsProblem, blocking: true, detail: actionsProblem ?? undefined },
   ];
   if (reading) {
     checks.push({
       id: "hold",
-      label: `Hold for at least ${MIN_HOLD} s`,
+      label: t("editor.rules.holdAtLeast", { n: MIN_HOLD }),
       ok: d.forDuration >= MIN_HOLD,
       blocking: false,
-      detail: d.forDuration >= MIN_HOLD ? undefined : "A single noisy reading could fire it. Hold the condition for a few seconds first.",
+      detail: d.forDuration >= MIN_HOLD ? undefined : t("editor.rules.holdDetail"),
     });
   }
   checks.push({
     id: "interval",
-    label: `Minimum interval of at least ${MIN_INTERVAL} s`,
+    label: t("editor.rules.intervalAtLeast", { n: MIN_INTERVAL }),
     ok: d.cooldown >= MIN_INTERVAL,
     blocking: false,
-    detail: d.cooldown >= MIN_INTERVAL ? undefined : "It could fire again within seconds of the last time.",
+    detail: d.cooldown >= MIN_INTERVAL ? undefined : t("editor.rules.intervalDetail"),
   });
   if (reading && switchesHardware(d)) {
     const bare = leafs.filter((c) => HYSTERESIS_OPERATORS.has(c.operator) && !(c.hysteresis > 0));
     checks.push({
       id: "hysteresis",
-      label: "Hysteresis above 0 on thresholds",
+      label: t("editor.rules.hysteresisAbove"),
       ok: bare.length === 0,
       blocking: false,
-      detail: bare.length === 0 ? undefined : "A reading hovering at the threshold would toggle the relay. Add a margin it must clear first.",
+      detail: bare.length === 0 ? undefined : t("editor.rules.hysteresisDetail"),
     });
   }
   return checks;
@@ -77,11 +78,11 @@ export function ruleChecks(d: RuleDraft): Check[] {
 /** The editor's sections, in rail order (DESIGN.md §9.2). */
 export type RuleSection = "when" | "if" | "then" | "behaviour" | "name";
 export const RULE_SECTIONS: { id: RuleSection; label: string; sub: string }[] = [
-  { id: "when", label: "When", sub: "Trigger" },
-  { id: "if", label: "If", sub: "Conditions" },
-  { id: "then", label: "Then", sub: "Actions" },
-  { id: "behaviour", label: "Behaviour", sub: "Hold, interval, clear" },
-  { id: "name", label: "Name", sub: "Name and status" },
+  { id: "when", get label() { return t("editor.rules.sections.when"); }, get sub() { return t("editor.rules.sections.whenSub"); } },
+  { id: "if", get label() { return t("editor.rules.sections.if"); }, get sub() { return t("editor.rules.sections.ifSub"); } },
+  { id: "then", get label() { return t("editor.rules.sections.then"); }, get sub() { return t("editor.rules.sections.thenSub"); } },
+  { id: "behaviour", get label() { return t("editor.rules.sections.behaviour"); }, get sub() { return t("editor.rules.sections.behaviourSub"); } },
+  { id: "name", get label() { return t("editor.rules.sections.name"); }, get sub() { return t("editor.rules.sections.nameSub"); } },
 ];
 
 export interface SectionIssue {

@@ -13,7 +13,8 @@ describe("catalogs", () => {
     expect(leaves(es).sort()).toEqual(leaves(en).sort());
   });
   it("Spanish strings use only the English placeholders (some drop a noun Spanish doesn't need)", () => {
-    const names = (s: string) => [...s.matchAll(/\{(\w+)/g)].map((m) => m[1]).sort();
+    // Placeholders only: "{name}" or "{name, plural, …}", not a plural branch.
+    const names = (s: string) => [...s.matchAll(/\{(\w+)\s*[,}]/g)].map((m) => m[1]).sort();
     const enMap = new Map(leaves(en).map((k) => [k, k.split(".").reduce<unknown>((n, p) => (n as Record<string, unknown>)[p], en) as string]));
     for (const key of leaves(es)) {
       const esText = key.split(".").reduce<unknown>((n, p) => (n as Record<string, unknown>)[p], es) as string;

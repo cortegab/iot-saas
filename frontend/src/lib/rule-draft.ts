@@ -140,19 +140,19 @@ export interface RuleDraft {
 }
 
 export const OPERATORS: { value: string; label: string }[] = [
-  { value: ">", label: "> above" },
-  { value: ">=", label: "≥ at or above" },
-  { value: "<", label: "< below" },
-  { value: "<=", label: "≤ at or below" },
-  { value: "==", label: "= equal to" },
-  { value: "!=", label: "≠ different from" },
-  { value: "between", label: "between" },
-  { value: "not_between", label: "outside" },
-  { value: "in", label: "is one of" },
-  { value: "not_in", label: "is none of" },
-  { value: "changed", label: "changes" },
-  { value: "increased", label: "increases" },
-  { value: "decreased", label: "decreases" },
+  { value: ">", get label() { return t("editor.rules.ops.gt"); } },
+  { value: ">=", get label() { return t("editor.rules.ops.gte"); } },
+  { value: "<", get label() { return t("editor.rules.ops.lt"); } },
+  { value: "<=", get label() { return t("editor.rules.ops.lte"); } },
+  { value: "==", get label() { return t("editor.rules.ops.eq"); } },
+  { value: "!=", get label() { return t("editor.rules.ops.ne"); } },
+  { value: "between", get label() { return t("editor.rules.ops.between"); } },
+  { value: "not_between", get label() { return t("editor.rules.ops.not_between"); } },
+  { value: "in", get label() { return t("editor.rules.ops.in"); } },
+  { value: "not_in", get label() { return t("editor.rules.ops.not_in"); } },
+  { value: "changed", get label() { return t("editor.rules.ops.changed"); } },
+  { value: "increased", get label() { return t("editor.rules.ops.increased"); } },
+  { value: "decreased", get label() { return t("editor.rules.ops.decreased"); } },
 ];
 
 export const OPERATOR_SYMBOL: Record<string, string> = {
@@ -607,52 +607,52 @@ export function draftToRequest(draft: RuleDraft): Record<string, unknown> {
 const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export function contactProblem(c: ContactDraft): string | null {
-  if (!c.deviceId || !c.metric.trim()) return "Every condition needs a device and a metric.";
+  if (!c.deviceId || !c.metric.trim()) return t("editor.rules.conditionNeeds");
   if (c.rhsKind === "metric" && OPERATOR_ARITY[c.operator] === "one" && (!c.rhsDeviceId || !c.rhsMetric))
-    return "A device comparison needs both a device and a metric.";
+    return t("editor.rules.comparisonNeeds");
   return null;
 }
 
 export function actionProblem(a: ActionDraft): string | null {
   switch (a.kind) {
     case "actuator":
-      return a.deviceId && a.actuator.trim() ? null : "An actuator action needs a device and an actuator.";
+      return a.deviceId && a.actuator.trim() ? null : t("editor.rules.actuatorNeeds");
     case "email": {
       const bad = parseRecipients(a.to).find((r) => !EMAIL_SHAPE.test(r));
-      if (bad) return `"${bad}" doesn't look like an email address.`;
-      return a.subject.trim() && a.body.trim() ? null : "An email needs a subject and a message.";
+      if (bad) return t("editor.rules.badEmail", { email: bad });
+      return a.subject.trim() && a.body.trim() ? null : t("editor.rules.emailNeeds");
     }
     case "webhook":
-      if (!a.url.trim()) return "A webhook needs a URL.";
+      if (!a.url.trim()) return t("editor.rules.webhookUrl");
       try {
         JSON.parse(a.body.trim() || "{}");
         return null;
       } catch {
-        return "The webhook body isn't valid JSON.";
+        return t("editor.rules.webhookJson");
       }
     case "notification":
-      return a.message.trim() ? null : "A notification needs a message.";
+      return a.message.trim() ? null : t("editor.rules.notificationNeeds");
   }
 }
 
 export function validateDraft(draft: RuleDraft): string | null {
   const w = draft.when;
-  if (w.type === "schedule" && !w.cron.trim()) return "A scheduled rule needs a cron expression.";
-  if (w.type === "device_status" && !w.statusDeviceId) return "Pick the device to watch.";
+  if (w.type === "schedule" && !w.cron.trim()) return t("editor.rules.cronNeeds");
+  if (w.type === "device_status" && !w.statusDeviceId) return t("editor.rules.pickDevice");
   if (draft.condition === null && w.type === "metric")
-    return "A rule that runs on each reading needs at least one condition.";
+    return t("editor.rules.readingNeeds");
   for (const c of contacts(draft.condition)) {
     const problem = contactProblem(c);
     if (problem) return problem;
   }
   if (draft.actions.length === 0 && draft.preserved.actions.length === 0)
-    return "Add at least one action.";
+    return t("editor.rules.addAction");
   for (const a of draft.actions) {
     const problem = actionProblem(a);
     if (problem) return problem;
   }
   if (canClear(draft) && draft.clearNotify && !draft.clearMessage.trim())
-    return "The clear notification needs a message.";
+    return t("editor.rules.clearMessage");
   return null;
 }
 

@@ -19,6 +19,7 @@ import {
 } from "@/lib/rule-draft";
 import { cronHuman } from "@/lib/schedule";
 import type { RuleCatalog } from "./useRuleCatalog";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 const ONE_VALUE_OPS = OPERATORS.filter((o) => OPERATOR_ARITY[o.value] === "one");
 
@@ -70,7 +71,7 @@ function Chip({ label, children }: { label: ReactNode; children: (close: () => v
         <div
           ref={panel}
           role="dialog"
-          aria-label="Edit phrase"
+          aria-label={tr("editor.chip.editPhrase")}
           className="absolute left-0 top-full z-30 mt-1.5 flex min-w-[240px] flex-col gap-2.5 rounded-lg border border-border bg-surface p-3 text-sm font-normal text-ink shadow-pop"
         >
           {children(close)}
@@ -84,7 +85,7 @@ function ApplyCancel({ onApply, close }: { onApply: () => void; close: () => voi
   return (
     <div className="flex justify-end gap-2">
       <Button size="sm" variant="ghost" onClick={close}>
-        Cancel
+        {tr("ui.cancel")}
       </Button>
       <Button
         size="sm"
@@ -93,7 +94,7 @@ function ApplyCancel({ onApply, close }: { onApply: () => void; close: () => voi
           close();
         }}
       >
-        Apply
+        {tr("editor.chip.apply")}
       </Button>
     </div>
   );
@@ -102,7 +103,7 @@ function ApplyCancel({ onApply, close }: { onApply: () => void; close: () => voi
 function OpenFull({ onOpenFull, close }: { onOpenFull: () => void; close: () => void }) {
   return (
     <>
-      <p className="text-meta text-ink-muted">This part has more options than fit here.</p>
+      <p className="text-meta text-ink-muted">{tr("editor.chip.moreOptions")}</p>
       <Button
         size="sm"
         variant="secondary"
@@ -111,7 +112,7 @@ function OpenFull({ onOpenFull, close }: { onOpenFull: () => void; close: () => 
           onOpenFull();
         }}
       >
-        Open full condition
+        {tr("editor.chip.openFull")}
       </Button>
     </>
   );
@@ -148,14 +149,15 @@ export function EditableSentence({
     const metric = catalog.metricFor(c.deviceId, c.metric);
     const unit = metric?.unit;
     const state = onOffPhrase(c, metric?.data_type);
+    const where = tr("editor.chip.onDevice", { metric: metricName(c), device: deviceName(c.deviceId) });
     const label = state ? (
       <>
-        {metricName(c)} on {deviceName(c.deviceId)} {state}
+        {where} {tr(state === "is on" ? "editor.chip.isOn" : "editor.chip.isOff")}
       </>
     ) : (
       <>
-        {metricName(c)} on {deviceName(c.deviceId)} {OPERATOR_SYMBOL[c.operator] ?? c.operator}
-        {OPERATOR_ARITY[c.operator] === "one" ? ` ${c.rhsKind === "metric" ? "another reading" : `${c.value}${unit ? ` ${unit}` : ""}`}` : ""}
+        {where} {OPERATOR_SYMBOL[c.operator] ?? c.operator}
+        {OPERATOR_ARITY[c.operator] === "one" ? ` ${c.rhsKind === "metric" ? tr("editor.chip.anotherReading") : `${c.value}${unit ? ` ${unit}` : ""}`}` : ""}
       </>
     );
     return (
@@ -172,7 +174,7 @@ export function EditableSentence({
     if (node.kind === "contact") return contactChip(node);
     return node.children.map((child, i) => (
       <Fragment key={child.id}>
-        {i > 0 && <span> {node.op === "AND" ? "and" : "or"} </span>}
+        {i > 0 && <span>{tr(node.op === "AND" ? "editor.sum.and" : "editor.sum.or")}</span>}
         {child.kind === "group" ? <>({conditionPhrase(child)})</> : conditionPhrase(child)}
       </Fragment>
     ));
@@ -180,14 +182,22 @@ export function EditableSentence({
 
   function actionPhrase(a: RuleDraft["actions"][number], i: number) {
     if (a.kind !== "actuator") {
-      const words = a.kind === "email" ? "send an email" : a.kind === "webhook" ? "call a webhook" : "add a notification";
+      const words = tr(a.kind === "email" ? "editor.chip.sendEmail" : a.kind === "webhook" ? "editor.chip.callWebhook" : "editor.chip.addNotification");
       return <span key={a.id}>{i > 0 ? ", " : ""}{words}</span>;
     }
-    const value = a.valueKind === "boolean" ? (a.bool ? "on" : "off") : a.valueKind === "number" ? String(a.num) : a.text;
+    const value = a.valueKind === "boolean" ? tr(a.bool ? "editor.chip.on" : "editor.chip.off") : a.valueKind === "number" ? String(a.num) : a.text;
     return (
       <Fragment key={a.id}>
         {i > 0 ? ", " : ""}
-        <Chip label={<>turn {catalog.actuatorFor(a.deviceId, a.actuator)?.name ?? (a.actuator || "an actuator")} {value}</>}>
+        <Chip
+          label={
+            <>
+              {a.valueKind === "boolean"
+                ? tr(a.bool ? "editor.chip.turnOn" : "editor.chip.turnOff", { actuator: catalog.actuatorFor(a.deviceId, a.actuator)?.name ?? (a.actuator || tr("editor.chip.anActuator")) })
+                : tr("editor.chip.turn", { actuator: catalog.actuatorFor(a.deviceId, a.actuator)?.name ?? (a.actuator || tr("editor.chip.anActuator")), value })}
+            </>
+          }
+        >
           {(close) =>
             a.valueKind === "boolean" ? (
               <ActuatorEditor a={a} close={close} onApply={(bool) => update({ ...draft, actions: draft.actions.map((x) => (x.id === a.id ? { ...a, bool } : x)) })} />
@@ -204,13 +214,17 @@ export function EditableSentence({
   const reverts = canClear(draft)
     ? draft.actions.flatMap((a) => {
         if (a.kind !== "actuator" || !a.revertOnClear) return [];
-        const back = a.valueKind === "boolean" ? ((a.clearBool ?? !a.bool) ? "on" : "off") : a.valueKind === "number" ? String(a.clearNum) : a.clearText;
-        return [`turn ${catalog.actuatorFor(a.deviceId, a.actuator)?.name ?? (a.actuator || "it")} back ${back}`];
+        const back = a.valueKind === "boolean" ? tr((a.clearBool ?? !a.bool) ? "editor.chip.on" : "editor.chip.off") : a.valueKind === "number" ? String(a.clearNum) : a.clearText;
+        const who = catalog.actuatorFor(a.deviceId, a.actuator)?.name ?? (a.actuator || tr("editor.chip.it"));
+        if (a.valueKind === "boolean") return [tr((a.clearBool ?? !a.bool) ? "editor.chip.turnBackOn" : "editor.chip.turnBackOff", { actuator: who })];
+        return [tr("editor.chip.turnBack", { actuator: who, value: back })];
       })
     : [];
-  if (canClear(draft) && draft.clearNotify && draft.clearMessage.trim()) reverts.push("add a notification");
+  if (canClear(draft) && draft.clearNotify && draft.clearMessage.trim()) reverts.push(tr("editor.chip.addNotification"));
   const clearPhrase = reverts.length
-    ? `when that's no longer true${draft.clearDelay > 0 ? ` for ${draft.clearDelay}s` : ""}, ${reverts.join(", ")}`
+    ? draft.clearDelay > 0
+      ? tr("editor.chip.noLongerFor", { n: String(draft.clearDelay), list: reverts.join(", ") })
+      : tr("editor.chip.noLonger", { list: reverts.join(", ") })
     : null;
 
   const w = draft.when;
@@ -219,24 +233,24 @@ export function EditableSentence({
       <Chip label={cronHuman(w.cron)}>{(close) => <OpenFull onOpenFull={onOpenFull} close={close} />}</Chip>
     ) : w.type === "device_status" ? (
       <span>
-        {deviceName(w.statusDeviceId)} {w.transition === "connected" ? "connects" : "disconnects"}
+        {tr(w.transition === "connected" ? "editor.chip.connects" : "editor.chip.disconnects", { device: deviceName(w.statusDeviceId) })}
       </span>
     ) : w.type === "manual" ? (
-      <span>someone runs it</span>
+      <span>{tr("editor.chip.someoneRuns")}</span>
     ) : (
       conditionPhrase(draft.condition)
     );
 
   const Root = inline ? "span" : "p";
   return (
-    <Root className={inline ? "leading-[1.9]" : "text-section leading-[2] text-ink"} aria-label="Rule sentence">
-      <span>When </span>
+    <Root className={inline ? "leading-[1.9]" : "text-section leading-[2] text-ink"} aria-label={tr("editor.chip.sentence")}>
+      <span>{tr("editor.chip.when")}</span>
       {when ?? <span className="text-ink-muted">…</span>}
       {/* No hold time reads "…, immediately turn…" instead of "for 0 s"; the
           same chip sets one. */}
       {w.type === "metric" && draft.forDuration > 0 && (
         <>
-          <span> for </span>
+          <span>{tr("editor.chip.for")}</span>
           <Chip label={`${draft.forDuration} s`}>
             {(close) => <DurationEditor seconds={draft.forDuration} close={close} onApply={(forDuration) => update({ ...draft, forDuration })} />}
           </Chip>
@@ -245,13 +259,13 @@ export function EditableSentence({
       <span>, </span>
       {w.type === "metric" && draft.forDuration === 0 && (
         <>
-          <Chip label="immediately">
+          <Chip label={tr("editor.chip.immediately")}>
             {(close) => <DurationEditor seconds={draft.forDuration} close={close} onApply={(forDuration) => update({ ...draft, forDuration })} />}
           </Chip>
           <span> </span>
         </>
       )}
-      {draft.actions.length ? draft.actions.map(actionPhrase) : <span className="text-ink-muted">do nothing yet</span>}
+      {draft.actions.length ? draft.actions.map(actionPhrase) : <span className="text-ink-muted">{tr("editor.chip.nothingYet")}</span>}
       {clearPhrase && <span>; {clearPhrase}</span>}
       <span>.</span>
     </Root>
@@ -265,16 +279,16 @@ function ContactEditor({ c, close, onApply }: { c: ContactDraft; close: () => vo
   return (
     <>
       <div className="grid grid-cols-[110px_minmax(0,1fr)] gap-2">
-        <Select aria-label="Operator" value={op} onChange={(e) => setOp(e.target.value)}>
+        <Select aria-label={tr("editor.chip.operator")} value={op} onChange={(e) => setOp(e.target.value)}>
           {ONE_VALUE_OPS.map((o) => (
             <option key={o.value} value={o.value}>
               {o.label}
             </option>
           ))}
         </Select>
-        <Input aria-label="Value" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />
+        <Input aria-label={tr("editor.value")} inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} />
       </div>
-      {!ok && <p className="text-xs text-status-error">Enter a number.</p>}
+      {!ok && <p className="text-xs text-status-error">{tr("editor.chip.enterNumber")}</p>}
       <ApplyCancel close={close} onApply={() => ok && onApply({ ...c, operator: op, value: Number(value) })} />
     </>
   );
@@ -285,12 +299,12 @@ function ActuatorEditor({ a, close, onApply }: { a: ActuatorActionDraft; close: 
   return (
     <>
       <SegmentedControl
-        ariaLabel="Value"
+        ariaLabel={tr("editor.value")}
         value={on}
         onChange={setOn}
         options={[
-          { value: "on", label: "On" },
-          { value: "off", label: "Off" },
+          { value: "on", label: tr("editor.on") },
+          { value: "off", label: tr("editor.off") },
         ]}
       />
       <ApplyCancel close={close} onApply={() => onApply(on === "on")} />
@@ -305,10 +319,10 @@ function DurationEditor({ seconds, close, onApply }: { seconds: number; close: (
   return (
     <>
       <label className="flex flex-col gap-1 text-meta text-ink-muted">
-        Hold time (seconds)
+        {tr("editor.chip.holdSeconds")}
         <Input inputMode="numeric" value={v} onChange={(e) => setV(e.target.value)} />
       </label>
-      {ok && n < 5 && <p className="text-xs text-status-pending">Under 5 s, a single noisy reading can fire it.</p>}
+      {ok && n < 5 && <p className="text-xs text-status-pending">{tr("editor.chip.underFive")}</p>}
       <ApplyCancel close={close} onApply={() => ok && onApply(n)} />
     </>
   );

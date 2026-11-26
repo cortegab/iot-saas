@@ -128,8 +128,8 @@ export default function RulesPage() {
     if (r.enabled && !r.health.evaluatable && cells.length > 0 && cells[cells.length - 1] === "idle") cells[cells.length - 1] = "unknown";
     return (
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {!schedule && a && <MiniStrip cells={cells} label={`Fired ${a.fired} time${a.fired === 1 ? "" : "s"} in 24 h`} />}
-        <span>{schedule ? triggerText(r) : a ? (a.fired ? `fired ${a.fired}× in 24 h` : "quiet in 24 h") : devicesLine(r)}</span>
+        {!schedule && a && <MiniStrip cells={cells} label={t("editor.peek.firedTimes", { count: a.fired })} />}
+        <span>{schedule ? triggerText(r) : a ? (a.fired ? t("editor.peek.firedLower", { count: a.fired }) : t("editor.peek.quietLower")) : devicesLine(r)}</span>
         {shared.get(r.id)?.map((x) => (
           <Tag key={x} tone="warn" size="sm">
             <AlertTriangle aria-hidden size={11} />
