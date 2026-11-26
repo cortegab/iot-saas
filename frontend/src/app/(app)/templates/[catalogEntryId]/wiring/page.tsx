@@ -16,6 +16,7 @@ import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import { hardwareToDraft, wiringGuide, type KeyedRow } from "@/lib/hardware/hardware-draft";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
@@ -27,11 +28,11 @@ export default function WiringGuidePage() {
   const { data: catalog, isLoading: catalogLoading } = useDriverCatalog();
 
   const crumbs = [
-    { label: "Device templates", href: "/templates" },
-    { label: entry?.name ?? "Template", href: `/templates/${catalogEntryId}` },
+    { label: tr("tlist.title"), href: "/templates" },
+    { label: entry?.name ?? tr("wguide.template"), href: `/templates/${catalogEntryId}` },
   ];
   if (error) {
-    return <ErrorState message={error instanceof ApiRequestError ? error.message : "Couldn't load this template."} onRetry={() => void mutate()} />;
+    return <ErrorState message={error instanceof ApiRequestError ? error.message : tr("wguide.loadFailed")} onRetry={() => void mutate()} />;
   }
   if (isLoading || catalogLoading || !entry) return <LoadingSkeleton rows={5} rowClassName="h-10" />;
 
@@ -48,24 +49,24 @@ export default function WiringGuidePage() {
       <PageHeader
         breadcrumbs={crumbs}
         eyebrow={board}
-        title="Wiring guide"
-        description="Print it or keep it open while you wire the board."
+        title={tr("wguide.title")}
+        description={tr("wguide.description")}
         actions={
           guide && guide.pins.length > 0 ? (
             <Button variant="secondary" className="print:hidden" onClick={() => window.print()}>
               <Printer aria-hidden size={15} />
-              Print
+              {tr("wguide.print")}
             </Button>
           ) : undefined
         }
       />
       {!guide || guide.pins.length === 0 ? (
         <EmptyState
-          title="Nothing to wire yet"
-          description={`${entry.name} has no parts on a board, so there's no wiring to follow.`}
+          title={tr("wguide.emptyTitle")}
+          description={tr("wguide.emptyBody", { template: entry.name })}
           action={
             <Link href={`/templates/${catalogEntryId}?tab=wiring`} className={buttonClassName({ variant: "secondary" })}>
-              Set up its wiring
+              {tr("wguide.setUp")}
             </Link>
           }
         />
@@ -73,7 +74,7 @@ export default function WiringGuidePage() {
         <>
           <GuideTable guide={{ ...guide, board: null, notes: [] }} />
           <section className="flex flex-col gap-2">
-            <h2 className="text-section font-semibold text-ink">Notes</h2>
+            <h2 className="text-section font-semibold text-ink">{tr("wguide.notes")}</h2>
             <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm text-ink-muted">
               {guide.notes.map((n) =>
                 n.lines.map((line) => (

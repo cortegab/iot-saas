@@ -13,21 +13,26 @@ import { Lines } from "@/components/ui/LineRow";
 import { KeyField, notWired, RowLine, RowSheet, useRowSheet } from "@/components/catalog/template/rows";
 import type { SectionProps } from "@/components/catalog/template/section-props";
 import { blankMetric, renamed, type MetricDraft } from "@/lib/template-draft";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
-const PUBLISH_WORD = { periodic: "", on_change: "on change", streaming: "streaming" } as const;
+const PUBLISH_WORD = {
+  periodic: "",
+  get on_change() { return tr("tpls.onChange"); },
+  get streaming() { return tr("tpls.streaming"); },
+};
 const span2 = "col-span-2";
 
 /** "Every 30 s · 1 decimal · 0 to 50" (demo H). */
 function publishSummary(m: MetricDraft): string {
-  const how = m.publish === "periodic" ? `every ${m.interval || "?"} s` : PUBLISH_WORD[m.publish];
+  const how = m.publish === "periodic" ? tr("tpls.every", { n: m.interval || "?" }) : PUBLISH_WORD[m.publish];
   if (m.data_type === "bool") return how;
-  const range = m.min !== "" || m.max !== "" ? `${m.min || "…"} to ${m.max || "…"}` : null;
-  return [how, `${m.decimals || 0} decimal${m.decimals === "1" ? "" : "s"}`, range].filter(Boolean).join(" · ");
+  const range = m.min !== "" || m.max !== "" ? tr("tpls.range", { min: m.min || "…", max: m.max || "…" }) : null;
+  return [how, tr("tpls.decimals", { count: Number(m.decimals || 0) }), range].filter(Boolean).join(" · ");
 }
 
 // A metric on its line: unit and how it publishes (demo H).
 const describe = (m: MetricDraft) =>
-  [m.data_type === "bool" ? "On/Off" : m.unit || "no unit", m.publish === "periodic" ? `every ${m.interval || "?"} s` : PUBLISH_WORD[m.publish]].join(" · ");
+  [m.data_type === "bool" ? tr("tpls.onOff") : m.unit || tr("tpls.noUnit"), m.publish === "periodic" ? tr("tpls.every", { n: m.interval || "?" }) : PUBLISH_WORD[m.publish]].join(" · ");
 
 /** A labelled segmented control in the sheet's grid: a plain caption, not a
  * <label> (a label around the buttons would name them all after it). */
@@ -48,11 +53,11 @@ export function MetricsSection(props: SectionProps) {
   const setMetric = (i: number, m: MetricDraft) => set({ ...d, metrics: d.metrics.map((x, j) => (j === i ? m : x)) });
 
   return (
-    <EditorSection id="metrics" title="Metrics" lead="What the device publishes. Rules, dashboards and history point at these keys.">
+    <EditorSection id="metrics" title={tr("tpls.metrics")} lead={tr("tpls.metricsLead")}>
       <div className="flex flex-col gap-2">
-        {d.metrics.length === 0 && <p className="text-sm text-ink-muted">None yet.</p>}
+        {d.metrics.length === 0 && <p className="text-sm text-ink-muted">{tr("tpls.noneYet")}</p>}
         {d.metrics.length > 0 && (
-          <Lines label="Metrics">
+          <Lines label={tr("tpls.metrics")}>
             {d.metrics.map((m, i) => (
               <RowLine key={m.uid} kind="metrics" i={i} row={m} desc={describe(m)} selected={rows.openUid === m.uid} onOpen={() => rows.open(m.uid)} props={props} />
             ))}
@@ -62,27 +67,27 @@ export function MetricsSection(props: SectionProps) {
           if (m.uid !== rows.openUid) return null;
           const p = `metrics.${i}.`;
           return (
-            <RowSheet key={m.uid} open onClose={rows.close} title={m.name || "New metric"} sub="Metric" readOnly={readOnly} unwired={notWired("metrics", m, props)} onRemove={() => set({ ...d, metrics: d.metrics.filter((x) => x.uid !== m.uid) })}>
-              <Field label="Name" {...f(p + "name")} className={span2}>
-                <Input value={m.name} disabled={readOnly} placeholder="e.g. Temperature" onChange={(e) => setMetric(i, renamed(m, e.target.value))} onBlur={blur(p + "name")} />
+            <RowSheet key={m.uid} open onClose={rows.close} title={m.name || tr("tpls.newMetric")} sub={tr("tpls.metric")} readOnly={readOnly} unwired={notWired("metrics", m, props)} onRemove={() => set({ ...d, metrics: d.metrics.filter((x) => x.uid !== m.uid) })}>
+              <Field label={tr("tpls.name")} {...f(p + "name")} className={span2}>
+                <Input value={m.name} disabled={readOnly} placeholder={tr("tpls.metricPlaceholder")} onChange={(e) => setMetric(i, renamed(m, e.target.value))} onBlur={blur(p + "name")} />
               </Field>
               <div className={span2}>
                 <KeyField kind="metrics" i={i} row={m} topic={`…/{device}/${m.key.trim() || "key"}`} onChange={(key) => setMetric(i, { ...m, key, keyAuto: false })} unlocked={rows.isUnlocked(m.uid)} onUnlock={() => rows.unlock(m.uid)} props={props} />
               </div>
-              <SegField label="Type" className={m.data_type === "float" ? span2 : "col-span-full"} hint={m.data_type === "bool" ? "Reads On or Off; no unit." : undefined}>
+              <SegField label={tr("tpls.type")} className={m.data_type === "float" ? span2 : "col-span-full"} hint={m.data_type === "bool" ? tr("tpls.boolHint") : undefined}>
                 <SegmentedControl
-                  ariaLabel="Type"
+                  ariaLabel={tr("tpls.type")}
                   size="md"
                   value={m.data_type}
                   onChange={(data_type) => !readOnly && setMetric(i, { ...m, data_type })}
                   options={[
-                    { value: "float", label: "Number", disabled: readOnly },
-                    { value: "bool", label: "On / Off", disabled: readOnly },
+                    { value: "float", label: tr("tpls.number"), disabled: readOnly },
+                    { value: "bool", label: tr("tpls.onOffSeg"), disabled: readOnly },
                   ]}
                 />
               </SegField>
               {m.data_type === "float" && (
-                <Field label="Unit" optional className={span2}>
+                <Field label={tr("tpls.unit")} optional className={span2}>
                   <UnitField value={m.unit} onChange={(unit) => setMetric(i, { ...m, unit })} />
                 </Field>
               )}
@@ -92,45 +97,45 @@ export function MetricsSection(props: SectionProps) {
                 open={["interval", "deadband", "decimals", "min", "max"].some((k) => !!f(p + k).error) || undefined}
               >
                 <summary className="cursor-pointer text-sm font-medium text-ink">
-                  Publishing and range <span className="font-normal text-ink-muted">· {publishSummary(m)}</span>
+                  {tr("tpls.publishing")} <span className="font-normal text-ink-muted">· {publishSummary(m)}</span>
                 </summary>
                 <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">
-                  <SegField label="Publish" className="col-span-full">
+                  <SegField label={tr("tpls.publish")} className="col-span-full">
                     <SegmentedControl
-                      ariaLabel="Publish"
+                      ariaLabel={tr("tpls.publish")}
                       size="md"
                       value={m.publish}
                       onChange={(publish) => !readOnly && setMetric(i, { ...m, publish })}
                       options={[
-                        { value: "periodic", label: "Every…", disabled: readOnly },
-                        { value: "on_change", label: "On change", disabled: readOnly },
-                        { value: "streaming", label: "Streaming", disabled: readOnly },
+                        { value: "periodic", label: tr("tpls.everyOption"), disabled: readOnly },
+                        { value: "on_change", label: tr("tpls.onChangeOption"), disabled: readOnly },
+                        { value: "streaming", label: tr("tpls.streamingOption"), disabled: readOnly },
                       ]}
                     />
                   </SegField>
                   {m.publish === "periodic" && (
-                    <Field label="Every" {...f(p + "interval")}>
+                    <Field label={tr("tpls.everyLabel")} {...f(p + "interval")}>
                       <Affix suffix="s">
                         <Input inputMode="numeric" value={m.interval} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, interval: e.target.value })} onBlur={blur(p + "interval")} />
                       </Affix>
                     </Field>
                   )}
                   {m.publish === "on_change" && m.data_type === "float" && (
-                    <Field label="Change of at least" optional {...f(p + "deadband")}>
-                      <Affix suffix={m.unit || "units"}>
+                    <Field label={tr("tpls.deadband")} optional {...f(p + "deadband")}>
+                      <Affix suffix={m.unit || tr("tpls.units")}>
                         <Input inputMode="decimal" value={m.deadband} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, deadband: e.target.value })} onBlur={blur(p + "deadband")} />
                       </Affix>
                     </Field>
                   )}
                   {m.data_type === "float" && (
                     <>
-                      <Field label="Decimals" {...f(p + "decimals")}>
+                      <Field label={tr("tpls.decimalsLabel")} {...f(p + "decimals")}>
                         <Input inputMode="numeric" value={m.decimals} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, decimals: e.target.value })} onBlur={blur(p + "decimals")} />
                       </Field>
-                      <Field label="Min" optional {...f(p + "min")}>
+                      <Field label={tr("tpls.min")} optional {...f(p + "min")}>
                         <Input inputMode="decimal" value={m.min} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, min: e.target.value })} onBlur={blur(p + "min")} />
                       </Field>
-                      <Field label="Max" optional {...f(p + "max")}>
+                      <Field label={tr("tpls.max")} optional {...f(p + "max")}>
                         <Input inputMode="decimal" value={m.max} disabled={readOnly} onChange={(e) => setMetric(i, { ...m, max: e.target.value })} onBlur={blur(p + "max")} />
                       </Field>
                     </>
@@ -151,7 +156,7 @@ export function MetricsSection(props: SectionProps) {
             }}
           >
             <Plus aria-hidden size={14} />
-            Add metric
+            {tr("tpls.addMetric")}
           </Button>
         )}
       </div>

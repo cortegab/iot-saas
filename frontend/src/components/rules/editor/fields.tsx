@@ -35,7 +35,9 @@ import {
   type WhenDraft,
 } from "@/lib/rule-draft";
 import type { CatalogActuator, RuleCatalog, WireOption } from "./useRuleCatalog";
-import { tActive as tr } from "@iodriven/shared/i18n";
+import { nounWord, tActive as tr } from "@iodriven/shared/i18n";
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 import { richT } from "@/lib/i18n";
 
 export const SECTION_LABEL = "text-xs font-medium uppercase tracking-wide text-ink-muted";
@@ -141,7 +143,7 @@ function WireControl({
       <Input
         compact
         aria-label={ariaLabel}
-        placeholder={`${noun} name`}
+        placeholder={tr("frame.namePlaceholder", { noun: nounWord(noun), Noun: cap(nounWord(noun)) })}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -150,7 +152,7 @@ function WireControl({
   return (
     <Select compact aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="" disabled>
-        Choose a{/^[aeiou]/.test(noun) ? "n" : ""} {noun}…
+        {tr("frame.choose", { noun: nounWord(noun), article: /^[aeiou]/.test(noun) ? "an" : "a" })}
       </option>
       {options.map((o) => (
         <option key={o.id} value={o.id}>

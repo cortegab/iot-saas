@@ -6,7 +6,7 @@ import { Select } from "@/components/ui/Select";
 import { PAGE_SIZES } from "@/components/list/useListState";
 import { pageItems } from "@/components/list/usePager";
 import { cn } from "@/lib/cn";
-import { tActive as t } from "@iodriven/shared/i18n";
+import { nounWord, tActive as t } from "@iodriven/shared/i18n";
 
 /** DESIGN.md §6 table footer: result count ("12 of 15 devices"), page size
  * and a numbered pager (‹ 1 2 [3] … 9 ›; ‹ 3 / 9 › on phones). The pager
@@ -34,7 +34,7 @@ export function TableFooter({
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-0.5 pt-1 text-xs text-ink-muted">
       <span aria-live="polite">
-        {shown === total ? `${total} ${noun[total === 1 ? 0 : 1]}` : t("ui.list.shownOf", { shown, total, noun: noun[1] })}
+        {shown === total ? `${total} ${nounWord(noun[total === 1 ? 0 : 1])}` : t("ui.list.shownOf", { shown, total, noun: nounWord(noun[1]) })}
       </span>
       {(pageCount > 1 || shown > PAGE_SIZES[0]) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">

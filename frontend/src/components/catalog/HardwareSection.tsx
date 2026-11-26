@@ -33,6 +33,7 @@ import {
   type MovedPin,
   type WiringGuide,
 } from "@/lib/hardware/hardware-draft";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type Kind = "inputs" | "outputs";
 
@@ -91,12 +92,12 @@ export function HardwareSection({
   const fw = catalog.data;
   if (!fw) {
     return hardware ? (
-      <Callout tone="warning" title="Couldn't load the driver list">
-        This wiring is kept as saved. Publish a firmware release to edit it.
+      <Callout tone="warning" title={tr("hw.noDrivers")}>
+        {tr("hw.noDriversBody")}
       </Callout>
     ) : (
-      <Callout title="No firmware release is published yet">
-        Wiring needs one, because it lists the drivers that firmware supports. Until then, devices of this template use the downloadable sketch.
+      <Callout title={tr("hw.noRelease")}>
+        {tr("hw.noReleaseBody")}
       </Callout>
     );
   }
@@ -105,13 +106,12 @@ export function HardwareSection({
     return (
       <div className="flex flex-col items-start gap-3 rounded-xl border border-dashed border-border bg-surface px-4 py-5">
         <p className="text-sm text-ink-muted">
-          No wiring yet, so devices of this template get a sketch to edit and upload. Set up the wiring once, and every device installs from the
-          browser with no code.
+          {tr("hw.noWiring")}
         </p>
         {!readOnly && (
           <Button variant="secondary" onClick={() => onChange(blankHardware(fw.models[0]?.id))}>
             <Cpu aria-hidden size={14} />
-            Set up wiring
+            {tr("hw.setUp")}
           </Button>
         )}
       </div>
@@ -176,38 +176,38 @@ export function HardwareSection({
     setOpenPart(b.uid);
   };
   const facts = model
-    ? [model.description, hasCapability(model, "ble") ? "Wi-Fi from a phone" : "Wi-Fi typed in", hasCapability(model, "rgb_led") ? "RGB LED" : "", `firmware ${fw.version}`]
+    ? [model.description, hasCapability(model, "ble") ? tr("hw.wifiPhone") : tr("hw.wifiTyped"), hasCapability(model, "rgb_led") ? tr("hw.rgb") : "", tr("hw.firmware", { version: fw.version })]
         .filter(Boolean)
         .join(" · ")
-    : `Firmware ${fw.version}.`;
-  const metricNames = rows.metrics.map((r) => r.name || r.key || "Unnamed");
-  const actuatorNames = rows.actuators.map((r) => r.name || r.key || "Unnamed");
+    : tr("hw.firmwareSentence", { version: fw.version });
+  const metricNames = rows.metrics.map((r) => r.name || r.key || tr("hw.unnamed"));
+  const actuatorNames = rows.actuators.map((r) => r.name || r.key || tr("hw.unnamed"));
 
   return (
     <div className="flex flex-col gap-6">
       {/* The board in its own block, with what it can do in the hint. */}
       <div className="grid gap-3.5 @[640px]:grid-cols-2">
-        <Field label="Board" error={boardField.error ?? detectState.error ?? undefined} hint={facts}>
+        <Field label={tr("hw.board")} error={boardField.error ?? detectState.error ?? undefined} hint={facts}>
           <div className="flex items-center gap-2">
             {/* A saved chip id ("esp32") shows as its model until the board is picked again. */}
             <Select value={model?.id ?? h.board} disabled={readOnly} onChange={(e) => changeBoard(e.target.value)}>
-              {!model && <option value={h.board}>{h.board} (not in this firmware)</option>}
+              {!model && <option value={h.board}>{tr("hw.notInFirmware", { id: h.board })}</option>}
               {model && !groups.some((g) => g.chip === model.chip) && <option value={model.id}>{model.label}</option>}
               {groups.map((g) => (
                 <optgroup key={g.chip} label={g.name}>
                   {g.models.map((m) => (
                     <option key={m.id} value={m.id}>
                       {m.label}
-                      {hasCapability(m, "ble") ? "" : " · no phone setup"}
+                      {hasCapability(m, "ble") ? "" : tr("hw.noPhone")}
                     </option>
                   ))}
                 </optgroup>
               ))}
             </Select>
             {!readOnly && webSerialSupported() && (
-              <Button variant="secondary" className="shrink-0" disabled={detectState.busy} title="Connect over USB to read the chip" onClick={() => void detect()}>
+              <Button variant="secondary" className="shrink-0" disabled={detectState.busy} title={tr("hw.detectTitle")} onClick={() => void detect()}>
                 <Usb aria-hidden size={14} />
-                {detectState.busy ? "Detecting…" : "Detect"}
+                {detectState.busy ? tr("hw.detecting") : tr("hw.detect")}
               </Button>
             )}
           </div>
@@ -216,35 +216,35 @@ export function HardwareSection({
       {detected && (
         <p className="-mt-3 text-meta text-ink-muted">
           {detected.chip
-            ? `Detected an ${detected.name}. Boards with the same chip look alike, so pick your model.`
-            : `This board is an ${detected.name}, which firmware ${fw.version} doesn't support yet.`}{" "}
+            ? tr("hw.detected", { chip: detected.name })
+            : tr("hw.unsupported", { chip: detected.name, version: fw.version })}{" "}
           <Button variant="link" className="text-meta" onClick={() => setDetected(null)}>
-            Show all boards
+            {tr("hw.showAll")}
           </Button>
         </p>
       )}
 
       {/* One summary of a board change: pins that moved, and parts it can't run. */}
       {moved && (moved.pins.length > 0 || moved.unsupported.length > 0) && (
-        <Callout tone="warning" title={`Changed for the ${moved.board}`}>
+        <Callout tone="warning" title={tr("hw.changedFor", { board: moved.board })}>
           <ul className="list-disc pl-4">
             {moved.pins.map((m) => (
               <li key={`${m.owner}-${m.from}`}>
-                {m.owner}: GPIO {m.from} → {m.to == null ? "no free pin left, pick one" : pinName(model, m.to)}
+                {m.owner}: GPIO {m.from} → {m.to == null ? tr("hw.noFreePin") : pinName(model, m.to)}
               </li>
             ))}
             {moved.unsupported.map((label) => (
-              <li key={label}>{label}: not in this board&apos;s firmware. Pick another part, or remove it.</li>
+              <li key={label}>{tr("hw.notInBoard", { part: label })}</li>
             ))}
           </ul>
-          {moved.pins.length > 0 && "Rewire those as the wiring guide shows."}
+          {moved.pins.length > 0 && tr("hw.rewire")}
         </Callout>
       )}
 
       {h.i2c && (
         <div className="flex flex-col gap-2">
-          <h3 className="text-sm font-semibold text-ink">I2C bus</h3>
-          <p className="text-meta text-ink-muted">Every I2C part shares these two pins; each needs its own address.</p>
+          <h3 className="text-sm font-semibold text-ink">{tr("hw.i2c")}</h3>
+          <p className="text-meta text-ink-muted">{tr("hw.i2cLead")}</p>
           <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">
             {(["sda", "scl"] as const).map((line) => (
               <Field key={line} label={line.toUpperCase()} error={field(`hardware.i2c.${line}`).error}>
@@ -252,7 +252,7 @@ export function HardwareSection({
                   {(busPins.includes(h.i2c![line]) ? busPins : [h.i2c![line], ...busPins]).map((n) => (
                     <option key={n} value={n}>
                       {pinName(model, n)}
-                      {i2cOthers.has(n) ? ` · used by ${i2cOthers.get(n)}` : ""}
+                      {i2cOthers.has(n) ? tr("hw.usedBy", { who: i2cOthers.get(n) ?? "" }) : ""}
                     </option>
                   ))}
                 </Select>
@@ -265,23 +265,23 @@ export function HardwareSection({
       <section aria-labelledby="hw-parts" className="flex flex-col gap-2">
         <div className="flex flex-wrap items-baseline gap-2">
           <h3 id="hw-parts" className="text-sm font-semibold text-ink">
-            Parts
+            {tr("hw.parts")}
           </h3>
           {parts.length > 0 && <span className="rounded-full bg-surface-raised px-1.5 text-xs tabular-nums text-ink-muted">{parts.length}</span>}
           {guideHref && guide.pins.length > 0 && (
             <Link href={guideHref} className="ml-auto inline-flex items-center gap-1 text-meta text-accent hover:underline">
-              <BookOpen aria-hidden size={13} /> Wiring guide
+              <BookOpen aria-hidden size={13} /> {tr("hw.guide")}
             </Link>
           )}
         </div>
-        <p className="text-meta text-ink-muted">Each part brings its metrics or actuators. Open one to set its pins and name its readings.</p>
+        <p className="text-meta text-ink-muted">{tr("hw.partsLead")}</p>
         {parts.length === 0 ? (
           <div className="flex flex-col items-center gap-1 rounded-xl border border-border bg-surface px-4 py-6 text-center text-sm">
-            <b className="font-semibold text-ink">No parts yet</b>
-            <span className="text-ink-muted">Add the sensors and outputs wired to the board.</span>
+            <b className="font-semibold text-ink">{tr("hw.noParts")}</b>
+            <span className="text-ink-muted">{tr("hw.noPartsBody")}</span>
           </div>
         ) : (
-          <Lines label="Parts">
+          <Lines label={tr("hw.parts")}>
             {parts.map(({ kind, b, i }) => (
               <BindingCard
                 key={b.uid}
@@ -309,7 +309,7 @@ export function HardwareSection({
         {!readOnly && (
           <Button variant="secondary" className="self-start" disabled={available.length === 0} onClick={() => setPicking(true)}>
             <Plus aria-hidden size={14} />
-            Add part
+            {tr("hw.addPart")}
           </Button>
         )}
       </section>
@@ -317,12 +317,12 @@ export function HardwareSection({
       {showYield && (
         <section aria-labelledby="hw-see" className="flex flex-col gap-2">
           <h3 id="hw-see" className="text-sm font-semibold text-ink">
-            What you&apos;ll see
+            {tr("hw.yields")}
           </h3>
           <FactList
             facts={[
-              ["Metrics", metricNames.length ? metricNames.join(", ") : <span key="m" className="text-ink-muted">None yet</span>],
-              ["Actuators", actuatorNames.length ? actuatorNames.join(", ") : <span key="a" className="text-ink-muted">None</span>],
+              [tr("hw.metrics"), metricNames.length ? metricNames.join(", ") : <span key="m" className="text-ink-muted">{tr("hw.noneYet")}</span>],
+              [tr("hw.actuators"), actuatorNames.length ? actuatorNames.join(", ") : <span key="a" className="text-ink-muted">{tr("hw.none")}</span>],
             ]}
           />
         </section>
@@ -332,7 +332,7 @@ export function HardwareSection({
           wiring, or a template not saved yet, shows it here, folded. */}
       {!guideHref && guide.pins.length > 0 && (
         <details className="group rounded-xl border border-border bg-surface px-4 py-3">
-          <summary className="cursor-pointer text-sm font-semibold text-ink">Wiring guide</summary>
+          <summary className="cursor-pointer text-sm font-semibold text-ink">{tr("hw.guide")}</summary>
           <div className="mt-3">
             <GuideTable guide={guide} />
           </div>
@@ -341,24 +341,24 @@ export function HardwareSection({
 
       {!readOnly && (
         <Button variant="link-danger" className="self-start text-xs" onClick={() => onChange(null)}>
-          Remove wiring
+          {tr("hw.removeWiring")}
         </Button>
       )}
 
-      <ItemSheet open={picking} onClose={() => setPicking(false)} title="Add a part" sub="It brings its metrics or actuators. You can rename them on the part.">
+      <ItemSheet open={picking} onClose={() => setPicking(false)} title={tr("hw.pickTitle")} sub={tr("hw.pickSub")}>
         <div className="flex flex-col gap-4">
           {(["input", "output"] as const).map((k) => {
             const list = available.filter((d) => d.kind === k);
             if (list.length === 0) return null;
             return (
               <div key={k} className="flex flex-col gap-2">
-                <h3 className="text-xs font-medium text-ink-muted">{k === "input" ? "Sensors and inputs" : "Outputs"}</h3>
-                <Lines label={k === "input" ? "Sensors and inputs" : "Outputs"}>
+                <h3 className="text-xs font-medium text-ink-muted">{k === "input" ? tr("hw.inputs") : tr("hw.outputs")}</h3>
+                <Lines label={k === "input" ? tr("hw.inputs") : tr("hw.outputs")}>
                   {list.map((d) => (
                     <LineRow
                       key={d.id}
                       title={d.label}
-                      sub={[d.description, d.channels.length > 1 ? `${d.channels.length} readings` : ""].filter(Boolean).join(" · ")}
+                      sub={[d.description, d.channels.length > 1 ? tr("hw.readings", { count: d.channels.length }) : ""].filter(Boolean).join(" · ")}
                       onOpen={() => pick(d)}
                     />
                   ))}
@@ -378,9 +378,9 @@ export function GuideTable({ guide }: { guide: WiringGuide }) {
     <div className="flex flex-col gap-3">
       <Table
         columns={[
-          { header: "Part", render: (r) => r.to },
-          { header: "Connection", render: (r) => <span className="text-ink-muted">{r.role}</span> },
-          { header: "Board pin", render: (r) => <span className="font-mono">{r.name}</span>, className: "w-36" },
+          { header: tr("hw.colPart"), render: (r) => r.to },
+          { header: tr("hw.colConnection"), render: (r) => <span className="text-ink-muted">{r.role}</span> },
+          { header: tr("hw.colPin"), render: (r) => <span className="font-mono">{r.name}</span>, className: "w-36" },
         ]}
         rows={guide.pins}
         rowKey={(r) => `${r.pin}-${r.role}-${r.to}`}
@@ -509,8 +509,8 @@ function BindingCard({
   // The one line: pins · what its readings feed.
   const fed = channels.map((c) => targets.find((t) => t.uid === binding.channels[c.key])).filter((t): t is KeyedRow => !!t);
   const summary = [
-    i2c ? "I2C" : Object.values(binding.pins).filter((n): n is number => n != null).map((n) => pinName(model, n)).join(", ") || "no pin",
-    fed.length ? fed.map((t) => t.name || t.key).join(", ") : "no readings kept",
+    i2c ? "I2C" : Object.values(binding.pins).filter((n): n is number => n != null).map((n) => pinName(model, n)).join(", ") || tr("hw.noPin"),
+    fed.length ? fed.map((t) => t.name || t.key).join(", ") : tr("hw.noneKept"),
   ].join(" · ");
   // A part with many readings asks which to keep (DESIGN.md §8).
   const choosing = !!onKeepReading && kind === "inputs" && channels.length > 2 && !readOnly;
@@ -529,7 +529,7 @@ function BindingCard({
         open={open}
         onClose={onClose}
         title={spec?.label ?? binding.driver}
-        sub={`Part · ${kind === "inputs" ? "its readings feed the metrics named here" : "it drives the actuator named here"}`}
+        sub={tr(kind === "inputs" ? "hw.partSubIn" : "hw.partSubOut")}
         footer={
           <>
             {!readOnly && (
@@ -541,19 +541,19 @@ function BindingCard({
                   onClose();
                 }}
               >
-                Remove part
+                {tr("hw.removePart")}
               </Button>
             )}
-            <Button onClick={onClose}>Done</Button>
+            <Button onClick={onClose}>{tr("hw.done")}</Button>
           </>
         }
       >
       <div className="flex flex-col gap-4">
         {spec?.description && <p className="text-meta text-ink-muted">{spec.description}</p>}
         <div className="grid gap-3.5 @[640px]:grid-cols-2">
-          <Field label="Driver" error={field(p + "driver").error}>
+          <Field label={tr("hw.driver")} error={field(p + "driver").error}>
             <Select value={binding.driver} disabled={readOnly} onChange={(e) => pickDriver(e.target.value)}>
-              {!spec && <option value={binding.driver}>{binding.driver} (not in this firmware)</option>}
+              {!spec && <option value={binding.driver}>{tr("hw.notInFirmware", { id: binding.driver })}</option>}
               {choices.map((d) => (
                 <option key={d.id} value={d.id}>
                   {d.label}
@@ -564,11 +564,10 @@ function BindingCard({
         </div>
 
         {(pins.length > 0 || i2c) && (
-          <Block title="Connection">
+          <Block title={tr("hw.connection")}>
             {i2c && (
               <p className="text-meta text-ink-muted">
-                On the I2C bus
-                {hardware.i2c && ` (SDA ${pinName(model, hardware.i2c.sda)}, SCL ${pinName(model, hardware.i2c.scl)})`}: no pins of its own.
+                {tr("hw.onBus", { pins: hardware.i2c ? ` (SDA ${pinName(model, hardware.i2c.sda)}, SCL ${pinName(model, hardware.i2c.scl)})` : "" })}
               </p>
             )}
             <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">
@@ -578,17 +577,17 @@ function BindingCard({
                 const allowed = model ? pinsFor(model, role.needs) : [];
                 const options = value != null && !allowed.includes(value) ? [value, ...allowed] : allowed;
                 return (
-                  <Field key={role.role} label={`${role.label} pin`} error={field(path).error}>
+                  <Field key={role.role} label={tr("hw.pinLabel", { role: role.label })} error={field(path).error}>
                     <Select
                       value={value ?? ""}
                       disabled={readOnly}
                       onChange={(e) => onChange({ ...binding, pins: { ...binding.pins, [role.role]: e.target.value === "" ? null : Number(e.target.value) } })}
                     >
-                      {value == null && <option value="">Pick a pin</option>}
+                      {value == null && <option value="">{tr("hw.pickPin")}</option>}
                       {options.map((n) => (
                         <option key={n} value={n}>
                           {pinName(model, n)}
-                          {others.has(n) ? ` · used by ${others.get(n)}` : ""}
+                          {others.has(n) ? tr("hw.usedBy", { who: others.get(n) ?? "" }) : ""}
                         </option>
                       ))}
                     </Select>
@@ -601,13 +600,13 @@ function BindingCard({
         )}
 
         {settings.length > 0 && (
-          <Block title="Settings">
+          <Block title={tr("hw.settings")}>
             <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">{settings.map(renderParam)}</div>
           </Block>
         )}
 
         {channels.length > 0 && (
-          <Block title={kind === "inputs" ? "Readings" : "Commands"} aside={kind === "inputs" ? "Feeds metric" : "Drives actuator"}>
+          <Block title={kind === "inputs" ? tr("hw.readingsBlock") : tr("hw.commands")} aside={kind === "inputs" ? tr("hw.feeds") : tr("hw.drives")}>
             <div className="flex flex-col gap-2.5">
               {channels.map((ch) => {
                 const path = `${p}channels.${ch.key}`;
@@ -626,12 +625,12 @@ function BindingCard({
                         <label className="flex items-center gap-2 text-meta text-ink">
                           <input
                             type="checkbox"
-                            aria-label={`Keep ${ch.label}`}
+                            aria-label={tr("hw.keep", { channel: ch.label })}
                             checked={kept}
                             onChange={(e) => onKeepReading!(binding.uid, ch.key, e.target.checked)}
                             className="accent-[var(--color-accent)]"
                           />
-                          {kept ? "Keep" : "Not kept: no metric"}
+                          {kept ? tr("hw.kept") : tr("hw.notKept")}
                         </label>
                       )}
                       {kept && (
@@ -640,11 +639,11 @@ function BindingCard({
                         disabled={readOnly}
                         onChange={(e) => onChange({ ...binding, channels: { ...binding.channels, [ch.key]: e.target.value } })}
                       >
-                        <option value="">{kind === "inputs" ? "Not used" : "Pick an actuator"}</option>
-                        {current && !targets.some((t) => t.uid === current) && <option value={current}>Missing</option>}
+                        <option value="">{kind === "inputs" ? tr("hw.notUsed") : tr("hw.pickActuator")}</option>
+                        {current && !targets.some((t) => t.uid === current) && <option value={current}>{tr("hw.missing")}</option>}
                         {free.map((t) => (
                           <option key={t.uid} value={t.uid}>
-                            {t.name || "Unnamed"}
+                            {t.name || tr("hw.unnamed")}
                             {t.key ? ` (${t.key})` : ""}
                           </option>
                         ))}
@@ -654,12 +653,12 @@ function BindingCard({
                       {linked && onRenameTarget && !readOnly && (
                         <div className="flex items-center gap-2">
                           <Input
-                            aria-label={`Name of what ${ch.label} ${kind === "inputs" ? "feeds" : "drives"}`}
+                            aria-label={tr(kind === "inputs" ? "hw.nameOfFeeds" : "hw.nameOfDrives", { channel: ch.label })}
                             value={linked.name}
-                            placeholder="Name"
+                            placeholder={tr("hw.name")}
                             onChange={(e) => onRenameTarget(kind, linked.uid, e.target.value)}
                           />
-                          <span className="shrink-0 font-mono text-xs text-ink-muted">{linked.key || "key"}</span>
+                          <span className="shrink-0 font-mono text-xs text-ink-muted">{linked.key || tr("hw.key")}</span>
                         </div>
                       )}
                     </div>
@@ -671,8 +670,8 @@ function BindingCard({
               {!readOnly && targets.length > 0 && channels.some((ch) => !binding.channels[ch.key]) && targets.every((t) => taken.has(t.uid)) && (
                 <p className="text-meta text-ink-muted">
                   {kind === "inputs"
-                    ? "Every metric is already fed. Add a metric above to map more."
-                    : "Every actuator is already driven. Add an actuator above to wire more."}
+                    ? tr("hw.allFed")
+                    : tr("hw.allDriven")}
                 </p>
               )}
             </div>

@@ -201,3 +201,14 @@ export function formatDateTime(locale: Locale, date: Date | string | number, tim
 export function intlLocale(locale: Locale): string {
   return INTL_LOCALE[locale];
 }
+
+/**
+ * A record noun ("device", "device template", "API keys") in the active
+ * language, for frames that say "Open {noun}" or "{total} {noun}". Unknown
+ * nouns come back as given. Spanish phrases around it avoid gendered words.
+ */
+export function nounWord(noun: string): string {
+  const key = `nouns.${noun.toLowerCase().replace(/\s+(\w)/g, (_m, c: string) => c.toUpperCase())}`;
+  const word = tActive(key as MessageKey);
+  return word === key ? noun : word;
+}

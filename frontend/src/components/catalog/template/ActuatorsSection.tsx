@@ -11,8 +11,13 @@ import { Lines } from "@/components/ui/LineRow";
 import { KeyField, notWired, RowLine, RowSheet, useRowSheet } from "@/components/catalog/template/rows";
 import type { SectionProps } from "@/components/catalog/template/section-props";
 import { blankActuator, renamed, type ActuatorDraft } from "@/lib/template-draft";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
-const CONTROL_LABEL = { bool: "On / Off", float: "Number", string: "List of values" } as const;
+const CONTROL_LABEL = {
+  get bool() { return tr("tpls.onOffSeg"); },
+  get float() { return tr("tpls.number"); },
+  get string() { return tr("tpls.listOfValues"); },
+};
 const span2 = "col-span-2";
 
 /** What the platform can switch. */
@@ -22,18 +27,18 @@ export function ActuatorsSection(props: SectionProps) {
   const setActuator = (i: number, a: ActuatorDraft) => set({ ...d, actuators: d.actuators.map((x, j) => (j === i ? a : x)) });
 
   return (
-    <EditorSection id="actuators" title="Actuators" lead="What the platform can switch.">
+    <EditorSection id="actuators" title={tr("tpls.actuators")} lead={tr("tpls.actuatorsLead")}>
       <div className="flex flex-col gap-2">
-        {d.actuators.length === 0 && <p className="text-sm text-ink-muted">None.</p>}
+        {d.actuators.length === 0 && <p className="text-sm text-ink-muted">{tr("tpls.none")}</p>}
         {d.actuators.length > 0 && (
-          <Lines label="Actuators">
+          <Lines label={tr("tpls.actuators")}>
             {d.actuators.map((a, i) => (
               <RowLine
                 key={a.uid}
                 kind="actuators"
                 i={i}
                 row={a}
-                desc={a.value_type === "bool" ? "On / Off" : a.value_type === "string" ? `values: ${a.allowed || "—"}` : "a number"}
+                desc={a.value_type === "bool" ? tr("tpls.onOffSeg") : a.value_type === "string" ? tr("tpls.values", { list: a.allowed || "—" }) : tr("tpls.aNumber")}
                 selected={rows.openUid === a.uid}
                 onOpen={() => rows.open(a.uid)}
                 props={props}
@@ -45,16 +50,16 @@ export function ActuatorsSection(props: SectionProps) {
           if (a.uid !== rows.openUid) return null;
           const p = `actuators.${i}.`;
           return (
-            <RowSheet key={a.uid} open onClose={rows.close} title={a.name || "New actuator"} sub="Actuator" readOnly={readOnly} unwired={notWired("actuators", a, props)} onRemove={() => set({ ...d, actuators: d.actuators.filter((x) => x.uid !== a.uid) })}>
-              <Field label="Name" {...f(p + "name")} className={span2}>
-                <Input value={a.name} disabled={readOnly} placeholder="e.g. Fan" onChange={(e) => setActuator(i, renamed(a, e.target.value))} onBlur={blur(p + "name")} />
+            <RowSheet key={a.uid} open onClose={rows.close} title={a.name || tr("tpls.newActuator")} sub={tr("tpls.actuator")} readOnly={readOnly} unwired={notWired("actuators", a, props)} onRemove={() => set({ ...d, actuators: d.actuators.filter((x) => x.uid !== a.uid) })}>
+              <Field label={tr("tpls.name")} {...f(p + "name")} className={span2}>
+                <Input value={a.name} disabled={readOnly} placeholder={tr("tpls.actuatorPlaceholder")} onChange={(e) => setActuator(i, renamed(a, e.target.value))} onBlur={blur(p + "name")} />
               </Field>
               <div className={span2}>
                 <KeyField kind="actuators" i={i} row={a} topic={`…/{device}/cmd/${a.key.trim() || "key"}`} onChange={(key) => setActuator(i, { ...a, key, keyAuto: false })} unlocked={rows.isUnlocked(a.uid)} onUnlock={() => rows.unlock(a.uid)} props={props} />
               </div>
-              <SegField label="Control" className="col-span-full" hint="Commands go out on QoS 1 with a 30 s time limit.">
+              <SegField label={tr("tpls.control")} className="col-span-full" hint={tr("tpls.controlHint")}>
                 <SegmentedControl
-                  ariaLabel="Control"
+                  ariaLabel={tr("tpls.control")}
                   size="md"
                   value={a.value_type}
                   onChange={(value_type) => !readOnly && setActuator(i, { ...a, value_type })}
@@ -64,27 +69,25 @@ export function ActuatorsSection(props: SectionProps) {
               {a.value_type === "bool" && (
                 <details className="col-span-full rounded-lg border border-border px-3.5 py-2.5" open={!!(f(p + "on").error || f(p + "off").error) || undefined}>
                   <summary className="cursor-pointer text-sm font-medium text-ink">
-                    Payloads{" "}
-                    <span className="font-normal text-ink-muted">
-                      · sends {a.on || "…"} for On, {a.off || "…"} for Off
-                    </span>
+                    {tr("tpls.payloads")}{" "}
+                    <span className="font-normal text-ink-muted">{tr("tpls.sends", { on: a.on || "…", off: a.off || "…" })}</span>
                   </summary>
                   <div className="mt-3 grid grid-cols-2 gap-x-3 gap-y-3.5">
-                    <Field label="Sends for On" {...f(p + "on")}>
+                    <Field label={tr("tpls.sendsOn")} {...f(p + "on")}>
                       <Input mono value={a.on} disabled={readOnly} onChange={(e) => setActuator(i, { ...a, on: e.target.value })} onBlur={blur(p + "on")} />
                     </Field>
-                    <Field label="Sends for Off" {...f(p + "off")}>
+                    <Field label={tr("tpls.sendsOff")} {...f(p + "off")}>
                       <Input mono value={a.off} disabled={readOnly} onChange={(e) => setActuator(i, { ...a, off: e.target.value })} onBlur={blur(p + "off")} />
                     </Field>
                   </div>
                 </details>
               )}
               {a.value_type === "string" && (
-                <Field label="Allowed values" hint="Separated by commas, e.g. open, closed, half" {...f(p + "allowed")} className="col-span-full">
+                <Field label={tr("tpls.allowed")} hint={tr("tpls.allowedHint")} {...f(p + "allowed")} className="col-span-full">
                   <Input mono value={a.allowed} disabled={readOnly} onChange={(e) => setActuator(i, { ...a, allowed: e.target.value })} onBlur={blur(p + "allowed")} />
                 </Field>
               )}
-              {a.value_type === "float" && <p className="col-span-full text-xs text-ink-muted">Sends the number you choose.</p>}
+              {a.value_type === "float" && <p className="col-span-full text-xs text-ink-muted">{tr("tpls.sendsNumber")}</p>}
             </RowSheet>
           );
         })}
@@ -99,7 +102,7 @@ export function ActuatorsSection(props: SectionProps) {
             }}
           >
             <Plus aria-hidden size={14} />
-            Add actuator
+            {tr("tpls.addActuator")}
           </Button>
         )}
       </div>

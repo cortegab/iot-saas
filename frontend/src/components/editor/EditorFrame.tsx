@@ -10,7 +10,9 @@ import { Tabs } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
 import { PAGE_WITH_BAR, SAVE_BAR } from "@/components/editor/save-bar";
-import { tActive as t } from "@iodriven/shared/i18n";
+import { nounWord, tActive as t } from "@iodriven/shared/i18n";
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export type EditorMode = "dock" | "drawer" | "page";
 
@@ -428,7 +430,7 @@ export function EditorFrame({
 
   const tabStrip = tabs && (
     <Tabs
-      ariaLabel={`${noun.charAt(0).toUpperCase()}${noun.slice(1)} sections`}
+      ariaLabel={t("frame.sectionsOf", { noun: nounWord(noun), Noun: cap(nounWord(noun)) })}
       tabs={groupList.map((g) => ({ id: g.id, label: g.label, issues: groupIssues(g) }))}
       active={activeGroup?.id ?? ""}
       onChange={goTo}
@@ -451,7 +453,7 @@ export function EditorFrame({
 
   const TitleTag = mode === "page" ? "h1" : "h2";
   const closeButton = onClose && (
-    <IconButton aria-label={`Close ${noun} editor`} onClick={onClose}>
+    <IconButton aria-label={t("frame.closeEditor", { noun: nounWord(noun) })} onClick={onClose}>
       <X size={18} />
     </IconButton>
   );
@@ -534,8 +536,8 @@ export function EditorFrame({
   );
 
   const rail = showRail && (
-    <aside aria-label="Sections" className="hidden [grid-area:rail] wb:sticky wb:top-4 wb:flex wb:flex-col wb:gap-1.5 wb:pt-2">
-      <p className="px-2.5 pb-1 text-xs font-semibold text-ink-muted">{status.isNew ? `New ${noun}` : "Sections"}</p>
+    <aside aria-label={t("frame.sections")} className="hidden [grid-area:rail] wb:sticky wb:top-4 wb:flex wb:flex-col wb:gap-1.5 wb:pt-2">
+      <p className="px-2.5 pb-1 text-xs font-semibold text-ink-muted">{status.isNew ? t("frame.newOf", { noun: nounWord(noun) }) : t("frame.sections")}</p>
       <ol className="flex flex-col gap-0.5">
         {sections.map((s, i) => {
           const shown = shownBySection.get(s.id) ?? 0;
@@ -575,7 +577,7 @@ export function EditorFrame({
                   {s.description && <small className="text-xs text-ink-muted">{s.description}</small>}
                 </span>
                 {shown > 0 && (
-                  <span aria-label={`${shown} to fix`} className="mt-px grid h-[18px] min-w-[18px] place-items-center rounded-full bg-status-error px-[5px] text-xs font-bold text-on-accent">
+                  <span aria-label={t("frame.toFix", { count: shown })} className="mt-px grid h-[18px] min-w-[18px] place-items-center rounded-full bg-status-error px-[5px] text-xs font-bold text-on-accent">
                     {shown}
                   </span>
                 )}
@@ -584,7 +586,7 @@ export function EditorFrame({
           );
         })}
       </ol>
-      {status.isNew && <p className="px-2.5 py-1.5 text-xs text-ink-muted">A step shows ✓ once it has no errors. Save checks everything again.</p>}
+      {status.isNew && <p className="px-2.5 py-1.5 text-xs text-ink-muted">{t("frame.stepHint")}</p>}
     </aside>
   );
 
@@ -668,7 +670,7 @@ export function EditorFrame({
             </Button>
           ) : (
             <Button disabled={!status.dirty || status.saving} onClick={() => void save()}>
-              {status.saving ? t("ui.saving") : (saveLabel ?? t("ui.editor.create", { noun }))}
+              {status.saving ? t("ui.saving") : (saveLabel ?? t("ui.editor.create", { noun: nounWord(noun) }))}
             </Button>
           )}
         </div>
@@ -686,7 +688,7 @@ export function EditorFrame({
             </Button>
           )}
           <Button disabled={!status.dirty || status.saving} onClick={() => void save()}>
-            {status.saving ? t("ui.saving") : (saveLabel ?? (status.isNew ? t("ui.editor.create", { noun }) : t("ui.save")))}
+            {status.saving ? t("ui.saving") : (saveLabel ?? (status.isNew ? t("ui.editor.create", { noun: nounWord(noun) }) : t("ui.save")))}
           </Button>
         </div>
       )}
@@ -720,7 +722,7 @@ export function EditorFrame({
       <div
         ref={rootRef}
         role={mode === "dock" ? "region" : undefined}
-        aria-label={mode === "dock" ? `${title} editor` : undefined}
+        aria-label={mode === "dock" ? t("frame.editorOf", { title }) : undefined}
         className={cn(
           "flex min-w-0 flex-col bg-surface [container-type:inline-size]",
           mode === "dock"
