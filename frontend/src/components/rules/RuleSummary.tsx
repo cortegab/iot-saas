@@ -5,6 +5,7 @@ import { tzCity } from "@/lib/timezones";
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 import type { components } from "@/types/api";
+import { tActive as tr, type MessageKey } from "@iodriven/shared/i18n";
 
 type ActuatorCommandAction = components["schemas"]["ActuatorCommandAction"];
 type NotificationAction = components["schemas"]["NotificationAction"];
@@ -30,10 +31,10 @@ export interface RuleSummaryData {
 /** The word for the direction a latched inequality releases in — the
  * complement of its own operator (a `>` rule releases at `<=`). */
 const RELEASE_WORDS: Record<string, string> = {
-  ">": "falls to or below",
-  ">=": "drops below",
-  "<": "reaches or exceeds",
-  "<=": "goes above",
+  get ">"() { return tr("notif.ops.lte"); },
+  get ">="() { return tr("notif.ops.lt"); },
+  get "<"() { return tr("notif.ops.gte"); },
+  get "<="() { return tr("notif.ops.gt"); },
 };
 
 /** Where a single-inequality rule's condition actually clears: the threshold
@@ -97,7 +98,9 @@ function ActionText({ action, placeholder }: { action: RuleAction | null; placeh
   if (action?.type === "actuator_command") {
     return (
       <>
-        turn <Value placeholder={placeholder}>{action.actuator || (placeholder ?? "")}</Value>{" "}
+        {tr("editor.sum.turnPre")}
+        <Value placeholder={placeholder}>{action.actuator || (placeholder ?? "")}</Value>
+        {tr("editor.sum.turnMid")}
         <Value placeholder={placeholder}>
           {typeof action.value === "boolean" ? (action.value ? "ON" : "OFF") : String(action.value)}
         </Value>
@@ -107,14 +110,15 @@ function ActionText({ action, placeholder }: { action: RuleAction | null; placeh
   if (action?.type === "notification") {
     return (
       <>
-        send a notification: &ldquo;<Value placeholder={placeholder}>{action.message || (placeholder ?? "")}</Value>&rdquo;
+        {tr("editor.sum.notify")}&ldquo;<Value placeholder={placeholder}>{action.message || (placeholder ?? "")}</Value>&rdquo;
       </>
     );
   }
   if (action?.type === "webhook") {
     return (
       <>
-        call the webhook at <Value placeholder={placeholder}>{action.url || (placeholder ?? "")}</Value>
+        {tr("editor.sum.webhook")}
+        <Value placeholder={placeholder}>{action.url || (placeholder ?? "")}</Value>
       </>
     );
   }
@@ -122,20 +126,21 @@ function ActionText({ action, placeholder }: { action: RuleAction | null; placeh
     const to = action.to ?? [];
     return (
       <>
-        email <Value placeholder={placeholder}>{to.length ? to.join(", ") : "the alert recipients"}</Value>
+        {tr("editor.sum.email")}
+        <Value placeholder={placeholder}>{to.length ? to.join(", ") : tr("editor.sum.alertRecipients")}</Value>
       </>
     );
   }
-  return <>do something unrecognized</>;
+  return <>{tr("editor.sum.unrecognized")}</>;
 }
 
 function ActionList({ actions, placeholder }: { actions: Record<string, unknown>[]; placeholder?: string }) {
-  if (actions.length === 0) return <Value placeholder={placeholder}>{placeholder ?? "nothing"}</Value>;
+  if (actions.length === 0) return <Value placeholder={placeholder}>{placeholder ?? tr("editor.sum.nothing")}</Value>;
   return (
     <>
       {actions.map((a, i) => (
         <Fragment key={i}>
-          {i > 0 && (i === actions.length - 1 ? " and " : ", ")}
+          {i > 0 && (i === actions.length - 1 ? tr("editor.sum.and") : ", ")}
           <ActionText action={parseAction(a)} placeholder={placeholder} />
         </Fragment>
       ))}
@@ -143,21 +148,25 @@ function ActionList({ actions, placeholder }: { actions: Record<string, unknown>
   );
 }
 
-const OPERATOR_WORDS: Record<string, string> = {
-  ">": "goes above",
-  ">=": "reaches or exceeds",
-  "<": "drops below",
-  "<=": "falls to or below",
-  "==": "equals",
-  "!=": "is different from",
-  between: "goes between",
-  not_between: "goes outside",
-  in: "is one of",
-  not_in: "is none of",
-  changed: "changes",
-  increased: "increases",
-  decreased: "decreases",
+const OPERATOR_KEYS: Record<string, string> = {
+  ">": "gt",
+  ">=": "gte",
+  "<": "lt",
+  "<=": "lte",
+  "==": "eq",
+  "!=": "ne",
+  between: "between",
+  not_between: "not_between",
+  in: "in",
+  not_in: "not_in",
+  changed: "changed",
+  increased: "increased",
+  decreased: "decreased",
 };
+/** The operator as the sentence says it, in the language on screen. */
+const OPERATOR_WORDS: Record<string, string> = new Proxy({} as Record<string, string>, {
+  get: (_, op: string) => (OPERATOR_KEYS[op] ? tr(`notif.ops.${OPERATOR_KEYS[op]}` as MessageKey) : undefined),
+});
 
 const CHANGE_OPERATORS = new Set(["changed", "increased", "decreased"]);
 
@@ -175,7 +184,9 @@ function RhsText({
   if (rhs.source === "range")
     return (
       <>
-        <Value placeholder={placeholder}>{rhs.low}</Value> and <Value placeholder={placeholder}>{rhs.high}</Value>
+        <Value placeholder={placeholder}>{rhs.low}</Value>
+        {tr("editor.sum.rangeAnd")}
+        <Value placeholder={placeholder}>{rhs.high}</Value>
       </>
     );
   if (rhs.source === "set") return <Value placeholder={placeholder}>{rhs.values.join(", ")}</Value>;
@@ -208,7 +219,7 @@ function ConditionText({
       </>
     );
   }
-  const joiner = node.op === "AND" ? " and " : " or ";
+  const joiner = tr(node.op === "AND" ? "editor.sum.and" : "editor.sum.or");
   // Parenthesise a nested group so "a and (b or c)" can't read as "(a and b) or c".
   return (
     <>
@@ -243,14 +254,16 @@ function TriggerText({
       </>
     );
   }
-  if (trigger.type === "manual") return <>When run manually</>;
+  if (trigger.type === "manual") return <>{tr("editor.sum.manual")}</>;
   if (trigger.type === "device_status") {
     const deviceId = typeof trigger.device_id === "string" ? trigger.device_id : "";
-    const name = (deviceId && deviceNameById?.[deviceId]) || placeholder || "a device";
-    const verb = trigger.transition === "connected" ? "connects" : "disconnects";
+    const name = (deviceId && deviceNameById?.[deviceId]) || placeholder || tr("editor.sum.aDevice");
+    const verb = tr(trigger.transition === "connected" ? "editor.sum.connects" : "editor.sum.disconnects");
     return (
       <>
-        When <Value placeholder={placeholder}>{name}</Value> {verb}
+        {tr("editor.sum.statusWhen")}
+        <Value placeholder={placeholder}>{name}</Value>
+        {verb}
       </>
     );
   }
@@ -264,19 +277,19 @@ function ClearText({ rule, placeholder }: { rule: RuleSummaryData; placeholder?:
   const delay = rule.execution_policy.clear_for_duration ?? 0;
   return (
     <>
-      ; when{" "}
+      {tr("editor.sum.clearWhen")}
       {release ? (
         <>
           <Value placeholder={placeholder}>{release.metric}</Value> {release.words}{" "}
           <Value placeholder={placeholder}>{release.value}</Value>
         </>
       ) : (
-        "that's no longer true"
+        tr("editor.sum.noLonger")
       )}
       {delay > 0 && (
         <>
-          {" "}
-          for <strong>{delay}s</strong>
+          {tr("editor.sum.for")}
+          <strong>{delay}s</strong>
         </>
       )}
       , <ActionList actions={actions} placeholder={placeholder} />
@@ -311,21 +324,29 @@ export function RuleSummary({
   return (
     <p className={cn("text-sm text-ink", className)}>
       {reading ? (
-        <>When {condition ?? <Value placeholder={placeholder}>{placeholder ?? "…"}</Value>}</>
+        <>
+          {tr("editor.sum.when")}
+          {condition ?? <Value placeholder={placeholder}>{placeholder ?? "…"}</Value>}
+        </>
       ) : (
         <>
           <TriggerText trigger={rule.trigger} placeholder={placeholder} deviceNameById={deviceNameById} />
-          {condition && <>, if {condition}</>}
+          {condition && (
+            <>
+              {tr("editor.sum.if")}
+              {condition}
+            </>
+          )}
         </>
       )}
       {hold > 0 && (
         <>
-          {" "}
-          for <strong>{hold}s</strong>
+          {tr("editor.sum.for")}
+          <strong>{hold}s</strong>
         </>
       )}
       , <ActionList actions={rule.actions} placeholder={placeholder} />
-      {latch && <>, then stay latched until reset</>}
+      {latch && <>{tr("editor.sum.latch")}</>}
       <ClearText rule={rule} placeholder={placeholder} />.
     </p>
   );

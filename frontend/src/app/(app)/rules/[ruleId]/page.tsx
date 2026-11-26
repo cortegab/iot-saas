@@ -134,7 +134,13 @@ export default function EditRulePage() {
               eyebrow={
                 <span className="flex flex-wrap items-center gap-x-1.5">
                   <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
-                  {rule.trigger.type === "schedule" ? (lastFired ? `fired ${timeAgo(lastFired)}` : "never fired") : fired ? `fired ${fired}× in 24 h` : "quiet in 24 h"}
+                  {rule.trigger.type === "schedule"
+                    ? lastFired
+                      ? t("editor.peek.firedAgo", { ago: timeAgo(lastFired) })
+                      : t("editor.peek.neverFired")
+                    : fired
+                      ? t("editor.peek.firedLower", { count: fired })
+                      : t("editor.peek.quietLower")}
                   {/* One state (Can't evaluate replaces Armed), and why, in words. */}
                   {unhealthy && <span>· {unhealthy}. Missing data never fires or clears it.</span>}
                 </span>
@@ -145,7 +151,7 @@ export default function EditRulePage() {
               actions={
                 isAdmin ? (
                   <Button type="button" variant="secondary" onClick={() => void actions.runNow(rule)}>
-                    <Play size={14} aria-hidden /> Run now…
+                    <Play size={14} aria-hidden /> {t("rules.actions.runNow")}
                   </Button>
                 ) : undefined
               }
