@@ -30,6 +30,7 @@ import { ApiRequestError, type ApiPage } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatWhen, timeAgo } from "@/lib/time-ago";
 import type { components, operations } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -44,28 +45,28 @@ type MemberResponse = components["schemas"]["MemberResponse"];
 /** The alarm state of an alert (DESIGN.md §13), in words: who is on it, or
  * that its condition went away. Null while it's active. */
 function alarmState(n: NotificationResponse, who: (id: string | null | undefined) => string): string | null {
-  if (n.cleared_at) return `Cleared ${timeAgo(n.cleared_at)}`;
+  if (n.cleared_at) return t("alerts.cleared", { ago: timeAgo(n.cleared_at) });
   if (n.acknowledged_at)
-    return `Acknowledged by ${who(n.acknowledged_by)}, ${timeAgo(n.acknowledged_at)}${n.acknowledged_note ? `: “${n.acknowledged_note}”` : ""}`;
+    return `${t("alerts.acknowledgedBy", { who: who(n.acknowledged_by), ago: timeAgo(n.acknowledged_at) })}${n.acknowledged_note ? `: “${n.acknowledged_note}”` : ""}`;
   return null;
 }
 
 const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; tone: string }> = {
-  critical: { icon: AlertTriangle, label: "Critical", tone: "text-status-error" },
-  warning: { icon: Zap, label: "Warning", tone: "text-status-pending" },
-  info: { icon: Info, label: "Info", tone: "text-ink-muted" },
+  critical: { icon: AlertTriangle, get label() { return t("alerts.severity.critical"); }, tone: "text-status-error" },
+  warning: { icon: Zap, get label() { return t("alerts.severity.warning"); }, tone: "text-status-pending" },
+  info: { icon: Info, get label() { return t("alerts.severity.info"); }, tone: "text-ink-muted" },
 };
 const SEVERITY_ORDER: Severity[] = ["critical", "warning", "info"];
 
 /** The state filter's types (DESIGN.md §8): what someone scans for. A rule
  * firing and its clearing are both "Rules". */
 const TYPES: { value: NotificationType; label: string; hint: string; tone: QuickFilterOption["tone"]; alert?: boolean }[] = [
-  { value: "device_offline", label: "Offline", hint: "Devices that went offline, not read yet", tone: "offline", alert: true },
-  { value: "device_health", label: "Device health", hint: "Devices that restarted after a crash or have a sensor not answering, not read yet", tone: "error", alert: true },
-  { value: "rules", label: "Rules", hint: "Rules that fired or cleared, not read yet", tone: "pending" },
-  { value: "rule_health", label: "Rule health", hint: "Rules that stopped working, not read yet", tone: "error", alert: true },
-  { value: "delivery_failed", label: "Failed deliveries", hint: "Emails and webhooks that failed, not read yet", tone: "error", alert: true },
-  { value: "template_changed", label: "Templates", hint: "Template changes, not read yet", tone: "unknown" },
+  { value: "device_offline", get label() { return t("alerts.types.device_offline"); }, get hint() { return t("alerts.types.device_offlineHint"); }, tone: "offline", alert: true },
+  { value: "device_health", get label() { return t("alerts.types.device_health"); }, get hint() { return t("alerts.types.device_healthHint"); }, tone: "error", alert: true },
+  { value: "rules", get label() { return t("alerts.types.rules"); }, get hint() { return t("alerts.types.rulesHint"); }, tone: "pending" },
+  { value: "rule_health", get label() { return t("alerts.types.rule_health"); }, get hint() { return t("alerts.types.rule_healthHint"); }, tone: "error", alert: true },
+  { value: "delivery_failed", get label() { return t("alerts.types.delivery_failed"); }, get hint() { return t("alerts.types.delivery_failedHint"); }, tone: "error", alert: true },
+  { value: "template_changed", get label() { return t("alerts.types.template_changed"); }, get hint() { return t("alerts.types.template_changedHint"); }, tone: "unknown" },
 ];
 const isType = (v: string): v is NotificationType => TYPES.some((t) => t.value === v);
 
@@ -97,9 +98,9 @@ export default function NotificationsPage() {
     try {
       await acknowledge(g.key, note);
       setAckNote("");
-      toast({ title: "Acknowledged", detail: "It no longer counts as needing attention. Everyone sees who's on it." });
+      toast({ title: t("alerts.acknowledged"), detail: t("alerts.acknowledgedDetail") });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't acknowledge it", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("alerts.ackFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
   const { data: devices } = useApiSWR<DeviceResponse[]>("/devices");
@@ -114,8 +115,8 @@ export default function NotificationsPage() {
   const templateName = useMemo(() => new Map((templates ?? []).map((t) => [t.id, t.name])), [templates]);
 
   // Only devices and rules that have alerts are offered as filters.
-  const deviceOptions = (summary?.device_ids ?? []).map((id) => ({ id, name: deviceName.get(id) ?? "Deleted device" }));
-  const ruleOptions = (summary?.rule_ids ?? []).map((id) => ({ id, name: ruleName.get(id) ?? "Deleted rule" }));
+  const deviceOptions = (summary?.device_ids ?? []).map((id) => ({ id, name: deviceName.get(id) ?? t("alerts.deletedDevice") }));
+  const ruleOptions = (summary?.rule_ids ?? []).map((id) => ({ id, name: ruleName.get(id) ?? t("alerts.deletedRule") }));
 
   const f = list.filters;
   const all = (v: string) => (v === "all" ? null : v);
@@ -145,11 +146,11 @@ export default function NotificationsPage() {
       const ids = await dismiss(g.key);
       if (open?.key === g.key) setOpen(null);
       toast({
-        title: ids.length > 1 ? `${ids.length} notifications dismissed` : "Notification dismissed",
-        action: { label: "Undo", onClick: () => void restore(ids) },
+        title: ids.length > 1 ? t("alerts.dismissedMany", { count: ids.length }) : t("alerts.dismissedOne"),
+        action: { label: t("devices.toast.undo"), onClick: () => void restore(ids) },
       });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't dismiss it", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("alerts.dismissFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -166,9 +167,9 @@ export default function NotificationsPage() {
 
   const unreadTotal = summary?.unread ?? 0;
   const markAllButton = (
-    <Button variant="secondary" disabled={unreadTotal === 0} onClick={() => void markAllRead().then(() => toast({ title: "All notifications marked as read" }))}>
+    <Button variant="secondary" disabled={unreadTotal === 0} onClick={() => void markAllRead().then(() => toast({ title: t("alerts.allMarked") }))}>
       <CheckCheck aria-hidden size={15} />
-      Mark all as read
+      {t("alerts.markAll")}
     </Button>
   );
   const loadError = summaryError ?? error;
@@ -180,21 +181,21 @@ export default function NotificationsPage() {
           only while there's no toolbar (loading, error, nothing yet). */}
       <PageHeader
         inline
-        title="Notifications"
-        description="Alarms that need someone, and what happened. Open one for its details and links."
+        title={t("alerts.title")}
+        description={t("alerts.description")}
         actions={!loadError && summary && !empty ? undefined : markAllButton}
       />
 
       {loadError ? (
         <ErrorState
-          title="Couldn't load notifications"
-          message={loadError instanceof ApiRequestError ? loadError.message : "The API didn't respond."}
+          title={t("alerts.loadFailed")}
+          message={loadError instanceof ApiRequestError ? loadError.message : t("devices.apiDown")}
           onRetry={() => void refreshNotifications()}
         />
       ) : !summary || (isLoading && !data) ? (
         <LoadingSkeleton rows={4} rowClassName="h-16" />
       ) : empty ? (
-        <EmptyState icon={<Bell aria-hidden size={26} />} title="Nothing needs attention" description="No alerts. New ones appear here, with a count in the sidebar." />
+        <EmptyState icon={<Bell aria-hidden size={26} />} title={t("alerts.emptyTitle")} description={t("alerts.emptyBody")} />
       ) : (
         <>
           {/* The state filter: alarms that still need someone (not
@@ -203,23 +204,23 @@ export default function NotificationsPage() {
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
-            placeholder="Search notifications"
+            placeholder={t("alerts.search")}
             activeFilters={[f.severity, f.device, f.rule].filter((v) => v !== "all").length}
             actions={markAllButton}
             quick={{
-              label: "Filter by state",
+              label: t("alerts.filterState"),
               value: f.state,
               onChange: (v) => list.setFilter("state", v),
               options: [
-                { value: "all", label: "All", count: summary.alerts },
-                { value: "active", label: "Needs attention", hint: "Not acknowledged, not cleared" },
-                { value: "unread", label: "Unread", count: unreadTotal, tone: "accent", hint: "Not read yet" },
+                { value: "all", label: t("devices.all"), count: summary.alerts },
+                { value: "active", label: t("alerts.needsAttention"), hint: t("alerts.needsAttentionHint") },
+                { value: "unread", label: t("alerts.unread"), count: unreadTotal, tone: "accent", hint: t("alerts.unreadHint") },
                 ...TYPES.map((t) => ({ ...t, count: summary.unread_by_type[t.value] ?? 0 })),
               ],
             }}
           >
-            <Select aria-label="Filter by severity" value={f.severity} onChange={(e) => list.setFilter("severity", e.target.value)} className="w-auto">
-              <option value="all">All severities</option>
+            <Select aria-label={t("alerts.filterSeverity")} value={f.severity} onChange={(e) => list.setFilter("severity", e.target.value)} className="w-auto">
+              <option value="all">{t("alerts.allSeverities")}</option>
               {SEVERITY_ORDER.map((s) => (
                 <option key={s} value={s}>
                   {SEVERITY[s].label}
@@ -227,8 +228,8 @@ export default function NotificationsPage() {
               ))}
             </Select>
             {deviceOptions.length > 0 && (
-              <Select aria-label="Filter by device" value={f.device} onChange={(e) => list.setFilter("device", e.target.value)} className="w-auto">
-                <option value="all">All devices</option>
+              <Select aria-label={t("alerts.filterDevice")} value={f.device} onChange={(e) => list.setFilter("device", e.target.value)} className="w-auto">
+                <option value="all">{t("rules.allDevices")}</option>
                 {deviceOptions.map((d) => (
                   <option key={d.id} value={d.id}>
                     {d.name}
@@ -237,8 +238,8 @@ export default function NotificationsPage() {
               </Select>
             )}
             {ruleOptions.length > 0 && (
-              <Select aria-label="Filter by rule" value={f.rule} onChange={(e) => list.setFilter("rule", e.target.value)} className="w-auto">
-                <option value="all">All rules</option>
+              <Select aria-label={t("alerts.filterRule")} value={f.rule} onChange={(e) => list.setFilter("rule", e.target.value)} className="w-auto">
+                <option value="all">{t("alerts.allRules")}</option>
                 {ruleOptions.map((r) => (
                   <option key={r.id} value={r.id}>
                     {r.name}
@@ -252,13 +253,13 @@ export default function NotificationsPage() {
             f.state !== "all" && chips.length === 0 ? (
               <EmptyState
                 icon={<Check aria-hidden size={26} />}
-                title={f.state === "active" ? "Nothing needs attention" : "Nothing unread"}
+                title={f.state === "active" ? t("alerts.emptyTitle") : t("alerts.nothingUnread")}
                 description={
                   f.state === "active"
-                    ? "Every alarm is acknowledged or has cleared."
+                    ? t("alerts.allHandled")
                     : f.state === "unread"
-                      ? "Every notification has been read."
-                      : "Nothing of this type is waiting to be read."
+                      ? t("alerts.allRead")
+                      : t("alerts.noneOfType")
                 }
               />
             ) : (
@@ -269,7 +270,7 @@ export default function NotificationsPage() {
               {/* demo H rows: a bare severity icon, one column (title, muted
                   detail, small meta with links), the state and its action on
                   the right. The whole row opens the sheet. */}
-              <ul aria-label="Alerts" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+              <ul aria-label={t("alerts.list")} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
                 {groups.map((g) => {
                   const n = g.latest;
                   const sev = SEVERITY[n.severity];
@@ -291,7 +292,7 @@ export default function NotificationsPage() {
                         <SevIcon aria-hidden size={17} className={cn("mt-0.5 shrink-0", sev.tone)} />
                         <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-sm">
                           <button type="button" onClick={() => openSheet(g)} aria-haspopup="dialog" className="min-w-0 text-left text-ink">
-                            <span className="sr-only">{sev.label}{unread ? ", Unread" : ""}: </span>
+                            <span className="sr-only">{sev.label}{unread ? t("alerts.unreadPrefix") : ""}: </span>
                             {/* Unread is the accent bar and a bold title (DESIGN.md §8). */}
                             <strong className={unread ? "font-semibold" : "font-normal"}>{n.message}</strong>
                             {g.count > 1 && (
@@ -305,7 +306,7 @@ export default function NotificationsPage() {
                             <span className={cn("text-xs", n.cleared_at ? "text-status-online" : "text-ink-muted")}>{alarmState(n, who)}</span>
                           )}
                           <span className="text-xs text-ink-muted">
-                            {g.count > 1 ? `since ${formatWhen(g.first_at)}, last ${timeAgo(g.last_at)}` : timeAgo(g.last_at)}
+                            {g.count > 1 ? t("alerts.since", { first: formatWhen(g.first_at), ago: timeAgo(g.last_at) }) : timeAgo(g.last_at)}
                             <SourceLinks n={n} deviceName={deviceName} ruleName={ruleName} templateName={templateName} />
                           </span>
                         </div>
@@ -316,13 +317,13 @@ export default function NotificationsPage() {
                           groups={[
                             [
                               unread
-                                ? { label: "Mark as read", icon: <Check size={15} />, onClick: () => void markRead(g.key) }
-                                : { label: "Mark as unread", icon: <Bell size={15} />, onClick: () => void markUnread(g.key) },
+                                ? { label: t("alerts.markRead"), icon: <Check size={15} />, onClick: () => void markRead(g.key) }
+                                : { label: t("alerts.markUnread"), icon: <Bell size={15} />, onClick: () => void markUnread(g.key) },
                               ...(canManage && n.severity !== "info" && !n.acknowledged_at && !n.cleared_at
-                                ? [{ label: "Acknowledge", icon: <CheckCheck size={15} />, onClick: () => void onAcknowledge(g) }]
+                                ? [{ label: t("alerts.acknowledge"), icon: <CheckCheck size={15} />, onClick: () => void onAcknowledge(g) }]
                                 : []),
                             ],
-                            ...(canManage ? [[{ label: "Dismiss", icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }]] : []),
+                            ...(canManage ? [[{ label: t("alerts.dismiss"), icon: <X size={15} />, danger: true, onClick: () => void onDismiss(g) }]] : []),
                           ]}
                         />
                       </div>
@@ -348,25 +349,25 @@ export default function NotificationsPage() {
       <ItemSheet
         open={open != null}
         onClose={() => setOpen(null)}
-        title={open?.latest.message ?? "Notification"}
-        sub={open ? `${SEVERITY[open.latest.severity].label}${open.count > 1 ? ` · ${open.count} times` : ""}` : undefined}
+        title={open?.latest.message ?? t("alerts.notification")}
+        sub={open ? `${SEVERITY[open.latest.severity].label}${open.count > 1 ? ` · ${t("alerts.times", { count: open.count })}` : ""}` : undefined}
         footer={
           open ? (
             <>
               {canManage ? (
                 <Button variant="link-danger" className="mr-auto text-meta" onClick={() => void onDismiss(open)}>
-                  Dismiss
+                  {t("alerts.dismiss")}
                 </Button>
               ) : (
                 <span className="mr-auto" />
               )}
               <Button variant="ghost" onClick={() => void markUnread(open.key)}>
-                Mark as unread
+                {t("alerts.markUnread")}
               </Button>
               {canManage && open.latest.severity !== "info" && !open.latest.acknowledged_at && !open.latest.cleared_at ? (
-                <Button onClick={() => void onAcknowledge(open, ackNote).then(() => setOpen(null))}>Acknowledge</Button>
+                <Button onClick={() => void onAcknowledge(open, ackNote).then(() => setOpen(null))}>{t("alerts.acknowledge")}</Button>
               ) : (
-                <Button onClick={() => setOpen(null)}>Done</Button>
+                <Button onClick={() => setOpen(null)}>{t("ui.done")}</Button>
               )}
             </>
           ) : undefined
@@ -381,37 +382,37 @@ export default function NotificationsPage() {
               canManage &&
               open.latest.severity !== "info" && (
                 <label className="flex flex-col gap-1 text-meta text-ink-muted">
-                  Note for the team (optional)
-                  <Input value={ackNote} maxLength={500} placeholder="e.g. On my way, ETA 20 min" onChange={(e) => setAckNote(e.target.value)} />
+                  {t("alerts.note")}
+                  <Input value={ackNote} maxLength={500} placeholder={t("alerts.notePlaceholder")} onChange={(e) => setAckNote(e.target.value)} />
                 </label>
               )
             )}
             <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
               {open.latest.device_id && (
                 <>
-                  <dt className="text-ink-muted">Device</dt>
-                  <dd>{deviceName.has(open.latest.device_id) ? <Link href={`/devices/${open.latest.device_id}`} className="text-accent hover:underline">{deviceName.get(open.latest.device_id)}</Link> : "Deleted device"}</dd>
+                  <dt className="text-ink-muted">{t("alerts.device")}</dt>
+                  <dd>{deviceName.has(open.latest.device_id) ? <Link href={`/devices/${open.latest.device_id}`} className="text-accent hover:underline">{deviceName.get(open.latest.device_id)}</Link> : t("alerts.deletedDevice")}</dd>
                 </>
               )}
               {open.latest.rule_id && (
                 <>
-                  <dt className="text-ink-muted">Rule</dt>
-                  <dd>{ruleName.has(open.latest.rule_id) ? <Link href={`/rules/${open.latest.rule_id}`} className="text-accent hover:underline">{ruleName.get(open.latest.rule_id)}</Link> : "Deleted rule"}</dd>
+                  <dt className="text-ink-muted">{t("alerts.rule")}</dt>
+                  <dd>{ruleName.has(open.latest.rule_id) ? <Link href={`/rules/${open.latest.rule_id}`} className="text-accent hover:underline">{ruleName.get(open.latest.rule_id)}</Link> : t("alerts.deletedRule")}</dd>
                 </>
               )}
               {open.latest.catalog_entry_id && (
                 <>
-                  <dt className="text-ink-muted">Template</dt>
-                  <dd>{templateName.has(open.latest.catalog_entry_id) ? <Link href={`/templates/${open.latest.catalog_entry_id}`} className="text-accent hover:underline">{templateName.get(open.latest.catalog_entry_id)}</Link> : "Deleted template"}</dd>
+                  <dt className="text-ink-muted">{t("alerts.template")}</dt>
+                  <dd>{templateName.has(open.latest.catalog_entry_id) ? <Link href={`/templates/${open.latest.catalog_entry_id}`} className="text-accent hover:underline">{templateName.get(open.latest.catalog_entry_id)}</Link> : t("alerts.deletedTemplate")}</dd>
                 </>
               )}
-              <dt className="text-ink-muted">{open.count > 1 ? "First" : "When"}</dt>
+              <dt className="text-ink-muted">{open.count > 1 ? t("alerts.first") : t("alerts.when")}</dt>
               <dd>{formatWhen(open.first_at)}</dd>
               {open.count > 1 && (
                 <>
-                  <dt className="text-ink-muted">Last</dt>
+                  <dt className="text-ink-muted">{t("alerts.last")}</dt>
                   <dd>
-                    {formatWhen(open.last_at)} · {open.count} times
+                    {formatWhen(open.last_at)} · {t("alerts.times", { count: open.count })}
                   </dd>
                 </>
               )}
@@ -430,14 +431,14 @@ function EachTime({ groupKey }: { groupKey: string }) {
   return (
     <div className="flex flex-col gap-2">
       <h3 className="text-meta font-medium text-ink-muted">Each time</h3>
-      <ol aria-label="Each time" className="flex flex-col gap-1.5 border-l-2 border-border pl-3.5 text-meta">
+      <ol aria-label={t("alerts.eachTime")} className="flex flex-col gap-1.5 border-l-2 border-border pl-3.5 text-meta">
         {pager.rows.map((n) => (
           <li key={n.id} className="tabular-nums text-ink">
             {formatWhen(n.created_at)}
           </li>
         ))}
       </ol>
-      <TableFooter shown={pager.total} total={pager.total} noun={["time", "times"]} page={pager.page} pageCount={pager.pageCount} pageSize={pager.pageSize} onPage={pager.setPage} onPageSize={pager.setPageSize} />
+      <TableFooter shown={pager.total} total={pager.total} noun={[t("alerts.timeOne"), t("alerts.timeMany")]} page={pager.page} pageCount={pager.pageCount} pageSize={pager.pageSize} onPage={pager.setPage} onPageSize={pager.setPageSize} />
     </div>
   );
 }
@@ -461,8 +462,8 @@ function SourceLinks({
   );
   return (
     <>
-      {n.device_id && <> · {deviceName.has(n.device_id) ? link(`/devices/${n.device_id}`, deviceName.get(n.device_id)!) : "deleted device"}</>}
-      {n.rule_id && <> · rule {ruleName.has(n.rule_id) ? link(`/rules/${n.rule_id}`, ruleName.get(n.rule_id)!) : "deleted"}</>}
+      {n.device_id && <> · {deviceName.has(n.device_id) ? link(`/devices/${n.device_id}`, deviceName.get(n.device_id)!) : t("alerts.deletedDeviceLower")}</>}
+      {n.rule_id && <> · {t("alerts.ruleLink")} {ruleName.has(n.rule_id) ? link(`/rules/${n.rule_id}`, ruleName.get(n.rule_id)!) : t("alerts.deleted")}</>}
       {n.catalog_entry_id && templateName.has(n.catalog_entry_id) && <> · {link(`/templates/${n.catalog_entry_id}`, templateName.get(n.catalog_entry_id)!)}</>}
     </>
   );

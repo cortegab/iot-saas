@@ -13,6 +13,7 @@ import { WidgetCard, WidgetTitleContext } from "@/components/dashboards/WidgetCa
 import { cn } from "@/lib/cn";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type Widget = components["schemas"]["Widget"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
@@ -26,11 +27,11 @@ const ResponsiveGridLayout = WidthProvider(Responsive);
 const BREAKPOINTS = { lg: 640, sm: 0 };
 const COLS = { lg: 12, sm: 1 };
 export const WIDGET_LABEL: Record<Widget["type"], string> = {
-  value_card: "Value card",
-  trend_chart: "Trend chart",
-  gauge: "Gauge",
-  device_status: "Device status",
-  actuator_control: "Actuator control",
+  get value_card() { return t("dashboards.widgets.value_card"); },
+  get trend_chart() { return t("dashboards.widgets.trend_chart"); },
+  get gauge() { return t("dashboards.widgets.gauge"); },
+  get device_status() { return t("dashboards.widgets.device_status"); },
+  get actuator_control() { return t("dashboards.widgets.actuator_control"); },
 };
 
 /** Why a widget can't render, or null. A widget outlives its device and its
@@ -42,12 +43,12 @@ export function brokenReason(
 ): string | null {
   if (!devices || !templates) return null;
   const device = devices.find((d) => d.id === w.device_id);
-  if (!device) return "This widget's device was deleted. Remove the widget and add a new one.";
+  if (!device) return t("dashboards.widgetGone");
   const tpl = templates.find((t) => t.id === device.catalog_entry_id);
   if (!tpl) return null;
   if ((w.type === "value_card" || w.type === "trend_chart" || w.type === "gauge") && tpl.metrics.length > 0) {
     if (!w.metric || !tpl.metrics.some((m) => wireId(m) === w.metric)) {
-      return `${w.metric || "No metric"} isn't published by ${device.name} (${tpl.name}) anymore. Remove this widget and add one with another metric.`;
+      return t("dashboards.metricGone", { metric: w.metric || t("dashboards.noMetric"), device: device.name, template: tpl.name });
     }
   }
   return null;
@@ -171,7 +172,7 @@ export function DashboardGrid({
                 />
                 <span
                   className="widget-drag-handle absolute right-1.5 top-1.5 z-10 grid h-8 w-8 cursor-move place-items-center rounded-md border border-border bg-surface text-ink-muted shadow-card"
-                  title="Drag to move"
+                  title={t("dashboards.drag")}
                 >
                   <GripVertical aria-hidden size={14} />
                 </span>
