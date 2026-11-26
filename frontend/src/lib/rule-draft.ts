@@ -14,6 +14,7 @@
  */
 
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type ConditionLeaf = components["schemas"]["ConditionLeaf"];
@@ -779,14 +780,15 @@ export function setGroupOp(root: DraftNode | null, id: string, op: Combinator): 
   return normalize(mapNode(root, (n) => (n.id === id && n.kind === "group" ? { ...n, op } : n)));
 }
 
-/** "10 s", "a minute", "5 min", "an hour", "2 h": a duration as it's said. */
+/** "10 s", "a minute", "5 min", "an hour", "2 h": a duration as it's said,
+ * in the language on screen. */
 export function spokenDuration(seconds: number): string {
-  if (seconds < 60 || seconds % 60 !== 0) return `${seconds} s`;
+  if (seconds < 60 || seconds % 60 !== 0) return t("rules.behaviour.seconds", { n: String(seconds) });
   const minutes = seconds / 60;
-  if (minutes === 1) return "a minute";
-  if (minutes < 60 || minutes % 60 !== 0) return `${minutes} min`;
+  if (minutes === 1) return t("rules.behaviour.aMinute");
+  if (minutes < 60 || minutes % 60 !== 0) return t("rules.behaviour.minutes", { n: String(minutes) });
   const hours = minutes / 60;
-  return hours === 1 ? "an hour" : `${hours} h`;
+  return hours === 1 ? t("rules.behaviour.anHour") : t("rules.behaviour.hours", { n: String(hours) });
 }
 
 /**
@@ -798,20 +800,20 @@ export function spokenDuration(seconds: number): string {
 export function behaviourSentence(draft: RuleDraft, unitOf?: (c: ContactDraft) => string | null | undefined): string {
   const parts: string[] = [];
   if (isReadingRule(draft)) {
-    parts.push(draft.forDuration > 0 ? `waits ${spokenDuration(draft.forDuration)} before acting` : "acts as soon as it's true");
+    parts.push(draft.forDuration > 0 ? t("rules.behaviour.waits", { d: spokenDuration(draft.forDuration) }) : t("rules.behaviour.asSoon"));
     const h = contacts(draft.condition).find((c) => c.hysteresis > 0);
     if (h) {
       const unit = unitOf?.(h);
-      parts.push(`re-arms only once the reading is ${h.hysteresis}${unit ? ` ${unit}` : ""} back past the limit`);
+      parts.push(t("rules.behaviour.rearms", { margin: `${h.hysteresis}${unit ? ` ${unit}` : ""}` }));
     }
   }
   if (draft.cooldown > 0) {
-    const every = spokenDuration(draft.cooldown);
-    parts.push(every === "a minute" || every === "an hour" ? `acts at most once ${every}` : `acts at most once every ${every}`);
+    const single = draft.cooldown === 60 || draft.cooldown === 3600;
+    parts.push(t(single ? "rules.behaviour.onceA" : "rules.behaviour.onceEvery", { d: spokenDuration(draft.cooldown) }));
   }
-  if (isReadingRule(draft) && draft.behaviour === "latch") parts.push("then stays latched until someone resets it");
-  if (canClear(draft) && draft.clearDelay > 0) parts.push(`counts as clear once it's been false for ${spokenDuration(draft.clearDelay)}`);
-  if (parts.length === 0) return "It acts every time it's true.";
-  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
-  return `It ${list}.`;
+  if (isReadingRule(draft) && draft.behaviour === "latch") parts.push(t("rules.behaviour.latch"));
+  if (canClear(draft) && draft.clearDelay > 0) parts.push(t("rules.behaviour.clear", { d: spokenDuration(draft.clearDelay) }));
+  if (parts.length === 0) return t("rules.behaviour.always");
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")}${t("rules.behaviour.and")}${parts[parts.length - 1]}`;
+  return t("rules.behaviour.sentence", { list });
 }

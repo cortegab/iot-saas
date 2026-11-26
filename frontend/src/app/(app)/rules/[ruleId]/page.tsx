@@ -30,11 +30,11 @@ import { RULE_STATE, ruleStateKey } from "@/lib/rule-text";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 import { NotFound, isNotFound } from "@/components/ui/NotFound";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
 
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** demo G's consequence line: what saving touches (under Basics; the
  * header's description is the rule's sentence). */
@@ -45,8 +45,8 @@ function consequence(rule: RuleResponse): string {
       a.type === "actuator_command" ? [`${a.device_id ?? ""}/${a.actuator}`] : [],
     ),
   ).size;
-  const switches = actuators > 0 ? ` and can switch ${plural(actuators, "actuator")}` : "";
-  return `Saving applies within a second. It watches ${plural(watched, "device")}${switches}.`;
+  const switches = actuators > 0 ? t("rules.page.switches", { count: actuators }) : "";
+  return t("rules.page.consequence", { devices: t("rules.page.devices", { count: watched }), switches });
 }
 
 type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
@@ -54,9 +54,9 @@ type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
 function unhealthySummary(rule: RuleResponse): string | null {
   if (rule.health.evaluatable) return null;
   const bad = rule.health.signals.filter((s) => s.state !== "fresh");
-  if (bad.length === 0) return "One or more inputs are unavailable";
+  if (bad.length === 0) return t("rules.page.inputsUnavailable");
   return bad
-    .map((s) => `${s.metric} from ${s.device_name ?? "a device"} is ${s.state}`)
+    .map((s) => t("rules.page.signalState", { metric: s.metric, device: s.device_name ?? t("rules.page.aDevice"), state: s.state }))
     .join("; ");
 }
 
@@ -85,13 +85,13 @@ export default function EditRulePage() {
   // the header's chip and callouts carry it from then on.
   useChangeToast(rule?.id, rule ? unhealthySummary(rule) : undefined, (before, now) =>
     now && !before
-      ? { tone: "warning", title: "Can't evaluate now", detail: `${now}. Missing data never fires or clears it.` }
+      ? { tone: "warning", title: t("rules.page.cantNow"), detail: t("rules.page.cantNowDetail", { reason: now }) }
       : !now && before
-        ? { tone: "success", title: "Evaluating again", detail: "Its inputs are fresh." }
+        ? { tone: "success", title: t("rules.page.again"), detail: t("rules.page.againDetail") }
         : null,
   );
   useChangeToast(rule?.id, rule?.latched, (before, now) =>
-    now && !before ? { tone: "warning", title: "Latched", detail: "It fired and won't fire again until someone resets it." } : null,
+    now && !before ? { tone: "warning", title: t("rules.page.latched"), detail: t("rules.page.latchedDetail") } : null,
   );
 
   if (isLoading) return <LoadingSkeleton rows={4} rowClassName="h-12" />;
@@ -99,7 +99,7 @@ export default function EditRulePage() {
   if (error) {
     return (
       <ErrorState
-        message={error instanceof ApiRequestError ? error.message : "Couldn't load this rule."}
+        message={error instanceof ApiRequestError ? error.message : t("rules.page.loadFailed")}
         onRetry={() => void mutate()}
       />
     );
@@ -130,7 +130,7 @@ export default function EditRulePage() {
         header={(sentence) => (
           <>
             <PageHeader
-              breadcrumbs={[{ label: "Rules", href: "/rules" }]}
+              breadcrumbs={[{ label: t("rules.title"), href: "/rules" }]}
               eyebrow={
                 <span className="flex flex-wrap items-center gap-x-1.5">
                   <Badge tone={state.tone} shape={state.shape} variant="dot" label={state.label} /> ·{" "}
@@ -151,7 +151,7 @@ export default function EditRulePage() {
               }
               menu={
                 isAdmin ? (
-                  <DropdownMenu label="More actions" groups={actions.menu(rule, { where: "page", onDeleted: () => router.push("/rules") })} />
+                  <DropdownMenu label={t("ui.moreActions")} groups={actions.menu(rule, { where: "page", onDeleted: () => router.push("/rules") })} />
                 ) : undefined
               }
             />
@@ -164,7 +164,7 @@ export default function EditRulePage() {
                   </span>
                   {isAdmin && (
                     <Button variant="secondary" size="sm" onClick={() => void actions.resetLatch(rule)}>
-                      Reset latch…
+                      {t("rules.page.resetLatch")}
                     </Button>
                   )}
                 </span>
@@ -175,7 +175,7 @@ export default function EditRulePage() {
                 <span className="flex flex-wrap items-center justify-between gap-3">
                   <span>Version {restored.version} is loaded. Save to make it current, or discard it.</span>
                   <button type="button" className="text-sm font-medium text-accent hover:underline" onClick={() => setRestored(null)}>
-                    Discard
+                    {t("ui.discard")}
                   </button>
                 </span>
               </Callout>
@@ -247,23 +247,23 @@ function SceneSwitch({ rule, onSaved }: { rule: RuleResponse; onSaved: (saved: R
       onSaved(saved);
       void revalidate(`/rules/${rule.id}`);
       void revalidate("/rules");
-      toast({ title: allowed ? "It's a scene now" : "Not a scene any more", detail: allowed ? "A button on every dashboard runs it, for viewers too." : undefined });
+      toast({ title: allowed ? t("rules.page.sceneNow") : t("rules.page.sceneNoMore"), detail: allowed ? t("rules.page.sceneOnHint") : undefined });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't change it", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("rules.page.changeFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     } finally {
       setBusy(false);
     }
   }
   return (
     <SwitchField
-      label="Scene"
+      label={t("rules.page.scene")}
       checked={rule.clients_can_run ?? false}
       onChange={(v) => void set(v)}
       disabled={busy}
-      onLabel="Clients can run it"
-      offLabel="Admins only"
-      onHint="A button on every dashboard runs it, for viewers too."
-      offHint="Only owners and admins run it, from here."
+      onLabel={t("rules.page.sceneOn")}
+      offLabel={t("rules.page.sceneOff")}
+      onHint={t("rules.page.sceneOnHint")}
+      offHint={t("rules.page.sceneOffHint")}
     />
   );
 }

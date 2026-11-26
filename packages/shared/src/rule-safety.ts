@@ -1,5 +1,6 @@
 import type { components } from "./api";
 import { timeAgo } from "./time-ago";
+import { tActive } from "./i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type SimulateResponse = components["schemas"]["SimulateResponse"];
@@ -11,17 +12,21 @@ export function guardsHardware(rule: Pick<RuleResponse, "actions" | "clear_actio
   return acts.some((a) => a.type === "actuator_command") || rule.execution_policy?.strategy === "latch";
 }
 
-export const DISABLE_GUARDED_RULE =
-  "Its actuators stay in their current state, and nothing will switch them for this rule until it's enabled again.";
+/** In the language on screen (a getter, read when shown). */
+export const RULE_SAFETY = {
+  get disableGuarded(): string {
+    return tActive("rules.actions.guarded");
+  },
+};
+/** @deprecated read RULE_SAFETY.disableGuarded (follows the language). */
+export const DISABLE_GUARDED_RULE = "Its actuators stay in their current state, and nothing will switch them for this rule until it's enabled again.";
 
 /** What resetting a latched rule will do now (DESIGN.md §9.8), from a dry run
  * of it; null when the dry run failed. A reset can switch hardware again. */
 export function resetLatchVerdict(sim: SimulateResponse | null): string {
-  if (sim == null) return "We couldn't check the current readings. If the condition still holds, it fires again after its hold time.";
-  if (sim.unavailable_signals.length > 0) return "It re-arms now. Some readings are missing or stale, so it can't fire until they report.";
-  return sim.would_fire
-    ? "It re-arms now. Its condition is still true, so it fires again after its hold time."
-    : "It re-arms now. Its condition is false now, so it won't fire straight away.";
+  if (sim == null) return tActive("rules.actions.verdictUnknown");
+  if (sim.unavailable_signals.length > 0) return tActive("rules.actions.verdictMissing");
+  return tActive(sim.would_fire ? "rules.actions.verdictFires" : "rules.actions.verdictQuiet");
 }
 
 /** The readings a latched rule's condition reads, as lines for its reset
@@ -30,6 +35,6 @@ export function resetLatchReadings(rule: Pick<RuleResponse, "health">, now: numb
   return rule.health.signals.map((s) => {
     const value = s.last_value ?? "—";
     const when = s.state === "fresh" && s.last_seen_at ? timeAgo(s.last_seen_at, now) : s.state;
-    return `${s.metric} on ${s.device_name ?? "a device"}: ${value} · ${when}`;
+    return `${tActive("rules.actions.reading", { metric: s.metric, device: s.device_name ?? tActive("rules.page.aDevice") })}: ${value} · ${when}`;
   });
 }

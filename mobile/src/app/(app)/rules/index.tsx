@@ -1,7 +1,7 @@
 import type { components } from "@iodriven/shared/api";
 import { ApiRequestError } from "@iodriven/shared/api-client";
 import { RULE_STATE, ruleStateKey } from "@iodriven/shared/rule-text";
-import { DISABLE_GUARDED_RULE, guardsHardware, resetLatchReadings, resetLatchVerdict } from "@iodriven/shared/rule-safety";
+import { RULE_SAFETY, guardsHardware, resetLatchReadings, resetLatchVerdict } from "@iodriven/shared/rule-safety";
 import { timeAgo } from "@iodriven/shared/time-ago";
 import * as Linking from "expo-linking";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -83,7 +83,7 @@ export default function Rules() {
       // The same check as the web: turning off a rule that switches hardware
       // or latches removes a protection, so it asks first.
       if (!enabled && undoable && guardsHardware(rule)) {
-        const ok = await confirm(`Disable ${rule.name}?`, DISABLE_GUARDED_RULE, "Disable rule");
+        const ok = await confirm(`Disable ${rule.name}?`, RULE_SAFETY.disableGuarded, "Disable rule");
         if (!ok) return;
       }
       setBusy(rule.id);
