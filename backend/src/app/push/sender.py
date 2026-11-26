@@ -156,14 +156,16 @@ def _parse(message: dict[str, Any]) -> tuple[uuid.UUID, uuid.UUID] | None:
 
 
 async def push_loop(factory: async_sessionmaker[AsyncSession]) -> None:
+    # Off stays off without returning: the worker's supervisor would take a
+    # return for a crash and restart (and log) this loop every 30 s forever.
     if not settings.fcm_service_account_file:
         log.info("push notifications off: FCM_SERVICE_ACCOUNT_FILE isn't set")
-        return
+        await asyncio.Event().wait()
     try:
         account = ServiceAccount.load(settings.fcm_service_account_file)
     except (OSError, ValueError, KeyError) as exc:
         log.error("push notifications off: can't read the FCM service account (%s)", exc)
-        return
+        await asyncio.Event().wait()
     log.info("push notifications on (Firebase project %s)", account.project_id)
     limit = asyncio.Semaphore(MAX_IN_FLIGHT)
     tasks: set[asyncio.Task[None]] = set()

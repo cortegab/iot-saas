@@ -3,7 +3,9 @@ import { API_URL, landed } from "./fixtures";
 
 // DESIGN.md §10.2 Welcome: someone new to a workspace (no dashboard there)
 // lands on it once; Build my dashboard makes one from the devices, sets it as
-// their default, and from then on that's where they land.
+// their default, and from then on that's where they land. Building one takes
+// an Owner or Admin (a Viewer is told who makes them), and an Admin lands on
+// Get started until setup is done or dismissed, so the owner dismisses it.
 
 test("a new member is welcomed, builds a dashboard, and lands on it next time", async ({ page, request }) => {
   const stamp = Date.now();
@@ -19,7 +21,8 @@ test("a new member is welcomed, builds a dashboard, and lands on it next time", 
 
   const email = `e2e-wmember-${stamp}@example.com`;
   expect((await request.post(`${API_URL}/auth/register`, { data: { email, password, tenant_name: `E2E Own ${stamp}` } })).ok()).toBeTruthy();
-  expect((await request.post(`${API_URL}/tenants/members`, { headers, data: { email, role: "viewer" } })).ok()).toBeTruthy();
+  expect((await request.post(`${API_URL}/tenants/current/setup/dismiss`, { headers })).ok()).toBeTruthy();
+  expect((await request.post(`${API_URL}/tenants/members`, { headers, data: { email, role: "admin" } })).ok()).toBeTruthy();
 
   const signIn = async () => {
     await page.goto("/login");
@@ -33,7 +36,7 @@ test("a new member is welcomed, builds a dashboard, and lands on it next time", 
   await signIn();
   await expect(page).toHaveURL("/welcome");
   await expect(page.getByRole("heading", { name: `Welcome to E2E Welcome ${stamp}`, level: 1 })).toBeVisible();
-  await expect(page.getByText("You're in as Viewer.")).toBeVisible();
+  await expect(page.getByText("You're in as Admin.")).toBeVisible();
   await expect(page.getByText(/1 device · 0 rules/)).toBeVisible();
 
   await page.getByRole("button", { name: "Build my dashboard" }).click();

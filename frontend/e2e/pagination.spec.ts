@@ -5,21 +5,26 @@ import { API_URL, login, test, expandCommandRuns } from "./fixtures";
 // paged by the API (X-Total-Count), so all of it can be browsed, not just the
 // latest 100. Short lists show no pager.
 
+const OUTPUTS = Array.from({ length: 120 }, (_, i) => ({ name: `Out ${i}`, key: `out${i}` }));
+
 test("the command timeline pages past the old 100-row cap, filters on the server, and short lists show no pager", async ({ page, request, ruleUnderTest }) => {
   test.setTimeout(180_000);
   const { accessToken, tenantId } = await login(request);
   const headers = { Authorization: `Bearer ${accessToken}`, "X-Tenant-Id": tenantId };
   const stamp = Date.now();
   const tpl = await (
-    await request.post(`${API_URL}/catalog`, { headers, data: { name: `E2E paging ${stamp}`, runs_on: "own_code", actuators: [{ name: "Fan", key: "fan1" }] } })
+    await request.post(`${API_URL}/catalog`, { headers, data: { name: `E2E paging ${stamp}`, runs_on: "own_code", actuators: OUTPUTS } })
   ).json();
   const created = await (await request.post(`${API_URL}/devices`, { headers, data: { name: `E2E paging ${stamp}`, catalog_entry_id: tpl.id } })).json();
   const deviceId = created.device.id as string;
 
   try {
-    // 120 commands; the worker writes each row a moment after the 202.
+    // 120 commands, one per output: an output takes at most one command
+    // every 2 s and never repeats the last one (flapping protection, §9.7),
+    // so a burst on one output would collapse to a couple of rows. The
+    // worker writes each row a moment after the 202.
     for (let i = 0; i < 120; i++) {
-      const res = await request.post(`${API_URL}/devices/${deviceId}/commands`, { headers, data: { actuator: "fan1", value: i % 2 === 0 } });
+      const res = await request.post(`${API_URL}/devices/${deviceId}/commands`, { headers, data: { actuator: `out${i}`, value: true } });
       expect(res.status()).toBe(202);
     }
     await expect
