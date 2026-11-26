@@ -18,6 +18,7 @@ import { sectionIssues } from "@/lib/rule-preview";
 import { cronHuman } from "@/lib/schedule";
 import type { Recipe } from "@/lib/rule-recipes";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 
@@ -91,10 +92,10 @@ export function QuickRecipe({
     setSubmitting(true);
     try {
       const saved = await api.post<RuleResponse>(`/rules`, draftToRequest(draft));
-      toast({ title: `${saved.name} created`, detail: "It applies within a second." });
+      toast({ title: t("rules.quick.created", { name: saved.name }), detail: t("rules.quick.createdDetail") });
       onSaved(saved);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't create this rule.");
+      setError(err instanceof ApiRequestError ? err.message : t("rules.quick.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -104,7 +105,7 @@ export function QuickRecipe({
 
   if (w.type === "device_status") {
     rows.push(
-      <Field key="status" label="Which device">
+      <Field key="status" label={t("rules.quick.whichDevice")}>
         <Select value={w.statusDeviceId} onChange={(e) => setDraft((d) => ({ ...d, when: { ...d.when, statusDeviceId: e.target.value } }))}>
           <option value="">Pick a device</option>
           {catalog.devices.map((d) => (
@@ -131,7 +132,7 @@ export function QuickRecipe({
     rows.push(
       <Fragment key={c.id}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label={leafs.length > 1 ? `Device ${i + 1}` : "Device it reads"}>
+          <Field label={leafs.length > 1 ? t("rules.quick.deviceN", { n: String(i + 1) }) : t("rules.quick.deviceReads")}>
             <Select
               value={c.deviceId}
               onChange={(e) => {
@@ -149,7 +150,7 @@ export function QuickRecipe({
               ))}
             </Select>
           </Field>
-          <Field label="Reading">
+          <Field label={t("rules.quick.reading")}>
             <Select value={c.metric} disabled={!c.deviceId} onChange={(e) => setContact(c, { metric: e.target.value })}>
               {!c.deviceId && <option value="">Pick the device first</option>}
               {options.map((o) => (
@@ -198,7 +199,7 @@ export function QuickRecipe({
             ))}
           </Select>
         </Field>
-        <Field label="Output">
+        <Field label={t("rules.quick.output")}>
           <Select value={a.actuator} disabled={!a.deviceId} onChange={(e) => setOutput(a, { actuator: e.target.value })}>
             {!a.deviceId && <option value="">Pick the device first</option>}
             {options.map((o) => (
@@ -219,7 +220,7 @@ export function QuickRecipe({
 
   return (
     <>
-      <section aria-label="Quick rule" className={`flex flex-col gap-5 ${EDITOR_COLUMN}`}>
+      <section aria-label={t("rules.quick.label")} className={`flex flex-col gap-5 ${EDITOR_COLUMN}`}>
         <div className="flex flex-col gap-1">
           <h2 className="text-section font-semibold text-ink">{recipe.title}</h2>
           <p className="text-sm text-ink-muted">{recipe.description}</p>
@@ -231,11 +232,11 @@ export function QuickRecipe({
 
         <div className="flex flex-col gap-4">{rows}</div>
 
-        <Field label="Name">
+        <Field label={t("rules.quick.name")}>
           <Input value={draft.name} onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
         </Field>
 
-        <p className="text-meta text-ink-muted">{safety} Change these in Customize.</p>
+        <p className="text-meta text-ink-muted">{safety} {t("rules.quick.changeIn")}</p>
 
         {shownIssues.length > 0 && (
           <div role="alert">
@@ -253,17 +254,17 @@ export function QuickRecipe({
       </section>
 
       <div data-savebar className={SAVE_BAR}>
-        <span className="mr-auto text-meta text-ink-muted">Not created yet</span>
+        <span className="mr-auto text-meta text-ink-muted">{t("ui.editor.notCreated")}</span>
         <Button type="button" variant="ghost" onClick={onBack}>
           <ChevronLeft aria-hidden size={15} />
-          Recipes
+          {t("rules.quick.recipes")}
         </Button>
         <Button type="button" variant="secondary" onClick={() => onCustomize(draft)}>
           <SlidersHorizontal aria-hidden size={15} />
-          Customize
+          {t("rules.quick.customize")}
         </Button>
         <Button type="button" disabled={submitting} onClick={() => void create()}>
-          {submitting ? "Creating…" : "Create rule"}
+          {submitting ? t("rules.quick.creating") : t("rules.quick.create")}
         </Button>
       </div>
     </>

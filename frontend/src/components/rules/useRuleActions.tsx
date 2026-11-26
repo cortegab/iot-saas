@@ -12,8 +12,9 @@ import { ApiRequestError } from "@/lib/api-client";
 import { upsertRuleInCache } from "@/lib/rule-cache";
 import { draftFromRule, draftToRequest } from "@/lib/rule-draft";
 import { timeAgo } from "@/lib/time-ago";
-import { DISABLE_GUARDED_RULE, guardsHardware, resetLatchVerdict } from "@iodriven/shared/rule-safety";
+import { RULE_SAFETY, guardsHardware, resetLatchVerdict } from "@iodriven/shared/rule-safety";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type SimulateResponse = components["schemas"]["SimulateResponse"];
@@ -41,37 +42,37 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
     // Turning off a rule that switches hardware, or that latches, removes a
     // protection: say so before it happens, not only with an Undo after.
     if (!enabled && undoable && guardsHardware(rule)) {
-      const ok = await confirm(DISABLE_GUARDED_RULE, { title: `Disable ${rule.name}?`, confirmLabel: "Disable rule" });
+      const ok = await confirm(RULE_SAFETY.disableGuarded, { title: t("rules.actions.disableTitle", { name: rule.name }), confirmLabel: t("rules.actions.disableConfirm") });
       if (!ok) return;
     }
     try {
       await api.patch(`/rules/${rule.id}`, { enabled });
       changed(rule);
       toast({
-        title: `${rule.name} ${enabled ? "enabled" : "disabled"}`,
-        detail: enabled ? "Fires when its trigger and conditions are met." : "Keeps its settings and history, but won't fire.",
-        action: undoable ? { label: "Undo", onClick: () => void setEnabled(rule, !enabled, false) } : undefined,
+        title: t(enabled ? "rules.actions.enabledOne" : "rules.actions.disabledOne", { name: rule.name }),
+        detail: enabled ? t("rules.actions.enabledDetail") : t("rules.actions.disabledDetail"),
+        action: undoable ? { label: t("devices.toast.undo"), onClick: () => void setEnabled(rule, !enabled, false) } : undefined,
       });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't update the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("rules.actions.updateFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
   /** Resolves true once the rule is deleted. `gone` runs before the re-fetch. */
   async function remove(rule: RuleResponse, gone?: () => void): Promise<boolean> {
     const ok = await confirm(
-      "It stops evaluating immediately. Actuators keep their current state. This can't be undone; to pause it instead, disable it.",
-      { title: `Delete ${rule.name}?`, confirmLabel: "Delete rule" },
+      t("rules.actions.deleteBody"),
+      { title: t("rules.actions.deleteTitle", { name: rule.name }), confirmLabel: t("rules.actions.deleteConfirm") },
     );
     if (!ok) return false;
     try {
       await api.delete(`/rules/${rule.id}`);
-      toast({ title: `${rule.name} deleted` });
+      toast({ title: t("rules.actions.deleted", { name: rule.name }) });
       gone?.();
       changed(rule);
       return true;
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("rules.actions.deleteFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
       return false;
     }
   }
@@ -79,16 +80,16 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
   // Run now bypasses the hold time and can drive an actuator at once.
   async function runNow(rule: RuleResponse) {
     const ok = await confirm(
-      "It's evaluated right now, and its actions run if the condition holds. This can command a device immediately.",
-      { title: `Run ${rule.name} now?`, confirmLabel: "Run now", danger: false },
+      t("rules.actions.runBody"),
+      { title: t("rules.actions.runTitle", { name: rule.name }), confirmLabel: t("rules.actions.runConfirm"), danger: false },
     );
     if (!ok) return;
     try {
       await api.post(`/rules/${rule.id}/run`, {});
-      toast({ title: "Ran once", detail: `${rule.name}: see Activity for what it did.` });
+      toast({ title: t("rules.actions.ran"), detail: t("rules.actions.ranDetail", { name: rule.name }) });
       setTimeout(() => void revalidate(`/rules/${rule.id}/executions`), 1500);
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't run this rule", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("rules.actions.runFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -98,10 +99,10 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
       const copy = await api.post<RuleResponse>("/rules", { ...draftToRequest(draftFromRule(rule)), name: `${rule.name} (copy)`, enabled: false });
       upsertRuleInCache(copy);
       void revalidate("/rules");
-      toast({ title: "Rule duplicated", detail: "The copy starts disabled." });
+      toast({ title: t("rules.actions.duplicated"), detail: t("rules.actions.duplicatedDetail") });
       router.push(`/rules/${copy.id}`);
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't duplicate the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("rules.actions.duplicateFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -118,8 +119,8 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
     const verdict = resetLatchVerdict(sim);
     const readings = rule.health.signals;
     const ok = await confirm(verdict, {
-      title: `Reset ${rule.name}?`,
-      confirmLabel: "Reset latch",
+      title: t("rules.actions.resetTitle", { name: rule.name }),
+      confirmLabel: t("rules.actions.resetConfirm"),
       danger: false,
       details:
         readings.length > 0 ? (
@@ -127,7 +128,7 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
             {readings.map((s) => (
               <li key={`${s.device_id}/${s.metric}`} className="flex justify-between gap-3">
                 <span className="text-ink-muted">
-                  {s.metric} on {s.device_name ?? "a device"}
+                  {t("rules.actions.reading", { metric: s.metric, device: s.device_name ?? t("rules.page.aDevice") })}
                 </span>
                 <span className="font-medium tabular-nums text-ink">
                   {s.last_value ?? "—"}
@@ -141,11 +142,11 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
     if (!ok) return;
     try {
       await api.post(`/rules/${rule.id}/reset`, {});
-      toast({ title: "Latch reset", detail: `${rule.name} is armed again.` });
+      toast({ title: t("rules.actions.reset"), detail: t("rules.actions.resetDetail", { name: rule.name }) });
       // The worker clears the flag asynchronously.
       setTimeout(() => changed(rule), 1000);
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't reset the rule", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("rules.actions.resetFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -155,24 +156,24 @@ export function useRuleActions({ onChanged }: { onChanged?: (rule: RuleResponse)
   function menu(rule: RuleResponse, opts: { where?: "list" | "peek" | "page"; onDeleted?: () => void } = {}): DropdownMenuItem[][] {
     const where = opts.where ?? "list";
     const first: DropdownMenuItem[] = [];
-    if (where === "list") first.push({ label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/rules/${rule.id}`) });
+    if (where === "list") first.push({ label: t("rules.actions.open"), icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/rules/${rule.id}`) });
     if (where === "peek") {
       first.push({
-        label: "Copy link",
+        label: t("rules.actions.copyLink"),
         icon: <Link2 size={15} />,
-        onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/rules/${rule.id}`).then(() => toast({ tone: "info", title: "Link copied" })),
+        onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/rules/${rule.id}`).then(() => toast({ tone: "info", title: t("rules.actions.linkCopied") })),
       });
     }
     if (!canWrite) return first.length ? [first] : [];
     return [
       [
         ...first,
-        ...(where === "page" ? [] : [{ label: "Run now…", icon: <Play size={15} />, onClick: () => void runNow(rule) }]),
-        ...(rule.latched ? [{ label: "Reset latch…", icon: <Lock size={15} />, onClick: () => void resetLatch(rule) }] : []),
-        { label: "Duplicate", icon: <Copy size={15} />, onClick: () => void duplicate(rule) },
-        { label: rule.enabled ? "Disable" : "Enable", icon: <Power size={15} />, onClick: () => void setEnabled(rule, !rule.enabled) },
+        ...(where === "page" ? [] : [{ label: t("rules.actions.runNow"), icon: <Play size={15} />, onClick: () => void runNow(rule) }]),
+        ...(rule.latched ? [{ label: t("rules.page.resetLatch"), icon: <Lock size={15} />, onClick: () => void resetLatch(rule) }] : []),
+        { label: t("rules.actions.duplicate"), icon: <Copy size={15} />, onClick: () => void duplicate(rule) },
+        { label: rule.enabled ? t("devices.disable") : t("devices.enable"), icon: <Power size={15} />, onClick: () => void setEnabled(rule, !rule.enabled) },
       ],
-      [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(rule, opts.onDeleted) }],
+      [{ label: t("rules.actions.deleteDots"), icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(rule, opts.onDeleted) }],
     ];
   }
 
