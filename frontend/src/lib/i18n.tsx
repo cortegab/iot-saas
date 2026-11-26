@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { createT, isLocale, pickLocale, setRegion, type Locale, type T } from "@iodriven/shared/i18n";
+import { createT, isLocale, pickLocale, setActiveLocale, setRegion, type Locale, type T } from "@iodriven/shared/i18n";
 
 export { type Locale, type MessageKey, type T } from "@iodriven/shared/i18n";
 
@@ -52,6 +52,9 @@ const I18nContext = createContext<I18nValue | null>(null);
 export function I18nProvider({ initialLocale, children }: { initialLocale: Locale; children: ReactNode }) {
   const [locale, setLocale] = useState<Locale>(initialLocale);
   current = locale;
+  // The shared wording helpers (status labels, rule sentences, time-ago)
+  // read this; the app shell is keyed by locale so a switch re-renders them.
+  setActiveLocale(locale);
 
   useEffect(() => {
     // Numbers and dates the way this reader's country writes them.

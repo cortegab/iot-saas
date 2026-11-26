@@ -134,8 +134,25 @@ export function createT(locale: Locale): T {
   };
 }
 
-/** English `t`, the default for helpers that haven't been given one. */
+/** English `t`. */
 export const tEn: T = createT("en");
+
+// The language on screen, for the shared wording helpers (status labels,
+// rule sentences, time-ago…) so their many call sites need no `t` argument.
+// Each app sets it from its provider and re-renders on a change.
+let active: Locale = "en";
+const tByLocale: Partial<Record<Locale, T>> = { en: tEn };
+
+export function setActiveLocale(locale: Locale): void {
+  active = locale;
+}
+
+export function activeLocale(): Locale {
+  return active;
+}
+
+/** `t` in the language on screen. */
+export const tActive: T = (key, params) => (tByLocale[active] ??= createT(active))(key, params);
 
 // --- Formatting -------------------------------------------------------------
 

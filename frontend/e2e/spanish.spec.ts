@@ -26,6 +26,8 @@ test.describe("a Spanish browser", () => {
       await expect(nav.getByRole("link", { name: /Dispositivos/ })).toBeVisible();
       await expect(nav.getByRole("link", { name: /Reglas/ })).toBeVisible();
       await expect(nav.getByText("Monitoreo")).toBeVisible();
+      // Shared wording (statuses) follows the language too.
+      await expect(page.getByText("Nunca conectado").first()).toBeVisible();
 
       // Choose English in the account menu: applied at once and saved.
       await page.getByRole("button", { name: /Menú de cuenta/ }).click();

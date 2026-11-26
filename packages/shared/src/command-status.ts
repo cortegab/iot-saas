@@ -1,4 +1,5 @@
 import type { components } from "./api";
+import { tActive, type MessageKey } from "./i18n";
 
 type CommandResponse = components["schemas"]["CommandResponse"];
 
@@ -31,10 +32,10 @@ export function msUntilCommandDeadline(c: CommandResponse, now: number = Date.no
   return remaining > 0 ? remaining : null;
 }
 
-const LABELS: Record<CommandStatus, string> = {
-  confirmed: "Acknowledged",
-  pending: "Pending",
-  "no-response": "No response",
+const LABELS: Record<CommandStatus, MessageKey> = {
+  confirmed: "status.command.confirmed",
+  pending: "status.command.pending",
+  "no-response": "status.command.noResponse",
 };
 
 const TONES: Record<CommandStatus, "online" | "pending" | "offline"> = {
@@ -44,7 +45,7 @@ const TONES: Record<CommandStatus, "online" | "pending" | "offline"> = {
 };
 
 export function commandStatusLabel(status: CommandStatus): string {
-  return LABELS[status];
+  return tActive(LABELS[status]);
 }
 
 export function commandStatusTone(status: CommandStatus): "online" | "pending" | "offline" {
@@ -65,8 +66,8 @@ export function manualSender(
   members: { user_id: string; name?: string | null; email: string }[] | undefined,
   meId: string | null | undefined,
 ): string {
-  if (c.requested_by == null) return "manually";
-  if (meId != null && c.requested_by === meId) return "by you";
+  if (c.requested_by == null) return tActive("status.sender.manually");
+  if (meId != null && c.requested_by === meId) return tActive("status.sender.byYou");
   const m = members?.find((x) => x.user_id === c.requested_by);
-  return m ? `by ${m.name || m.email}` : "manually";
+  return m ? tActive("status.sender.byName", { name: m.name || m.email }) : tActive("status.sender.manually");
 }

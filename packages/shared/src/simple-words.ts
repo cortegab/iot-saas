@@ -3,6 +3,8 @@
  * keeps the integrator's terms; Simple view says what a client recognizes.
  * Labels only: the API, URLs and keys never change.
  */
+import { tActive } from "./i18n";
+
 export interface Words {
   template: string;
   templates: string;
@@ -14,30 +16,12 @@ export interface Words {
   actuator: string;
 }
 
-const FULL: Words = {
-  template: "template",
-  templates: "templates",
-  zone: "zone",
-  zones: "zones",
-  rule: "rule",
-  rules: "rules",
-  metric: "metric",
-  actuator: "actuator",
-};
+const KEYS: (keyof Words)[] = ["template", "templates", "zone", "zones", "rule", "rules", "metric", "actuator"];
 
-const SIMPLE: Words = {
-  template: "device type",
-  templates: "device types",
-  zone: "area",
-  zones: "areas",
-  rule: "automation",
-  rules: "automations",
-  metric: "reading",
-  actuator: "output",
-};
-
+/** The words of this view, in the language on screen (DESIGN.md §11a). */
 export function words(simple: boolean): Words {
-  return simple ? SIMPLE : FULL;
+  const view = simple ? "simple" : "full";
+  return Object.fromEntries(KEYS.map((k) => [k, tActive(`words.${view}.${k}`)])) as unknown as Words;
 }
 
 /** "device type" → "Device type". */
