@@ -15,6 +15,9 @@ import { Lines, Row } from "@/ui/Row";
 import { Segmented } from "@/ui/Segmented";
 import { Switch } from "@/ui/Switch";
 import { Text } from "@/ui/Text";
+import { useT } from "@/i18n/I18nProvider";
+import { useLanguage } from "@/hooks/useLanguage";
+import { LOCALES, LOCALE_NAMES, isLocale } from "@iodriven/shared/i18n";
 
 type UserResponse = components["schemas"]["UserResponse"];
 
@@ -30,22 +33,24 @@ export default function More() {
   const { data: me } = useApiSWR<UserResponse>("/auth/me");
   const push = usePush();
   const view = useInterfaceMode();
+  const t = useT();
+  const language = useLanguage();
 
   function confirmSignOut() {
-    Alert.alert("Sign out?", "You'll need your email and password to sign in again on this phone.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("app.more.signOutTitle"), t("app.more.signOutBody"), [
+      { text: t("common.cancel"), style: "cancel" },
       // The phone stops receiving this account's alerts before the session ends.
-      { text: "Sign out", style: "destructive", onPress: () => void push.unregisterAll().finally(() => void logout()) },
+      { text: t("common.signOut"), style: "destructive", onPress: () => void push.unregisterAll().finally(() => void logout()) },
     ]);
   }
 
   return (
     <ScrollView contentContainerStyle={styles.page}>
-      <Lines label="Account">
+      <Lines label={t("app.more.account")}>
         <Row title={me?.name || me?.email || "…"} detail={me?.name ? me.email : undefined} />
       </Lines>
 
-      <Lines label="Workspace">
+      <Lines label={t("app.more.workspace")}>
         {memberships.map((m) => (
           <Row
             key={m.tenant_id}
@@ -60,28 +65,43 @@ export default function More() {
       </Lines>
 
       {/* DESIGN.md §15a: the same choice as the web's account menu, for this workspace. */}
-      <Lines label="View">
+      <Lines label={t("app.more.view")}>
         <Row
-          title="Simple view"
-          detail="Hides set-up pages and says things in plain words. Changes nothing you can do."
-          right={<Switch value={view.simple} onValueChange={(v) => void view.setSimple(v)} accessibilityLabel="Simple view" />}
+          title={t("shell.simpleView")}
+          detail={t("app.more.simpleDetail")}
+          right={<Switch value={view.simple} onValueChange={(v) => void view.setSimple(v)} accessibilityLabel={t("shell.simpleView")} />}
         />
       </Lines>
 
-      <Lines label="Notifications">
+      {/* DESIGN.md §11a: the same choice as the web's account menu, saved on the account. */}
+      <Lines label={t("app.more.language")}>
+        <View style={styles.inset}>
+          <Segmented
+            accessibilityLabel={t("app.more.language")}
+            options={[
+              { value: "phone", label: t("language.phone") },
+              ...LOCALES.map((l) => ({ value: l, label: LOCALE_NAMES[l] })),
+            ]}
+            value={language.choice ?? "phone"}
+            onChange={(v) => void language.setChoice(isLocale(v) ? v : null)}
+          />
+        </View>
+      </Lines>
+
+      <Lines label={t("app.more.notifications")}>
         <Row
-          title="Alerts on this phone"
+          title={t("app.more.alertsOnPhone")}
           detail={
             push.permission === "denied"
-              ? "Notifications are off for IO Driven in the phone's settings."
+              ? t("app.more.pushDenied")
               : push.settings.enabled && push.permission === "granted"
-                ? "For this workspace. Device and rule names only, never readings."
-                : "Off for this workspace."
+                ? t("app.more.pushOn")
+                : t("app.more.pushOff")
           }
           right={
             push.permission === "denied" ? null : (
               <Switch
-                accessibilityLabel="Alerts on this phone"
+                accessibilityLabel={t("app.more.alertsOnPhone")}
                 value={push.permission === "granted" && push.settings.enabled}
                 onValueChange={(on) => void push.setEnabled(on)}
               />
@@ -89,14 +109,14 @@ export default function More() {
           }
         />
         {push.permission === "denied" ? (
-          <Row title="Open the phone's settings" onPress={openAppSettings} right={<ExternalLink size={18} color={theme.inkMuted} />} />
+          <Row title={t("app.more.openSettings")} onPress={openAppSettings} right={<ExternalLink size={18} color={theme.inkMuted} />} />
         ) : push.permission === "granted" && push.settings.enabled ? (
           <View style={styles.inset}>
             <Segmented
-              accessibilityLabel="Which alerts"
+              accessibilityLabel={t("app.more.whichAlerts")}
               options={[
-                { value: "critical", label: "Critical only" },
-                { value: "warning", label: "Warnings and critical" },
+                { value: "critical", label: t("app.more.criticalOnly") },
+                { value: "warning", label: t("app.more.warnings") },
               ]}
               value={push.settings.minSeverity}
               onChange={(v) => void push.setMinSeverity(v)}
@@ -106,16 +126,16 @@ export default function More() {
       </Lines>
       {push.error && <Text color="statusError">{push.error}</Text>}
 
-      <Lines label="On the web">
+      <Lines label={t("app.more.onWeb")}>
         <Row
-          title="Open IO Driven on the web"
-          detail="Rules, templates, wiring, dashboard layouts, members and settings are edited there."
+          title={t("app.more.openWeb")}
+          detail={t("app.more.webDetail")}
           onPress={() => void Linking.openURL(webUrl())}
           right={<ExternalLink size={18} color={theme.inkMuted} />}
         />
       </Lines>
 
-      <Button variant="secondary" label="Sign out" onPress={confirmSignOut} />
+      <Button variant="secondary" label={t("common.signOut")} onPress={confirmSignOut} />
 
       <Text size="micro" color="inkMuted" style={styles.version}>
         IO Driven {Constants.expoConfig?.version ?? ""} · {apiUrl().replace(/^https?:\/\//, "")}

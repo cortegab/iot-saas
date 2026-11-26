@@ -348,7 +348,7 @@ ESP32 ──MQTT/TLS──► EMQX ──► Ingestion (validates; a bad message
 | API keys (`Authorization: Bearer`), Viewer or Admin, with expiry | ✅ | |
 | Workspace settings: time zone, alert recipients | ✅ | |
 | Simple view (per person per workspace; Viewers start in it) | 🚧 | Hides set-up pages (templates, zones, members, keys), the ladder and device details; Rules reads *Automations*. Tiles, scenes and plain words are next (ease-of-use plan C3–C5). |
-| Spanish (second language; browser default, saved per person) | 🚧 | Shell, language choice and API locale in L1; sign-in, devices, rules, dashboards, emails and the app follow (Spanish plan L2–L9). English shows for anything not yet translated. |
+| Spanish (second language; browser or phone default, saved per person) | 🚧 | Web: shell, sign-in, public site, devices list and page, rules list and recipes, notifications, dashboards, Get started. Backend: errors, emails, push, keyed notifications. App 0.9.0: tabs, More (Language), alerts, devices, rules, dashboards, sign-in. Still English: device editor and connect flow, the full rule editor, settings/members/keys, Wi-Fi setup in the app, privacy policy (needs a reviewed legal translation). |
 | Command palette, responsive shell (icon rail, full sidebar, phone tab bar) | ✅ | Accessibility audited with axe: zero violations across 36+ pages at the last audit. |
 | SSO (SAML / OIDC), audit log of who changed what | ⛔ | Rule versions record who edited a rule; nothing else is audited. |
 

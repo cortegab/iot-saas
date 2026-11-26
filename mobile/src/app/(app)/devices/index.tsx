@@ -15,6 +15,7 @@ import { SearchField } from "@/ui/SearchField";
 import { Segmented } from "@/ui/Segmented";
 import { StatusDot } from "@/ui/StatusDot";
 import { Text } from "@/ui/Text";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -59,7 +60,7 @@ export default function Devices() {
   }, [rows, simple, zoneName, w.zone]);
 
   const options = [
-    { value: "all" as Filter, label: `All ${devices?.length ?? ""}`.trim() },
+    { value: "all" as Filter, label: `${t("devices.all")} ${devices?.length ?? ""}`.trim() },
     ...ORDER.filter((k) => counts[k] > 0 || filter === k).map((k) => ({ value: k as Filter, label: `${DEVICE_STATUS[k].label} ${counts[k]}` })),
   ];
 
@@ -82,7 +83,7 @@ export default function Devices() {
   return (
     <>
       {/* Scan is in the top bar, on every screen (DESIGN.md §15). */}
-      <Stack.Screen options={{ title: "Devices" }} />
+      <Stack.Screen options={{ title: t("nav.devices") }} />
       <SectionList
         sections={sections}
         keyExtractor={(d) => d.id}
@@ -99,8 +100,8 @@ export default function Devices() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={theme.inkMuted} />}
         ListHeaderComponent={
           <View style={styles.head}>
-            <SearchField label="Search devices" value={query} onChangeText={setQuery} />
-            <Segmented accessibilityLabel="Status" options={options} value={filter} onChange={setFilter} />
+            <SearchField label={t("app.screens.searchDevices")} value={query} onChangeText={setQuery} />
+            <Segmented accessibilityLabel={t("app.screens.status")} options={options} value={filter} onChange={setFilter} />
           </View>
         }
         ListEmptyComponent={<View style={styles.empty}>{empty}</View>}
@@ -109,7 +110,7 @@ export default function Devices() {
           const s = DEVICE_STATUS[key];
           // In Simple the area is the section's heading, so only the device type stays.
           const where = [templateName.get(d.catalog_entry_id), !simple && d.zone_id ? zoneName.get(d.zone_id) : null].filter(Boolean).join(" · ");
-          const seen = key === "never" ? "Never connected" : `last message ${timeAgo(d.last_seen_at)}`;
+          const seen = key === "never" ? DEVICE_STATUS.never.label : t("app.screens.lastMessage", { ago: timeAgo(d.last_seen_at) });
           return (
             <Pressable
               accessibilityRole="button"

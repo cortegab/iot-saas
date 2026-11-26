@@ -2,6 +2,7 @@ import type { components, operations } from "@iodriven/shared/api";
 import { useSWRConfig } from "swr";
 import { useApi } from "@/hooks/useApi";
 import { useApiSWR } from "@/hooks/useApiSWR";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type NotificationSummaryResponse = components["schemas"]["NotificationSummaryResponse"];
 type NotificationIdsRequest = components["schemas"]["NotificationIdsRequest"];
@@ -24,12 +25,12 @@ export const isNotificationsKey = (key: unknown) => {
 /** The web's state filter (DESIGN.md §8): all, unread, or one type's unread
  * alerts. A rule firing and its clearing are both "Rules". */
 export const TYPES: { value: NotificationType; label: string }[] = [
-  { value: "device_offline", label: "Offline" },
-  { value: "device_health", label: "Device health" },
-  { value: "rules", label: "Rules" },
-  { value: "rule_health", label: "Rule health" },
-  { value: "delivery_failed", label: "Failed deliveries" },
-  { value: "template_changed", label: "Templates" },
+  { value: "device_offline", get label() { return t("alerts.types.device_offline"); } },
+  { value: "device_health", get label() { return t("alerts.types.device_health"); } },
+  { value: "rules", get label() { return t("alerts.types.rules"); } },
+  { value: "rule_health", get label() { return t("alerts.types.rule_health"); } },
+  { value: "delivery_failed", get label() { return t("alerts.types.delivery_failed"); } },
+  { value: "template_changed", get label() { return t("alerts.types.template_changed"); } },
 ];
 export type AlertFilter = "all" | "unread" | NotificationType;
 

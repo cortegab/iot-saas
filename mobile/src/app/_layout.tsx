@@ -10,6 +10,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { useColorScheme } from "react-native";
 import { AuthProvider, useAuth } from "@/auth/AuthProvider";
+import { I18nProvider } from "@/i18n/I18nProvider";
 import { useTheme } from "@/theme/useTheme";
 import { UpdateGate } from "@/update/UpdateGate";
 
@@ -36,10 +37,12 @@ export default function RootLayout() {
   const scheme = useColorScheme();
   const [loaded, error] = useFonts({ Geist_400Regular, Geist_500Medium, Geist_600SemiBold });
   return (
+    <I18nProvider>
     <AuthProvider>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       {/* Fonts failing to load isn't fatal: the system face stands in. */}
       <Root fontsReady={loaded || !!error} />
     </AuthProvider>
+    </I18nProvider>
   );
 }
