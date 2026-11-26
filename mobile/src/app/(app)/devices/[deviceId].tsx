@@ -25,6 +25,7 @@ import { capital, words } from "@iodriven/shared/simple-words";
 import { AlertSettings } from "@/devices/AlertSettings";
 import { useCan } from "@/hooks/useCan";
 import { useInterfaceMode } from "@/hooks/useInterfaceMode";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -32,9 +33,9 @@ type ZoneResponse = components["schemas"]["ZoneResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 
 const FRESHNESS: Record<Freshness, { label: string; tone: "online" | "unknown" }> = {
-  live: { label: "Live", tone: "online" },
-  stale: { label: "Stale", tone: "unknown" },
-  none: { label: "No data", tone: "unknown" },
+  live: { get label() { return t("devices.live"); }, tone: "online" },
+  stale: { get label() { return t("devices.stale"); }, tone: "unknown" },
+  none: { get label() { return t("app.screens.noData"); }, tone: "unknown" },
 };
 
 function uptime(s: number): string {
@@ -50,15 +51,15 @@ function uptime(s: number): string {
 // Why the chip last restarted, as the firmware reports it (firmware/src/diag.h);
 // the same words as the web's Health card.
 const RESTART_REASON: Record<string, string> = {
-  power_on: "Power on",
-  reset_pin: "Reset button",
-  software: "Restarted itself",
-  crash: "Crash",
-  task_wdt: "Froze (watchdog)",
-  interrupt_wdt: "Watchdog",
-  other_wdt: "Watchdog",
-  brownout: "Power dip (brown-out)",
-  deep_sleep: "Woke from sleep",
+  get power_on() { return t("devices.restart.power_on"); },
+  get reset_pin() { return t("devices.restart.reset_pin"); },
+  get software() { return t("devices.restart.software"); },
+  get crash() { return t("devices.restart.crash"); },
+  get task_wdt() { return t("devices.restart.task_wdt"); },
+  get interrupt_wdt() { return t("devices.restart.interrupt_wdt"); },
+  get other_wdt() { return t("devices.restart.other_wdt"); },
+  get brownout() { return t("devices.restart.brownout"); },
+  get deep_sleep() { return t("devices.restart.deep_sleep"); },
 };
 
 const kb = (bytes: number) => `${Math.round(bytes / 1024)} KB`;
@@ -78,9 +79,9 @@ export default function DeviceScreen() {
   if (!device) {
     return (
       <View style={styles.page}>
-        <Stack.Screen options={{ title: "Device" }} />
+        <Stack.Screen options={{ title: t("app.screens.device") }} />
         <Text color={error ? "statusError" : "inkMuted"}>
-          {error ? (error.status === 404 ? "This device doesn't exist in this workspace." : "Couldn't load this device.") : "Loading…"}
+          {error ? (error.status === 404 ? t("app.screens.deviceMissing") : t("devices.loadOneFailed")) : t("common.loading")}
         </Text>
       </View>
     );
@@ -96,27 +97,27 @@ export default function DeviceScreen() {
   const details: [string, string][] = [
     [capital(w.template), template?.name ?? "—"],
     [capital(w.zone), zone ?? `No ${w.zone}`],
-    ...(device.simulated ? [["Readings", "Simulated: made up by the platform"] as [string, string]] : []),
-    ["Last message", device.last_seen_at ? timeAgo(device.last_seen_at) : "Never"],
+    ...(device.simulated ? [[t("app.screens.readingsLabel"), t("app.screens.simulatedReadings")] as [string, string]] : []),
+    [t("devices.healthFacts.lastMessage"), device.last_seen_at ? timeAgo(device.last_seen_at) : t("devices.healthFacts.never")],
   ];
   // The web's Health facts (DESIGN.md §8), so a device-health push lands on
   // the restart and the sensor it's about.
   const faults = device.faults ?? [];
   const health: [string, string, boolean?][] = [
-    ...(device.rssi != null ? [["Wi-Fi signal", signalLabel(device.rssi)] as [string, string]] : []),
-    ...(device.battery_pct != null ? [["Battery", `${device.battery_pct} %`] as [string, string]] : []),
-    ...(device.fw_version ? [["Firmware", device.fw_version] as [string, string]] : []),
-    ...(device.uptime_s != null ? [["Uptime", uptime(device.uptime_s)] as [string, string]] : []),
+    ...(device.rssi != null ? [[t("app.screens.wifiSignal"), signalLabel(device.rssi)] as [string, string]] : []),
+    ...(device.battery_pct != null ? [[t("devices.healthFacts.battery"), `${device.battery_pct} %`] as [string, string]] : []),
+    ...(device.fw_version ? [[t("devices.healthFacts.firmware"), device.fw_version] as [string, string]] : []),
+    ...(device.uptime_s != null ? [[t("devices.healthFacts.uptime"), uptime(device.uptime_s)] as [string, string]] : []),
     ...(device.boot_count != null
-      ? [["Last restart", `${RESTART_REASON[device.reset_reason ?? ""] ?? "Unknown"} · boot ${device.boot_count}`] as [string, string]]
+      ? [[t("devices.healthFacts.lastRestart"), t("devices.healthFacts.restartValue", { reason: RESTART_REASON[device.reset_reason ?? ""] ?? t("devices.healthFacts.unknown"), n: String(device.boot_count) })] as [string, string]]
       : []),
     ...(device.faults != null
-      ? [faults.length === 0 ? (["Sensors", "All answering"] as [string, string]) : (["Sensors", faults.join("; "), true] as [string, string, boolean])]
+      ? [faults.length === 0 ? ([t("devices.healthFacts.sensors"), t("devices.healthFacts.allAnswering")] as [string, string]) : ([t("devices.healthFacts.sensors"), faults.join("; "), true] as [string, string, boolean])]
       : []),
     ...(device.heap_free != null
-      ? [["Memory", `${kb(device.heap_free)} free${device.heap_min != null ? ` · lowest ${kb(device.heap_min)}` : ""}`] as [string, string]]
+      ? [[t("devices.healthFacts.memory"), device.heap_min != null ? t("devices.healthFacts.memoryLowest", { free: kb(device.heap_free), min: kb(device.heap_min) }) : t("devices.healthFacts.memoryValue", { free: kb(device.heap_free) })] as [string, string]]
       : []),
-    ...(device.wifi_reconnects != null ? [["Wi-Fi rejoins", `${device.wifi_reconnects} since it started`] as [string, string]] : []),
+    ...(device.wifi_reconnects != null ? [[t("devices.healthFacts.rejoins"), t("devices.healthFacts.rejoinsValue", { count: device.wifi_reconnects })] as [string, string]] : []),
   ];
   const hasActuators = (template?.actuators.length ?? 0) > 0;
   const hk = healthKey(device);
@@ -158,7 +159,7 @@ export default function DeviceScreen() {
       {hasActuators && (
         <View style={styles.section}>
           <Text size="section" weight="semibold" accessibilityRole="header">
-            Controls
+            {t("devices.controls")}
           </Text>
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <ActuatorControl device={device} />
@@ -168,7 +169,7 @@ export default function DeviceScreen() {
 
       <View style={styles.section}>
         <Text size="section" weight="semibold" accessibilityRole="header">
-          Readings
+          {t("app.screens.readingsLabel")}
         </Text>
         {metrics.length === 0 ? (
           <Text color="inkMuted">This device&apos;s template has no metrics.</Text>
@@ -214,7 +215,7 @@ export default function DeviceScreen() {
                     ) : null}
                   </View>
                   <Text size="micro" color="inkMuted">
-                    {reading ? timeAgo(reading.time) : "Nothing received yet"}
+                    {reading ? timeAgo(reading.time) : t("devices.nothingYet")}
                   </Text>
                 </Pressable>
               );
@@ -226,13 +227,13 @@ export default function DeviceScreen() {
       {chartKey && (
         <View style={styles.section}>
           <Text size="section" weight="semibold" accessibilityRole="header">
-            Trend
+            {t("devices.trend")}
           </Text>
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             {/* The web's metric chips: pick the reading to chart. */}
             {metrics.length > 1 && (
               <Chips
-                accessibilityLabel="Metric"
+                accessibilityLabel={t("app.screens.metric")}
                 options={metrics.map((m) => ({ value: wireId(m), label: m.name }))}
                 value={chartKey}
                 onChange={setSelected}
@@ -243,7 +244,7 @@ export default function DeviceScreen() {
         </View>
       )}
 
-      <Lines label="Details">
+      <Lines label={t("app.screens.details")}>
         {details.map(([label, value]) => (
           <Row key={label} title={label} right={<Text color="inkMuted">{value}</Text>} />
         ))}
@@ -251,11 +252,11 @@ export default function DeviceScreen() {
 
       {/* The web's one word first (ease-of-use A4), then the facts; Simple keeps just the word. */}
       {(healthWord || health.length > 0) && (
-        <Lines label="Health">
+        <Lines label={t("devices.health")}>
           {healthWord ? (
             <Row
               key="overall"
-              title="Overall"
+              title={t("app.screens.overall")}
               right={<Text weight="medium" color={healthWord.key === "healthy" ? "statusOnline" : healthWord.key === "faults" ? "statusError" : "statusPending"}>{healthWord.label}</Text>}
             />
           ) : null}
@@ -269,8 +270,8 @@ export default function DeviceScreen() {
 
       <Lines>
         <Row
-          title="Open on the web"
-          detail="Settings, wiring, rules and the command timeline."
+          title={t("app.screens.openWeb")}
+          detail={t("app.screens.deviceWebDetail")}
           onPress={() => void Linking.openURL(`${webUrl()}/devices/${device.id}`)}
           right={<ExternalLink size={18} color={theme.inkMuted} />}
         />

@@ -15,6 +15,7 @@ import { useTheme } from "@/theme/useTheme";
 import { Button } from "@/ui/Button";
 import { Segmented } from "@/ui/Segmented";
 import { Text } from "@/ui/Text";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DashboardResponse = components["schemas"]["DashboardResponse"];
 
@@ -39,9 +40,9 @@ export default function DashboardScreen() {
   if (!dashboard) {
     return (
       <View style={styles.page}>
-        <Stack.Screen options={{ title: "Dashboard" }} />
+        <Stack.Screen options={{ title: t("app.screens.dashboard") }} />
         <Text color={error ? "statusError" : "inkMuted"}>
-          {error ? (error.status === 404 ? "This dashboard doesn't exist in this workspace." : "Couldn't load this dashboard.") : "Loading…"}
+          {error ? (error.status === 404 ? t("app.screens.dashboardMissing") : t("dashboards.loadFailed")) : t("common.loading")}
         </Text>
       </View>
     );
@@ -65,7 +66,7 @@ export default function DashboardScreen() {
       <ScenesRow />
       {hasTrend ? (
         <Segmented
-          accessibilityLabel="Time range"
+          accessibilityLabel={t("app.screens.timeRange")}
           options={RANGE_OPTIONS.map((o) => ({ value: String(o.ms), label: o.label }))}
           value={String(rangeMs)}
           onChange={(v) => setRangeMs(Number(v))}
@@ -75,7 +76,7 @@ export default function DashboardScreen() {
         <View style={styles.empty}>
           <Text weight="medium">This dashboard has no widgets yet</Text>
           <Text color="inkMuted">Add them on the web, in Edit layout.</Text>
-          <Button variant="secondary" label="Open on the web" onPress={() => void Linking.openURL(`${webUrl()}/dashboards/${dashboard.id}`)} />
+          <Button variant="secondary" label={t("app.screens.openWeb")} onPress={() => void Linking.openURL(`${webUrl()}/dashboards/${dashboard.id}`)} />
         </View>
       ) : (
         widgets.map((w) => <DashboardWidget key={w.id} w={w} rangeMs={rangeMs} />)

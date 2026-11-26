@@ -9,10 +9,11 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { useTheme } from "@/theme/useTheme";
 import { Lines, Row } from "@/ui/Row";
 import { Text } from "@/ui/Text";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DashboardResponse = components["schemas"]["DashboardResponse"];
 
-const widgets = (n: number) => `${n} widget${n === 1 ? "" : "s"}`;
+const widgets = (n: number) => t("app.screens.widgets", { count: n });
 
 /** The workspace's dashboards, your default first (DESIGN.md §8). Making
  * and arranging them stays on the web. */
@@ -34,7 +35,7 @@ export default function Dashboards() {
       contentContainerStyle={styles.page}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void onRefresh()} tintColor={theme.inkMuted} />}
     >
-      <Stack.Screen options={{ title: "Dashboards" }} />
+      <Stack.Screen options={{ title: t("nav.dashboards") }} />
       <AttentionStrip />
       {isLoading ? (
         <Text color="inkMuted">Loading dashboards…</Text>
@@ -51,7 +52,7 @@ export default function Dashboards() {
             <Row
               key={d.id}
               title={d.name}
-              detail={[d.is_default ? "Default" : null, widgets(d.layout.length)].filter(Boolean).join(" · ")}
+              detail={[d.is_default ? t("app.screens.default") : null, widgets(d.layout.length)].filter(Boolean).join(" · ")}
               onPress={() => router.push(`/dashboards/${d.id}`)}
               right={<ChevronRight size={18} color={theme.inkMuted} />}
             />
