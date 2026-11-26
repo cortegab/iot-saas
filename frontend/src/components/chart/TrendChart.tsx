@@ -16,6 +16,7 @@ import { axisIncrs, axisLabels } from "@/lib/chart-axis";
 import { appendToWindow, liveBuffer, reseed, type Series } from "@/lib/live-buffer";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type TelemetryDataResponse = components["schemas"]["TelemetryDataResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
@@ -26,8 +27,8 @@ type CatalogMetric = components["schemas"]["CatalogMetric"];
 
 const RESOLUTION_LABEL: Record<Resolution, string | null> = {
   raw: null,
-  "1m": "1-minute average",
-  "1h": "1-hour average",
+  get "1m"() { return tr("chart.avg1m"); },
+  get "1h"() { return tr("chart.avg1h"); },
 };
 
 // An on/off metric's rollup average is the share of its *readings* that were
@@ -37,8 +38,8 @@ const RESOLUTION_LABEL: Record<Resolution, string | null> = {
 // aggregated ranges keep the same Off/On axis as raw ones (lib/bool-series).
 const BOOL_RESOLUTION_LABEL: Record<Resolution, string | null> = {
   raw: null,
-  "1m": "On if it was On at any point in the minute",
-  "1h": "On if it was On at any point in the hour",
+  get "1m"() { return tr("chart.bool1m"); },
+  get "1h"() { return tr("chart.bool1h"); },
 };
 
 // On/off metrics hold their state until the next reading, so they're drawn
@@ -290,7 +291,7 @@ export function TrendChart({
       axes: [
         axis,
         isBool
-          ? { ...axis, splits: () => [0, 1], values: (_u, vs) => vs.map((v) => (v ? "On" : "Off")) }
+          ? { ...axis, splits: () => [0, 1], values: (_u, vs) => vs.map((v) => (v ? tr("chart.on") : tr("chart.off"))) }
           : {
               ...axis,
               // No gridline finer than the metric's decimals, and labels with
@@ -406,7 +407,7 @@ export function TrendChart({
         {controlledRange == null ? (
         // The control-height segmented control (DESIGN.md §3), as on the dashboard header.
         <SegmentedControl
-          ariaLabel="Time range"
+          ariaLabel={tr("chart.range")}
           value={String(rangeMs)}
           onChange={(v) => setRangeMs(Number(v))}
           options={RANGE_OPTIONS.map((opt) => ({ value: String(opt.ms), label: opt.label }))}
@@ -415,8 +416,8 @@ export function TrendChart({
           null
         )}
         {aggregatedLabel && (
-          <span className="text-xs text-ink-muted" title="This range is too wide to show every raw reading">
-            Aggregated — {aggregatedLabel}
+          <span className="text-xs text-ink-muted" title={tr("chart.tooWide")}>
+            {tr("chart.aggregated", { how: aggregatedLabel })}
           </span>
         )}
       </div>
@@ -425,7 +426,7 @@ export function TrendChart({
 
       {error && (
         <ErrorState
-          message={error instanceof ApiRequestError ? error.message : "Couldn't load chart data."}
+          message={error instanceof ApiRequestError ? error.message : tr("chart.loadFailed")}
         />
       )}
 

@@ -49,7 +49,7 @@ export function SimulatedStart({ cards }: { cards: ReactNode }) {
   const [name, setName] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const shownName = name.trim() || (kit ? `${kit.title} (simulated)` : "");
+  const shownName = name.trim() || (kit ? t("kits.simulatedName", { kit: kit.title }) : "");
 
   async function create() {
     if (!kit || !firmware) return;
@@ -68,7 +68,7 @@ export function SimulatedStart({ cards }: { cards: ReactNode }) {
       void revalidate("/catalog");
       router.push(`/devices/${result.device.id}`);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");
+      setError(err instanceof ApiRequestError ? err.message : t("kits.failed"));
       setSubmitting(false);
     }
   }
@@ -76,30 +76,29 @@ export function SimulatedStart({ cards }: { cards: ReactNode }) {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ href: "/devices", label: "Devices" }]}
-        title={shownName || "Add device"}
-        description="A device whose readings the platform makes up, so you can try rules and dashboards before any hardware."
+        breadcrumbs={[{ href: "/devices", label: t("kits.devices") }]}
+        title={shownName || t("kits.addDevice")}
+        description={t("kits.simLead")}
       />
       <div className={`${PAGE_WITH_BAR} ${EDITOR_COLUMN} @container gap-6`}>
         {cards}
         {isLoading ? (
-          <p className="text-sm text-ink-muted">Loading the kits…</p>
+          <p className="text-sm text-ink-muted">{t("kits.loading")}</p>
         ) : kits.length === 0 ? (
-          <p className="text-sm text-ink-muted">No firmware release is published yet, so there are no kits to simulate.</p>
+          <p className="text-sm text-ink-muted">{t("kits.noRelease")}</p>
         ) : (
           <>
             <ChoiceCards<string>
-              ariaLabel="What it simulates"
+              ariaLabel={t("kits.whatSimulates")}
               value={kit?.id ?? ""}
               onChange={setKitId}
               options={kits.map((k) => ({ value: k.id, title: k.title, description: k.description }))}
             />
-            <Field label="Device name" hint="Shown in lists and alerts, marked Simulated.">
-              <Input value={name} placeholder={kit ? `${kit.title} (simulated)` : ""} onChange={(e) => setName(e.target.value)} />
+            <Field label={t("kits.deviceName")} hint={t("kits.deviceNameHint")}>
+              <Input value={name} placeholder={kit ? t("kits.simulatedName", { kit: kit.title }) : ""} onChange={(e) => setName(e.target.value)} />
             </Field>
             <p className="text-meta text-ink-muted">
-              New readings every 5 seconds. Its outputs answer commands, and a fan cools it, so a rule visibly does its job. A workspace
-              can have three. Stop simulating it from its page when a real board takes over.
+              {t("kits.simNote")}
             </p>
           </>
         )}
@@ -109,12 +108,12 @@ export function SimulatedStart({ cards }: { cards: ReactNode }) {
           </p>
         )}
         <div data-savebar className={SAVE_BAR}>
-          <span className="mr-auto text-meta text-ink-muted">Not created yet</span>
+          <span className="mr-auto text-meta text-ink-muted">{t("kits.notCreated")}</span>
           <Link href="/devices" className={buttonClassName({ variant: "ghost" })}>
-            Cancel
+            {t("kits.cancel")}
           </Link>
           <Button type="button" disabled={submitting || !kit} onClick={() => void create()}>
-            {submitting ? "Creating…" : "Create simulated device"}
+            {submitting ? t("kits.creating") : t("kits.create")}
           </Button>
         </div>
       </div>

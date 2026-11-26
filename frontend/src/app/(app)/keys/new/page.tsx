@@ -7,6 +7,8 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SecretReveal } from "@/components/ui/SecretReveal";
 import { KeyEditor } from "@/components/keys/KeyEditor";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
+import { richT } from "@/lib/i18n";
 
 type ApiKeyCreateResponse = components["schemas"]["ApiKeyCreateResponse"];
 
@@ -17,15 +19,15 @@ export default function NewKeyPage() {
   const [secret, setSecret] = useState<ApiKeyCreateResponse | null>(null);
   return (
     <>
-      <Breadcrumbs crumbs={[{ label: "API keys", href: "/keys" }]} />
+      <Breadcrumbs crumbs={[{ label: tr("apik.crumb"), href: "/keys" }]} />
       <KeyEditor keyId={null} onCreated={setSecret} />
-      <Dialog open={secret != null} onClose={() => undefined} title="Copy your key">
+      <Dialog open={secret != null} onClose={() => undefined} title={tr("apik.copyYourKey")}>
         {secret && (
           <SecretReveal
-            fields={[{ label: "API key", value: secret.key, secret: true }]}
+            fields={[{ label: tr("apik.apiKey"), value: secret.key, secret: true }]}
             title={
               <>
-                It won&apos;t be shown again. Only a hash of <strong>{secret.api_key.name}</strong> is stored.
+                {richT(tr, "apik.notAgain", { name: <strong>{secret.api_key.name}</strong> })}
               </>
             }
             requireAcknowledge

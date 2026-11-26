@@ -8,6 +8,7 @@ import { DEFAULT_RANGE_MS } from "@/lib/chart-range";
 import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -43,9 +44,9 @@ export function WidgetFoot({ stale, time }: { stale: boolean; time?: string | nu
   return stale ? (
     <span className="inline-flex items-center gap-1 text-xs text-status-pending">
       <AlertTriangle aria-hidden size={12} />
-      Stale · last value{time ? ` ${timeAgo(time)}` : ""}
+      {time ? tr("wsheet.staleAgo", { ago: timeAgo(time) }) : tr("wsheet.stale")}
     </span>
   ) : (
-    <span className="text-xs text-ink-muted">{time ? timeAgo(time) : "live"}</span>
+    <span className="text-xs text-ink-muted">{time ? timeAgo(time) : tr("wsheet.live")}</span>
   );
 }

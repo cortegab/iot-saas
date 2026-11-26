@@ -167,7 +167,7 @@ export function DashboardGrid({
                 <button
                   type="button"
                   onClick={() => onOpenWidget(widget.id)}
-                  aria-label={`Edit ${WIDGET_LABEL[widget.type]}${deviceName(widget) ? `, ${deviceName(widget)}` : ""}`}
+                  aria-label={deviceName(widget) ? t("wsheet.editOn", { widget: WIDGET_LABEL[widget.type], device: deviceName(widget) ?? "" }) : t("wsheet.edit", { widget: WIDGET_LABEL[widget.type] })}
                   className="absolute inset-0 z-[5] cursor-pointer rounded-xl hover:bg-accent/5"
                 />
                 <span

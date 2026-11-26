@@ -41,6 +41,12 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 export const pad2 = (n: number) => String(n).padStart(2, "0");
 
+/** A weekday's short name in the language on screen ("Mon", "lun"). */
+export function dowName(d: number): string {
+  return activeLocale() === "en" ? DOW[d] : tActive("schedule.dow").split(",")[d];
+}
+const monthName = (m: number) => (activeLocale() === "en" ? MONTHS[m - 1] : tActive("schedule.months").split(",")[m - 1]);
+
 export function ordinal(n: number): string {
   const s = n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
   return `${n}${s}`;
@@ -104,9 +110,9 @@ export function cronParts(cron: string): CronParts | null {
 /** Plain-language error for a cron that can't be read, or null. */
 export function validateCron(cron: string): string | null {
   const p = (cron || "").trim().split(/\s+/).filter(Boolean);
-  if (p.length !== 5) return "Enter five fields: minute, hour, day, month, weekday.";
+  if (p.length !== 5) return tActive("schedule.cronFields");
   if (!cronParts(cron)) {
-    return "One of the fields isn't valid. Use numbers, *, ranges (1-5), lists (1,3) or steps (*/15).";
+    return tActive("schedule.cronInvalid");
   }
   return null;
 }
@@ -293,9 +299,9 @@ export function runText(run: WallTime, zone: string, from: Date = new Date()): s
   const b = Date.UTC(run.year, run.month - 1, run.day);
   const diff = Math.round((b - a) / 864e5);
   const hm = `${pad2(run.hour)}:${pad2(run.minute)}`;
-  if (diff === 0) return `Today ${hm}`;
-  if (diff === 1) return `Tomorrow ${hm}`;
-  return `${DOW[run.dow]} ${run.day} ${MONTHS[run.month - 1]} ${hm}`;
+  if (diff === 0) return tActive("schedule.today", { time: hm });
+  if (diff === 1) return tActive("schedule.tomorrow", { time: hm });
+  return tActive("schedule.runDate", { dow: dowName(run.dow), day: String(run.day), month: monthName(run.month), time: hm });
 }
 
 /** "Runs weekdays at 22:00 (Mexico City, GMT-6)" parts for the summary line. */

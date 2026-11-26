@@ -81,6 +81,23 @@ test.describe("templates and zones, in Spanish", () => {
   });
 });
 
+test.describe("editors, in Spanish", () => {
+  test.use({ locale: "es-MX" });
+
+  test("invite, new API key and new dashboard speak Spanish", async ({ page, request }) => {
+    await resetChoice(request);
+    await page.goto("/members/invite");
+    await expect(page.getByRole("heading", { name: "Invitar a un miembro" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Enviar invitación" })).toBeVisible();
+    await page.goto("/keys/new");
+    await expect(page.getByRole("heading", { name: "Nueva API key" })).toBeVisible();
+    await expect(page.getByLabel("Vence")).toBeVisible();
+    await page.goto("/dashboards/new");
+    await expect(page.getByRole("heading", { name: "Nuevo dashboard" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Crear dashboard" })).toBeVisible();
+  });
+});
+
 test.describe("signed out, a Spanish browser", () => {
 
   test("gets the landing page and sign-in in Spanish", async ({ browser }) => {

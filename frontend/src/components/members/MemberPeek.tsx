@@ -11,6 +11,7 @@ import { formatDate, timeAgo } from "@/lib/time-ago";
 import { ROLE_HELP } from "./MemberEditor";
 import { useMemberActions } from "./useMemberActions";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type MemberResponse = components["schemas"]["MemberResponse"];
 type InvitationResponse = components["schemas"]["InvitationResponse"];
@@ -44,23 +45,23 @@ export function MemberPeek({
           title={invite.email}
           eyebrow={
             <>
-              <Badge tone="pending" shape="hollow" label="Invited" />
+              <Badge tone="pending" shape="hollow" label={tr("mem.invited")} />
             </>
           }
-          description="They join when they open the link in their email."
+          description={tr("mem.joinNote")}
           facts={[
-            ["Role", <Tag key="r">{roleLabel(invite.role)}</Tag>],
-            ["Sent", timeAgo(invite.created_at)],
-            ["Link expires", formatDate(invite.expires_at)],
+            [tr("mem.role"), <Tag key="r">{roleLabel(invite.role)}</Tag>],
+            [tr("mem.sent"), timeAgo(invite.created_at)],
+            [tr("mem.expires"), formatDate(invite.expires_at)],
           ]}
           primary={
             canManage ? (
               <Button size="sm" variant="secondary" onClick={() => void resend(invite)}>
-                <Send aria-hidden size={14} /> Resend invite
+                <Send aria-hidden size={14} /> {tr("mem.resend")}
               </Button>
             ) : undefined
           }
-          menu={canManage ? [[{ label: "Cancel invite…", icon: <Trash2 size={15} />, danger: true, onClick: () => void cancelInvite(invite) }]] : undefined}
+          menu={canManage ? [[{ label: tr("mem.cancelMenu"), icon: <Trash2 size={15} />, danger: true, onClick: () => void cancelInvite(invite) }]] : undefined}
           onClose={onClose}
         />
         {dialog}
@@ -72,19 +73,19 @@ export function MemberPeek({
   const role = toRole(member.role);
   const ownerLocked = member.role === "owner" && myRole !== "owner";
   const menu: DropdownMenuItem[][] =
-    canManage && !isMe && !ownerLocked ? [[{ label: "Remove from workspace…", icon: <Trash2 size={15} />, danger: true, onClick: () => void removeMember(member) }]] : [];
+    canManage && !isMe && !ownerLocked ? [[{ label: tr("mem.remove"), icon: <Trash2 size={15} />, danger: true, onClick: () => void removeMember(member) }]] : [];
 
   return (
     <>
       <PeekFrame
         noun="member"
         title={member.name || member.email}
-        eyebrow={isMe ? "You" : undefined}
+        eyebrow={isMe ? tr("mem.you") : undefined}
         description={role ? ROLE_HELP[role] : undefined}
         facts={[
-          ["Email", <span key="e" className="font-mono text-meta">{member.email}</span>],
-          ["Role", <Tag key="r">{roleLabel(member.role)}</Tag>],
-          ["Joined", member.joined_at ? formatDate(member.joined_at) : null],
+          [tr("mem.email"), <span key="e" className="font-mono text-meta">{member.email}</span>],
+          [tr("mem.role"), <Tag key="r">{roleLabel(member.role)}</Tag>],
+          [tr("mem.joinedFact"), member.joined_at ? formatDate(member.joined_at) : null],
         ]}
         primary={<PeekOpen href={`/members/${member.user_id}`} noun="member" />}
         menu={menu}

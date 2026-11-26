@@ -8,6 +8,7 @@ import { useWidgetDevice, WidgetFoot } from "@/components/dashboards/widget-comm
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import type { components } from "@/types/api";
 import { tActive as t } from "@iodriven/shared/i18n";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 
@@ -28,7 +29,7 @@ export function ValueCardWidget({ deviceId, metric }: { deviceId: string; metric
         ) : (
           <Readout value={value} unit={reading && !isBool ? (meta?.unit ?? undefined) : undefined} size="lg" stale={stale && !!reading} framed={false} />
         )}
-        {reading ? <WidgetFoot stale={stale} time={reading.time} /> : <span className="text-xs text-ink-muted">No data</span>}
+        {reading ? <WidgetFoot stale={stale} time={reading.time} /> : <span className="text-xs text-ink-muted">{tr("wsheet.noData")}</span>}
       </div>
     </WidgetCard>
   );

@@ -4,6 +4,7 @@ import { ArrowDown, ArrowUp, ChevronRight } from "lucide-react";
 import { WIDGET_LABEL } from "@/components/dashboards/DashboardGrid";
 import { widgetTitle } from "@/components/dashboards/WidgetSheet";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type Widget = components["schemas"]["Widget"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
@@ -44,7 +45,7 @@ export function WidgetList({
   const iconButton =
     "grid h-11 w-11 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink disabled:opacity-35";
   return (
-    <ol aria-label="Widgets" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+    <ol aria-label={tr("wsheet.widgetsList")} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
       {order.map((w, i) => {
         const title = widgetTitle(w, src);
         return (
@@ -56,10 +57,10 @@ export function WidgetList({
               </span>
               <ChevronRight aria-hidden size={15} className="shrink-0 text-ink-muted" />
             </button>
-            <button type="button" aria-label={`Move ${title} up`} disabled={i === 0} onClick={() => onMove(w.id, -1)} className={iconButton}>
+            <button type="button" aria-label={tr("wsheet.moveUp", { title })} disabled={i === 0} onClick={() => onMove(w.id, -1)} className={iconButton}>
               <ArrowUp aria-hidden size={16} />
             </button>
-            <button type="button" aria-label={`Move ${title} down`} disabled={i === order.length - 1} onClick={() => onMove(w.id, 1)} className={iconButton}>
+            <button type="button" aria-label={tr("wsheet.moveDown", { title })} disabled={i === order.length - 1} onClick={() => onMove(w.id, 1)} className={iconButton}>
               <ArrowDown aria-hidden size={16} />
             </button>
           </li>

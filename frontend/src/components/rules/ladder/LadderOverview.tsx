@@ -9,6 +9,7 @@ import { RULE_STATE, ruleStateKey } from "@/lib/rule-text";
 import { useRuleCatalog } from "@/components/rules/editor/useRuleCatalog";
 import type { components } from "@/types/api";
 import { ResponsiveRung } from "./LadderRung";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 
@@ -36,10 +37,10 @@ export function LadderOverview({ rules }: { rules: RuleResponse[] }) {
             </div>
             <Link
               href={`/rules/${rule.id}`}
-              aria-label={`Edit ${rule.name}`}
+              aria-label={tr("ladder.editRule", { name: rule.name })}
               className="-mx-1 block rounded-lg px-1 pb-1 hover:bg-surface-raised"
             >
-              <ResponsiveRung fit draft={draft} catalog={catalog} ariaLabel={`Ladder for ${rule.name}`} />
+              <ResponsiveRung fit draft={draft} catalog={catalog} ariaLabel={tr("ladder.ladderFor", { name: rule.name })} />
             </Link>
           </div>
         </Card>

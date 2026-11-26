@@ -28,6 +28,8 @@ import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, formatWhen, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 import { NotFound } from "@/components/ui/NotFound";
+import { tActive as tr } from "@iodriven/shared/i18n";
+import { richT } from "@/lib/i18n";
 
 type ApiKeyCreateResponse = components["schemas"]["ApiKeyCreateResponse"];
 
@@ -66,9 +68,9 @@ export function KeyEditor({
   const validate = useCallback((d: KeyDraft): Validation => {
     const errors: Record<string, string> = {};
     const warnings: Record<string, string> = {};
-    if (!d.name.trim()) errors["key.name"] = "Name it after what uses it, like “Grafana read-only”.";
-    else if (d.name.trim().length > 100) errors["key.name"] = "Keep the name under 100 characters.";
-    if (d.expiry === "never") warnings["key.expiry"] = "Keys that never expire are easy to forget. Prefer a date.";
+    if (!d.name.trim()) errors["key.name"] = tr("apik.nameRequired");
+    else if (d.name.trim().length > 100) errors["key.name"] = tr("apik.nameLong");
+    if (d.expiry === "never") warnings["key.expiry"] = tr("apik.neverWarn");
     return { errors, warnings };
   }, []);
   const editor = useRecordEditor({ source, isNew, validate });
@@ -85,10 +87,10 @@ export function KeyEditor({
           });
           await mutate();
           void revalidate("/api-keys");
-          toast({ title: "API key created", detail: `${result.api_key.name} · ${ROLE_LABEL[d.role]}` });
+          toast({ title: tr("apik.created"), detail: `${result.api_key.name} · ${ROLE_LABEL[d.role]}` });
           onCreated?.(result);
         } catch (err) {
-          toast({ tone: "error", title: "The server rejected the key", detail: err instanceof ApiRequestError ? err.message : undefined });
+          toast({ tone: "error", title: tr("apik.rejected"), detail: err instanceof ApiRequestError ? err.message : undefined });
           throw err;
         }
       })
@@ -98,7 +100,7 @@ export function KeyEditor({
   if (error) {
     return (
       <div className="p-5">
-        <ErrorState title="Couldn't load this key" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
+        <ErrorState title={tr("apik.loadFailed")} message={error instanceof ApiRequestError ? error.message : tr("apik.noResponse")} onRetry={() => void mutate()} />
       </div>
     );
   }
@@ -122,8 +124,8 @@ export function KeyEditor({
           noun="key"
           title={key.name}
           eyebrow={<Badge tone={KEY_STATUS_TONE[st]} label={KEY_STATUS_LABEL[st]} />}
-          consequence="Keys can't be edited. To change a key's scope or expiry, create a new one and revoke this one."
-          sections={[{ id: "key", label: "Key" }]}
+          consequence={tr("apik.consView")}
+          sections={[{ id: "key", label: tr("apik.key") }]}
           status={editor}
           readOnly
           readOnlyNote={false}
@@ -132,44 +134,43 @@ export function KeyEditor({
           menu={[
             [
               {
-                label: "Copy link",
+                label: tr("apik.copyLink"),
                 icon: <Link2 size={15} />,
-                onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/keys/${key.id}`).then(() => toast({ tone: "info", title: "Link copied" })),
+                onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/keys/${key.id}`).then(() => toast({ tone: "info", title: tr("apik.linkCopied") })),
               },
             ],
             ...(can("keys.manage") ? endItems(key, () => router.push("/keys")) : []),
           ]}
         >
-          <EditorSection id="key" title="Key">
+          <EditorSection id="key" title={tr("apik.key")}>
             <FactList
               facts={[
-                ["Prefix", <CopyField key="prefix" value={`${key.key_prefix}…`} label="key prefix" />],
-                ["Scope", role ? ROLE_LABEL[role] : key.role],
-                ["Created", formatWhen(key.created_at)],
-                ["Last used", key.last_used_at ? timeAgo(key.last_used_at) : "Never"],
-                ["Expires", key.expires_at ? formatDate(key.expires_at) : "Never"],
-                key.revoked_at ? ["Revoked", formatWhen(key.revoked_at)] : null,
-                ["Header", <code key="header" className="break-all font-mono text-xs">Authorization: Bearer {key.key_prefix}…</code>],
+                [tr("apik.prefix"), <CopyField key="prefix" value={`${key.key_prefix}…`} label={tr("apik.prefixLabel")} />],
+                [tr("apik.scope"), role ? ROLE_LABEL[role] : key.role],
+                [tr("apik.created2"), formatWhen(key.created_at)],
+                [tr("apik.lastUsed"), key.last_used_at ? timeAgo(key.last_used_at) : tr("apik.never")],
+                [tr("apik.expires"), key.expires_at ? formatDate(key.expires_at) : tr("apik.never")],
+                key.revoked_at ? [tr("apik.revoked"), formatWhen(key.revoked_at)] : null,
+                [tr("apik.header"), <code key="header" className="break-all font-mono text-xs">Authorization: Bearer {key.key_prefix}…</code>],
               ]}
             />
             <p className="text-meta text-ink-muted">
-              The key names its workspace, so <code className="font-mono">X-Tenant-Id</code> is optional. It works on devices, telemetry,
-              rules, templates, zones and notifications, never on members, keys or dashboards.
+              {richT(tr, "apik.tenantNote", { header: <code className="font-mono">X-Tenant-Id</code> })}
             </p>
             {st === "active" && can("keys.manage") ? (
               <div>
                 <Button variant="secondary-danger" onClick={() => void revoke(key)}>
                   <Ban aria-hidden size={14} />
-                  Revoke key…
+                  {tr("apik.revokeButton")}
                 </Button>
               </div>
             ) : st !== "active" && can("keys.manage") ? (
               <div className="flex flex-wrap items-center gap-3">
                 <Button variant="secondary-danger" onClick={() => void remove(key, () => router.push("/keys"))}>
                   <Trash2 aria-hidden size={14} />
-                  Delete key…
+                  {tr("apik.deleteButton")}
                 </Button>
-                <span className="text-meta text-ink-muted">{st === "revoked" ? "Revoked" : "Expired"}, so it can&apos;t authenticate any more.</span>
+                <span className="text-meta text-ink-muted">{tr("apik.cantAuth", { state: st === "revoked" ? tr("apik.revoked") : tr("apik.expired") })}</span>
               </div>
             ) : null}
           </EditorSection>
@@ -186,43 +187,43 @@ export function KeyEditor({
       <EditorFrame
         mode={mode}
         noun="key"
-        title="New API key"
-        consequence="The key is shown once, then stored hashed."
-        sections={[{ id: "key", label: "Key" }]}
+        title={tr("apik.newTitle")}
+        consequence={tr("apik.consNew")}
+        sections={[{ id: "key", label: tr("apik.key") }]}
         status={editor}
-        saveLabel="Create key"
+        saveLabel={tr("apik.create")}
         onSave={onSave}
         onDiscard={editor.discard}
       >
-        <EditorSection id="key" title="Key">
+        <EditorSection id="key" title={tr("apik.key")}>
           <div className="grid items-start gap-3.5 @md:grid-cols-2">
-            <Field label="Name" error={editor.errorFor("key.name")} hint="What uses it, e.g. Grafana.">
+            <Field label={tr("apik.name")} error={editor.errorFor("key.name")} hint={tr("apik.nameHint")}>
               <Input autoFocus value={d.name} onChange={(e) => editor.set({ ...d, name: e.target.value })} onBlur={() => editor.touch("key.name")} />
             </Field>
-            <Field label="Expires" warning={editor.warningFor("key.expiry")}>
+            <Field label={tr("apik.expires")} warning={editor.warningFor("key.expiry")}>
               <Select value={d.expiry} onChange={(e) => editor.set({ ...d, expiry: e.target.value as KeyDraft["expiry"] })}>
-                <option value="30">In 30 days</option>
-                <option value="90">In 90 days</option>
-                <option value="365">In a year</option>
-                <option value="never">Never</option>
+                <option value="30">{tr("apik.in30")}</option>
+                <option value="90">{tr("apik.in90")}</option>
+                <option value="365">{tr("apik.inYear")}</option>
+                <option value="never">{tr("apik.never")}</option>
               </Select>
             </Field>
           </div>
           {/* demo H: Viewer | Admin; keys can never be Owner. */}
           <div className="flex flex-col gap-[5px]">
-            <span className="text-meta font-medium text-ink">Scope</span>
+            <span className="text-meta font-medium text-ink">{tr("apik.scope")}</span>
             <SegmentedControl
-              ariaLabel="Scope"
+              ariaLabel={tr("apik.scope")}
               size="md"
               value={d.role}
               onChange={(role) => editor.set({ ...d, role })}
               options={[
-                { value: "viewer", label: "Viewer" },
-                { value: "admin", label: "Admin" },
+                { value: "viewer", label: ROLE_LABEL.viewer },
+                { value: "admin", label: ROLE_LABEL.admin },
               ]}
             />
             <span className={d.role === "admin" ? "text-xs text-status-pending" : "text-xs text-ink-muted"}>
-              {d.role === "admin" ? "Can change devices and rules. Give it only to systems you trust." : "Read-only."}
+              {d.role === "admin" ? tr("apik.adminHint") : tr("apik.readOnly")}
             </span>
           </div>
         </EditorSection>
