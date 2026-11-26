@@ -9,6 +9,7 @@ import { formatReading } from "@/lib/format-reading";
 import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -35,7 +36,7 @@ export function DeviceTile({ device, template }: { device: DeviceResponse; templ
         <Link href={`/devices/${device.id}`} className="min-w-0 flex-1 truncate text-sm font-semibold text-ink hover:text-accent">
           {device.name}
         </Link>
-        {device.simulated && <Tag size="sm">Simulated</Tag>}
+        {device.simulated && <Tag size="sm">{t("devices.simulated")}</Tag>}
         <DeviceStatusPill device={device} />
       </div>
       {main && (
@@ -46,7 +47,7 @@ export function DeviceTile({ device, template }: { device: DeviceResponse; templ
             {reading && main.unit && main.data_type !== "bool" && <span className="text-sm font-normal tracking-normal text-ink-muted">{main.unit}</span>}
           </span>
           <span className={`text-xs ${reading && !online ? "text-status-pending" : "text-ink-muted"}`}>
-            {!reading ? "Nothing received yet" : online ? timeAgo(reading.time) : `Last value, ${timeAgo(reading.time)}`}
+            {!reading ? t("devices.nothingYet") : online ? timeAgo(reading.time) : t("devices.lastValue", { ago: timeAgo(reading.time) })}
           </span>
         </div>
       )}

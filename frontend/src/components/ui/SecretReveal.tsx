@@ -4,6 +4,7 @@ import { useState, type ReactNode } from "react";
 import { AlertTriangle, Check, Copy, Eye, EyeOff } from "lucide-react";
 import { buttonClassName } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -37,7 +38,7 @@ export function CopyField({
       <code className="min-w-0 flex-1 select-all break-all font-mono text-xs text-ink">{value}</code>
       <button
         type="button"
-        aria-label={copied ? "Copied" : `Copy ${label ?? "value"}`}
+        aria-label={copied ? t("ui.copied") : t("ui.copyValue", { label: label ?? t("ui.value") })}
         onClick={() =>
           void copyText(value).then((ok) => {
             if (!ok) return;
@@ -71,7 +72,7 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
       className={buttonClassName({ variant: "secondary" })}
     >
       {copied ? <Check aria-hidden size={14} className="text-status-online" /> : <Copy aria-hidden size={14} />}
-      {copied ? "Copied" : "Copy"}
+      {copied ? t("ui.copied") : t("ui.copy")}
     </button>
   );
 }
@@ -106,9 +107,9 @@ export function SecretReveal({
   title,
   fields,
   copyValue,
-  copyLabel = "Copy",
+  copyLabel = t("ui.copy"),
   onDismiss,
-  dismissLabel = "Done",
+  dismissLabel = t("ui.done"),
   requireAcknowledge = false,
   className,
 }: SecretRevealProps) {
@@ -123,7 +124,7 @@ export function SecretReveal({
   return (
     <div
       role="region"
-      aria-label="One-time secret"
+      aria-label={t("ui.oneTimeSecret")}
       className={cn(
         "flex flex-col gap-3 rounded-md border border-status-pending/45 bg-status-pending-surface p-3.5",
         className,
@@ -157,7 +158,7 @@ export function SecretReveal({
           className={buttonClassName({ variant: "primary", size: "sm" })}
         >
           {copied ? <Check aria-hidden size={14} /> : <Copy aria-hidden size={14} />}
-          {copied ? "Copied" : copyLabel}
+          {copied ? t("ui.copied") : copyLabel}
         </button>
         {hasMasked && (
           <button
@@ -166,7 +167,7 @@ export function SecretReveal({
             className={buttonClassName({ variant: "secondary", size: "sm" })}
           >
             {shown ? <EyeOff aria-hidden size={14} /> : <Eye aria-hidden size={14} />}
-            {shown ? "Hide" : "Show"}
+            {shown ? t("ui.hide") : t("ui.show")}
           </button>
         )}
         {requireAcknowledge && (

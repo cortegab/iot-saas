@@ -2,12 +2,13 @@ import type { ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 export type Freshness = "live" | "stale" | "none";
 
 const FRESHNESS: Record<Freshness, { label: string; tone: "online" | "unknown"; shape: "solid" | "square" }> = {
-  live: { label: "Live", tone: "online", shape: "solid" },
-  stale: { label: "Stale", tone: "unknown", shape: "square" },
+  live: { get label() { return t("devices.live"); }, tone: "online", shape: "solid" },
+  stale: { get label() { return t("devices.stale"); }, tone: "unknown", shape: "square" },
   none: { label: "No data", tone: "unknown", shape: "square" },
 };
 
@@ -113,7 +114,7 @@ export function Readout({
           </span>
           <span className="flex justify-between gap-1.5 text-xs text-ink-muted tabular-nums">
             <span>{min.toLocaleString()}</span>
-            {threshold != null && <span className="text-ink">rule at {threshold.toLocaleString()}</span>}
+            {threshold != null && <span className="text-ink">{t("devices.ruleAt", { value: threshold })}</span>}
             <span>{max.toLocaleString()}</span>
           </span>
         </>

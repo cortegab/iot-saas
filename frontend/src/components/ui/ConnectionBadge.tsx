@@ -1,6 +1,7 @@
 import { Badge, type DotShape, type StatusTone } from "@/components/ui/Badge";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type ConnectionState = DeviceResponse["connection_state"];
@@ -18,9 +19,9 @@ const SHAPE: Record<ConnectionState, DotShape> = {
   never_connected: "hollow",
 };
 const LABEL: Record<ConnectionState, string> = {
-  online: "Online",
-  offline: "Offline",
-  never_connected: "Never connected",
+  get online() { return t("status.device.online"); },
+  get offline() { return t("status.device.offline"); },
+  get never_connected() { return t("status.device.never"); },
 };
 
 /** Device connection state as a status pill — never colour alone: every state

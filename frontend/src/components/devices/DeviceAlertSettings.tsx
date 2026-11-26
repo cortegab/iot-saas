@@ -9,6 +9,7 @@ import { SwitchField } from "@/components/ui/Switch";
 import { useToast } from "@/components/ui/Toast";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
+import { activeLocale, intlLocale, tActive as tr } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 
@@ -22,9 +23,9 @@ export function isMuted(device: Pick<DeviceResponse, "alerts_muted_until">): boo
 }
 
 function mutedLabel(until: string): string {
-  const t = Date.parse(until);
-  if (t > FOREVER_AFTER) return "Muted until you turn them back on.";
-  return `Muted until ${new Date(t).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit" })}.`;
+  const at = Date.parse(until);
+  if (at > FOREVER_AFTER) return tr("devices.alerts.mutedForever");
+  return tr("devices.alerts.mutedUntil", { when: new Date(at).toLocaleString(intlLocale(activeLocale()), { weekday: "short", hour: "numeric", minute: "2-digit" }) });
 }
 
 /**
@@ -46,44 +47,44 @@ export function DeviceAlertSettings({ device, canWrite }: { device: DeviceRespon
       void revalidate("/devices");
       toast({ title: done });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't change its alerts", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("devices.alerts.changeFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     } finally {
       setBusy(false);
     }
   }
 
   function mute(choice: string) {
-    if (choice === "off") return void save({ alerts_muted_until: null }, `${device.name}'s alerts are on`);
+    if (choice === "off") return void save({ alerts_muted_until: null }, tr("devices.alerts.alertsOn", { name: device.name }));
     const until = choice === "forever" ? FOREVER : new Date(Date.now() + Number(choice) * 3600_000).toISOString();
-    void save({ alerts_muted_until: until }, `${device.name}'s alerts are muted`);
+    void save({ alerts_muted_until: until }, tr("devices.alerts.alertsMuted", { name: device.name }));
   }
 
   return (
     <section aria-labelledby="device-alerts" className="mb-6 flex max-w-[760px] flex-col gap-3 border-b border-border-soft pb-6">
       <h2 id="device-alerts" className="text-section font-semibold text-ink">
-        Alerts
+        {tr("devices.alerts.title")}
       </h2>
       <Field
-        label="Offline and health alerts"
-        hint={muted ? `${mutedLabel(device.alerts_muted_until!)} Rules still run and notify.` : "On. Muting doesn't stop its rules."}
+        label={tr("devices.alerts.label")}
+        hint={muted ? tr("devices.alerts.mutedHint", { until: mutedLabel(device.alerts_muted_until!) }) : tr("devices.alerts.onHint")}
       >
         <Select value={muted ? "muted" : "off"} disabled={!canWrite || busy} onChange={(e) => mute(e.target.value)} className="max-w-[280px]">
-          <option value="off">On</option>
-          {muted && <option value="muted">Muted</option>}
-          <option value="1">Mute for 1 hour</option>
-          <option value="24">Mute for 1 day</option>
-          <option value="forever">Mute until I turn them back on</option>
+          <option value="off">{tr("devices.alerts.on")}</option>
+          {muted && <option value="muted">{tr("devices.alerts.muted")}</option>}
+          <option value="1">{tr("devices.alerts.hour")}</option>
+          <option value="24">{tr("devices.alerts.day")}</option>
+          <option value="forever">{tr("devices.alerts.forever")}</option>
         </Select>
       </Field>
       <SwitchField
-        label="Back online"
+        label={tr("devices.alerts.backOnline")}
         checked={device.notify_back_online}
         disabled={!canWrite || busy}
-        onChange={(on) => void save({ notify_back_online: on }, on ? "You'll hear when it's back online" : "No back-online notice")}
-        onLabel="Tell me when it's back online"
-        offLabel="Off"
-        onHint="A notification when it reconnects after going offline."
-        offHint="Only going offline is an alert."
+        onChange={(on) => void save({ notify_back_online: on }, on ? tr("devices.alerts.savedOn") : tr("devices.alerts.savedOff"))}
+        onLabel={tr("devices.alerts.backOnlineOn")}
+        offLabel={tr("devices.alerts.off")}
+        onHint={tr("devices.alerts.backOnlineOnHint")}
+        offHint={tr("devices.alerts.backOnlineOffHint")}
       />
     </section>
   );

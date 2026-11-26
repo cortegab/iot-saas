@@ -12,6 +12,7 @@ import {
 } from "react";
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 export type ToastTone = "success" | "warning" | "error" | "info";
 
@@ -119,7 +120,7 @@ function ToastCard({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
       )}
       <button
         type="button"
-        aria-label="Dismiss"
+        aria-label={t("ui.dismiss")}
         onClick={onDismiss}
         className="grid shrink-0 place-items-center rounded p-0.5 text-ink-muted hover:text-ink"
       >

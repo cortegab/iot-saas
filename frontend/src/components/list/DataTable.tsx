@@ -5,6 +5,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from "lucide-react";
 import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { cn } from "@/lib/cn";
 import type { SortDir } from "@/components/list/useListState";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 export interface DataColumn<T> {
   id: string;
@@ -252,7 +253,7 @@ export function DataTable<T>({
                       return groups.length > 0 ? (
                         <DropdownMenu
                           groups={groups}
-                          label={rowMenuLabel?.(row) ?? "Actions"}
+                          label={rowMenuLabel?.(row) ?? t("ui.actions")}
                           triggerClassName="inline-grid h-[30px] w-[30px] place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink @max-[600px]:h-[42px] @max-[600px]:w-[42px]"
                         />
                       ) : null;

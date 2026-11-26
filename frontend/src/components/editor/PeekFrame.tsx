@@ -8,6 +8,7 @@ import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMen
 import { FactList } from "@/components/ui/FactList";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PeekNavContext } from "@/components/list/peek-nav";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 /**
  * A record's read-only peek (DESIGN.md §7), shown in a drawer over its list
@@ -68,7 +69,7 @@ export function PeekFrame({
               </IconButton>
             </div>
           )}
-          {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
+          {menu && menu.length > 0 && <DropdownMenu groups={menu} label={t("ui.moreActions")} />}
           <IconButton aria-label={`Close ${noun}`} onClick={onClose}>
             <X size={18} />
           </IconButton>
@@ -104,7 +105,7 @@ export function PeekSection({ title, children }: { title: string; children: Reac
 /** While the record loads, or when it no longer exists. */
 export function PeekPlaceholder({ noun, missing, onClose }: { noun: string; missing?: boolean; onClose: () => void }) {
   return (
-    <PeekFrame noun={noun} title={missing ? `This ${noun} doesn't exist` : "Loading…"} onClose={onClose} description={missing ? "It may have been deleted." : undefined}>
+    <PeekFrame noun={noun} title={missing ? t("ui.editor.missing", { noun }) : t("common.loading")} onClose={onClose} description={missing ? t("ui.editor.maybeDeleted") : undefined}>
       {!missing && <LoadingSkeleton rows={3} rowClassName="h-6" />}
     </PeekFrame>
   );

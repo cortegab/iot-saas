@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { buttonClassName } from "@/components/ui/Button";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 export interface ConfirmDialogProps {
   open: boolean;
@@ -30,8 +31,8 @@ export function ConfirmDialog({
   title,
   message,
   details,
-  confirmLabel = "Delete",
-  cancelLabel = "Cancel",
+  confirmLabel = t("ui.delete"),
+  cancelLabel = t("ui.cancel"),
   danger = true,
   onConfirm,
   onCancel,

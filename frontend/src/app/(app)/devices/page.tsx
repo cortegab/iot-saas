@@ -29,6 +29,7 @@ import { ApiRequestError } from "@/lib/api-client";
 import { DEVICE_STATUS, deviceStatusKey, type DeviceStatusKey } from "@/lib/device-status";
 import { ageMinutes, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -110,7 +111,7 @@ export default function DevicesPage() {
   const columns: DataColumn<DeviceResponse>[] = [
     {
       id: "name",
-      header: "Device",
+      header: t("devices.device"),
       sortable: true,
       cell: (d) => (
         <NameCell
@@ -119,7 +120,7 @@ export default function DevicesPage() {
               <Link href={`/devices/${d.id}`} className="hover:underline hover:underline-offset-[3px]">
                 {d.name}
               </Link>
-              {d.simulated && <Tag size="sm">Simulated</Tag>}
+              {d.simulated && <Tag size="sm">{t("devices.simulated")}</Tag>}
             </span>
           }
           // demo H: the name in the UI face, its MQTT id under it in mono.
@@ -139,7 +140,7 @@ export default function DevicesPage() {
           {templateName.get(d.catalog_entry_id) ?? <span className="text-ink-muted">—</span>}
           {d.hardware && (
             <Tag size="sm" className="ml-1.5">
-              Own wiring
+              {t("devices.ownWiring")}
             </Tag>
           )}
         </>
@@ -154,10 +155,10 @@ export default function DevicesPage() {
       fold: (d) => (d.zone_id ? zoneName.get(d.zone_id) : null),
       cell: (d) => (d.zone_id ? zoneName.get(d.zone_id) : null) ?? <span className="text-ink-muted">—</span>,
     },
-    { id: "status", header: "Status", sortable: true, cell: (d) => <DeviceStatusPill device={d} /> },
+    { id: "status", header: t("devices.status"), sortable: true, cell: (d) => <DeviceStatusPill device={d} /> },
     {
       id: "seen",
-      header: "Last seen",
+      header: t("devices.lastSeen"),
       sortable: true,
       numeric: true,
       cell: (d) => <span className="text-ink-muted">{timeAgo(d.last_seen_at)}</span>,
@@ -168,25 +169,25 @@ export default function DevicesPage() {
 
   // ---------------------------------------------------------------- chips
   const chips: FilterChip[] = [];
-  if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
+  if (list.q) chips.push({ id: "q", label: t("devices.chipSearch", { q: list.q }), onRemove: () => list.setQuery("") });
   if (list.filters.status !== "all") {
     chips.push({
       id: "status",
-      label: `Status: ${DEVICE_STATUS[list.filters.status as DeviceStatusKey]?.label ?? list.filters.status}`,
+      label: t("devices.chipStatus", { status: DEVICE_STATUS[list.filters.status as DeviceStatusKey]?.label ?? list.filters.status }),
       onRemove: () => list.setFilter("status", "all"),
     });
   }
   if (list.filters.zone !== "all") {
     chips.push({
       id: "zone",
-      label: `${capital(w.zone)}: ${list.filters.zone === "none" ? `No ${w.zone}` : (zoneName.get(list.filters.zone) ?? "unknown")}`,
+      label: `${capital(w.zone)}: ${list.filters.zone === "none" ? t("devices.noneOf", { what: w.zone }) : (zoneName.get(list.filters.zone) ?? t("devices.unknown"))}`,
       onRemove: () => list.setFilter("zone", "all"),
     });
   }
   if (list.filters.template !== "all") {
     chips.push({
       id: "template",
-      label: `Template: ${templateName.get(list.filters.template) ?? "unknown"}`,
+      label: `${capital(w.template)}: ${templateName.get(list.filters.template) ?? t("devices.unknown")}`,
       onRemove: () => list.setFilter("template", "all"),
     });
   }
@@ -196,7 +197,7 @@ export default function DevicesPage() {
   const addAction = canWrite ? (
     <Link href="/devices/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
-      Add device
+      {t("devices.add")}
     </Link>
   ) : null;
 
@@ -206,8 +207,8 @@ export default function DevicesPage() {
           holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
         inline
-        title="Devices"
-        description="Open a device for its readings and controls."
+        title={t("devices.title")}
+        description={t("devices.description")}
         actions={!error && devices && total > 0 ? undefined : addAction}
       />
 
@@ -215,8 +216,8 @@ export default function DevicesPage() {
 
       {error ? (
         <ErrorState
-          title="Couldn't load devices"
-          message={`${error instanceof ApiRequestError ? error.message : "The API didn't respond."} Devices keep reporting and rules keep running; only this page is affected.`}
+          title={t("devices.loadFailed")}
+          message={t("devices.keepRunning", { message: error instanceof ApiRequestError ? error.message : t("devices.apiDown") })}
           onRetry={() => void mutate()}
         />
       ) : isLoading || !devices ? (
@@ -224,23 +225,22 @@ export default function DevicesPage() {
       ) : total === 0 ? (
         <FirstUse
           icon={<Cpu aria-hidden size={28} />}
-          title="No devices yet"
+          title={t("devices.emptyTitle")}
           description={
             <>
-              Add a device, then install its firmware from a computer over USB, no code needed. Its readings show up here as soon as
-              it&apos;s online. No board yet?{" "}
+              {t("devices.emptyBody")}{" "}
               <Link href="/devices/new?from=simulated" className="link-inline">
-                Try a simulated device
+                {t("devices.trySimulated")}
               </Link>
               .
             </>
           }
           action={addAction ?? undefined}
-          readOnlyNote="Ask an admin to add the first device."
+          readOnlyNote={t("devices.askAdmin")}
         />
       ) : (
         <ListWithPeek
-          label="Device"
+          label={t("devices.device")}
           onClose={peek.close}
           nav={peek.nav}
           peek={
@@ -264,40 +264,40 @@ export default function DevicesPage() {
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
-            placeholder={`Search name or ${w.template}`}
+            placeholder={t("devices.search", { template: w.template })}
             activeFilters={[list.filters.template, list.filters.zone].filter((v) => v !== "all").length}
             actions={addAction}
             view={
               <SegmentedControl
-                ariaLabel="Devices view"
+                ariaLabel={t("devices.view")}
                 value={view}
                 onChange={(v) => list.setFilter("view", v)}
                 options={[
-                  { value: "table", label: "Table" },
-                  { value: "tiles", label: "Tiles" },
+                  { value: "table", label: t("devices.table") },
+                  { value: "tiles", label: t("devices.tiles") },
                 ]}
               />
             }
             quick={{
-              label: "Filter by status",
+              label: t("devices.filterStatus"),
               value: list.filters.status,
               onChange: (v) => list.setFilter("status", v),
               options: [
-                { value: "all", label: "All", count: total },
-                { value: "online", label: "Online", count: counts.online, tone: "online", hint: "Reporting now" },
-                { value: "offline", label: "Offline", count: counts.offline, tone: "offline", hint: "Not reporting now", alert: true },
-                { value: "never", label: "Never connected", count: counts.never, tone: "pending", shape: "hollow", hint: "Waiting for the first message" },
-                { value: "disabled", label: "Disabled", count: counts.disabled, tone: "unknown", shape: "square", hint: "Not evaluated by rules" },
+                { value: "all", label: t("devices.all"), count: total },
+                { value: "online", label: DEVICE_STATUS.online.label, count: counts.online, tone: "online", hint: t("devices.hintOnline") },
+                { value: "offline", label: DEVICE_STATUS.offline.label, count: counts.offline, tone: "offline", hint: t("devices.hintOffline"), alert: true },
+                { value: "never", label: DEVICE_STATUS.never.label, count: counts.never, tone: "pending", shape: "hollow", hint: t("devices.hintNever") },
+                { value: "disabled", label: DEVICE_STATUS.disabled.label, count: counts.disabled, tone: "unknown", shape: "square", hint: t("devices.hintDisabled") },
               ],
             }}
           >
             <Select
-              aria-label={`Filter by ${w.template}`}
+              aria-label={t("devices.filterBy", { what: w.template })}
               value={list.filters.template}
               onChange={(e) => list.setFilter("template", e.target.value)}
               className="w-auto min-w-[170px]"
             >
-              <option value="all">All {w.templates}</option>
+              <option value="all">{t("devices.allOf", { what: w.templates })}</option>
               {(templates ?? []).map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -305,18 +305,18 @@ export default function DevicesPage() {
               ))}
             </Select>
             <Select
-              aria-label={`Filter by ${w.zone}`}
+              aria-label={t("devices.filterBy", { what: w.zone })}
               value={list.filters.zone}
               onChange={(e) => list.setFilter("zone", e.target.value)}
               className="w-auto min-w-[150px]"
             >
-              <option value="all">All {w.zones}</option>
+              <option value="all">{t("devices.allOf", { what: w.zones })}</option>
               {(zones ?? []).map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.name}
                 </option>
               ))}
-              <option value="none">No {w.zone}</option>
+              <option value="none">{t("devices.noneOf", { what: w.zone })}</option>
             </Select>
           </ListToolbar>
 
@@ -326,24 +326,24 @@ export default function DevicesPage() {
             <BulkBar count={selectedRows.length} onClear={() => setSelected(new Set())}>
               <Button variant="secondary" size="sm" onClick={() => void setEnabled(selectedRows, false).then(() => setSelected(new Set()))}>
                 <Power aria-hidden size={14} />
-                Disable
+                {t("devices.disable")}
               </Button>
               <Button variant="secondary" size="sm" onClick={() => void setEnabled(selectedRows, true).then(() => setSelected(new Set()))}>
                 <Power aria-hidden size={14} />
-                Enable
+                {t("devices.enable")}
               </Button>
               <Button variant="secondary-danger" size="sm" onClick={() => void remove(selectedRows)}>
                 <Trash2 aria-hidden size={14} />
-                Delete…
+                {t("devices.deleteDots")}
               </Button>
             </BulkBar>
           )}
 
           {filtered.length === 0 ? (
-            <NoResults noun="devices" hidden={total} onClear={list.clearAll} />
+            <NoResults noun={t("devices.nounMany")} hidden={total} onClear={list.clearAll} />
           ) : view === "tiles" ? (
             <div className="flex flex-col gap-5">
-              {groupByZone(pageRows, zoneName, `No ${w.zone}`).map((g) => (
+              {groupByZone(pageRows, zoneName, t("devices.noneOf", { what: w.zone })).map((g) => (
                 <section key={g.key} aria-label={g.label} className="flex flex-col gap-2.5">
                   <h2 className="text-sm font-semibold text-ink">{g.label}</h2>
                   <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] gap-3">
@@ -356,7 +356,7 @@ export default function DevicesPage() {
               <TableFooter
                 shown={filtered.length}
                 total={total}
-                noun={["device", "devices"]}
+                noun={[t("devices.nounOne"), t("devices.nounMany")]}
                 page={page}
                 pageCount={pageCount}
                 pageSize={list.pageSize}
@@ -377,14 +377,14 @@ export default function DevicesPage() {
                 onRowEnter={peek.onRowEnter}
                 selection={canWrite ? { selected, onChange: setSelected, rowLabel: (d) => d.name } : undefined}
                 rowMenu={rowMenu}
-                rowMenuLabel={(d) => `Actions for ${d.name}`}
+                rowMenuLabel={(d) => t("devices.actionsFor", { name: d.name })}
                 inactive={(d) => d.status === "disabled"}
                 currentKey={peek.peekId}
               />
               <TableFooter
                 shown={filtered.length}
                 total={total}
-                noun={["device", "devices"]}
+                noun={[t("devices.nounOne"), t("devices.nounMany")]}
                 page={page}
                 pageCount={pageCount}
                 pageSize={list.pageSize}
