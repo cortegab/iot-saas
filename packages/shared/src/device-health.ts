@@ -6,6 +6,7 @@
  */
 import type { DotShape, StatusTone } from "./device-status";
 import type { components } from "./api";
+import { tActive } from "./i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 
@@ -19,11 +20,11 @@ const WEAK_RSSI = -80;
 const LOW_BATTERY_PCT = 15;
 
 export const HEALTH: Record<HealthKey, { label: string; tone: StatusTone; shape: DotShape }> = {
-  healthy: { label: "Healthy", tone: "online", shape: "solid" },
-  faults: { label: "Sensor not answering", tone: "error", shape: "square" },
-  restarted: { label: "Restarted after a fault", tone: "pending", shape: "square" },
-  weak_wifi: { label: "Weak Wi-Fi", tone: "pending", shape: "square" },
-  battery_low: { label: "Battery low", tone: "pending", shape: "square" },
+  healthy: { get label() { return tActive("status.health.healthy"); }, tone: "online", shape: "solid" },
+  faults: { get label() { return tActive("status.health.faults"); }, tone: "error", shape: "square" },
+  restarted: { get label() { return tActive("status.health.restarted"); }, tone: "pending", shape: "square" },
+  weak_wifi: { get label() { return tActive("status.health.weak_wifi"); }, tone: "pending", shape: "square" },
+  battery_low: { get label() { return tActive("status.health.battery_low"); }, tone: "pending", shape: "square" },
 };
 
 type HealthInput = Pick<DeviceResponse, "status" | "connection_state"> &
@@ -43,5 +44,5 @@ export function healthKey(d: HealthInput): HealthKey | null {
 /** "2 sensors not answering" when there are several. */
 export function healthLabel(key: HealthKey, d: Pick<HealthInput, "faults">): string {
   const n = (d.faults ?? []).length;
-  return key === "faults" && n > 1 ? `${n} sensors not answering` : HEALTH[key].label;
+  return key === "faults" && n > 1 ? tActive("status.health.faultsMany", { count: n }) : HEALTH[key].label;
 }

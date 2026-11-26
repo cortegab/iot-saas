@@ -6,6 +6,7 @@
  *
  * Roles rank owner > admin > viewer.
  */
+import { tActive } from "./i18n";
 
 export type Role = "owner" | "admin" | "viewer";
 
@@ -64,4 +65,9 @@ export function assignableRoles(actor: string | null | undefined): Role[] {
   return (["viewer", "admin", "owner"] as Role[]).filter((x) => RANK[x] <= RANK[r]);
 }
 
-export const ROLE_LABEL: Record<Role, string> = { owner: "Owner", admin: "Admin", viewer: "Viewer" };
+// In the language on screen (DESIGN.md §11a).
+export const ROLE_LABEL: Record<Role, string> = {
+  get owner() { return tActive("roles.owner"); },
+  get admin() { return tActive("roles.admin"); },
+  get viewer() { return tActive("roles.viewer"); },
+};

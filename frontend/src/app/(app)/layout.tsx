@@ -11,7 +11,7 @@ import { NoWorkspace } from "@/components/shell/NoWorkspace";
 import { PhoneTabBar, PhoneTopBar, ReconnectingBanner } from "@/components/shell/PhoneNav";
 import { ShellContext } from "@/components/shell/shell-context";
 import { LocaleSync } from "@/hooks/useLanguage";
-import { useT } from "@/lib/i18n";
+import { useLocale, useT } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 /** The app shell (DESIGN.md §4): the full 256px sidebar, with labels, from
@@ -26,6 +26,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const realtime = useRealtime();
   const router = useRouter();
   const t = useT();
+  const locale = useLocale();
   const isFull = useMediaQuery("(min-width: 1280px)");
   const [pinned, setPinned] = useState(false);
   // Wide screens show labels unless this person collapsed them (a per-browser
@@ -95,10 +96,11 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <ShellContext.Provider value={shell}>
       <LocaleSync />
-      {/* Keyed by tenant: switching workspace remounts every hook so nothing
-          from the previous workspace survives (see setCurrentTenantId). */}
+      {/* Keyed by tenant and language: switching workspace remounts every hook
+          so nothing from the previous workspace survives (see
+          setCurrentTenantId), and switching language re-renders every label. */}
       <div
-        key={currentTenantId}
+        key={`${currentTenantId}:${locale}`}
         className={cn(
           "app-shell grid min-h-screen rail:grid-cols-[64px_minmax(0,1fr)]",
           collapsed ? "full:grid-cols-[64px_minmax(0,1fr)]" : "full:grid-cols-[256px_minmax(0,1fr)]",

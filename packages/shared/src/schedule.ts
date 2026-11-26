@@ -6,6 +6,7 @@
  */
 
 import { tzCity, tzOffset } from "./timezones";
+import { activeLocale, tActive } from "./i18n";
 
 export type ScheduleMode = "daily" | "days" | "every" | "monthly" | "custom";
 
@@ -163,11 +164,12 @@ export function clampRepeat(n: number, unit: "min" | "h"): number {
 
 export function daysText(days: number[]): string {
   const k = [...days].sort((a, b) => a - b).join(",");
-  if (k === "1,2,3,4,5") return "weekdays";
-  if (k === "0,6") return "weekends";
-  if (days.length === 7) return "every day";
+  if (k === "1,2,3,4,5") return tActive("schedule.weekdays");
+  if (k === "0,6") return tActive("schedule.weekends");
+  if (days.length === 7) return tActive("schedule.everyDay");
+  const names = activeLocale() === "en" ? DOW : tActive("schedule.dow").split(",");
   return DOW_ORDER.filter((d) => days.includes(d))
-    .map((d) => DOW[d])
+    .map((d) => names[d])
     .join(", ");
 }
 
@@ -176,15 +178,17 @@ export function daysText(days: number[]): string {
  * "on the 1st of each month at 09:00", "weekdays at 08:00 and 20:00". */
 export function cronHuman(cron: string): string {
   const s = scheduleFromCron(cron);
-  if (s.mode === "daily") return `every day at ${s.time}`;
-  if (s.mode === "days") return `${daysText(s.days ?? [])} at ${s.time}`;
-  if (s.mode === "monthly") return `on the ${ordinal(s.dom ?? 1)} of each month at ${s.time}`;
+  const nth = (n: number) => (activeLocale() === "en" ? ordinal(n) : String(n));
+  if (s.mode === "daily") return tActive("schedule.dailyAt", { time: s.time ?? "" });
+  if (s.mode === "days") return tActive("schedule.daysAt", { days: daysText(s.days ?? []), time: s.time ?? "" });
+  if (s.mode === "monthly") return tActive("schedule.monthlyAt", { nth: nth(s.dom ?? 1), time: s.time ?? "" });
   if (s.mode === "every") {
-    if (s.unit === "min") return `every ${s.n} min`;
-    return s.n === 1 ? `every hour at :${pad2(s.at ?? 0)}` : `every ${s.n} hours at :${pad2(s.at ?? 0)}`;
+    if (s.unit === "min") return tActive("schedule.everyMin", { n: String(s.n) });
+    const mm = pad2(s.at ?? 0);
+    return s.n === 1 ? tActive("schedule.everyHourAt", { mm }) : tActive("schedule.everyHoursAt", { n: String(s.n), mm });
   }
   const P = cronParts(cron);
-  if (!P) return "invalid schedule";
+  if (!P) return tActive("schedule.invalid");
   const [, , dom, mon, dow] = P.raw;
   const times =
     P.minutes.length * P.hours.length <= 4
@@ -192,15 +196,16 @@ export function cronHuman(cron: string): string {
       : null;
   let when: string | null = null;
   if (mon === "*") {
-    if (dom === "*" && dow === "*") when = "every day";
+    if (dom === "*" && dow === "*") when = tActive("schedule.everyDay");
     else if (dom === "*") when = daysText(P.dow);
-    else if (dow === "*" && P.dom.length === 1) when = `on the ${ordinal(P.dom[0])} of each month`;
+    else if (dow === "*" && P.dom.length === 1) when = tActive("schedule.monthly", { nth: nth(P.dom[0]) });
   }
   if (times && when) {
     const last = times[times.length - 1];
-    return `${when} at ${times.slice(0, -1).join(", ")}${times.length > 1 ? " and " : ""}${last}`;
+    const list = `${times.slice(0, -1).join(", ")}${times.length > 1 ? tActive("schedule.timesAnd") : ""}${last}`;
+    return tActive("schedule.whenAt", { when, times: list });
   }
-  return "on a custom schedule";
+  return tActive("schedule.custom");
 }
 
 /** A wall-clock moment in a given zone. */
