@@ -28,6 +28,7 @@ class TenantUpdateRequest(BaseModel):
     # a fat-fingered paste can't blow up every alert.
     notification_emails: list[str] | None = Field(default=None, max_length=50)
     timezone: str | None = Field(default=None, max_length=64)
+    locale: Literal["en", "es"] | None = None
 
     @field_validator("notification_emails")
     @classmethod
@@ -128,6 +129,8 @@ class TenantResponse(BaseModel):
     slug: str
     notification_emails: list[str]
     timezone: str
+    # Language of emails to the listed alert addresses (DESIGN.md §11a).
+    locale: Literal["en", "es"] = "en"
     created_at: datetime
 
 

@@ -834,6 +834,51 @@ path (CLAUDE.md §9.1).
 - No jargon without explanation. For example, the Ladder view keeps its PLC terms but is marked
   "expert".
 
+### 11a. Español (second language)
+
+The platform speaks English and Spanish (user decisions 2026-11-25). **Who sees what:** a person's saved
+**Language** (account menu, Settings → You, the app's More) wins; otherwise the browser's or phone's
+language (any `es-*` → Spanish); otherwise English. The saved choice also sets their emails. One
+catalog for both apps (`@iodriven/shared/i18n`); a string missing in Spanish shows in English.
+
+- **Variant:** neutral Latin American Spanish, *tú*, no regionalisms. Sentence case and verbs on
+  buttons, as in English ("Guardar regla", "Agregar dispositivo").
+- **Use the trade's words, not literal translations.** Terms the field says in English stay in English:
+  MQTT, broker, topic, payload, firmware, OTA, Wi-Fi, Bluetooth, BLE, QR, token, API key, webhook,
+  ESP32, Last Will, dashboard, widget.
+- **Numbers and dates** follow the reader's country (Mexico 27.4, Argentina 27,4), with 24-hour time and
+  "25 nov 2026". Units stay as in English (°C, %, kPa).
+- **Glossary** (Full view / Simple view where they differ). The catalog follows this table; each PR
+  lists the terms it adds.
+
+  | English | Español |
+  |---|---|
+  | Workspace | Espacio de trabajo |
+  | Device | Dispositivo |
+  | Device template / device type | Plantilla / tipo de equipo |
+  | Metric / reading | Variable / lectura |
+  | Actuator / output | Actuador / salida |
+  | Relay | Relé |
+  | Rule / automation | Regla / automatización |
+  | Trigger · condition · action | Disparador · condición · acción |
+  | Threshold · hysteresis | Umbral · histéresis |
+  | Hold time (`for_duration`) | Tiempo de permanencia |
+  | Minimum interval (cooldown) | Intervalo mínimo |
+  | Latch until reset · reset latch | Enclavar hasta restablecer · restablecer |
+  | Dashboard · widget | Dashboard · widget |
+  | Zone / area | Zona / área |
+  | Scene | Escena |
+  | Alarm · alert · notification | Alarma · alerta · notificación |
+  | Acknowledge (an alarm) | Reconocer |
+  | Credential · provisioning | Credencial · aprovisionamiento |
+  | Simple view / Full view | Vista simple / Vista completa |
+  | Owner · Admin · Viewer | Propietario · Administrador · Lector |
+  | Monitor · Automate · Configure · Admin (nav groups) | Monitoreo · Automatización · Configuración · Administración |
+
+- **Status words** (§3): Online *En línea* · Offline *Sin conexión* · Never connected *Nunca conectado* ·
+  Armed *Armada* · Latched *Enclavada* · Disabled *Desactivada* · Can't evaluate *No se puede evaluar*.
+- **Never translated:** what people typed (device, rule and workspace names, custom alert messages).
+
 ---
 
 ## 12. Accessibility and responsive
@@ -1196,3 +1241,4 @@ not a permission (the API still enforces roles).
 | 2026-11-25 | §8 **widget titles** (ease-of-use plan C8; §13's "widget titles" backend need): the widget sheet has an optional **Title** (≤ 60 characters, placeholder = the generated *Reading · Device*); a set title replaces the generated one in the widget's header, on the web (the app with its next release). |
 | 2026-11-25 | §15 app **0.8.0** (ease-of-use plan C9): More → **View → Simple view** (the same per-workspace choice as the web); in Simple the Rules tab reads *Automations*, Devices groups by area and rows drop the area, a device's Health keeps only its one word. Everywhere: the device screen opens with Controls, Health leads with its one word (*Overall*), Details say *Device type / Area* in Simple and *Simulated* when it is; admins get **Alerts** (offline and health alerts on/off, where off mutes until turned back on; *Tell me when it's back online*); dashboards show the **Scenes** row and widgets' own titles. Google sign-in in the app waits for the Android OAuth client. |
 | 2026-11-25 | §15a Simple view gaps: a device page keeps **Settings** in Simple for whoever can edit devices (Alerts stay there); **Get started** in Simple has three steps (no template step; *Create an automation*); until the server answers, the view last seen in this browser (else the role's default) is used, so a Viewer no longer sees Full flash first; a switch that fails to save goes back with an error toast. |
+| 2026-11-25 | §11a **Español** (Spanish plan L1): Spanish as a second language, chosen by the browser (any `es-*`) unless the person saved a **Language** (account menu: a radio group under Simple view with *Browser default · English · Español*; Settings → You, applied at once; phone More). Neutral Latin American *tú*, the trade's terms (English ones kept), numbers by the reader's country. L1 translates the shell: nav, account menu, workspace switcher, command palette, phone bars and More. |

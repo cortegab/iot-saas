@@ -31,6 +31,8 @@ class User(Base):
     password_hash: Mapped[str | None] = mapped_column(nullable=True)
     # Google's stable id for this person (an ID token's `sub`), once they sign in with Google.
     google_sub: Mapped[str | None] = mapped_column(nullable=True, unique=True)
+    # "en" or "es" (DESIGN.md §11a); null = follow the browser or phone.
+    locale: Mapped[str | None] = mapped_column(nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

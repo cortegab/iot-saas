@@ -18,6 +18,10 @@ import { Input } from "@/components/ui/Input";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { CopyField } from "@/components/ui/SecretReveal";
 import { TimezoneSelect } from "@/components/ui/TimezoneSelect";
+import { Select } from "@/components/ui/Select";
+import { useLanguage } from "@/hooks/useLanguage";
+import { useT } from "@/lib/i18n";
+import { LOCALES, LOCALE_NAMES, isLocale } from "@iodriven/shared/i18n";
 import { useToast } from "@/components/ui/Toast";
 import { EditorFrame, EditorSection } from "@/components/editor/EditorFrame";
 import { useRecordEditor, type Validation } from "@/components/editor/useRecordEditor";
@@ -272,6 +276,7 @@ export default function WorkspaceSettingsPage() {
               className="max-w-sm"
             />
           </Field>
+          <LanguageField />
         </EditorSection>
 
         <EditorSection id="leave" title="Leave workspace" tone="danger">
@@ -292,5 +297,28 @@ export default function WorkspaceSettingsPage() {
       {dialog}
       {guardDialog}
     </>
+  );
+}
+
+/** Settings → You → Language (DESIGN.md §11a): applies at once, saved on the
+ * account so it follows you to other browsers, the app and your emails. */
+function LanguageField() {
+  const t = useT();
+  const { choice, setChoice } = useLanguage();
+  return (
+    <Field label={t("language.label")} hint={t("language.hint")}>
+      <Select
+        value={choice ?? ""}
+        onChange={(e) => void setChoice(isLocale(e.target.value) ? e.target.value : null)}
+        className="max-w-sm"
+      >
+        <option value="">{t("language.browser")}</option>
+        {LOCALES.map((l) => (
+          <option key={l} value={l} lang={l}>
+            {LOCALE_NAMES[l]}
+          </option>
+        ))}
+      </Select>
+    </Field>
   );
 }
