@@ -1040,8 +1040,14 @@ not a permission (the API still enforces roles).
 - **Devices in Simple:** tiles grouped by zone (§8 *Device tiles*): each tile has the name, its state
   in words, the main reading and a Switch for its first on/off output. The table is one toggle away
   in Full.
-- **A device page in Simple:** Overview and Rules only. Controls lead, readings follow, Health shows
-  its one word; Details, Commands, Settings, wiring and MQTT ids are hidden.
+- **A device page in Simple:** Overview and Rules, plus Settings for whoever can edit devices (it is
+  the one place a device and its alerts are changed; a view never takes that away). Controls lead,
+  readings follow, Health shows its one word; Details, Commands, wiring and MQTT ids are hidden.
+- **Get started in Simple:** three steps, starting at *Connect a device* (Add device makes the
+  device's own type, and *No board yet* needs none); no template step, and *Create an automation*.
+- **Before the server answers:** the view last seen in this browser for that workspace, else the
+  role's default, so nothing shows and then vanishes. A switch that can't be saved goes back with an
+  error toast.
 - **Rules in Simple ("Automations"):** the list and each rule's sentence; the editor opens on Basics
   and the sentence. Hidden: the Ladder view and the Behaviour tab's numbers, which read as one line
   ("Waits 10 s, then acts at most once a minute.").
@@ -1189,3 +1195,4 @@ not a permission (the API still enforces roles).
 | 2026-11-25 | §8 device **Alerts** (ease-of-use plan C6): the device's Settings tab opens with an *Alerts* section, applied at once (no save bar): **Offline and health alerts** On / Mute for 1 hour / 1 day / until I turn them back on (hint says until when, and that rules still run), and **Back online** (*Tell me when it's back online*: an info notification, which never pushes). A muted device shows an *Alerts muted* tag beside its status. |
 | 2026-11-25 | §8 **widget titles** (ease-of-use plan C8; §13's "widget titles" backend need): the widget sheet has an optional **Title** (≤ 60 characters, placeholder = the generated *Reading · Device*); a set title replaces the generated one in the widget's header, on the web (the app with its next release). |
 | 2026-11-25 | §15 app **0.8.0** (ease-of-use plan C9): More → **View → Simple view** (the same per-workspace choice as the web); in Simple the Rules tab reads *Automations*, Devices groups by area and rows drop the area, a device's Health keeps only its one word. Everywhere: the device screen opens with Controls, Health leads with its one word (*Overall*), Details say *Device type / Area* in Simple and *Simulated* when it is; admins get **Alerts** (offline and health alerts on/off, where off mutes until turned back on; *Tell me when it's back online*); dashboards show the **Scenes** row and widgets' own titles. Google sign-in in the app waits for the Android OAuth client. |
+| 2026-11-25 | §15a Simple view gaps: a device page keeps **Settings** in Simple for whoever can edit devices (Alerts stay there); **Get started** in Simple has three steps (no template step; *Create an automation*); until the server answers, the view last seen in this browser (else the role's default) is used, so a Viewer no longer sees Full flash first; a switch that fails to save goes back with an error toast. |

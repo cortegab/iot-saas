@@ -58,6 +58,11 @@ export const test = base.extend<{ ruleUnderTest: RuleFixture }>({
     await page.getByLabel("Email").fill(email);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    // An account in several workspaces chooses one first: the first, the
+    // same one login() puts in X-Tenant-Id (memberships[0]).
+    const chooser = page.getByRole("list", { name: "Workspaces" });
+    await Promise.race([chooser.waitFor({ timeout: 15_000 }).catch(() => {}), landed(page).catch(() => {})]);
+    if (await chooser.isVisible()) await chooser.getByRole("button").first().click();
     await landed(page);
     await use(page);
   },
