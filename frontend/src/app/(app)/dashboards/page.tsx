@@ -28,10 +28,10 @@ import { ApiRequestError } from "@/lib/api-client";
 import { widgetSummary } from "@/lib/dashboard-summary";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type DashboardResponse = components["schemas"]["DashboardResponse"];
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** Dashboards are shared by the workspace (DESIGN.md §8): every member sees
  * all of them and, until permissions by role are decided, may change them. A row peeks; a dashboard is
@@ -63,17 +63,17 @@ export default function DashboardsPage() {
       const created = await api.post<DashboardResponse>("/dashboards", { name: `${d.name} copy`.slice(0, 100) });
       await api.patch(`/dashboards/${created.id}`, { layout: d.layout as unknown as Record<string, unknown>[] });
       await mutate();
-      toast({ title: "Dashboard duplicated", detail: `${created.name}: ${plural(d.layout.length, "widget")} copied.` });
+      toast({ title: tr("dashboards.duplicatedToast"), detail: tr("lists.dashboards.duplicatedDetail", { name: created.name, widgets: tr("app.screens.widgets", { count: d.layout.length }) }) });
       peek.setPeek(created.id);
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't duplicate the dashboard", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("lists.dashboards.duplicateFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
   async function remove(d: DashboardResponse) {
-    const ok = await confirm(`${defaultNote(d)}Its ${plural(d.layout.length, "widget")} are removed. Devices and their data aren't affected.`, {
-      title: `Delete ${d.name}?`,
-      confirmLabel: "Delete dashboard",
+    const ok = await confirm(`${defaultNote(d)}${tr("lists.dashboards.deleteBody")}`, {
+      title: tr("dashboards.deleteTitle", { name: d.name }),
+      confirmLabel: tr("dashboards.deleteConfirm"),
     });
     if (!ok) return;
     try {
@@ -82,14 +82,14 @@ export default function DashboardsPage() {
       if (peek.peekId === d.id) peek.close();
       toast({ title: `${d.name} deleted` });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete the dashboard", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("dashboards.deleteFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
   const columns: DataColumn<DashboardResponse>[] = [
     {
       id: "name",
-      header: "Dashboard",
+      header: tr("lists.dashboards.dashboard"),
       sortable: true,
       cell: (d) => (
         <NameCell
@@ -105,17 +105,17 @@ export default function DashboardsPage() {
         />
       ),
     },
-    { id: "widgets", header: "Widgets", sortable: true, numeric: true, cell: (d) => d.layout.length },
+    { id: "widgets", header: tr("lists.dashboards.widgets"), sortable: true, numeric: true, cell: (d) => d.layout.length },
     {
       id: "devices",
-      header: "Devices",
+      header: tr("lists.dashboards.devices"),
       numeric: true,
       hideOnPhone: true,
       cell: (d) => new Set(d.layout.map((w) => w.device_id)).size,
     },
     {
       id: "updated",
-      header: "Updated",
+      header: tr("lists.dashboards.updated"),
       sortable: true,
       numeric: true,
       cell: (d) => <span className="text-ink-muted">{timeAgo(d.updated_at)}</span>,
@@ -129,21 +129,21 @@ export default function DashboardsPage() {
     canWrite
       ? [
           [
-            { label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/dashboards/${d.id}`) },
-            { label: "Edit layout", icon: <LayoutGrid size={15} />, onClick: () => router.push(`/dashboards/${d.id}?edit=1`) },
+            { label: tr("lists.dashboards.open"), icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/dashboards/${d.id}`) },
+            { label: tr("lists.dashboards.editLayout"), icon: <LayoutGrid size={15} />, onClick: () => router.push(`/dashboards/${d.id}?edit=1`) },
             defaults.item(d),
-            { label: "Duplicate", icon: <Copy size={15} />, onClick: () => void duplicate(d) },
+            { label: tr("lists.dashboards.duplicate"), icon: <Copy size={15} />, onClick: () => void duplicate(d) },
           ],
-          [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(d) }],
+          [{ label: tr("dashboards.deleteDots"), icon: <Trash2 size={15} />, danger: true, onClick: () => void remove(d) }],
         ]
-      : [[{ label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/dashboards/${d.id}`) }, defaults.item(d)]];
+      : [[{ label: tr("lists.dashboards.open"), icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/dashboards/${d.id}`) }, defaults.item(d)]];
 
   const chips: FilterChip[] = list.q ? [{ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") }] : [];
   const total = dashboards?.length ?? 0;
   const newButton = canWrite ? (
     <Link href="/dashboards/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
-      New dashboard
+      {tr("start.newDashboard")}
     </Link>
   ) : undefined;
 
@@ -153,22 +153,22 @@ export default function DashboardsPage() {
           holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
         inline
-        title="Dashboards"
-        description="Views of live readings and controls, shared with everyone in the workspace."
+        title={tr("dashboards.title")}
+        description={tr("lists.dashboards.description")}
         actions={!error && dashboards && total > 0 ? undefined : newButton}
       />
 
       {error ? (
         <ErrorState
-          title="Couldn't load dashboards"
-          message={error instanceof ApiRequestError ? error.message : "The API didn't respond."}
+          title={tr("lists.dashboards.loadFailed")}
+          message={error instanceof ApiRequestError ? error.message : tr("devices.apiDown")}
           onRetry={() => void mutate()}
         />
       ) : isLoading || !dashboards ? (
         <TableSkeleton rows={3} columns={4} />
       ) : (
         <ListWithPeek
-          label="Dashboard"
+          label={tr("lists.dashboards.dashboard")}
           onClose={peek.close}
           nav={peek.nav}
           peek={
@@ -187,21 +187,21 @@ export default function DashboardsPage() {
           {total === 0 ? (
             <FirstUse
               icon={<LayoutDashboard aria-hidden size={26} />}
-              title="No dashboards yet"
-              description="Create one and add value cards, charts, gauges and controls for the devices you watch most."
+              title={tr("lists.dashboards.emptyTitle")}
+              description={tr("lists.dashboards.emptyBody")}
               action={newButton}
-              readOnlyNote="Ask an owner or admin to make the first one."
+              readOnlyNote={tr("lists.dashboards.askAdmin")}
             />
           ) : (
             <>
-              <ListToolbar query={list.q} onQuery={list.setQuery} placeholder="Search dashboards" actions={newButton} />
+              <ListToolbar query={list.q} onQuery={list.setQuery} placeholder={tr("lists.dashboards.search")} actions={newButton} />
               <FilterChips chips={chips} onClearAll={list.clearAll} />
               {filtered.length === 0 ? (
-                <NoResults noun="dashboards" onClear={list.clearAll} />
+                <NoResults noun={tr("lists.dashboards.nounMany")} onClear={list.clearAll} />
               ) : (
                 <div className="flex flex-col gap-2">
                   <DataTable
-                    label="Dashboards"
+                    label={tr("dashboards.title")}
                     columns={columns}
                     rows={pageRows}
                     rowKey={(d) => d.id}
@@ -216,7 +216,7 @@ export default function DashboardsPage() {
                   <TableFooter
                     shown={filtered.length}
                     total={total}
-                    noun={["dashboard", "dashboards"]}
+                    noun={[tr("lists.dashboards.nounOne"), tr("lists.dashboards.nounMany")]}
                     page={page}
                     pageCount={pageCount}
                     pageSize={list.pageSize}

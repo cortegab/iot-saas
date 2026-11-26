@@ -26,6 +26,7 @@ import { ApiRequestError } from "@/lib/api-client";
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type MemberResponse = components["schemas"]["MemberResponse"];
 type InvitationResponse = components["schemas"]["InvitationResponse"];
@@ -87,7 +88,7 @@ export default function MembersPage() {
   const columns: DataColumn<Row>[] = [
     {
       id: "name",
-      header: "Member",
+      header: tr("lists.members.member"),
       sortable: true,
       cell: (x) => (
         <NameCell
@@ -109,18 +110,18 @@ export default function MembersPage() {
     },
     {
       id: "role",
-      header: "Role",
+      header: tr("lists.members.role"),
       sortable: true,
       cell: (x) => (
         <span className="flex flex-wrap items-center gap-1.5">
           <Tag>{roleLabel(x.role)}</Tag>
-          {x.kind === "invite" && <Badge tone="pending" shape="hollow" label="Invited" />}
+          {x.kind === "invite" && <Badge tone="pending" shape="hollow" label={tr("lists.members.invited")} />}
         </span>
       ),
     },
     {
       id: "joined",
-      header: "Joined",
+      header: tr("lists.members.joined"),
       sortable: true,
       hideOnPhone: true,
       cell: (x) =>
@@ -135,17 +136,17 @@ export default function MembersPage() {
   const rowMenu = (x: Row): DropdownMenuItem[][] => {
     if (!canManage) return [];
     // Leaving the workspace lives in Workspace settings, not here.
-    if (x.you) return [[{ label: "Change your role", icon: <Users size={15} />, onClick: () => router.push(`/members/${x.id}`) }]];
+    if (x.you) return [[{ label: tr("lists.members.changeYourRole"), icon: <Users size={15} />, onClick: () => router.push(`/members/${x.id}`) }]];
     if (x.kind === "invite") {
       return [
-        [{ label: "Resend invite", icon: <Send size={15} />, onClick: () => void resend(x.invite) }],
-        [{ label: "Cancel invite…", icon: <Trash2 size={15} />, danger: true, onClick: () => void cancelInvite(x.invite) }],
+        [{ label: tr("lists.members.resend"), icon: <Send size={15} />, onClick: () => void resend(x.invite) }],
+        [{ label: tr("lists.members.cancelInvite"), icon: <Trash2 size={15} />, danger: true, onClick: () => void cancelInvite(x.invite) }],
       ];
     }
     const ownerLocked = x.role === "owner" && myRole !== "owner";
     return [
-      [{ label: "Change role", icon: <Users size={15} />, onClick: () => router.push(`/members/${x.id}`) }],
-      ...(ownerLocked ? [] : [[{ label: "Remove from workspace…", icon: <Trash2 size={15} />, danger: true, onClick: () => void removeMember(x.member) }]]),
+      [{ label: tr("lists.members.changeRole"), icon: <Users size={15} />, onClick: () => router.push(`/members/${x.id}`) }],
+      ...(ownerLocked ? [] : [[{ label: tr("lists.members.remove"), icon: <Trash2 size={15} />, danger: true, onClick: () => void removeMember(x.member) }]]),
     ];
   };
 
@@ -153,7 +154,7 @@ export default function MembersPage() {
   const inviteButton = canManage ? (
     <Link href="/members/invite" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
-      Invite
+      {tr("lists.members.invite")}
     </Link>
   ) : null;
   const peeked = peek.peekId ? rows.find((x) => x.id === peek.peekId) : undefined;
@@ -164,17 +165,17 @@ export default function MembersPage() {
           holds it only while there's no toolbar (loading, error). */}
       <PageHeader
         inline
-        title="Members"
-        description="People in this workspace and what they can do."
+        title={tr("lists.members.title")}
+        description={tr("lists.members.description")}
         actions={!error && members ? undefined : inviteButton}
       />
       {error ? (
-        <ErrorState title="Couldn't load members" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
+        <ErrorState title={tr("lists.members.loadFailed")} message={error instanceof ApiRequestError ? error.message : tr("devices.apiDown")} onRetry={() => void mutate()} />
       ) : isLoading || !members ? (
         <TableSkeleton rows={4} columns={3} />
       ) : (
         <ListWithPeek
-          label="Member"
+          label={tr("lists.members.member")}
           onClose={peek.close}
           nav={peek.nav}
           peek={
@@ -193,18 +194,18 @@ export default function MembersPage() {
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
-            placeholder="Search members"
+            placeholder={tr("lists.members.search")}
             actions={inviteButton}
             quick={
               canManage
                 ? {
-                    label: "Show",
+                    label: tr("lists.members.show"),
                     value: list.filters.show,
                     onChange: (v) => list.setFilter("show", v),
                     options: [
-                      { value: "all", label: "All", count: counts.all },
-                      { value: "active", label: "Active", count: counts.active, tone: "online", hint: "Members of this workspace" },
-                      { value: "invited", label: "Invited", count: counts.invited, tone: "pending", shape: "hollow", hint: "Invited, not joined yet" },
+                      { value: "all", label: tr("devices.all"), count: counts.all },
+                      { value: "active", label: tr("lists.members.active"), count: counts.active, tone: "online", hint: tr("lists.members.activeHint") },
+                      { value: "invited", label: tr("lists.members.invited"), count: counts.invited, tone: "pending", shape: "hollow", hint: tr("lists.members.invitedHint") },
                     ],
                   }
                 : undefined
@@ -212,11 +213,11 @@ export default function MembersPage() {
           />
           <FilterChips chips={chips} onClearAll={list.clearAll} />
           {filtered.length === 0 ? (
-            <NoResults noun="members" onClear={list.clearAll} />
+            <NoResults noun={tr("lists.members.nounMany")} onClear={list.clearAll} />
           ) : (
             <div className="flex flex-col gap-2">
               <DataTable
-                label="Members"
+                label={tr("lists.members.title")}
                 columns={columns}
                 rows={pageRows}
                 rowKey={(x) => x.id}
@@ -231,7 +232,7 @@ export default function MembersPage() {
               <TableFooter
                 shown={filtered.length}
                 total={rows.length}
-                noun={["member", "members"]}
+                noun={[tr("lists.members.nounOne"), tr("lists.members.nounMany")]}
                 page={page}
                 pageCount={pageCount}
                 pageSize={list.pageSize}

@@ -1,5 +1,6 @@
 import type { StatusTone } from "@/components/ui/Badge";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 export type ApiKey = components["schemas"]["ApiKeyResponse"];
 export type KeyStatus = "active" | "expired" | "revoked";
@@ -11,5 +12,9 @@ export function keyStatus(k: Pick<ApiKey, "revoked_at" | "expires_at">, now: num
   return "active";
 }
 
-export const KEY_STATUS_LABEL: Record<KeyStatus, string> = { active: "Active", expired: "Expired", revoked: "Revoked" };
+export const KEY_STATUS_LABEL: Record<KeyStatus, string> = {
+  get active() { return tr("lists.keys.active"); },
+  get expired() { return tr("lists.keys.expired"); },
+  get revoked() { return tr("lists.keys.revoked"); },
+};
 export const KEY_STATUS_TONE: Record<KeyStatus, StatusTone> = { active: "online", expired: "pending", revoked: "unknown" };
