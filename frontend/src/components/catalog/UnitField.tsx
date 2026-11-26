@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import { Combobox, type ComboboxGroup } from "@/components/ui/Combobox";
 import { UNIT_CATEGORIES, unitLabel } from "@/lib/units";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 /** The Metrics-tab Unit field: the `Combobox` bound to the categorized unit
  * catalog, but with `allowCustomValue` so an author can still type a unit
@@ -39,9 +40,9 @@ export function UnitField({
       groups={groups}
       allowCustomValue
       maxLength={32}
-      placeholder="Unit, e.g. °C"
-      searchPlaceholder="Search units…"
-      emptyLabel="No matching units"
+      placeholder={tr("tpls.unitPlaceholder")}
+      searchPlaceholder={tr("tpls.searchUnits")}
+      emptyLabel={tr("tpls.noUnits")}
       renderValue={unitLabel}
       className={className}
     />

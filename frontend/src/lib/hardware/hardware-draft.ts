@@ -10,6 +10,7 @@
 import { hasInternalPull, pinName, pinProblem, preferredPins, resolveModel } from "@/lib/hardware/board-pins";
 import { findDriver, runsOn, type DriverCatalog, type DriverSpec } from "@/lib/hardware/driver-catalog";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type HardwareConfig = components["schemas"]["HardwareConfig"];
 type HardwareBinding = components["schemas"]["HardwareBinding"];
@@ -181,8 +182,8 @@ export function hardwareToRequest(
 export function usedPins(h: HardwareDraft): { pin: number; path: string; owner: string }[] {
   const out: { pin: number; path: string; owner: string }[] = [];
   if (h.i2c) {
-    out.push({ pin: h.i2c.sda, path: "hardware.i2c.sda", owner: "the I2C bus (SDA)" });
-    out.push({ pin: h.i2c.scl, path: "hardware.i2c.scl", owner: "the I2C bus (SCL)" });
+    out.push({ pin: h.i2c.sda, path: "hardware.i2c.sda", owner: tr("hwv.busSda") });
+    out.push({ pin: h.i2c.scl, path: "hardware.i2c.scl", owner: tr("hwv.busScl") });
   }
   for (const kind of ["inputs", "outputs"] as const) {
     h[kind].forEach((b, i) => {
@@ -193,8 +194,6 @@ export function usedPins(h: HardwareDraft): { pin: number; path: string; owner: 
   }
   return out;
 }
-
-const article = (word: string) => (/^[aeiou]/i.test(word) ? "an" : "a");
 
 /** Errors (block save) and warnings (explain a risk), keyed by field path
  * under `hardware.` — the same checks the firmware makes at boot, plus the
@@ -210,18 +209,18 @@ export function validateHardware(
   if (!h) return { errors, warnings };
   const drivers = catalog?.drivers;
   const model = resolveModel(catalog?.models, h.board);
-  if (catalog && !model) errors["hardware.board"] = `This firmware has no “${h.board}” board. Pick one.`;
+  if (catalog && !model) errors["hardware.board"] = tr("hwv.noBoard", { board: h.board });
 
   // Pins: each suits its role on this board, and none is used twice.
   const seen = new Map<number, string>();
   for (const u of usedPins(h)) {
     const other = seen.get(u.pin);
-    if (other) errors[u.path] = `GPIO ${u.pin} is also used by ${other}.`;
+    if (other) errors[u.path] = tr("hwv.pinShared", { pin: u.pin, other });
     else seen.set(u.pin, u.owner);
   }
 
   // The I2C bus: there when an I2C driver is, on pins that can carry it.
-  if (usesI2c(h, catalog) && !h.i2c) errors["hardware.i2c.sda"] = "Pick the I2C bus pins.";
+  if (usesI2c(h, catalog) && !h.i2c) errors["hardware.i2c.sda"] = tr("hwv.pickBus");
   if (h.i2c && model) {
     for (const line of ["sda", "scl"] as const) {
       const path = `hardware.i2c.${line}`;
@@ -238,28 +237,27 @@ export function validateHardware(
       const addr = i2cAddress(b, spec);
       const other = addresses.get(addr);
       if (other)
-        errors[`hardware.${kind}.${i}.params.address`] = `Address ${addr} is also used by ${other}. Set the other address on one of them (e.g. AD0 to 3.3 V).`;
+        errors[`hardware.${kind}.${i}.params.address`] = tr("hwv.addressShared", { address: String(addr), other });
       else addresses.set(addr, `${kind === "inputs" ? "input" : "output"} ${i + 1}`);
     });
   }
 
   for (const kind of ["inputs", "outputs"] as const) {
     const list = kind === "inputs" ? rows.metrics : rows.actuators;
-    const noun = kind === "inputs" ? "metric" : "actuator";
     const fed = new Map<string, number>();
     h[kind].forEach((b, i) => {
       const p = `hardware.${kind}.${i}.`;
       const spec = findDriver(drivers, b.driver);
-      if (drivers && !spec) errors[p + "driver"] = `This firmware has no “${b.driver}” driver. Pick another, or update the firmware.`;
+      if (drivers && !spec) errors[p + "driver"] = tr("hwv.noDriver", { driver: b.driver });
       else if (spec && spec.kind !== (kind === "inputs" ? "input" : "output"))
-        errors[p + "driver"] = `${spec.label} is ${article(spec.kind)} ${spec.kind}, not ${kind === "inputs" ? "an input" : "an output"}.`;
+        errors[p + "driver"] = tr(kind === "inputs" ? "hwv.notInput" : "hwv.notOutput", { part: spec.label });
       else if (spec && model && !runsOn(spec, model))
-        errors[p + "driver"] = `The ${model.label}'s firmware doesn't include ${spec.label}. Pick another part, or another board.`;
+        errors[p + "driver"] = tr("hwv.notOnBoard", { board: model.label, part: spec.label });
 
       for (const role of spec?.pins ?? []) {
         const path = `${p}pins.${role.role}`;
         const pin = b.pins[role.role];
-        if (pin == null) errors[path] = "Pick a pin.";
+        if (pin == null) errors[path] = tr("hwv.pickPin");
         else if (!errors[path] && model) {
           const problem = pinProblem(model, role.needs, pin);
           if (problem) errors[path] = problem;
@@ -272,27 +270,27 @@ export function validateHardware(
         if (raw === undefined || raw === "") continue;
         if (param.type === "int" || param.type === "float") {
           const n = Number(raw);
-          if (typeof raw === "boolean" || !Number.isFinite(n)) errors[path] = "Enter a number.";
-          else if (param.type === "int" && !Number.isInteger(n)) errors[path] = "Enter a whole number.";
+          if (typeof raw === "boolean" || !Number.isFinite(n)) errors[path] = tr("hwv.number");
+          else if (param.type === "int" && !Number.isInteger(n)) errors[path] = tr("hwv.whole");
           else if ((param.min != null && n < param.min) || (param.max != null && n > param.max))
-            errors[path] = `Enter a number from ${param.min} to ${param.max}.`;
+            errors[path] = tr("hwv.range", { min: String(param.min), max: String(param.max) });
         } else if (param.type === "enum" && !param.options?.includes(String(raw))) {
-          errors[path] = `Pick one of ${param.options?.join(", ")}.`;
+          errors[path] = tr("hwv.oneOf", { options: param.options?.join(", ") ?? "" });
         }
       }
       // Pins 34–39 on the ESP32 have no internal pull resistor; the firmware
       // refuses a pull on them (firmware/src/drivers/digital_in.cpp).
       const pullPin = b.pins.pin;
       if (model && b.params.pull !== undefined && b.params.pull !== "none" && pullPin != null && !hasInternalPull(model.chip, pullPin))
-        errors[`${p}params.pull`] = `GPIO ${pullPin} has no internal pull resistor. Set it to none and fit a 10 kΩ resistor.`;
+        errors[`${p}params.pull`] = tr("hwv.noPull", { pin: pullPin });
 
       const channels = spec?.channels ?? Object.keys(b.channels).map((key) => ({ key, label: key }) as DriverSpec["channels"][number]);
-      if (kind === "outputs" && !b.channels.value) errors[`${p}channels.value`] = "Pick the actuator it drives.";
+      if (kind === "outputs" && !b.channels.value) errors[`${p}channels.value`] = tr("hwv.pickActuator");
       // An input that feeds nothing is read and thrown away: the board logs
       // "no input bound" and nothing reaches the platform. A warning, not an
       // error, so half-done wiring can still be saved.
       if (kind === "inputs" && channels.length > 0 && !channels.some((ch) => b.channels[ch.key]))
-        warnings[`${p}channels.${channels[0].key}`] = "This input feeds no metric, so nothing from it is published. Pick the metric it reads.";
+        warnings[`${p}channels.${channels[0].key}`] = tr("hwv.feedsNothing");
       for (const ch of channels) {
         const path = `${p}channels.${ch.key}`;
         const ref = b.channels[ch.key];
@@ -300,19 +298,23 @@ export function validateHardware(
         const row = list.find((r) => r.uid === ref);
         if (!row) {
           errors[path] = ref.startsWith(MISSING)
-            ? `“${ref.slice(MISSING.length)}” isn't ${article(noun)} ${noun} of this template any more. Pick another.`
-            : `The ${noun} it ${kind === "inputs" ? "fed" : "drove"} was removed. Pick another.`;
+            ? tr(kind === "inputs" ? "hwv.goneMetric" : "hwv.goneActuator", { key: ref.slice(MISSING.length) })
+            : tr(kind === "inputs" ? "hwv.removedMetric" : "hwv.removedActuator");
           continue;
         }
         if (fed.has(row.uid)) {
-          errors[path] = `${row.name || row.key} is already ${kind === "inputs" ? "read by" : "driven by"} ${kind.slice(0, -1)} ${fed.get(row.uid)! + 1}.`;
+          errors[path] = tr(kind === "inputs" ? "hwv.alreadyRead" : "hwv.alreadyDriven", { name: row.name || row.key, n: fed.get(row.uid)! + 1 });
           continue;
         }
         fed.set(row.uid, i);
         if (kind === "inputs" && ch.data_type === "bool" && row.type !== "bool")
-          warnings[path] = `This reads on/off, but ${row.name || row.key} is a number. It will read 0 or 1.`;
+          warnings[path] = tr("hwv.boolToNumber", { name: row.name || row.key });
         if (kind === "outputs" && ch.value_type && row.type !== ch.value_type)
-          warnings[path] = `This output takes ${ch.value_type === "bool" ? "on/off" : ch.value_type === "float" ? "a number" : "text"}, but ${row.name || row.key} sends ${row.type === "bool" ? "on/off" : row.type === "float" ? "a number" : "a choice"}.`;
+          warnings[path] = tr("hwv.typeMismatch", {
+            takes: tr(ch.value_type === "bool" ? "hwv.onOff" : ch.value_type === "float" ? "hwv.aNumber" : "hwv.text"),
+            name: row.name || row.key,
+            sends: tr(row.type === "bool" ? "hwv.onOff" : row.type === "float" ? "hwv.aNumber" : "hwv.aChoice"),
+          });
       }
     });
   }
@@ -339,7 +341,7 @@ export function wiringGuide(
   if (h.i2c) {
     // Name what's on the bus: "I2C bus (MPU6050 / GY-521 motion)".
     const onBus = [...new Set([...h.inputs, ...h.outputs].map((b) => findDriver(catalog?.drivers, b.driver)).filter((s) => s?.bus === "i2c").map((s) => s!.label))];
-    const to = onBus.length ? `I2C bus (${onBus.join(", ")})` : "I2C bus";
+    const to = onBus.length ? tr("hwv.busWith", { parts: onBus.join(", ") }) : tr("hwv.busName");
     row(h.i2c.sda, to, "SDA");
     row(h.i2c.scl, to, "SCL");
   }
@@ -364,7 +366,7 @@ export function wiringGuide(
         label: model.label,
         lines: [
           ...(model.notes ?? []),
-          `To set up Wi-Fi again, hold ${model.reset.label} for 5 seconds while the board is running.`,
+          tr("hwv.resetWifi", { button: model.reset.label }),
         ],
       }
     : null;

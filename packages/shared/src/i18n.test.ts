@@ -14,7 +14,9 @@ describe("catalogs", () => {
   });
   it("Spanish strings use only the English placeholders (some drop a noun Spanish doesn't need)", () => {
     // Placeholders only: "{name}" or "{name, plural, …}", not a plural branch.
-    const names = (s: string) => [...s.matchAll(/\{(\w+)\s*[,}]/g)].map((m) => m[1]).sort();
+    // Case aside: callers that pass {noun} also pass {Noun}, for the language
+    // whose word order puts it first ("{Noun} sections", "{Noun} anterior").
+    const names = (s: string) => [...s.matchAll(/\{(\w+)\s*[,}]/g)].map((m) => m[1].toLowerCase()).sort();
     const enMap = new Map(leaves(en).map((k) => [k, k.split(".").reduce<unknown>((n, p) => (n as Record<string, unknown>)[p], en) as string]));
     for (const key of leaves(es)) {
       const esText = key.split(".").reduce<unknown>((n, p) => (n as Record<string, unknown>)[p], es) as string;

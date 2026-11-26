@@ -27,10 +27,10 @@ import { ApiRequestError } from "@/lib/api-client";
 import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** DESIGN.md §6 catalog standard for device templates. */
 export default function DeviceTemplatesPage() {
@@ -76,11 +76,11 @@ export default function DeviceTemplatesPage() {
       await api.patch(`/catalog/${e.id}`, { status: enabled ? "active" : "disabled" });
       await mutate();
       toast({
-        title: `${e.name} ${enabled ? "enabled" : "disabled"}`,
-        detail: enabled ? "Available in Add device again." : "Hidden from Add device. Existing devices keep working.",
+        title: tr(enabled ? "tlist.enabledToast" : "tlist.disabledToast", { template: e.name }),
+        detail: enabled ? tr("tlist.enabledDetail") : tr("tlist.disabledDetail"),
       });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't update the template", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("tlist.updateFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -91,38 +91,42 @@ export default function DeviceTemplatesPage() {
       const n = e.device_count;
       const disable = e.status === "active";
       const go = await confirm(
-        `${plural(n, "device uses", "devices use")} this template, so it can't be deleted. Move ${n > 1 ? "them" : "it"} to another template or delete ${n > 1 ? "them" : "it"} first${disable ? ", or disable the template so it can't be picked for new devices" : ""}.`,
-        { title: `${e.name} is in use`, confirmLabel: disable ? "Disable instead" : "View devices", cancelLabel: "Close", danger: false },
+        tr(disable ? "tlist.inUseDisable" : "tlist.inUse", { count: n }),
+        { title: tr("tpl.inUseTitle", { template: e.name }), confirmLabel: disable ? tr("tlist.disableInstead") : tr("tpl.viewDevices"), cancelLabel: tr("tpl.close"), danger: false },
       );
       if (!go) return false;
       if (disable) await setEnabled(e, false);
       else router.push(`/devices?template=${e.id}`);
       return false;
     }
-    const ok = await confirm("No devices use it. This can't be undone.", {
-      title: `Delete ${e.name}?`,
-      confirmLabel: "Delete template",
+    const ok = await confirm(tr("tpl.deleteBody"), {
+      title: tr("tpl.deleteTitle", { template: e.name }),
+      confirmLabel: tr("tpl.deleteConfirm"),
     });
     if (!ok) return false;
     try {
       await api.delete(`/catalog/${e.id}`);
       await mutate();
-      toast({ title: `${e.name} deleted` });
+      toast({ title: tr("tpl.deleted", { template: e.name }) });
       return true;
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete the template", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("tpl.deleteFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
       return false;
     }
   }
 
   /** demo H: what it runs on, under the name. */
   const runsOnLine = (e: CatalogEntryResponse) =>
-    e.runs_on === "generic_firmware" ? `Our firmware${e.hardware ? ` · ${boardLabel.get(e.hardware.board) ?? e.hardware.board}` : ""}` : "Custom firmware";
+    e.runs_on === "generic_firmware"
+      ? e.hardware
+        ? tr("tlist.ourFirmwareOn", { board: boardLabel.get(e.hardware.board) ?? e.hardware.board })
+        : tr("tpl.ourFirmware")
+      : tr("tpl.customFirmware");
 
   const columns: DataColumn<CatalogEntryResponse>[] = [
     {
       id: "name",
-      header: "Template",
+      get header() { return tr("tlist.template"); },
       sortable: true,
       cell: (e) => (
         <NameCell
@@ -131,27 +135,27 @@ export default function DeviceTemplatesPage() {
               {e.name}
             </Link>
           }
-          trailing={e.is_legacy ? <Tag size="sm">Legacy</Tag> : undefined}
+          trailing={e.is_legacy ? <Tag size="sm">{tr("tlist.legacy")}</Tag> : undefined}
           sub={runsOnLine(e)}
         />
       ),
     },
-    { id: "metrics", header: "Metrics", sortable: true, numeric: true, hideOnPhone: true, priority: 2, fold: (e) => plural(e.metrics.length, "metric"), cell: (e) => e.metrics.length },
-    { id: "actuators", header: "Actuators", sortable: true, numeric: true, hideOnPhone: true, priority: 3, fold: (e) => plural(e.actuators.length, "actuator"), cell: (e) => e.actuators.length },
-    { id: "devices", header: "Devices", sortable: true, numeric: true, cell: (e) => plural(e.device_count, "device") },
+    { id: "metrics", get header() { return tr("tlist.metrics"); }, sortable: true, numeric: true, hideOnPhone: true, priority: 2, fold: (e) => tr("tlist.metricsFold", { count: e.metrics.length }), cell: (e) => e.metrics.length },
+    { id: "actuators", get header() { return tr("tlist.actuators"); }, sortable: true, numeric: true, hideOnPhone: true, priority: 3, fold: (e) => tr("tlist.actuatorsFold", { count: e.actuators.length }), cell: (e) => e.actuators.length },
+    { id: "devices", get header() { return tr("tlist.devices"); }, sortable: true, numeric: true, cell: (e) => tr("tpl.devices", { count: e.device_count }) },
     {
       id: "status",
-      header: "Status",
+      get header() { return tr("tlist.status"); },
       cell: (e) =>
-        e.status === "active" ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />,
+        e.status === "active" ? <Badge tone="online" variant="dot" label={tr("tpl.enabled")} /> : <Badge tone="unknown" shape="square" variant="dot" label={tr("tpl.disabled")} />,
     },
     {
       id: "updated",
-      header: "Updated",
+      get header() { return tr("tlist.updated"); },
       sortable: true,
       hideOnPhone: true,
       priority: 3,
-      fold: (e) => `updated ${timeAgo(e.updated_at)}`,
+      fold: (e) => tr("tlist.updatedFold", { ago: timeAgo(e.updated_at) }),
       cell: (e) => <span className="text-ink-muted">{timeAgo(e.updated_at)}</span>,
     },
   ];
@@ -159,21 +163,21 @@ export default function DeviceTemplatesPage() {
   const rowMenu = (e: CatalogEntryResponse): DropdownMenuItem[][] => {
     const groups: DropdownMenuItem[][] = [
       [
-        { label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/templates/${e.id}`) },
-        { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${e.id}`) },
-        ...(e.runs_on === "generic_firmware" && e.hardware ? [{ label: "Wiring guide", icon: <BookOpen size={15} />, onClick: () => router.push(`/templates/${e.id}/wiring`) }] : []),
+        { label: tr("tlist.open"), icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/templates/${e.id}`) },
+        { label: tr("tpl.viewDevices"), icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${e.id}`) },
+        ...(e.runs_on === "generic_firmware" && e.hardware ? [{ label: tr("tpl.wiringGuide"), icon: <BookOpen size={15} />, onClick: () => router.push(`/templates/${e.id}/wiring`) }] : []),
       ],
     ];
     if (canWrite) {
-      groups[0].push({ label: "Duplicate", icon: <Copy size={15} />, onClick: () => router.push(`/templates/new?duplicate=${e.id}`) });
+      groups[0].push({ label: tr("tpl.duplicate"), icon: <Copy size={15} />, onClick: () => router.push(`/templates/new?duplicate=${e.id}`) });
       groups.push(
-        [{ label: e.status === "active" ? "Disable" : "Enable", icon: <Power size={15} />, onClick: () => void setEnabled(e, e.status !== "active") }],
+        [{ label: e.status === "active" ? tr("tlist.disable") : tr("tlist.enable"), icon: <Power size={15} />, onClick: () => void setEnabled(e, e.status !== "active") }],
         [
           {
-            label: "Delete…",
+            label: tr("tpl.delete"),
             icon: <Trash2 size={15} />,
             danger: true,
-            hint: e.device_count ? `${plural(e.device_count, "device uses", "devices use")} it` : undefined,
+            hint: e.device_count ? tr("tlist.usesIt", { count: e.device_count }) : undefined,
             onClick: () => void remove(e),
           },
         ],
@@ -183,13 +187,13 @@ export default function DeviceTemplatesPage() {
   };
 
   const chips: FilterChip[] = [];
-  if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
+  if (list.q) chips.push({ id: "q", label: tr("tlist.search", { q: list.q }), onRemove: () => list.setQuery("") });
 
   const total = entries?.length ?? 0;
   const newAction = canWrite ? (
     <Link href="/templates/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
-      New template
+      {tr("tlist.newTemplate")}
     </Link>
   ) : null;
 
@@ -199,15 +203,15 @@ export default function DeviceTemplatesPage() {
           holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
         inline
-        title="Device templates"
-        description="What a kind of device publishes and what it can switch. Devices are added from these."
+        title={tr("tlist.title")}
+        description={tr("tlist.description")}
         actions={!error && entries && total > 0 ? undefined : newAction}
       />
 
       {error ? (
         <ErrorState
-          title="Couldn't load device templates"
-          message={error instanceof ApiRequestError ? error.message : "The API didn't respond."}
+          title={tr("tlist.loadFailed")}
+          message={error instanceof ApiRequestError ? error.message : tr("tpl.noResponse")}
           onRetry={() => void mutate()}
         />
       ) : isLoading || !entries ? (
@@ -215,14 +219,14 @@ export default function DeviceTemplatesPage() {
       ) : total === 0 ? (
         <FirstUse
           icon={<Boxes aria-hidden size={26} />}
-          title="No device templates"
-          description="A template defines which metrics a kind of device reports and which actuators it has."
+          title={tr("tlist.emptyTitle")}
+          description={tr("tlist.emptyBody")}
           action={newAction ?? undefined}
-          readOnlyNote="Ask an admin to create one."
+          readOnlyNote={tr("tlist.askAdmin")}
         />
       ) : (
         <ListWithPeek
-          label="Device template"
+          label={tr("tlist.peekLabel")}
           onClose={peek.close}
           nav={peek.nav}
           peek={
@@ -241,16 +245,16 @@ export default function DeviceTemplatesPage() {
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
-            placeholder="Search templates"
+            placeholder={tr("tlist.searchPlaceholder")}
             actions={newAction}
             quick={{
-              label: "Status",
+              label: tr("tlist.status"),
               value: list.filters.status,
               onChange: (v) => list.setFilter("status", v),
               options: [
-                { value: "all", label: "All", count: counts.all },
-                { value: "active", label: "Enabled", count: counts.active, tone: "online", hint: "Can be picked for new devices" },
-                { value: "disabled", label: "Disabled", count: counts.disabled, tone: "unknown", shape: "square", hint: "Hidden from Add device" },
+                { value: "all", label: tr("tlist.all"), count: counts.all },
+                { value: "active", label: tr("tpl.enabled"), count: counts.active, tone: "online", hint: tr("tlist.enabledHint") },
+                { value: "disabled", label: tr("tpl.disabled"), count: counts.disabled, tone: "unknown", shape: "square", hint: tr("tlist.disabledHint") },
               ],
             }}
           />
@@ -260,7 +264,7 @@ export default function DeviceTemplatesPage() {
           ) : (
             <div className="flex flex-col gap-2">
               <DataTable
-                label="Device templates"
+                label={tr("tlist.title")}
                 columns={columns}
                 rows={pageRows}
                 rowKey={(e) => e.id}
@@ -269,7 +273,7 @@ export default function DeviceTemplatesPage() {
                 onRowClick={peek.onRowClick}
                 onRowEnter={peek.onRowEnter}
                 rowMenu={rowMenu}
-                rowMenuLabel={(e) => `Actions for ${e.name}`}
+                rowMenuLabel={(e) => tr("tlist.actionsFor", { name: e.name })}
                 inactive={(e) => e.status === "disabled"}
                 currentKey={peek.peekId}
               />

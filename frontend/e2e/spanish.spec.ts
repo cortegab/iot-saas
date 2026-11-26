@@ -65,6 +65,22 @@ test.describe("Add device, in Spanish", () => {
   });
 });
 
+test.describe("templates and zones, in Spanish", () => {
+  test.use({ locale: "es-MX" });
+
+  test("list, new-template wizard and zones speak Spanish", async ({ page, request }) => {
+    await resetChoice(request);
+    await page.goto("/templates");
+    await expect(page.getByRole("heading", { name: "Plantillas de dispositivo" })).toBeVisible();
+    await page.goto("/templates/new");
+    await expect(page.getByRole("heading", { name: "Nueva plantilla de dispositivo" })).toBeVisible();
+    await expect(page.getByText("Nombra la plantilla")).toBeVisible();
+    await expect(page.getByRole("radio", { name: /Nuestro firmware/ })).toBeVisible();
+    await page.goto("/zones");
+    await expect(page.getByRole("heading", { name: "Zonas" })).toBeVisible();
+  });
+});
+
 test.describe("signed out, a Spanish browser", () => {
 
   test("gets the landing page and sign-in in Spanish", async ({ browser }) => {

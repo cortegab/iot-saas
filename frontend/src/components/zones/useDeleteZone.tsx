@@ -9,10 +9,10 @@ import type { DropdownMenuItem } from "@/components/ui/DropdownMenu";
 import { useToast } from "@/components/ui/Toast";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** Delete a zone, blocked with an explanation while devices are in it
  * (DESIGN.md §7). Shared by the zone's peek and its page. */
@@ -24,23 +24,23 @@ export function useDeleteZone(onDeleted: () => void) {
 
   async function remove(zone: ZoneResponse) {
     if (zone.device_count > 0) {
-      const go = await confirm(`${plural(zone.device_count, "device is", "devices are")} assigned to it. Move them to another zone from their settings first.`, {
-        title: `${zone.name} is in use`,
-        confirmLabel: "View devices",
-        cancelLabel: "Close",
+      const go = await confirm(tr("zone.inUseBody", { count: zone.device_count }), {
+        title: tr("zone.inUseTitle", { zone: zone.name }),
+        confirmLabel: tr("zone.viewDevices"),
+        cancelLabel: tr("zone.close"),
         danger: false,
       });
       if (go) router.push(`/devices?zone=${zone.id}`);
       return;
     }
-    if (!(await confirm("No devices are assigned to it.", { title: `Delete ${zone.name}?`, confirmLabel: "Delete zone" }))) return;
+    if (!(await confirm(tr("zone.deleteBody"), { title: tr("zone.deleteTitle", { zone: zone.name }), confirmLabel: tr("zone.deleteConfirm") }))) return;
     try {
       await api.delete(`/zones/${zone.id}`);
       void revalidate("/zones");
-      toast({ title: `${zone.name} deleted` });
+      toast({ title: tr("zone.deleted", { zone: zone.name }) });
       onDeleted();
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete the zone", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("zone.deleteFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -48,10 +48,10 @@ export function useDeleteZone(onDeleted: () => void) {
   // the peek and the zone's page: still offered while devices are in the
   // zone, with their count as the hint — picking it explains the block.
   const menuItem = (zone: ZoneResponse): DropdownMenuItem => ({
-    label: "Delete…",
+    label: tr("zone.delete"),
     icon: <Trash2 size={15} />,
     danger: true,
-    hint: zone.device_count ? `${plural(zone.device_count, "device is", "devices are")} in it` : undefined,
+    hint: zone.device_count ? tr("zone.inIt", { count: zone.device_count }) : undefined,
     onClick: () => void remove(zone),
   });
 

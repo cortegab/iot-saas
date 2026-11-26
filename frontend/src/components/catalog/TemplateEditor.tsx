@@ -56,23 +56,26 @@ import {
 import { applyKit, kitsFor } from "@/lib/starter-kits";
 import type { components } from "@/types/api";
 import { NotFound, isNotFound } from "@/components/ui/NotFound";
+import { tActive as tr } from "@iodriven/shared/i18n";
+import { richT } from "@/lib/i18n";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogUsageResponse = components["schemas"]["CatalogUsageResponse"];
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-
 const DIFF: DiffField<TemplateDraft>[] = [
-  { label: "Name", get: (d) => d.name.trim() },
-  { label: "Status", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
-  { label: "Runs on", get: (d) => d.runsOn, format: (v) => (v === "generic_firmware" ? "Our firmware" : "Custom firmware") },
-  { label: "Metrics", get: (d) => d.metrics.map((m) => m.key.trim()) },
-  { label: "Actuators", get: (d) => d.actuators.map((a) => a.key.trim()) },
+  { get label() { return tr("tpl.diff.name"); }, get: (d) => d.name.trim() },
+  { get label() { return tr("tpl.diff.status"); }, get: (d) => d.enabled, format: (v) => (v ? tr("tpl.enabled") : tr("tpl.disabled")) },
+  { get label() { return tr("tpl.diff.runsOn"); }, get: (d) => d.runsOn, format: (v) => (v === "generic_firmware" ? tr("tpl.ourFirmware") : tr("tpl.customFirmware")) },
+  { get label() { return tr("tpl.diff.metrics"); }, get: (d) => d.metrics.map((m) => m.key.trim()) },
+  { get label() { return tr("tpl.diff.actuators"); }, get: (d) => d.actuators.map((a) => a.key.trim()) },
   {
-    label: "Wiring",
-    get: (d) => (d.hardware ? `${d.hardware.inputs.length} in · ${d.hardware.outputs.length} out (${d.hardware.board})` : "none"),
+    get label() { return tr("tpl.diff.wiring"); },
+    get: (d) =>
+      d.hardware
+        ? tr("tpl.diff.wiringValue", { inputs: d.hardware.inputs.length, outputs: d.hardware.outputs.length, board: d.hardware.board })
+        : tr("tpl.diff.none"),
   },
 ];
 
@@ -81,13 +84,13 @@ function railEntry(id: TemplateSectionId, d: Draft): EditorSectionDef {
   const parts = d.runsOn === "generic_firmware";
   switch (id) {
     case "general":
-      return { id, label: "General", description: d.device ? "The device, and how it runs" : "Name, how it runs, availability" };
+      return { id, label: tr("tpl.rail.general"), description: d.device ? tr("tpl.rail.generalDevice") : tr("tpl.rail.generalTemplate") };
     case "hardware":
-      return { id, label: "Wiring", description: "The board and its parts" };
+      return { id, label: tr("tpl.rail.wiring"), description: tr("tpl.rail.wiringSub") };
     case "metrics":
-      return { id, label: "Metrics", count: d.metrics.length, description: parts ? "What its parts read" : "What the device publishes" };
+      return { id, label: tr("tpl.rail.metrics"), count: d.metrics.length, description: parts ? tr("tpl.rail.metricsParts") : tr("tpl.rail.metricsOwn") };
     case "actuators":
-      return { id, label: "Actuators", count: d.actuators.length, description: parts ? "What its parts switch" : "What the platform can switch" };
+      return { id, label: tr("tpl.rail.actuators"), count: d.actuators.length, description: parts ? tr("tpl.rail.actuatorsParts") : tr("tpl.rail.actuatorsOwn") };
   }
 }
 
@@ -157,21 +160,21 @@ export function TemplateEditor({
       const v = validateTemplate(d.runsOn === "own_code" ? { ...d, hardware: null } : d, { otherNames, usage, catalog });
       if (!d.device) return v;
       const name = d.device.name.trim();
-      const deviceError = !name ? "Give the device a name." : name.length > 100 ? "Keep the name under 100 characters." : null;
+      const deviceError = !name ? tr("setup.nameRequired") : name.length > 100 ? tr("setup.nameLong") : null;
       return deviceError ? { ...v, errors: { ...v.errors, "general.device": deviceError } } : v;
     },
     [otherNames, usage, catalog],
   );
   const editor = useRecordEditor<Draft>({ source: initial, isNew, validate });
-  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, onboard ? "this device" : (entry?.name ?? "this template"));
+  const { dialog: guardDialog } = useUnsavedGuard(editor.dirty, onboard ? tr("tpl.thisDevice") : (entry?.name ?? tr("tpl.thisTemplate")));
 
   if (isNotFound(error)) return <NotFound noun="template" href="/templates" list="templates" />;
   if (error) {
     return (
       <div className="p-5">
         <ErrorState
-          title="Couldn't load this template"
-          message={error instanceof ApiRequestError ? error.message : "The API didn't respond."}
+          title={tr("tpl.loadFailed")}
+          message={error instanceof ApiRequestError ? error.message : tr("tpl.noResponse")}
           onRetry={() => void mutate()}
         />
       </div>
@@ -195,9 +198,9 @@ export function TemplateEditor({
     const before = editor.original;
     const broken = brokenUsages(d!, editor.original, usage);
     if (broken.length && Object.keys(editor.errors).length === 0) {
-      const ok = await confirm("Rules and widgets that use these keys stop receiving data. Existing telemetry stays under the old keys.", {
-        title: "Save changes that disconnect keys?",
-        confirmLabel: "Save anyway",
+      const ok = await confirm(tr("tpl.disconnectBody"), {
+        title: tr("tpl.disconnectTitle"),
+        confirmLabel: tr("tpl.saveAnyway"),
         details: (
           <ul>
             {broken.map((b) => (
@@ -213,10 +216,10 @@ export function TemplateEditor({
     let twin: CatalogEntryResponse | undefined;
     const match = d!.device && Object.keys(editor.errors).length === 0 ? matchingTemplate(d!, all ?? [], drivers) : undefined;
     if (match) {
-      const ok = await confirm(`${match.name} has the same parts and data. Add this device to it, rather than make another template?`, {
-        title: `Matches ${match.name}`,
-        confirmLabel: `Use ${match.name}`,
-        cancelLabel: "Make a new template",
+      const ok = await confirm(tr("tpl.matchBody", { template: match.name }), {
+        title: tr("tpl.matchTitle", { template: match.name }),
+        confirmLabel: tr("tpl.matchUse", { template: match.name }),
+        cancelLabel: tr("tpl.matchNew"),
         danger: false,
       });
       if (ok) twin = match;
@@ -244,15 +247,15 @@ export function TemplateEditor({
             const created = await api.post<CatalogEntryResponse>("/catalog", { name: body.name, ...parts });
             if (!draft.enabled) await api.patch(`/catalog/${created.id}`, { status: "disabled" });
             void revalidate("/catalog");
-            toast({ title: "Template created", detail: `${created.name} is ${draft.enabled ? "available in Add device" : "disabled"}.` });
+            toast({ title: tr("tpl.created"), detail: tr(draft.enabled ? "tpl.createdOn" : "tpl.createdOff", { template: created.name }) });
             router.replace(`/templates/${created.id}`);
           } else {
             await api.patch(`/catalog/${entryId}`, { ...body, ...parts });
             await mutate();
-            toast({ title: "Template saved", detail: before ? changeSummary(diffLines(before, draft, DIFF)) : undefined });
+            toast({ title: tr("tpl.saved"), detail: before ? changeSummary(diffLines(before, draft, DIFF)) : undefined });
           }
         } catch (err) {
-          toast({ tone: "error", title: "The server rejected the change", detail: err instanceof ApiRequestError ? err.message : undefined });
+          toast({ tone: "error", title: tr("tpl.rejected"), detail: err instanceof ApiRequestError ? err.message : undefined });
           throw err;
         }
       })
@@ -262,35 +265,35 @@ export function TemplateEditor({
   async function remove() {
     if (!entry) return;
     if (entry.device_count > 0) {
-      await confirm(`${plural(entry.device_count, "device uses", "devices use")} this template, so it can't be deleted. Move or delete them first, or disable the template.`, {
-        title: `${entry.name} is in use`,
-        confirmLabel: "OK",
-        cancelLabel: "Close",
+      await confirm(tr("tpl.inUseBody", { count: entry.device_count }), {
+        title: tr("tpl.inUseTitle", { template: entry.name }),
+        confirmLabel: tr("tpl.ok"),
+        cancelLabel: tr("tpl.close"),
         danger: false,
       });
       return;
     }
-    if (!(await confirm("No devices use it. This can't be undone.", { title: `Delete ${entry.name}?`, confirmLabel: "Delete template" }))) return;
+    if (!(await confirm(tr("tpl.deleteBody"), { title: tr("tpl.deleteTitle", { template: entry.name }), confirmLabel: tr("tpl.deleteConfirm") }))) return;
     try {
       await api.delete(`/catalog/${entry.id}`);
       void revalidate("/catalog");
-      toast({ title: `${entry.name} deleted` });
+      toast({ title: tr("tpl.deleted", { template: entry.name }) });
       router.push("/templates");
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete the template", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("tpl.deleteFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
   const devices = entry?.device_count ?? 0;
   const consequence = d.device
-    ? "Creating it makes the device and its template together; next comes its credential and Install."
+    ? tr("tpl.consDevice")
     : isNew
     ? d.enabled
-      ? "Creating it makes it available in Add device."
-      : "It's created disabled, so it won't be offered in Add device yet."
+      ? tr("tpl.consNewOn")
+      : tr("tpl.consNewOff")
     : devices
-      ? `Saving updates ${plural(devices, "device")} and re-sends their telemetry profile within seconds.`
-      : "No devices use it yet.";
+      ? tr("tpl.consSave", { count: devices })
+      : tr("tpl.consNone");
 
   // A reading's metric (or a command's actuator), renamed on its part card.
   // Removing or replacing a part, or dropping a reading, names what rules and
@@ -300,14 +303,14 @@ export function TemplateEditor({
       .map(({ kind, row }) => ({ row, used: row.origKey ? usageText(usage?.[kind][row.origKey]) : "" }))
       .filter((x) => x.used);
     if (hit.length === 0) return set(next);
-    void confirm("They keep their history, but get no new data until a part feeds them again.", {
-      title: "Stop feeding what rules and dashboards use?",
-      confirmLabel: "Change the wiring",
+    void confirm(tr("tpl.unfedBody"), {
+      title: tr("tpl.unfedTitle"),
+      confirmLabel: tr("tpl.unfedConfirm"),
       details: (
         <ul>
           {hit.map(({ row, used }) => (
             <li key={row.uid}>
-              {row.name || row.key} ({row.key}): used by {used}
+              {tr("tpl.usedBy", { name: row.name || row.key, key: row.key, used })}
             </li>
           ))}
         </ul>
@@ -332,7 +335,7 @@ export function TemplateEditor({
   const wiring = (
     <WiringSection
       // The wizard step already says this as its lead; say it once (DESIGN.md §7).
-      lead={isNew ? undefined : "Pick the board, then add each part. Every part brings its metrics or actuators: name them on the part, and fine-tune them below."}
+      lead={isNew ? undefined : tr("tpl.wiringLead")}
       hardware={d.hardware}
       rows={keyedRows(d)}
       readOnly={readOnly}
@@ -345,8 +348,7 @@ export function TemplateEditor({
     >
       {!catalogLoading && !catalog && (
         <p className="text-sm text-ink-muted">
-          No firmware release is published yet, so there&apos;s nothing to wire. Choose <b className="text-ink">Custom firmware</b> under
-          Runs on to list the device&apos;s data instead.
+          {richT(tr, "tpl.noRelease", { custom: <b className="text-ink">{tr("tpl.customFirmware")}</b> })}
         </p>
       )}
     </WiringSection>
@@ -358,18 +360,18 @@ export function TemplateEditor({
     <section aria-labelledby="kit-heading" className="flex flex-col gap-2.5">
       <div className="flex flex-col gap-0.5">
         <h3 id="kit-heading" className="text-sm font-semibold text-ink">
-          Start from a kit
+          {tr("tpl.kitTitle")}
         </h3>
-        <p className="text-meta text-ink-muted">Common builds. It adds their parts on free pins; change anything after.</p>
+        <p className="text-meta text-ink-muted">{tr("tpl.kitLead")}</p>
       </div>
-      <ul aria-label="Starter kits" className="grid gap-2.5 sm:grid-cols-2">
+      <ul aria-label={tr("tpl.kits")} className="grid gap-2.5 sm:grid-cols-2">
         {kits.map((k) => (
           <li key={k.id}>
             <button
               type="button"
               onClick={() => {
                 set({ ...applyKit(d, k, catalog), device: d.device });
-                toast({ title: `${k.title} added`, detail: "Its parts are on free pins: check them against how the board is wired." });
+                toast({ title: tr("tpl.kitAdded", { kit: k.title }), detail: tr("tpl.kitAddedDetail") });
               }}
               className="flex h-full w-full flex-col gap-1 rounded-xl border border-border bg-surface p-3.5 text-left shadow-card hover:border-[color-mix(in_srgb,var(--color-accent)_50%,var(--color-border))]"
             >
@@ -401,90 +403,90 @@ export function TemplateEditor({
     ? [
         {
           id: "basics",
-          label: "Basics",
+          label: tr("tpl.basics"),
           sections: ["general"],
-          question: d.device ? "What is it?" : "Name the template",
-          lead: d.device ? "Name the device and say what it runs on." : "Then say what devices of this kind run on.",
+          question: d.device ? tr("tpl.qDevice") : tr("tpl.qTemplate"),
+          lead: d.device ? tr("tpl.leadDevice") : tr("tpl.leadTemplate"),
         },
         ...(parts
           ? [
               {
                 id: "hardware",
-                label: "Hardware",
+                label: tr("tpl.hardware"),
                 sections: ["hardware"],
-                question: "Which board and parts?",
-                lead: "Pick the board, then add each part wired to it. Every part brings its metrics or actuators.",
+                question: tr("tpl.qHardware"),
+                lead: tr("tpl.leadHardware"),
               },
             ]
           : []),
         {
           id: "data",
-          label: "Data",
+          label: tr("tpl.data"),
           sections: ["metrics", "actuators"],
-          question: "What does it publish and switch?",
-          lead: parts ? "Your parts brought these. Rename them, or fine-tune how often they publish." : "List the data your firmware sends, and anything it can switch.",
+          question: tr("tpl.qData"),
+          lead: parts ? tr("tpl.leadDataParts") : tr("tpl.leadDataOwn"),
         },
-        { id: "review", label: "Review", sections: ["review"], question: d.device ? "Check and create" : "Check and create the template", lead: consequence },
+        { id: "review", label: tr("tpl.review"), sections: ["review"], question: d.device ? tr("tpl.qReviewDevice") : tr("tpl.qReviewTemplate"), lead: consequence },
       ]
     : [
-        { id: "general", label: "General", sections: ["general"] },
-        ...(parts ? [{ id: "wiring", label: "Wiring", sections: ["hardware"] }] : []),
-        { id: "data", label: "Data", sections: ["metrics", "actuators"] },
+        { id: "general", label: tr("tpl.general"), sections: ["general"] },
+        ...(parts ? [{ id: "wiring", label: tr("tpl.wiring"), sections: ["hardware"] }] : []),
+        { id: "data", label: tr("tpl.data"), sections: ["metrics", "actuators"] },
       ];
 
   const none = (n: number, s: string) => (n ? undefined : <span className="text-ink-muted">{s}</span>);
   const review = isNew && (
-    <EditorSection id="review" title="Summary">
+    <EditorSection id="review" title={tr("tpl.summary")}>
       <ReviewList
         rows={[
           d.device
-            ? { label: "Device", value: d.device.name.trim() || <span className="text-ink-muted">Unnamed</span>, step: "basics" }
-            : { label: "Template", value: d.name.trim() || <span className="text-ink-muted">Unnamed</span>, step: "basics" },
-          { label: "Runs on", value: parts ? "Our firmware" : "Custom firmware", step: "basics" },
+            ? { label: tr("tpl.device"), value: d.device.name.trim() || <span className="text-ink-muted">{tr("tpl.unnamed")}</span>, step: "basics" }
+            : { label: tr("tpl.template"), value: d.name.trim() || <span className="text-ink-muted">{tr("tpl.unnamed")}</span>, step: "basics" },
+          { label: tr("tpl.runsOn"), value: parts ? tr("tpl.ourFirmware") : tr("tpl.customFirmware"), step: "basics" },
           ...(parts
             ? [
                 {
-                  label: "Board and parts",
+                  label: tr("tpl.boardParts"),
                   value: d.hardware ? (
                     <>
                       {resolveModel(catalog?.models, d.hardware.board)?.label ?? d.hardware.board}
                       <span className="block text-meta text-ink-muted">
-                        {[...d.hardware.inputs, ...d.hardware.outputs].map((b) => findDriver(drivers ?? [], b.driver)?.label ?? b.driver).join("; ") || "No parts"}
+                        {[...d.hardware.inputs, ...d.hardware.outputs].map((b) => findDriver(drivers ?? [], b.driver)?.label ?? b.driver).join("; ") || tr("tpl.noParts")}
                       </span>
                     </>
                   ) : (
-                    <span className="text-ink-muted">No wiring</span>
+                    <span className="text-ink-muted">{tr("tpl.noWiring")}</span>
                   ),
                   step: "hardware",
                 },
               ]
             : []),
           {
-            label: "Metrics",
-            value: none(d.metrics.length, "None") ?? (
+            label: tr("tpl.metrics"),
+            value: none(d.metrics.length, tr("tpl.none")) ?? (
               <>
                 {d.metrics.map((m, i) => (
                   <Fragment key={m.uid}>
                     {i > 0 && ", "}
-                    {m.name || "Unnamed"} <span className="font-mono text-xs text-ink-muted">{m.key}</span>
+                    {m.name || tr("tpl.unnamed")} <span className="font-mono text-xs text-ink-muted">{m.key}</span>
                   </Fragment>
                 ))}
               </>
             ),
             step: "data",
           },
-          { label: "Actuators", value: none(d.actuators.length, "None") ?? d.actuators.map((a) => a.name || "Unnamed").join(", "), step: "data" },
+          { label: tr("tpl.actuators"), value: none(d.actuators.length, tr("tpl.none")) ?? d.actuators.map((a) => a.name || tr("tpl.unnamed")).join(", "), step: "data" },
         ]}
       />
       {editor.warningFor(EMPTY_TEMPLATE_WARNING) && (
         <Callout tone="warning">
-          <b className="font-medium">Nothing to read or switch.</b> {editor.warningFor(EMPTY_TEMPLATE_WARNING)}
+          <b className="font-medium">{tr("tpl.nothing")}</b> {editor.warningFor(EMPTY_TEMPLATE_WARNING)}
         </Callout>
       )}
       {editor.visibleErrors.length > 0 && (
         <div role="alert">
           <Callout tone="error">
-            <b className="font-medium">{plural(editor.visibleErrors.length, "problem")} to fix.</b> The marked steps above show where.
+            <b className="font-medium">{tr("tpl.problems", { count: editor.visibleErrors.length })}</b> {tr("tpl.marked")}
           </Callout>
         </div>
       )}
@@ -496,16 +498,16 @@ export function TemplateEditor({
       <EditorFrame
         mode={mode}
         noun={d.device ? "device" : "device template"}
-        title={d.device ? d.device.name.trim() || "Add device" : isNew ? d.name.trim() || "New device template" : d.name.trim() || entry!.name}
+        title={d.device ? d.device.name.trim() || tr("tpl.addDevice") : isNew ? d.name.trim() || tr("tpl.newTemplate") : d.name.trim() || entry!.name}
         eyebrow={
           d.device || isNew ? undefined : <>
-            {d.enabled ? <Badge tone="online" variant="dot" label="Enabled" /> : <Badge tone="unknown" shape="square" variant="dot" label="Disabled" />}
-            <span>· {plural(devices, "device")}</span>
+            {d.enabled ? <Badge tone="online" variant="dot" label={tr("tpl.enabled")} /> : <Badge tone="unknown" shape="square" variant="dot" label={tr("tpl.disabled")} />}
+            <span>· {tr("tpl.devices", { count: devices })}</span>
           </>
         }
         // Adding something new says what the wizard does (demo H); a new template
         // says it on its Review step.
-        consequence={d.device ? "Say what it runs on and what's wired to it. Its template is made for you." : isNew ? undefined : consequence}
+        consequence={d.device ? tr("tpl.consDeviceFrame") : isNew ? undefined : consequence}
         sections={order.map((id) => railEntry(id, d))}
         nav={isNew ? "steps" : "tabs"}
         groups={groups}
@@ -513,14 +515,14 @@ export function TemplateEditor({
         intro={intro}
         status={editor}
         readOnly={readOnly}
-        saveLabel={d.device ? "Create device" : isNew ? "Create template" : "Save"}
+        saveLabel={d.device ? tr("tpl.createDevice") : isNew ? tr("tpl.createTemplate") : tr("tpl.save")}
         onSave={onSave}
         onDiscard={editor.discard}
         headerActions={
           !isNew && !readOnly ? (
             <Button variant="secondary" onClick={() => router.push(`/templates/new?duplicate=${entryId}`)}>
               <Copy aria-hidden size={14} />
-              Duplicate
+              {tr("tpl.duplicate")}
             </Button>
           ) : undefined
         }
@@ -528,10 +530,10 @@ export function TemplateEditor({
           !isNew
             ? [
                 [
-                  { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${entryId}`) },
-                  ...(entry?.hardware && entry.runs_on === "generic_firmware" ? [{ label: "Wiring guide", icon: <BookOpen size={15} />, onClick: () => router.push(`/templates/${entryId}/wiring`) }] : []),
+                  { label: tr("tpl.viewDevices"), icon: <Cpu size={15} />, onClick: () => router.push(`/devices?template=${entryId}`) },
+                  ...(entry?.hardware && entry.runs_on === "generic_firmware" ? [{ label: tr("tpl.wiringGuide"), icon: <BookOpen size={15} />, onClick: () => router.push(`/templates/${entryId}/wiring`) }] : []),
                 ],
-                ...(readOnly ? [] : [[{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]]),
+                ...(readOnly ? [] : [[{ label: tr("tpl.delete"), icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }]]),
               ]
             : undefined
         }

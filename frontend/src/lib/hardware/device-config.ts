@@ -8,6 +8,7 @@ import type { FirmwareConfig } from "@/lib/hardware/config-blob";
 import type { BoardModel } from "@/lib/hardware/driver-catalog";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type CatalogMetric = components["schemas"]["CatalogMetric"];
 type CatalogActuator = components["schemas"]["CatalogActuator"];
@@ -80,8 +81,8 @@ export function buildFirmwareConfig(input: DeviceConfigInput): FirmwareConfig {
  * the dashboard's own "localhost": that's the computer it runs on, not the board. */
 export function brokerHostProblem(host: string): string | null {
   const h = host.trim().toLowerCase();
-  if (!h) return "Enter the broker's address.";
+  if (!h) return tr("hwv.brokerEmpty");
   if (h === "localhost" || h === "::1" || h === "[::1]" || h.startsWith("127."))
-    return "The board can't reach localhost. Enter this computer's address on your network, e.g. 192.168.1.82.";
+    return tr("hwv.brokerLocal");
   return null;
 }

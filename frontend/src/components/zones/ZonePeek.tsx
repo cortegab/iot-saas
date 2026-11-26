@@ -11,10 +11,10 @@ import { PeekFrame, PeekOpen, PeekPlaceholder } from "@/components/editor/PeekFr
 import { PeekDeviceList } from "@/components/devices/PeekDeviceList";
 import { useDeleteZone } from "./useDeleteZone";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** A zone at a glance beside the list; editing happens on /zones/{id}. */
 export function ZonePeek({ zone, offline, onClose }: { zone: ZoneResponse | undefined; offline: number; onClose: () => void }) {
@@ -28,20 +28,20 @@ export function ZonePeek({ zone, offline, onClose }: { zone: ZoneResponse | unde
 
   const status =
     zone.device_count === 0 ? (
-      <Badge tone="unknown" shape="square" label="No devices" />
+      <Badge tone="unknown" shape="square" label={tr("zone.noDevices")} />
     ) : offline ? (
-      <Badge tone="offline" label={`${offline} offline`} />
+      <Badge tone="offline" label={tr("zone.offline", { count: offline })} />
     ) : (
-      <Badge tone="online" label="All reporting" />
+      <Badge tone="online" label={tr("zone.allReporting")} />
     );
 
   const menu: DropdownMenuItem[][] = [
     [
-      { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${zone.id}`) },
+      { label: tr("zone.viewDevices"), icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${zone.id}`) },
       {
-        label: "Copy link",
+        label: tr("zone.copyLink"),
         icon: <Link2 size={15} />,
-        onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/zones/${zone.id}`).then(() => toast({ tone: "info", title: "Link copied" })),
+        onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/zones/${zone.id}`).then(() => toast({ tone: "info", title: tr("zone.linkCopied") })),
       },
     ],
     ...(canWrite ? [[menuItem(zone)]] : []),
@@ -55,8 +55,8 @@ export function ZonePeek({ zone, offline, onClose }: { zone: ZoneResponse | unde
         eyebrow={status}
         description={zone.notes || undefined}
         facts={[
-          ["Devices", zone.device_count ? <Link href={`/devices?zone=${zone.id}`} className="text-accent hover:underline">{plural(zone.device_count, "device")}</Link> : "None yet"],
-          ["Offline", zone.device_count ? (offline ? plural(offline, "device") : "None") : null],
+          [tr("zone.devices"), zone.device_count ? <Link href={`/devices?zone=${zone.id}`} className="text-accent hover:underline">{tr("zone.deviceCount", { count: zone.device_count })}</Link> : tr("zone.noneYet")],
+          [tr("zone.offlineFact"), zone.device_count ? (offline ? tr("zone.deviceCount", { count: offline }) : tr("zone.none")) : null],
         ]}
         primary={<PeekOpen href={`/zones/${zone.id}`} noun="zone" />}
         menu={menu}

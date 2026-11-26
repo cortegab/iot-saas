@@ -23,6 +23,7 @@ import { ApiRequestError } from "@/lib/api-client";
 import { changeSummary, diffLines, type DiffField } from "@/lib/diff-summary";
 import type { components } from "@/types/api";
 import { NotFound, isNotFound } from "@/components/ui/NotFound";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
@@ -32,12 +33,11 @@ interface ZoneDraft {
 }
 
 const DIFF: DiffField<ZoneDraft>[] = [
-  { label: "Name", get: (d) => d.name.trim() },
-  { label: "Notes", get: (d) => d.notes.trim() },
+  { get label() { return tr("zone.name"); }, get: (d) => d.name.trim() },
+  { get label() { return tr("zone.notes"); }, get: (d) => d.notes.trim() },
 ];
 
 const BLANK: ZoneDraft = { name: "", notes: "" };
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** A zone: name and notes only (DESIGN.md §8), edited on its own page
  * (/zones/new, /zones/{id}); the list only peeks. Devices are assigned from
@@ -68,10 +68,10 @@ export function ZoneEditor({
     (d: ZoneDraft): Validation => {
       const errors: Record<string, string> = {};
       const name = d.name.trim();
-      if (!name) errors["zone.name"] = "Give the zone a name.";
-      else if (name.length > 80) errors["zone.name"] = "Keep the name under 80 characters.";
-      else if (otherNames.includes(name.toLowerCase())) errors["zone.name"] = "Another zone already has this name.";
-      if (d.notes.length > 1000) errors["zone.notes"] = "Keep notes under 1,000 characters.";
+      if (!name) errors["zone.name"] = tr("zone.nameRequired");
+      else if (name.length > 80) errors["zone.name"] = tr("zone.nameLong");
+      else if (otherNames.includes(name.toLowerCase())) errors["zone.name"] = tr("zone.nameTaken");
+      if (d.notes.length > 1000) errors["zone.notes"] = tr("zone.notesLong");
       return { errors };
     },
     [otherNames],
@@ -89,17 +89,17 @@ export function ZoneEditor({
           if (isNew) {
             const created = await api.post<ZoneResponse>("/zones", body);
             void revalidate("/zones");
-            toast({ title: "Zone created", detail: created.name });
+            toast({ title: tr("zone.created"), detail: created.name });
             router.replace(`/zones/${created.id}`);
           } else {
             await api.patch(`/zones/${zoneId}`, body);
             await mutate();
             void revalidate("/zones");
             void revalidate("/devices");
-            toast({ title: "Zone saved", detail: before ? changeSummary(diffLines(before, d, DIFF)) : undefined });
+            toast({ title: tr("zone.saved"), detail: before ? changeSummary(diffLines(before, d, DIFF)) : undefined });
           }
         } catch (err) {
-          toast({ tone: "error", title: "The server rejected the change", detail: err instanceof ApiRequestError ? err.message : undefined });
+          toast({ tone: "error", title: tr("zone.rejected"), detail: err instanceof ApiRequestError ? err.message : undefined });
           throw err;
         }
       })
@@ -110,7 +110,7 @@ export function ZoneEditor({
   if (error) {
     return (
       <div className="p-5">
-        <ErrorState title="Couldn't load this zone" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
+        <ErrorState title={tr("zone.loadFailed")} message={error instanceof ApiRequestError ? error.message : tr("zone.noResponse")} onRetry={() => void mutate()} />
       </div>
     );
   }
@@ -129,12 +129,12 @@ export function ZoneEditor({
       <EditorFrame
         mode={mode}
         noun="zone"
-        title={d.name.trim() || (isNew ? "New zone" : zone!.name)}
-        consequence="Devices join a zone from their own settings."
-        sections={[{ id: "zone", label: "Zone" }]}
+        title={d.name.trim() || (isNew ? tr("zone.newZone") : zone!.name)}
+        consequence={tr("zone.consequence")}
+        sections={[{ id: "zone", label: tr("zone.zone") }]}
         status={editor}
         readOnly={readOnly}
-        saveLabel={isNew ? "Create zone" : "Save"}
+        saveLabel={isNew ? tr("zone.create") : tr("zone.save")}
         onSave={onSave}
         onDiscard={editor.discard}
         menu={
@@ -142,35 +142,35 @@ export function ZoneEditor({
             ? undefined
             : [
                 [
-                  { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${zoneId}`) },
+                  { label: tr("zone.viewDevices"), icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${zoneId}`) },
                   {
-                    label: "Copy link",
+                    label: tr("zone.copyLink"),
                     icon: <Link2 size={15} />,
-                    onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/zones/${zoneId}`).then(() => toast({ tone: "info", title: "Link copied" })),
+                    onClick: () => void navigator.clipboard.writeText(`${window.location.origin}/zones/${zoneId}`).then(() => toast({ tone: "info", title: tr("zone.linkCopied") })),
                   },
                 ],
                 ...(readOnly || !zone ? [] : [[menuItem(zone)]]),
               ]
         }
       >
-        <EditorSection id="zone" title="Zone">
-          <Field label="Name" error={editor.errorFor("zone.name")}>
-            <Input value={d.name} disabled={readOnly} placeholder="e.g. Greenhouse bay 1" onChange={(e) => editor.set({ ...d, name: e.target.value })} onBlur={() => editor.touch("zone.name")} />
+        <EditorSection id="zone" title={tr("zone.zone")}>
+          <Field label={tr("zone.name")} error={editor.errorFor("zone.name")}>
+            <Input value={d.name} disabled={readOnly} placeholder={tr("zone.namePlaceholder")} onChange={(e) => editor.set({ ...d, name: e.target.value })} onBlur={() => editor.touch("zone.name")} />
           </Field>
-          <Field label="Notes" optional error={editor.errorFor("zone.notes")} hint="Where it is, who looks after it, anything the next person should know.">
+          <Field label={tr("zone.notes")} optional error={editor.errorFor("zone.notes")} hint={tr("zone.notesHint")}>
             <Textarea rows={4} value={d.notes} disabled={readOnly} onChange={(e) => editor.set({ ...d, notes: e.target.value })} onBlur={() => editor.touch("zone.notes")} />
           </Field>
           {!isNew && (
             <FactList
               facts={[
                 [
-                  "Devices",
+                  tr("zone.devices"),
                   devices > 0 ? (
                     <Link key="devices" href={`/devices?zone=${zoneId}`} className="text-accent hover:underline">
-                      {plural(devices, "device")}
+                      {tr("zone.deviceCount", { count: devices })}
                     </Link>
                   ) : (
-                    "None yet"
+                    tr("zone.noneYet")
                   ),
                 ],
               ]}
