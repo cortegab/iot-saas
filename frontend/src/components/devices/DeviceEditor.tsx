@@ -40,6 +40,8 @@ import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
 import { FirmwareSection } from "@/components/devices/FirmwareSection";
 import { DeviceTopics } from "./DeviceTopics";
+import { tActive as tr } from "@iodriven/shared/i18n";
+import { richT } from "@/lib/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -57,12 +59,12 @@ interface DeviceDraft {
 }
 
 const DIFF: DiffField<DeviceDraft>[] = [
-  { label: "Name", get: (d) => d.name.trim() },
-  { label: "Zone", get: (d) => d.zoneId },
-  { label: "Status", get: (d) => d.enabled, format: (v) => (v ? "Enabled" : "Disabled") },
+  { get label() { return tr("setup.diff.name"); }, get: (d) => d.name.trim() },
+  { get label() { return tr("setup.diff.zone"); }, get: (d) => d.zoneId },
+  { get label() { return tr("setup.diff.status"); }, get: (d) => d.enabled, format: (v) => (v ? tr("setup.enabled") : tr("setup.disabled")) },
   {
-    label: "Wiring",
-    get: (d) => (d.wiring ? `own: ${d.wiring.inputs.length} in · ${d.wiring.outputs.length} out (${d.wiring.board})` : "the template's"),
+    get label() { return tr("setup.diff.wiring"); },
+    get: (d) => (d.wiring ? tr("setup.diff.own", { inputs: d.wiring.inputs.length, outputs: d.wiring.outputs.length, board: d.wiring.board }) : tr("setup.diff.templates")),
   },
 ];
 
@@ -77,15 +79,14 @@ function templateRows(template: CatalogEntryResponse | undefined): Rows {
 
 function validate(d: DeviceDraft, rows: Rows, catalog: HardwareCatalog | undefined): Validation {
   const errors: Record<string, string> = {};
-  if (!d.name.trim()) errors["identity.name"] = "Give the device a name.";
-  else if (d.name.trim().length > 100) errors["identity.name"] = "Keep the name under 100 characters.";
+  if (!d.name.trim()) errors["identity.name"] = tr("setup.nameRequired");
+  else if (d.name.trim().length > 100) errors["identity.name"] = tr("setup.nameLong");
   const wiring = validateHardware(d.wiring, rows, catalog);
   return { errors: { ...errors, ...wiring.errors }, warnings: wiring.warnings };
 }
 
 const wiringBody = (w: HardwareDraft | null, rows: Rows, drivers: DriverSpec[] | undefined) => JSON.stringify(hardwareToRequest(w, rows, drivers));
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** Edit a device's name, zone and rule evaluation (DESIGN.md §7/§8). It
  * lives in the device page's Settings tab (`embedded`: the page has the
@@ -136,14 +137,14 @@ export function DeviceEditor({
     () => (rules ?? []).filter((r) => r.devices.some((d) => d.device_id === deviceId)).length,
     [rules, deviceId],
   );
-  const rulesLine = ruleCount ? `${plural(ruleCount, "rule")} use${ruleCount === 1 ? "s" : ""} it.` : "No rules use it yet.";
+  const rulesLine = ruleCount ? tr("setup.rulesUse", { count: ruleCount }) : tr("setup.noRulesUse");
 
   async function copyUsername() {
     try {
       await navigator.clipboard.writeText(deviceId);
-      toast({ tone: "info", title: "Username copied" });
+      toast({ tone: "info", title: tr("setup.usernameCopied") });
     } catch {
-      toast({ tone: "error", title: "Couldn't copy", detail: "Select the username and copy it yourself." });
+      toast({ tone: "error", title: tr("setup.copyFailed"), detail: tr("setup.copyFailedDetail") });
     }
   }
 
@@ -159,12 +160,12 @@ export function DeviceEditor({
       try {
         await api.patch(`/devices/${deviceId}`, body);
       } catch (err) {
-        toast({ tone: "error", title: "The server rejected the change", detail: err instanceof ApiRequestError ? err.message : undefined });
+        toast({ tone: "error", title: tr("settings.rejected"), detail: err instanceof ApiRequestError ? err.message : undefined });
         throw err;
       }
       await mutate();
       const named = (x: DeviceDraft) => ({ ...x, zoneId: x.zoneId ? (zoneName.get(x.zoneId) ?? "") : "" });
-      toast({ title: "Device saved", detail: before ? changeSummary(diffLines(named(before), named(d), DIFF)) : undefined });
+      toast({ title: tr("setup.saved"), detail: before ? changeSummary(diffLines(named(before), named(d), DIFF)) : undefined });
     }).catch(() => false);
   }
 
@@ -175,26 +176,23 @@ export function DeviceEditor({
     const others = template.device_count - 1;
     const ok = await confirm(
       <p>
-        {template.hardware ? "This replaces the template's wiring. " : ""}
+        {template.hardware ? `${tr("setup.replacesWiring")} ` : ""}
         {others > 0 ? (
-          <>
-            The other <strong>{plural(others, "device")}</strong> of {template.name} that use the template&apos;s wiring get this wiring on
-            their next Install. Devices with their own wiring keep it.
-          </>
+          <>{richT(tr, "setup.othersGet", { devices: <strong>{tr("setup.othersCount", { count: others })}</strong> }, { template: template.name })}</>
         ) : (
-          <>New devices of {template.name} start with this wiring.</>
+          <>{tr("setup.newStart", { template: template.name })}</>
         )}
       </p>,
-      { title: `Save this wiring to ${template.name}?`, confirmLabel: "Save to template" },
+      { title: tr("setup.saveWiringTitle", { template: template.name }), confirmLabel: tr("setup.saveWiringConfirm") },
     );
     if (!ok) return;
     try {
       await api.patch(`/catalog/${template.id}`, { hardware: device.hardware as unknown as Record<string, unknown> });
       await api.patch(`/devices/${device.id}`, { hardware: null });
       await Promise.all([mutate(), mutateTemplate()]);
-      toast({ title: "Wiring saved to the template", detail: `${device.name} now uses the ${template.name} wiring.` });
+      toast({ title: tr("setup.wiringSaved"), detail: tr("setup.wiringSavedDetail", { device: device.name, template: template.name }) });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't save the wiring to the template", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("setup.wiringFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -202,8 +200,8 @@ export function DeviceEditor({
     return (
       <div className="p-5">
         <ErrorState
-          title="Couldn't load this device"
-          message={error instanceof ApiRequestError ? error.message : "The API didn't respond."}
+          title={tr("setup.loadFailed")}
+          message={error instanceof ApiRequestError ? error.message : tr("devices.apiDown")}
           onRetry={() => void mutate()}
         />
       </div>
@@ -219,8 +217,8 @@ export function DeviceEditor({
 
   const d = editor.draft;
   const consequence = d.enabled
-    ? "Saving applies right away. Renaming keeps its MQTT id, so the device doesn't need a new install."
-    : `Saving stops rule evaluation for this device and refuses its connections. ${ruleCount ? `${plural(ruleCount, "rule")} stop evaluating it. ` : ""}Its history is kept.`;
+    ? tr("setup.consequenceOn")
+    : tr("setup.consequenceOff", { rules: ruleCount ? tr("setup.rulesStop", { count: ruleCount }) : "" });
   // Plain stacked sections, no boxes (demo H device Settings).
 
   return (
@@ -228,7 +226,7 @@ export function DeviceEditor({
       <EditorFrame
         mode="page"
         headless={embedded}
-        noun="device"
+        noun={tr("setup.noun")}
         title={d.name.trim() || device.name}
         eyebrow={
           <>
@@ -237,8 +235,8 @@ export function DeviceEditor({
         }
         consequence={consequence}
         sections={[
-          { id: "general", label: "General", description: "Name and zone" },
-          { id: "hardware", label: "Wiring", description: d.wiring ? "This device's own" : "The template's" },
+          { id: "general", label: tr("setup.sections.general"), description: tr("setup.sections.generalHint") },
+          { id: "hardware", label: tr("setup.sections.wiring"), description: d.wiring ? tr("setup.sections.ownWiring") : tr("setup.sections.templatesWiring") },
         ]}
         sectionOf={(p) => (p.startsWith("identity") ? "general" : p.split(".")[0])}
         status={editor}
@@ -249,9 +247,9 @@ export function DeviceEditor({
         <div className="flex flex-col gap-7">
         {embedded && <p className="max-w-[70ch] text-sm text-ink-muted">{consequence}</p>}
 
-        <EditorSection id="general" title="General">
+        <EditorSection id="general" title={tr("setup.sections.general")}>
           <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Name" error={editor.errorFor("identity.name")} hint="Shown in lists, dashboards and alerts.">
+          <Field label={tr("setup.name")} error={editor.errorFor("identity.name")} hint={tr("setup.nameHint")}>
             <Input
               value={d.name}
               disabled={readOnly}
@@ -260,19 +258,19 @@ export function DeviceEditor({
             />
           </Field>
           <Field
-            label="Zone"
+            label={tr("setup.zone")}
             optional
             hint={
               <>
                 Where it&apos;s installed.{" "}
                 <Link href="/zones" className="link-inline">
-                  Manage zones
+                  {tr("setup.manageZones")}
                 </Link>
               </>
             }
           >
             <Select value={d.zoneId} disabled={readOnly} onChange={(e) => editor.set({ ...d, zoneId: e.target.value })}>
-              <option value="">No zone</option>
+              <option value="">{tr("setup.noZone")}</option>
               {(zones ?? []).map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.name}
@@ -282,28 +280,28 @@ export function DeviceEditor({
           </Field>
           </div>
           <SwitchField
-            label="Status"
+            label={tr("setup.status")}
             checked={d.enabled}
             disabled={readOnly}
             onChange={(enabled) => editor.set({ ...d, enabled })}
-            onLabel="Enabled"
-            offLabel="Disabled"
-            onHint={`Rules evaluate its readings and it can connect. ${rulesLine}`}
-            offHint={`Rules ignore it and its connections are refused. Telemetry history is kept. ${rulesLine}`}
+            onLabel={tr("setup.enabled")}
+            offLabel={tr("setup.disabled")}
+            onHint={tr("setup.statusOn", { rules: rulesLine })}
+            offHint={tr("setup.statusOff", { rules: rulesLine })}
           />
         </EditorSection>
 
-        <EditorSection id="template" title="Template" lead="A device keeps the template it was added with.">
+        <EditorSection id="template" title={tr("setup.sections.template")} lead={tr("setup.templateLead")}>
           {template ? (
             <FactList
               facts={[
                 [
-                  "Template",
+                  tr("setup.template"),
                   <>
                     <Link href={`/templates/${template.id}`} className="link-inline">
                       {template.name}
                     </Link>
-                    <span className="text-ink-muted"> · {template.runs_on === "generic_firmware" ? "Our firmware" : "Custom firmware"}</span>
+                    <span className="text-ink-muted"> · {template.runs_on === "generic_firmware" ? tr("setup.ourFirmware") : tr("setup.customFirmware")}</span>
                   </>,
                 ],
                 ...templateGivesFacts(template),
@@ -316,7 +314,7 @@ export function DeviceEditor({
 
         {template && (
           <WiringSection
-            lead="How this board is wired, for installing from the browser."
+            lead={tr("setup.wiringLead")}
             showYield={false}
             header={
               <Inherited
@@ -324,29 +322,29 @@ export function DeviceEditor({
                 what="wiring"
                 overridden={!!d.wiring}
                 readOnly={readOnly}
-                overrideLabel="Wire this device differently"
-                resetLabel="Use the template's wiring"
+                overrideLabel={tr("setup.wireDifferently")}
+                resetLabel={tr("setup.useTemplateWiring")}
                 // A fresh copy: its own row ids, apart from the read-only view's.
                 onOverride={() => editor.set({ ...d, wiring: hardwareToDraft(template.hardware, rows) ?? blankHardware(catalog?.models[0]?.id) })}
                 onReset={() => editor.set({ ...d, wiring: null })}
                 disabled={!d.wiring && !catalog && !template.hardware}
                 note={
                   d.wiring
-                    ? "Template wiring edits don't reach it; its metrics and actuators still come from the template."
-                    : "Wire it differently when it's built differently: another board, a moved pin, a different sensor."
+                    ? tr("setup.ownNote")
+                    : tr("setup.templateNote")
                 }
                 actions={
                   d.wiring ? (
                     device.hardware &&
                     !editor.dirty && (
                       <Button variant="secondary" size="sm" onClick={() => void saveWiringToTemplate()}>
-                        Save to {template.name}…
+                        {tr("setup.saveTo", { template: template.name })}
                       </Button>
                     )
                   ) : (
                     template.hardware && (
                       <Link href={`/templates/${template.id}#hardware`} className={buttonClassName({ variant: "secondary", size: "sm" })}>
-                        Edit the template&apos;s wiring
+                        {tr("setup.editTemplateWiring")}
                       </Link>
                     )
                   )
@@ -361,45 +359,47 @@ export function DeviceEditor({
           >
             {!d.wiring && !templateWiring && (
               <Callout>
-                {template.name} has no wiring, so this device gets a sketch to edit and upload. Wire this device alone, or{" "}
-                <Link href={`/templates/${template.id}#hardware`} className="link-inline">
-                  set up the template&apos;s wiring
-                </Link>{" "}
-                for every device of it.
+                {richT(tr, "setup.noWiring", {
+                  link: (
+                    <Link href={`/templates/${template.id}#hardware`} className="link-inline">
+                      {tr("setup.setUpWiring")}
+                    </Link>
+                  ),
+                }, { template: template.name })}
               </Callout>
             )}
           </WiringSection>
         )}
 
         {embedded && (
-          <EditorSection id="connection" title="Connection">
+          <EditorSection id="connection" title={tr("setup.sections.connection")}>
             <FactList
               facts={[
                 [
-                  "MQTT username",
+                  tr("setup.mqttUsername"),
                   <span key="username" className="flex min-w-0 flex-wrap items-center gap-x-2">
                     <span className="break-all font-mono text-meta">{device.id}</span>
                     <Button variant="link" className="text-meta" onClick={() => void copyUsername()}>
-                      Copy
+                      {tr("setup.copy")}
                     </Button>
                   </span>,
                 ],
                 [
-                  "Password",
+                  tr("setup.password"),
                   <span key="password" className="flex flex-wrap items-center gap-x-2">
-                    <span>Shown once when created, stored hashed.</span>
+                    <span>{tr("setup.shownOnce")}</span>
                     {!readOnly && onRotate && (
                       <Button variant="link" className="text-meta" onClick={onRotate}>
-                        Rotate credential…
+                        {tr("setup.rotate")}
                       </Button>
                     )}
                   </span>,
                 ],
-                ["Label", <DeviceLabel key="label" device={device} />],
+                [tr("setup.label"), <DeviceLabel key="label" device={device} />],
                 [
-                  "Topics",
+                  tr("setup.topics"),
                   <details key="topics" className="group">
-                    <summary className="cursor-pointer text-accent hover:underline">Show its MQTT topics</summary>
+                    <summary className="cursor-pointer text-accent hover:underline">{tr("setup.showTopics")}</summary>
                     <div className="mt-2 flex flex-col gap-2">
                       <DeviceTopics device={device} template={template} />
                     </div>
@@ -411,7 +411,7 @@ export function DeviceEditor({
         )}
 
         {embedded && (template?.runs_on === "generic_firmware" || device.hardware != null) && (
-          <EditorSection id="firmware" title="Firmware" lead="Our firmware updates over the air from 1.0.0. The device checks each release's signature before it installs it.">
+          <EditorSection id="firmware" title={tr("setup.sections.firmware")} lead={tr("setup.firmwareLead")}>
             <FirmwareSection deviceId={device.id} readOnly={readOnly} />
           </EditorSection>
         )}

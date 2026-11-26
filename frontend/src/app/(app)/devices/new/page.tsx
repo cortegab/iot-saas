@@ -20,6 +20,7 @@ import { templateGivesFacts } from "@/components/catalog/template-facts";
 import { ApiRequestError } from "@/lib/api-client";
 import type { RunsOn } from "@/lib/template-draft";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -46,14 +47,14 @@ export default function NewDevicePage() {
   const runsOn = runs === "generic" || runs === "own" ? RUNS[runs] : "generic_firmware";
   const cards = (
     <ChoiceCards<Start>
-      ariaLabel="How to start"
+      ariaLabel={tr("setup.howStart")}
       value={start}
       onChange={(v) => router.replace(v === "same" ? "/devices/new" : `/devices/new?from=${v}`)}
       options={[
-        { value: "same", title: "From a template", description: "Another device like one you already have." },
-        { value: "new", title: "Something new", description: "Say what it runs on and what it has; we make its template." },
+        { value: "same", title: tr("setup.fromTemplate"), description: tr("setup.fromTemplateHint") },
+        { value: "new", title: tr("setup.somethingNew"), description: tr("setup.somethingNewHint") },
         // Ease-of-use B4: try rules and dashboards before any hardware.
-        { value: "simulated", title: "No board yet", description: "A simulated device with made-up readings, to try things out." },
+        { value: "simulated", title: tr("setup.noBoard"), description: tr("setup.noBoardHint") },
       ]}
     />
   );
@@ -61,7 +62,7 @@ export default function NewDevicePage() {
   if (start === "simulated") return <SimulatedStart cards={cards} />;
   return (
     <>
-      <Breadcrumbs crumbs={[{ href: "/devices", label: "Devices" }]} />
+      <Breadcrumbs crumbs={[{ href: "/devices", label: tr("devices.title") }]} />
       <TemplateEditor key={runsOn} entryId={null} onboard runsOn={runsOn} mode="page" intro={cards} />
     </>
   );
@@ -110,7 +111,7 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
       // made here is never shown.
       router.push(`/devices/${result.device.id}/connect?fresh=1`);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Something went wrong. Try again.");
+      setError(err instanceof ApiRequestError ? err.message : tr("setup.failed"));
       setSubmitting(false);
     }
   }
@@ -120,20 +121,20 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ href: "/devices", label: "Devices" }]}
+        breadcrumbs={[{ href: "/devices", label: tr("devices.title") }]}
         // The typed name becomes the title, as on New template (DESIGN.md §4).
-        title={name.trim() || "Add device"}
-        description="Name it and pick its template. Next come its credential and Install."
+        title={name.trim() || tr("setup.addDevice")}
+        description={tr("setup.addLead")}
       />
       <form onSubmit={(e) => void handleSubmit(e)} className={`${PAGE_WITH_BAR} ${EDITOR_COLUMN} @container gap-6`}>
         {cards}
         <div className="grid gap-3.5 @min-[560px]:grid-cols-2">
-          <Field label="Device name" hint="Shown in lists and alerts. Its MQTT id is made from it and never changes.">
-            <Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. bay1-climate" />
+          <Field label={tr("setup.deviceName")} hint={tr("setup.deviceNameHint")}>
+            <Input required autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={tr("setup.deviceNamePlaceholder")} />
           </Field>
-          <Field label="Zone" optional>
+          <Field label={tr("setup.zone")} optional>
             <Select value={zoneId} onChange={(e) => setZoneId(e.target.value)}>
-              <option value="">No zone</option>
+              <option value="">{tr("setup.noZone")}</option>
               {(zones ?? []).map((z) => (
                 <option key={z.id} value={z.id}>
                   {z.name}
@@ -143,21 +144,21 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
           </Field>
         </div>
         <Field
-          label="Template"
+          label={tr("setup.template")}
           hint={
             <>
-              It sets what the device measures and switches.{" "}
+              {tr("setup.templateHint")}{" "}
               <Link href="/templates" className="link-inline">
-                Manage templates
+                {tr("setup.manageTemplates")}
               </Link>
             </>
           }
         >
           <Select required value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-            {!templates && <option value="">Loading…</option>}
+            {!templates && <option value="">{tr("common.loading")}</option>}
             {(["generic_firmware", "own_code"] as const).map((r) =>
               byRuns(r).length ? (
-                <optgroup key={r} label={r === "generic_firmware" ? "Our firmware" : "Custom firmware"}>
+                <optgroup key={r} label={r === "generic_firmware" ? tr("setup.ourFirmware") : tr("setup.customFirmware")}>
                   {byRuns(r).map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
@@ -175,12 +176,12 @@ function FromTemplate({ cards }: { cards: ReactNode }) {
           </p>
         )}
         <div data-savebar className={SAVE_BAR}>
-          <span className="mr-auto text-meta text-ink-muted">Not created yet</span>
+          <span className="mr-auto text-meta text-ink-muted">{tr("ui.editor.notCreated")}</span>
           <Link href="/devices" className={buttonClassName({ variant: "ghost" })}>
-            Cancel
+            {tr("ui.cancel")}
           </Link>
           <Button type="submit" disabled={submitting || !templateId || !name.trim()}>
-            {submitting ? "Creating…" : "Create device"}
+            {submitting ? tr("setup.creating") : tr("setup.create")}
           </Button>
         </div>
       </form>
