@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
 import { SAVE_BAR } from "@/components/editor/save-bar";
 import type { ConnectFlow } from "@/components/devices/connect/useConnectFlow";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 export const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
@@ -89,7 +90,7 @@ export function SerialMonitor({ flow }: { flow: ConnectFlow }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border">
       <div className="flex justify-between border-b border-border bg-surface-raised px-3 py-2 text-xs text-ink-muted">
-        <span>What the Serial Monitor shows when it works</span>
+        <span>{tr("qr.serialTitle")}</span>
         <span className="font-mono">115200</span>
       </div>
       <pre className="overflow-auto bg-canvas p-3 font-mono text-xs leading-[1.55] text-ink">{lines.join("\n")}</pre>

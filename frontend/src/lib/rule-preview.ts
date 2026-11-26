@@ -103,28 +103,28 @@ export function sectionIssues(d: RuleDraft): SectionIssue[] {
   const reading = isReadingRule(d);
   const leafs = contacts(d.condition);
 
-  if (w.type === "schedule" && !w.cron.trim()) add("when", "Pick when it runs.", true);
-  if (w.type === "device_status" && !w.statusDeviceId) add("when", "Pick the device to watch.", true);
+  if (w.type === "schedule" && !w.cron.trim()) add("when", t("editor.rules.issueCron"), true);
+  if (w.type === "device_status" && !w.statusDeviceId) add("when", t("editor.rules.issueStatusDevice"), true);
 
-  if (reading && d.condition === null) add("if", "A rule that runs on each reading needs at least one condition.", true);
+  if (reading && d.condition === null) add("if", t("editor.rules.readingNeeds"), true);
   for (const c of leafs) {
     const p = contactProblem(c);
     if (p) add("if", p, true);
   }
   if (reading && switchesHardware(d) && leafs.some((c) => HYSTERESIS_OPERATORS.has(c.operator) && !(c.hysteresis > 0)))
-    add("if", "Add hysteresis to the thresholds so a reading hovering at the line doesn't toggle the relay.", false);
+    add("if", t("editor.rules.issueHysteresis"), false);
 
-  if (d.actions.length === 0 && d.preserved.actions.length === 0) add("then", "Add at least one action.", true);
+  if (d.actions.length === 0 && d.preserved.actions.length === 0) add("then", t("editor.rules.addAction"), true);
   for (const a of d.actions) {
     const p = actionProblem(a);
     if (p) add("then", p, true);
   }
 
-  if (reading && d.forDuration < MIN_HOLD) add("behaviour", `Hold for at least ${MIN_HOLD} s so one noisy reading can't fire it.`, false);
-  if (d.cooldown < MIN_INTERVAL) add("behaviour", `Keep at least ${MIN_INTERVAL} s between firings.`, false);
-  if (canClear(d) && d.clearNotify && !d.clearMessage.trim()) add("behaviour", "The clear notification needs a message.", true);
+  if (reading && d.forDuration < MIN_HOLD) add("behaviour", t("editor.rules.issueHold", { n: MIN_HOLD }), false);
+  if (d.cooldown < MIN_INTERVAL) add("behaviour", t("editor.rules.issueInterval", { n: MIN_INTERVAL }), false);
+  if (canClear(d) && d.clearNotify && !d.clearMessage.trim()) add("behaviour", t("editor.rules.issueClearMessage"), true);
 
-  if (d.name.trim().length > MAX_NAME) add("name", `Keep the name to ${MAX_NAME} characters.`, true);
+  if (d.name.trim().length > MAX_NAME) add("name", t("editor.rules.issueName", { n: MAX_NAME }), true);
   return out;
 }
 
@@ -162,14 +162,14 @@ export function wouldSend(
   for (const a of body.actions as Record<string, unknown>[]) {
     if (a.type === "actuator_command") command(a, "command");
     else if (a.type === "email") {
-      const to = Array.isArray(a.to) && a.to.length ? (a.to as string[]).join(", ") : "the workspace's alert recipients";
+      const to = Array.isArray(a.to) && a.to.length ? (a.to as string[]).join(", ") : t("editor.rules.alertRecipients");
       out.push({ kind: "email", target: to, payload: String(a.subject ?? "") });
     } else if (a.type === "webhook") out.push({ kind: "webhook", target: String(a.url ?? ""), payload: JSON.stringify(a.body ?? {}) });
-    else if (a.type === "notification") out.push({ kind: "notification", target: "Notifications", payload: String(a.message ?? "") });
+    else if (a.type === "notification") out.push({ kind: "notification", target: t("editor.rules.sendNotifications"), payload: String(a.message ?? "") });
   }
   for (const a of body.clear_actions as Record<string, unknown>[]) {
     if (a.type === "actuator_command") command(a, "clear");
-    else if (a.type === "notification") out.push({ kind: "notification", target: "Notifications (on clear)", payload: String(a.message ?? "") });
+    else if (a.type === "notification") out.push({ kind: "notification", target: t("editor.rules.sendNotificationsClear"), payload: String(a.message ?? "") });
   }
   return out;
 }

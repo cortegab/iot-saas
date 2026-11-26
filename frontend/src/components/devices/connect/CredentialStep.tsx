@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/Input";
 import { CopyButton } from "@/components/ui/SecretReveal";
 import { StepNav } from "@/components/devices/connect/parts";
 import type { ConnectFlow } from "@/components/devices/connect/useConnectFlow";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 /** Step 1: create or rotate the device's MQTT credential, shown once. */
 export function CredentialStep({ flow }: { flow: ConnectFlow }) {
@@ -19,25 +20,23 @@ export function CredentialStep({ flow }: { flow: ConnectFlow }) {
     <>
       {!credential ? (
         <>
-          <h2 className="text-section font-semibold text-ink">Credential</h2>
+          <h2 className="text-section font-semibold text-ink">{tr("connect2.credential")}</h2>
           <Callout tone="warning">
-            <strong>Getting firmware {neverConnected ? "creates" : "rotates"} this device&apos;s password.</strong>{" "}
-            {flow.install
-              ? "Install puts it on the board for you."
-              : "The platform keeps only a fingerprint of it, so the sketch needs a new one."}{" "}
+            <strong>{tr(neverConnected ? "connect2.createsWarn" : "connect2.rotatesWarn")}</strong>{" "}
+            {flow.install ? tr("connect2.installPuts") : tr("connect2.fingerprint")}{" "}
             {neverConnected
-              ? "This device has never connected, so nothing is interrupted."
-              : `${device.name} goes offline until it gets the new ${flow.install ? "install" : "sketch"}.`}
+              ? tr("connect2.nothingInterrupted")
+              : tr(flow.install ? "connect2.goesOfflineInstall" : "connect2.goesOfflineSketch", { device: device.name })}
           </Callout>
           {can("devices.write") ? (
             <div>
               <Button variant={neverConnected ? "primary" : "secondary-danger"} disabled={rotating} onClick={() => void flow.rotate()}>
                 <KeyRound aria-hidden size={15} />
-                {rotating ? "Working…" : neverConnected ? "Create credential" : "Rotate credential…"}
+                {rotating ? tr("connect2.working") : neverConnected ? tr("connect2.createCredential") : tr("connect2.rotateCredential")}
               </Button>
             </div>
           ) : (
-            <p className="text-sm text-ink-muted">Only admins can rotate credentials.</p>
+            <p className="text-sm text-ink-muted">{tr("connect2.onlyAdmins")}</p>
           )}
         </>
       ) : (
@@ -55,19 +54,19 @@ function StoreCredential({ flow, credential }: { flow: ConnectFlow; credential: 
   // hand: no "I've stored it" gate on that path.
   const [stored, setStored] = useState(flow.stored || flow.install != null);
   const fields = [
-    { label: "Username", value: credential.username, warning: undefined },
+    { label: tr("connect2.username"), value: credential.username, warning: undefined },
     {
-      label: "Password",
+      label: tr("connect2.password"),
       value: credential.password,
-      warning: flow.install ? "It won't be shown again. Install puts it on the board for you." : "It won't be shown again. The sketch you get next has it.",
+      warning: flow.install ? tr("connect2.notShownInstall") : tr("connect2.notShownSketch"),
     },
   ];
   return (
     <>
       <div className="flex flex-col gap-1">
-        <h2 className="text-section font-semibold text-ink">{flow.install ? "Its credential" : "Store its credential"}</h2>
+        <h2 className="text-section font-semibold text-ink">{flow.install ? tr("connect2.itsCredential") : tr("connect2.storeCredential")}</h2>
         <p className="text-meta text-ink-muted">
-          The device signs in with these. The password is shown only now{flow.install ? "; Install puts it on the board." : "."}
+          {tr(flow.install ? "connect2.signsInInstall" : "connect2.signsIn")}
         </p>
       </div>
       {fields.map((f) => (
@@ -84,11 +83,11 @@ function StoreCredential({ flow, credential }: { flow: ConnectFlow; credential: 
       {!flow.install && (
         <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-ink">
           <input type="checkbox" checked={stored} onChange={(e) => setStored(e.target.checked)} className="h-4 w-4 accent-[var(--color-accent)]" />
-          I&apos;ve stored it
+          {tr("connect2.stored")}
         </label>
       )}
       <StepNav
-        state={flow.install ? "Continue to the board's options" : "Store the password, then continue"}
+        state={flow.install ? tr("connect2.continueOptions") : tr("connect2.storeThenContinue")}
         nextDisabled={!stored}
         onNext={() => {
           flow.setStored(true);

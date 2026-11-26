@@ -9,17 +9,19 @@ import { Input } from "@/components/ui/Input";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { Select } from "@/components/ui/Select";
 import { Table } from "@/components/ui/Table";
-import { OptionGroup, plural, StepNav } from "@/components/devices/connect/parts";
+import { OptionGroup, StepNav } from "@/components/devices/connect/parts";
 import type { ConnectFlow, InstallPath } from "@/components/devices/connect/useConnectFlow";
 import { BOARDS, CHIPS, pinChoices, type SketchBoard } from "@/lib/firmware-sketch";
 import { wireId } from "@/lib/wire-id";
+import { tActive as tr } from "@iodriven/shared/i18n";
+import { richT } from "@/lib/i18n";
 
 /** Step 2: wiring (or board and pins, for the sketch), Wi-Fi and broker. */
 export function OptionsStep({ flow }: { flow: ConnectFlow }) {
   const { install, phone, ssid, hostProblem, blocked } = flow;
   return (
     <>
-      <h2 className="text-section font-semibold text-ink">Options</h2>
+      <h2 className="text-section font-semibold text-ink">{tr("connect.options")}</h2>
       {install ? <InstallLead flow={flow} install={install} /> : <SketchLead flow={flow} />}
       <div className="grid gap-5 xl:grid-cols-2">
         <div className="flex flex-col gap-4">
@@ -27,7 +29,7 @@ export function OptionsStep({ flow }: { flow: ConnectFlow }) {
             <WiringCard flow={flow} install={install} />
           ) : (
             <OptionGroup
-              label="Board"
+              label={tr("connect.board")}
               value={flow.board}
               onChange={(v) => flow.changeBoard(v as SketchBoard)}
               options={CHIPS.map((c) => [c, BOARDS[c].label, BOARDS[c].blurb] as const)}
@@ -40,7 +42,7 @@ export function OptionsStep({ flow }: { flow: ConnectFlow }) {
           {install ? <InstallSummary flow={flow} install={install} /> : <SketchPinsAndSummary flow={flow} />}
         </div>
       </div>
-      <StepNav state="Choose the board, Wi-Fi and broker, then continue" onBack={() => flow.setStep(1)} onNext={() => flow.setStep(3)} nextDisabled={blocked || (!phone && !ssid) || hostProblem != null} />
+      <StepNav state={tr("connect.optionsState")} onBack={() => flow.setStep(1)} onNext={() => flow.setStep(3)} nextDisabled={blocked || (!phone && !ssid) || hostProblem != null} />
     </>
   );
 }
@@ -48,9 +50,10 @@ export function OptionsStep({ flow }: { flow: ConnectFlow }) {
 function InstallLead({ flow, install }: { flow: ConnectFlow; install: InstallPath }) {
   return (
     <p className="text-sm text-ink-muted">
-      The board gets firmware <b className="text-ink">{install.firmware.version}</b>, set up from{" "}
-      {flow.device.hardware ? "this device's own wiring" : <>the <b className="text-ink">{flow.template.name}</b> wiring</>} and these choices. Nothing to
-      edit or compile: you install it on the next step.
+      {richT(tr, "connect.installLead", {
+        version: <b className="text-ink">{install.firmware.version}</b>,
+        wiring: flow.device.hardware ? tr("connect.ownWiringLower") : <>{richT(tr, "connect.templateWiringOf", { template: <b className="text-ink">{flow.template.name}</b> })}</>,
+      })}
     </p>
   );
 }
@@ -62,31 +65,36 @@ function SketchLead({ flow }: { flow: ConnectFlow }) {
   return (
     <>
       <p className="text-sm text-ink-muted">
-        The sketch is built from the <b className="text-ink">{template.name}</b> template and these choices. You get it on the next step.
+        {richT(tr, "connect.sketchLead", { template: <b className="text-ink">{template.name}</b> })}
       </p>
       <Callout>
         {wiring && flow.firmwarePublished ? (
           <>
-            This device is wired for a board the published firmware doesn&apos;t know (<code className="font-mono">{wiring.board}</code>). Pick
-            another board in{" "}
-            <Link href={device.hardware ? deviceWiringHref : templateWiringHref} className="text-accent hover:underline">
-              {device.hardware ? "this device's wiring" : "the template's wiring"}
-            </Link>
-            , or use the sketch.
+            {richT(tr, "connect.unknownBoard", {
+              board: <code className="font-mono">{wiring.board}</code>,
+              link: (
+                <Link href={device.hardware ? deviceWiringHref : templateWiringHref} className="text-accent hover:underline">
+                  {device.hardware ? tr("connect.thisDevicesWiring") : tr("connect.theTemplatesWiring")}
+                </Link>
+              ),
+            })}
           </>
         ) : wiring ? (
-          "No firmware release is published yet, so this device gets the sketch to upload."
+          tr("connect.noRelease")
         ) : (
           <>
-            To install from this page with no code, set up the wiring on the{" "}
-            <Link href={templateWiringHref} className="text-accent hover:underline">
-              {template.name} template
-            </Link>{" "}
-            for every device of it, or{" "}
-            <Link href={deviceWiringHref} className="text-accent hover:underline">
-              for this device alone
-            </Link>
-            .
+            {richT(tr, "connect.noWiringLead", {
+              templateLink: (
+                <Link href={templateWiringHref} className="text-accent hover:underline">
+                  {tr("connect.templateLinkText", { template: template.name })}
+                </Link>
+              ),
+              deviceLink: (
+                <Link href={deviceWiringHref} className="text-accent hover:underline">
+                  {tr("connect.deviceAlone")}
+                </Link>
+              ),
+            })}
           </>
         )}
       </Callout>
@@ -101,15 +109,15 @@ function WiringCard({ flow, install }: { flow: ConnectFlow; install: InstallPath
     <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-meta font-medium text-ink">
-          Wiring {device.hardware && <Tag size="sm">This device&apos;s own</Tag>}
+          {tr("connect.wiring")} {device.hardware && <Tag size="sm">{tr("connect.ownTag")}</Tag>}
         </span>
         <span className="flex gap-3 text-xs">
           <Link href={deviceWiringHref} className="text-accent hover:underline">
-            {device.hardware ? "Change this device's wiring" : "Wire this device differently"}
+            {device.hardware ? tr("connect.changeWiring") : tr("connect.wireDifferently")}
           </Link>
           {!device.hardware && (
             <Link href={templateWiringHref} className="text-accent hover:underline">
-              Edit the template&apos;s ({plural(template.device_count, "device")})
+              {tr("connect.editTemplates", { devices: tr("common.deviceCount", { count: template.device_count }) })}
             </Link>
           )}
         </span>
@@ -121,23 +129,24 @@ function WiringCard({ flow, install }: { flow: ConnectFlow; install: InstallPath
       {guide.pins.length > 0 ? (
         <Table
           columns={[
-            { header: "Pin", render: (r) => <span className="font-mono">{r.name}</span>, className: "w-36" },
-            { header: "Connects to", render: (r) => r.to },
+            { header: tr("connect.pin"), render: (r) => <span className="font-mono">{r.name}</span>, className: "w-36" },
+            { header: tr("connect.connectsTo"), render: (r) => r.to },
           ]}
           rows={guide.pins}
           rowKey={(r) => `${r.pin}-${r.role}-${r.to}`}
         />
       ) : (
-        <p className="text-sm text-ink-muted">Nothing is wired yet, so the board will only report that it&apos;s online.</p>
+        <p className="text-sm text-ink-muted">{tr("connect.nothingWired")}</p>
       )}
       {unlinkedPins.length > 0 && (
         <Callout tone="warning">
-          GPIO {unlinkedPins.join(", ")} {unlinkedPins.length === 1 ? "isn't" : "aren't"} linked to a metric, so{" "}
-          {unlinkedPins.length === 1 ? "it won't" : "they won't"} publish anything. Pick the metric in{" "}
-          <Link href={device.hardware ? deviceWiringHref : templateWiringHref} className="text-accent hover:underline">
-            the wiring
-          </Link>
-          .
+          {richT(tr, unlinkedPins.length === 1 ? "connect.unlinkedOne" : "connect.unlinkedMany", {
+            link: (
+              <Link href={device.hardware ? deviceWiringHref : templateWiringHref} className="text-accent hover:underline">
+                {tr("connect.theWiring")}
+              </Link>
+            ),
+          }, { pins: unlinkedPins.join(", ") })}
         </Callout>
       )}
     </div>
@@ -148,7 +157,7 @@ function WifiOptions({ flow }: { flow: ConnectFlow }) {
   return (
     <>
       <OptionGroup
-        label="Wi-Fi"
+        label={tr("connect.wifi")}
         value={flow.phone ? "ble" : "sketch"}
         onChange={(v) => flow.setWifiMode(v as "ble" | "sketch")}
         options={
@@ -156,27 +165,27 @@ function WifiOptions({ flow }: { flow: ConnectFlow }) {
             ? [
                 [
                   "ble",
-                  "Set up from a phone",
-                  "The IO Driven app or ESP BLE Provisioning, Security 1 (PoP): the app proves it holds this device's password, then you pick the network. Nothing about your Wi-Fi in the firmware.",
+                  tr("connect.fromPhone"),
+                  tr("connect.fromPhoneHint"),
                 ],
                 flow.install
-                  ? ["sketch", "Type it in", "Quick for a bench test. Readable from the board's flash."]
-                  : ["sketch", "Type it into the sketch", "Quick for a bench test. Readable from the binary."],
+                  ? ["sketch", tr("connect.typeIn"), tr("connect.typeInHint")]
+                  : ["sketch", tr("connect.typeInSketch"), tr("connect.typeInSketchHint")],
               ]
             : // No Bluetooth on this board: the only way in (DESIGN.md §8).
-              [["sketch", "Type it in", "This board has no Bluetooth, so its Wi-Fi goes in with the config. To change networks, run Install again."]]
+              [["sketch", tr("connect.typeIn"), tr("connect.noBluetooth")]]
         }
       />
       {!flow.phone && (
         <div className="grid grid-cols-2 gap-2">
           {!flow.phoneSetup && (
-            <p className="col-span-2 text-xs text-ink-muted">Saved on the board with its config. Anyone holding the board can read it.</p>
+            <p className="col-span-2 text-xs text-ink-muted">{tr("connect.savedOnBoard")}</p>
           )}
-          <Field label="Network (2.4 GHz)">
+          <Field label={tr("connect.network")}>
             <Input value={flow.ssid} autoComplete="off" onChange={(e) => flow.setSsid(e.target.value)} />
           </Field>
-          <Field label="Password">
-            <PasswordInput aria-label="Wi-Fi password" value={flow.wifiPassword} autoComplete="off" onChange={(e) => flow.setWifiPassword(e.target.value)} />
+          <Field label={tr("connect.password")}>
+            <PasswordInput aria-label={tr("connect.wifiPassword")} value={flow.wifiPassword} autoComplete="off" onChange={(e) => flow.setWifiPassword(e.target.value)} />
           </Field>
         </div>
       )}
@@ -190,25 +199,25 @@ function BrokerOptions({ flow }: { flow: ConnectFlow }) {
   return (
     <details open={flow.hostProblem != null || !flow.tls} className="overflow-hidden rounded-lg border border-border">
       <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">
-        Advanced: where it connects <span className="text-ink-muted">· {flow.host || "…"}, {flow.tls ? "secure" : "not secure"}</span>
+        {tr("connect.advanced")} <span className="text-ink-muted">· {flow.host || "…"}, {flow.tls ? tr("connect.secure") : tr("connect.notSecure")}</span>
       </summary>
       <div className="flex flex-col gap-4 p-4">
-      <Field label="Broker host" error={flow.hostProblem ?? undefined} hint="Where the board connects: this server's address, as the board's network sees it.">
+      <Field label={tr("connect.brokerHost")} error={flow.hostProblem ?? undefined} hint={tr("connect.brokerHint")}>
         <Input mono value={flow.host} autoComplete="off" spellCheck={false} onChange={(e) => flow.setHost(e.target.value)} />
       </Field>
       <OptionGroup
-        label="Connection"
+        label={tr("connect.connection")}
         value={flow.tls ? "tls" : "plain"}
         onChange={(v) => flow.setTls(v === "tls")}
         options={[
-          ["tls", "TLS on 8883", "Production. Certificate validated."],
-          ["plain", "Plain 1883", "Local broker only."],
+          ["tls", tr("connect.tls"), tr("connect.tlsHint")],
+          ["plain", tr("connect.plain"), tr("connect.plainHint")],
         ]}
       />
       {!flow.tls && (
         <p className="flex gap-1.5 text-xs text-status-pending">
           <AlertTriangle aria-hidden size={13} className="mt-0.5 shrink-0" />
-          Without TLS the credential crosses the network in the clear. Use it only against a local development broker.
+          {tr("connect.noTls")}
         </p>
       )}
       </div>
@@ -220,20 +229,24 @@ function InstallSummary({ flow, install }: { flow: ConnectFlow; install: Install
   const { phone, security, name, ssid, tls, host, checkedMetrics, boolActuators } = flow;
   return (
     <div className="rounded-lg bg-canvas px-3.5 py-3 text-meta">
-      <p className="mb-1 font-medium text-ink">The board gets</p>
+      <p className="mb-1 font-medium text-ink">{tr("connect.boardGets")}</p>
       <ul className="list-disc pl-5 text-ink-muted">
         <li>
-          Firmware {install.firmware.version} for the {install.model.label}
+          {tr("connect.firmwareFor", { version: install.firmware.version, board: install.model.label })}
         </li>
         <li>
           {phone
-            ? `Wi-Fi from a phone (Espressif provisioning, Security ${security} – PoP), advertised as "${name}". Any Wi-Fi it had saved is erased.`
-            : `Wi-Fi "${ssid || "…"}", typed in.`}
+            ? tr("connect.wifiPhone", { security, name })
+            : tr("connect.wifiTyped", { ssid: ssid || "…" })}
         </li>
-        {phone && <li>To set a new Wi-Fi later: hold {install.model.reset.label} for 5 seconds.</li>}
+        {phone && <li>{tr("connect.newWifiLater", { button: install.model.reset.label })}</li>}
         <li>
-          MQTT over {tls ? "TLS on 8883" : "plain 1883"} to {host || "…"}, {checkedMetrics.length} metric{checkedMetrics.length === 1 ? "" : "s"} and {boolActuators.length} actuator
-          {boolActuators.length === 1 ? "" : "s"} wired
+          {tr("connect.mqttWired", {
+            transport: tr(tls ? "connect.tls" : "connect.plain"),
+            host: host || "…",
+            metrics: tr("connect.metrics", { count: checkedMetrics.length }),
+            actuators: tr("connect.actuators", { count: boolActuators.length }),
+          })}
         </li>
       </ul>
     </div>
@@ -246,14 +259,14 @@ function SketchPinsAndSummary({ flow }: { flow: ConnectFlow }) {
     <>
       {Object.keys(pins).length > 0 && (
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-meta font-medium text-ink">Pins</legend>
-          {[...metrics.filter((m) => m.data_type === "bool").map((m) => [`m:${wireId(m)}`, m.name, "input"] as const), ...boolActuators.map((a) => [`a:${wireId(a)}`, a.name, "output"] as const)].map(([k, label, dir]) => (
+          <legend className="mb-1 text-meta font-medium text-ink">{tr("connect.pins")}</legend>
+          {[...metrics.filter((m) => m.data_type === "bool").map((m) => [`m:${wireId(m)}`, m.name, tr("connect.input")] as const), ...boolActuators.map((a) => [`a:${wireId(a)}`, a.name, tr("connect.output")] as const)].map(([k, label, dir]) => (
             <div key={k} className="grid grid-cols-[minmax(0,1fr)_120px] items-center gap-2">
               <span className="min-w-0 text-sm text-ink">
                 {label} <small className="font-mono text-ink-muted">{k.slice(2)} · {dir}</small>
               </span>
               <Select
-                aria-label={`GPIO for ${label}`}
+                aria-label={tr("connect.gpioFor", { name: label })}
                 aria-invalid={clashes[k] ? true : undefined}
                 value={pins[k]}
                 onChange={(e) => flow.setPinOverrides((p) => ({ ...p, [k]: Number(e.target.value) }))}
@@ -270,20 +283,23 @@ function SketchPinsAndSummary({ flow }: { flow: ConnectFlow }) {
         </fieldset>
       )}
       <div className="rounded-lg bg-canvas px-3.5 py-3 text-meta">
-        <p className="mb-1 font-medium text-ink">The sketch includes</p>
+        <p className="mb-1 font-medium text-ink">{tr("connect.sketchIncludes")}</p>
         <ul className="list-disc pl-5 text-ink-muted">
           <li>
-            {boardInfo.label}: Arduino board &quot;{boardInfo.arduinoBoard}&quot;{boardInfo.ideSettings.length ? `, ${boardInfo.ideSettings.join(", ")}` : ""}
+            {tr("connect.arduinoBoard", { board: boardInfo.label, arduino: boardInfo.arduinoBoard })}{boardInfo.ideSettings.length ? `, ${boardInfo.ideSettings.join(", ")}` : ""}
           </li>
           <li>
             {phone
-              ? `Wi-Fi from a phone (Espressif provisioning, Security ${security} – PoP), advertised as "${name}". Needs the Huge APP partition.`
-              : "Wi-Fi in the firmware. Fits the default partition."}
+              ? tr("connect.sketchPhone", { security, name })
+              : tr("connect.sketchWifi")}
           </li>
-          {phone && <li>To set a new Wi-Fi later: hold {boardInfo.resetButton} for 5 seconds.</li>}
+          {phone && <li>{tr("connect.newWifiLater", { button: boardInfo.resetButton })}</li>}
           <li>
-            MQTT over {tls ? "TLS on 8883" : "plain 1883"}, {metrics.length} metric{metrics.length === 1 ? "" : "s"}, {actuators.length} actuator
-            {actuators.length === 1 ? "" : "s"}
+            {tr("connect.mqttSketch", {
+              transport: tr(tls ? "connect.tls" : "connect.plain"),
+              metrics: tr("connect.metrics", { count: metrics.length }),
+              actuators: tr("connect.actuators", { count: actuators.length }),
+            })}
           </li>
         </ul>
       </div>

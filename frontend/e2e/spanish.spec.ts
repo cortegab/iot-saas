@@ -51,6 +51,20 @@ test.describe("a Spanish browser", () => {
   });
 });
 
+test.describe("Add device, in Spanish", () => {
+  test.use({ locale: "es-MX" });
+
+  test("speaks Spanish from the start choice to Create", async ({ page, request }) => {
+    await resetChoice(request);
+    await page.goto("/devices/new");
+    await expect(page.getByRole("heading", { name: "Agregar dispositivo" })).toBeVisible();
+    const start = page.getByRole("radiogroup", { name: "Cómo empezar" });
+    await expect(start.getByRole("radio", { name: /Con una plantilla/ })).toBeVisible();
+    await expect(start.getByRole("radio", { name: /Algo nuevo/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Crear dispositivo" })).toBeVisible();
+  });
+});
+
 test.describe("signed out, a Spanish browser", () => {
 
   test("gets the landing page and sign-in in Spanish", async ({ browser }) => {

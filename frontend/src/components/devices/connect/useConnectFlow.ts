@@ -19,6 +19,7 @@ import { hardwareToDraft, wiringGuide, type KeyedRow, type WiringGuide } from "@
 import { useRealtimeEvents } from "@/lib/realtime-bus";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
@@ -54,10 +55,10 @@ export interface InstallPath {
 export type ConnectFlow = Extract<ReturnType<typeof useConnectFlow>, { kind: "ready" }>["flow"];
 
 const LEAVE_UNSTORED = {
-  title: "Leave before storing the password?",
-  body: "It's shown only once. If you leave now, you'll have to rotate the credential to see a new one.",
-  confirmLabel: "Leave",
-  cancelLabel: "Stay",
+  get title() { return tr("connect3.leaveTitle"); },
+  get body() { return tr("connect3.leaveBody"); },
+  get confirmLabel() { return tr("connect3.leave"); },
+  get cancelLabel() { return tr("connect3.stay"); },
   // A reload loses it too (it's held in the page only), so the browser asks.
   onUnload: true,
 };
@@ -117,7 +118,7 @@ export function useConnectFlow(deviceId: string) {
         autoCredential.current = "done";
       })
       // Step 1 still offers Create credential, and says why it failed.
-      .catch((err: unknown) => toast({ tone: "error", title: "Couldn't create the credential", detail: err instanceof ApiRequestError ? err.message : undefined }))
+      .catch((err: unknown) => toast({ tone: "error", title: tr("connect3.createFailed"), detail: err instanceof ApiRequestError ? err.message : undefined }))
       .finally(() => setRotating(false));
   }, [api, canWrite, device, deviceId, fresh, pathname, role, router, toast]);
 
@@ -139,13 +140,13 @@ export function useConnectFlow(deviceId: string) {
   useRealtimeEvents((m) => {
     if (m.device_id !== deviceId) return;
     if (m.type === "device_health" && m.online) {
-      setLive((l) => ({ ...l, status: { ok: true, detail: [m.rssi != null && `rssi ${m.rssi} dBm`, m.fw_version && `fw ${m.fw_version}`].filter(Boolean).join(" · ") || "online" } }));
+      setLive((l) => ({ ...l, status: { ok: true, detail: [m.rssi != null && `rssi ${m.rssi} dBm`, m.fw_version && `fw ${m.fw_version}`].filter(Boolean).join(" · ") || tr("connect3.detailOnline") } }));
     } else if (m.type === "telemetry" && m.metric) {
-      setLive((l) => ({ ...l, status: l.status?.ok ? l.status : { ok: true, detail: "publishing" }, [`m:${m.metric}`]: { ok: true, detail: String(m.value) } }));
+      setLive((l) => ({ ...l, status: l.status?.ok ? l.status : { ok: true, detail: tr("connect3.detailPublishing") }, [`m:${m.metric}`]: { ok: true, detail: String(m.value) } }));
     } else if (m.type === "command_ack") {
       setLive((l) => {
         const waiting = Object.entries(l).find(([k, s]) => k.startsWith("a:") && s.busy);
-        return waiting ? { ...l, [waiting[0]]: { ok: true, detail: "acknowledged" } } : l;
+        return waiting ? { ...l, [waiting[0]]: { ok: true, detail: tr("connect3.detailAcked") } } : l;
       });
     }
   });
@@ -209,26 +210,26 @@ export function useConnectFlow(deviceId: string) {
   const items: CheckItem[] = [
     {
       k: "status",
-      label: "Reached the broker",
+      label: tr("connect3.reachedBroker"),
       sub: `${tenantSlug}/${device.slug}/status`,
       hint: install
-        ? `Check the board is on a 2.4 GHz network that can reach ${host}. Its LED double-blinks while it can't connect.`
-        : "Check the board is powered and on a 2.4 GHz network, and that the whole credential was pasted.",
+        ? tr("connect3.hintBrokerInstall", { host })
+        : tr("connect3.hintBrokerSketch"),
     },
     ...checkedMetrics.map((m) => ({
       k: `m:${wireId(m)}`,
-      label: `First reading: ${m.name}`,
+      label: tr("connect3.firstReading", { metric: m.name }),
       sub: `…/${wireId(m)}`,
       hint:
         install || m.data_type === "bool"
-          ? `Check the wiring on GPIO ${wiredPin(`m:${wireId(m)}`)}.`
-          : "The sketch publishes nothing until your sensor code returns a number.",
+          ? tr("connect3.hintWiring", { pin: String(wiredPin(`m:${wireId(m)}`)) })
+          : tr("connect3.hintSensorCode"),
     })),
     ...boolActuators.map((a) => ({
       k: `a:${wireId(a)}`,
-      label: `Command test: ${a.name}`,
+      label: tr("connect3.commandTest", { actuator: a.name }),
       sub: `…/cmd/${wireId(a)} → ack`,
-      hint: `Nothing on GPIO ${wiredPin(`a:${wireId(a)}`)}? Check the relay's supply and whether it's active-low.`,
+      hint: tr("connect3.hintRelay", { pin: String(wiredPin(`a:${wireId(a)}`)) }),
       actuator: a,
     })),
   ];
@@ -251,9 +252,9 @@ export function useConnectFlow(deviceId: string) {
 
   async function rotate() {
     if (!neverConnected) {
-      const ok = await confirm("The firmware running now disconnects until the new sketch is flashed. The provisioning QR changes too.", {
-        title: `Rotate the credential for ${device!.name}?`,
-        confirmLabel: "Rotate credential",
+      const ok = await confirm(tr("connect3.rotateBody"), {
+        title: tr("connect3.rotateTitle", { device: device!.name }),
+        confirmLabel: tr("connect3.rotate"),
       });
       if (!ok) return;
     }
@@ -262,9 +263,9 @@ export function useConnectFlow(deviceId: string) {
       const result = await api.post<DeviceCreateResponse>(`/devices/${deviceId}/rotate-credential`);
       setCredential(result.credential);
       setStored(false);
-      toast({ title: "Credential ready", detail: "Store it, then choose the firmware options." });
+      toast({ title: tr("connect3.ready"), detail: tr("connect3.readyDetail") });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't rotate the credential", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("connect3.rotateFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     } finally {
       setRotating(false);
     }
@@ -277,7 +278,7 @@ export function useConnectFlow(deviceId: string) {
       await api.post(`/devices/${deviceId}/commands`, { actuator: wireId(actuator), value: actuator.on_value ?? true });
     } catch (err) {
       setLive((l) => ({ ...l, [key]: {} }));
-      toast({ tone: "error", title: "Couldn't send the test", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("connect3.testFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
