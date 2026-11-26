@@ -8,15 +8,17 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { encodeConfigBlob, type FirmwareConfig } from "@/lib/hardware/config-blob";
 import type { BoardModel } from "@/lib/hardware/driver-catalog";
 import { BAUD_LADDER, FlashError, flashBoard, webSerialSupported, type FirmwareManifest, type FlashProgress, type FlashTimings } from "@/lib/hardware/flasher";
+import { activeLocale, formatNumber, tActive as tr } from "@iodriven/shared/i18n";
+import { richT } from "@/lib/i18n";
 
 type Mode = "full" | "config";
 
 const STAGE_LABEL: Record<FlashProgress["stage"], string> = {
-  connecting: "Connecting to the board…",
-  downloading: "Downloading the firmware…",
-  writing: "Writing",
-  restarting: "Restarting the board…",
-  done: "Done",
+  get connecting() { return tr("install.connecting"); },
+  get downloading() { return tr("install.downloading"); },
+  get writing() { return tr("install.writing"); },
+  get restarting() { return tr("install.restarting"); },
+  get done() { return tr("install.done"); },
 };
 
 /** "1:52" from milliseconds. */
@@ -89,7 +91,7 @@ export function InstallStep({
       setError(
         err instanceof FlashError
           ? err.message
-          : `${(err as Error).message} If the board wouldn't connect, hold its BOOT button while you click Install, then try again.`,
+          : tr("install.bootHint", { message: (err as Error).message }),
       );
     } finally {
       setBusy(null);
@@ -100,41 +102,40 @@ export function InstallStep({
 
   const writing = progress?.stage === "writing" && progress.fraction != null;
   const pct = writing ? Math.round((progress.fraction ?? 0) * 100) : null;
-  const stageText = progress && (progress.stage === "writing" ? `Writing ${progress.file ?? "the firmware"}…` : STAGE_LABEL[progress.stage]);
+  const stageText = progress && (progress.stage === "writing" ? tr("install.writingFile", { file: progress.file ?? tr("install.theFirmware") }) : STAGE_LABEL[progress.stage]);
   // Below full speed after the board dropped out: say why it's slow.
   const slower = progress != null && progress.baudrate < BAUD_LADDER[0];
 
   return (
     <div className="flex flex-col gap-4">
       {serialOk === false && (
-        <Callout tone="warning" title="This browser can't install firmware">
-          Installing over USB needs Chrome or Edge on a computer. Open this page there, or download the sketch below and upload it with the Arduino
-          IDE.
+        <Callout tone="warning" title={tr("install.noSerialTitle")}>
+          {tr("install.noSerial")}
         </Callout>
       )}
 
       <div className="rounded-lg border border-border p-4">
-        <h3 className="mb-2 text-sm font-semibold text-ink">Before you install</h3>
+        <h3 className="mb-2 text-sm font-semibold text-ink">{tr("install.before")}</h3>
         <ul className="list-disc space-y-1 pl-5 text-sm text-ink">
           <li>
-            Plug the <b>{model.label}</b> in with a USB <b>data</b> cable (charge-only cables don&apos;t work).
+            {richT(tr, "install.plug", { board: <b>{model.label}</b>, data: <b>{tr("install.data")}</b> })}
           </li>
-          <li>If no port shows up, install the board&apos;s USB driver (CP210x or CH340) and plug it in again.</li>
+          <li>{tr("install.driver")}</li>
           {(model.notes ?? []).map((n) => (
             <li key={n}>{n}</li>
           ))}
-          <li>Installing erases the Wi-Fi the board has saved, so it starts at phone setup.</li>
+          <li>{tr("install.erases")}</li>
         </ul>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button disabled={!config || busy != null || !serialOk} onClick={() => void install("full")}>
           {busy === "full" ? <Loader2 aria-hidden size={15} className="animate-spin" /> : <Cpu aria-hidden size={15} />}
-          {busy === "full" ? "Installing…" : `Install firmware ${manifest.version}`}
+          {busy === "full" ? tr("install.installing") : tr("install.installVersion", { version: manifest.version })}
         </Button>
         <Button variant="secondary" disabled={!config || busy != null || !serialOk} onClick={() => void install("config")}>
           <RefreshCw aria-hidden size={14} />
-          Update config only
+          {tr("install.configOnly")}
         </Button>
       </div>
       {busy && (
@@ -150,38 +151,40 @@ export function InstallStep({
           </div>
           <ProgressBar
             value={writing ? (progress.fraction ?? 0) : undefined}
-            label={busy === "full" ? "Installing the firmware" : "Updating the config"}
+            label={busy === "full" ? tr("install.installingLabel") : tr("install.updatingLabel")}
             valueText={pct != null ? `${pct}%` : (stageText ?? undefined)}
           />
           {slower && (
             <p className="text-xs text-ink-muted">
-              Slower link ({progress.baudrate.toLocaleString("en-US")} baud): this board dropped out at higher speeds, so this takes
-              {progress.baudrate <= BAUD_LADDER[BAUD_LADDER.length - 1] ? " about 2 minutes" : " under a minute"}. Keep it plugged in.
+              {tr("install.slower", {
+                baud: formatNumber(activeLocale(), progress.baudrate),
+                time: tr(progress.baudrate <= BAUD_LADDER[BAUD_LADDER.length - 1] ? "install.about2" : "install.underMinute"),
+              })}
             </p>
           )}
         </div>
       )}
       <p className="text-xs text-ink-muted">
-        Update config only rewrites this device&apos;s settings (pins, credential, broker) on a board that already runs the firmware, and keeps its
-        Wi-Fi. It takes a few seconds.
+        {tr("install.configNote")}
       </p>
 
       {error && (
-        <Callout tone="error" title="The install didn't finish">
+        <Callout tone="error" title={tr("install.failed")}>
           {error}
         </Callout>
       )}
       {done && (
-        <Callout title={done.mode === "full" ? "Firmware installed" : "Config updated"}>
+        <Callout title={done.mode === "full" ? tr("install.installed") : tr("install.configUpdated")}>
           <span className="inline-flex items-center gap-1.5">
             <Check aria-hidden size={14} className="text-status-online" />
             {done.mode === "full"
               ? done.timings.wifiErased
-                ? "The board restarted with no Wi-Fi saved, and its LED blinks slowly while it waits for your phone."
-                : "The board restarted. It kept the Wi-Fi it had."
-              : "The board restarted with the new settings and kept its Wi-Fi."}{" "}
-            Took {clock(done.timings.totalMs)}
-            {done.timings.baudrate < BAUD_LADDER[0] ? ` at ${done.timings.baudrate.toLocaleString("en-US")} baud` : ""}.
+                ? tr("install.noWifi")
+                : tr("install.keptWifi")
+              : tr("install.newSettings")}{" "}
+            {done.timings.baudrate < BAUD_LADDER[0]
+              ? tr("install.tookAt", { time: clock(done.timings.totalMs), baud: formatNumber(activeLocale(), done.timings.baudrate) })
+              : tr("install.took", { time: clock(done.timings.totalMs) })}
           </span>
           {done.timings.notes.map((n) => (
             <span key={n} className="mt-1 block text-xs text-ink-muted">

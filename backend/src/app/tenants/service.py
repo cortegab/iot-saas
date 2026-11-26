@@ -38,7 +38,9 @@ async def _unique_slug(session: AsyncSession, name: str) -> str:
     return slug
 
 
-async def create_tenant_with_owner(session: AsyncSession, user_id: uuid.UUID, name: str) -> Tenant:
+async def create_tenant_with_owner(
+    session: AsyncSession, user_id: uuid.UUID, name: str, locale: str = "en"
+) -> Tenant:
     """Create a tenant and insert its owner membership in one step.
 
     Sets tenant context itself, immediately after creating the tenant, so the
@@ -54,7 +56,7 @@ async def create_tenant_with_owner(session: AsyncSession, user_id: uuid.UUID, na
     `from app.catalog.models import ...` here (CLAUDE.md §6).
     """
     slug = await _unique_slug(session, name)
-    tenant = Tenant(name=name, slug=slug)
+    tenant = Tenant(name=name, slug=slug, locale=locale)
     session.add(tenant)
     await session.flush()  # populate tenant.id for the membership insert
 
@@ -79,6 +81,7 @@ async def update_tenant(
     name: str | None = None,
     notification_emails: list[str] | None = None,
     timezone: str | None = None,
+    locale: str | None = None,
 ) -> Tenant:
     """Update workspace settings. Callers gate this by role (tenants/router.py:
     admins for recipients and time zone, owners for the name) — `tenants`
@@ -93,6 +96,8 @@ async def update_tenant(
         tenant.notification_emails = [e.strip() for e in notification_emails if e.strip()]
     if timezone is not None:
         tenant.timezone = timezone
+    if locale is not None:
+        tenant.locale = locale
     await session.flush()
     return tenant
 
@@ -126,7 +131,8 @@ async def get_tenant_slug(session: AsyncSession, tenant_id: uuid.UUID) -> str:
 
 
 async def list_my_tenants(session: AsyncSession, user_id: uuid.UUID) -> list[tuple[Tenant, str]]:
-    """List every tenant the given user belongs to, with their role in each.
+    """List every tenant the given user belongs to, with their role in each,
+    the one joined first first.
 
     Relies on tenant_memberships' dual-predicate RLS policy's user_id branch,
     so the caller must have already called set_user_context in the same
@@ -137,6 +143,9 @@ async def list_my_tenants(session: AsyncSession, user_id: uuid.UUID) -> list[tup
         select(Tenant, TenantMembership.role)
         .join(TenantMembership, TenantMembership.tenant_id == Tenant.id)
         .where(TenantMembership.user_id == user_id)
+        # A fixed order (joined first, then by name): the sign-in chooser lists
+        # them this way, and the first is where a sign-in lands by default.
+        .order_by(TenantMembership.created_at, Tenant.name, Tenant.id)
     )
     return [(tenant, role) for tenant, role in result.all()]
 

@@ -127,16 +127,17 @@ async def register_user(
     password: str,
     tenant_name: str,
     name: str | None = None,
+    locale: str = "en",
 ) -> tuple[User, Tenant]:
     user = await create_user(session, email, password, name)
     tenant = await tenants_service.create_tenant_with_owner(
-        session, user_id=user.id, name=tenant_name
+        session, user_id=user.id, name=tenant_name, locale=locale
     )
     return user, tenant
 
 
 async def user_for_google(
-    session: AsyncSession, identity: GoogleIdentity, tenant_name: str | None
+    session: AsyncSession, identity: GoogleIdentity, tenant_name: str | None, locale: str = "en"
 ) -> tuple[User, bool]:
     """The account a verified Google identity signs in to, and whether it was
     just made (ease-of-use plan B5). By Google's `sub` first; else the account
@@ -160,7 +161,9 @@ async def user_for_google(
     session.add(user)
     await session.flush()
     if tenant_name:
-        await tenants_service.create_tenant_with_owner(session, user_id=user.id, name=tenant_name)
+        await tenants_service.create_tenant_with_owner(
+            session, user_id=user.id, name=tenant_name, locale=locale
+        )
     return user, True
 
 
@@ -189,10 +192,27 @@ async def get_user_by_email(session: AsyncSession, email: str) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def update_profile(session: AsyncSession, user: User, name: str | None) -> User:
-    user.name = name.strip() if name and name.strip() else None
+async def update_profile(session: AsyncSession, user: User, changes: dict[str, str | None]) -> User:
+    """Only the keys present change (PATCH): `name`, and `locale` (null goes
+    back to following the browser or phone)."""
+    if "name" in changes:
+        name = changes["name"]
+        user.name = name.strip() if name and name.strip() else None
+    if "locale" in changes:
+        user.locale = changes["locale"]
     await session.flush()
     return user
+
+
+async def get_locales_by_user_ids(
+    session: AsyncSession, user_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, str | None]:
+    """Each user's saved language (None = follow their device), for messages
+    sent to them (push; DESIGN.md §11a)."""
+    if not user_ids:
+        return {}
+    result = await session.execute(select(User.id, User.locale).where(User.id.in_(user_ids)))
+    return {uid: loc for uid, loc in result.all()}
 
 
 async def get_emails_by_user_ids(

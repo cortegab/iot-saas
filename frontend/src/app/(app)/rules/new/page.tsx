@@ -16,6 +16,7 @@ import { recipeStarts, type Recipe } from "@/lib/rule-recipes";
 import { cn } from "@/lib/cn";
 import { PAGE_WITH_BAR } from "@/components/editor/save-bar";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 
@@ -101,13 +102,13 @@ export default function NewRulePage() {
   return (
     <div className={cn("flex flex-col gap-4", start && PAGE_WITH_BAR)}>
       <PageHeader
-        title="New rule"
-        breadcrumbs={[seededDevice ? { href: back, label: device?.name ?? "Device" } : { href: "/rules", label: "Rules" }]}
-        description={start ? undefined : "Start from a recipe or blank. A recipe asks only for its devices and limit."}
+        title={t("rules.new")}
+        breadcrumbs={[seededDevice ? { href: back, label: device?.name ?? t("rules.newPage.device") } : { href: "/rules", label: t("rules.title") }]}
+        description={start ? undefined : t("rules.newPage.description")}
       />
       {!isAdmin ? (
         <p className="max-w-[760px] rounded-lg bg-surface-raised px-3 py-2 text-meta text-ink-muted">
-          Only owners and admins create rules. Ask one to add it.
+          {t("rules.newPage.onlyAdmins")}
         </p>
       ) : start?.recipe ? (
         <QuickRecipe
@@ -126,7 +127,7 @@ export default function NewRulePage() {
         <RuleEditor key={start.key} deviceId={seededDevice} initialDraft={start.draft} onSaved={onSaved} onCancel={() => setStart(null)} />
       ) : (
         <div className="flex max-w-[760px] flex-col gap-4">
-          <ul aria-label="Recipes" className="grid gap-3 sm:grid-cols-2">
+          <ul aria-label={t("rules.newPage.recipes")} className="grid gap-3 sm:grid-cols-2">
             {recipes.map((r) => {
               const Icon = ICON[r.icon];
               return (
@@ -143,9 +144,9 @@ export default function NewRulePage() {
                     <span className="text-meta text-ink-muted">{r.description}</span>
                     {r.tags.length > 0 && (
                       <span className="mt-auto flex flex-wrap gap-1.5 pt-1">
-                        {r.tags.map((t) => (
-                          <Tag key={t} tone={t === "switches hardware" ? "warn" : "neutral"} size="sm">
-                            {t}
+                        {r.tags.map((tag) => (
+                          <Tag key={tag} tone={tag === "switches hardware" ? "warn" : "neutral"} size="sm">
+                            {t(tag === "switches hardware" ? "rules.tags.hardware" : tag === "latches" ? "rules.tags.latches" : "rules.tags.email")}
                           </Tag>
                         ))}
                       </span>
@@ -162,9 +163,9 @@ export default function NewRulePage() {
               >
                 <span className="flex items-center gap-2.5">
                   <Plus aria-hidden size={18} className="shrink-0 text-ink-muted" />
-                  <strong className="text-sm font-semibold text-ink">Start blank</strong>
+                  <strong className="text-sm font-semibold text-ink">{t("rules.newPage.blank")}</strong>
                 </span>
-                <span className="text-meta text-ink-muted">When, If, Then, step by step.</span>
+                <span className="text-meta text-ink-muted">{t("rules.newPage.blankHint")}</span>
               </button>
             </li>
           </ul>

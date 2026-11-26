@@ -2,7 +2,7 @@
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,9 @@ class NotificationResponse(BaseModel):
     catalog_entry_id: uuid.UUID | None
     message: str
     detail: str | None
+    # {"message": {"key", "params"}, "detail": {…}} when the platform wrote
+    # it; clients word it in the reader's language, else show message/detail.
+    i18n: dict[str, Any] | None = None
     severity: Severity
     kind: NotificationKind
     created_at: datetime

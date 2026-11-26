@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { Search } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 /** "No results" for a filtered list — always offers "Clear filters"
  * (DESIGN.md §6 states). */
@@ -9,11 +10,11 @@ export function NoResults({ noun, hidden, onClear }: { noun: string; hidden?: nu
   return (
     <EmptyState
       icon={<Search aria-hidden size={26} />}
-      title={`No ${noun} match these filters`}
-      description={hidden ? `${hidden} ${noun} are hidden by the current filters.` : undefined}
+      title={t("ui.list.noMatch", { noun })}
+      description={hidden ? t("ui.list.hidden", { count: hidden, noun }) : undefined}
       action={
         <Button variant="secondary" onClick={onClear}>
-          Clear filters
+          {t("ui.list.clearFilters")}
         </Button>
       }
     />

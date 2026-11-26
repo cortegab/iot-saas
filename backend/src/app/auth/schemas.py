@@ -2,8 +2,12 @@
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+# DESIGN.md §11a: the languages the platform speaks.
+Locale = Literal["en", "es"]
 
 
 class RegisterRequest(BaseModel):
@@ -11,6 +15,9 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8, max_length=256)
     tenant_name: str = Field(min_length=1, max_length=100)
     name: str | None = Field(default=None, max_length=200)
+    # The browser's language when signing up (DESIGN.md §11a): the new
+    # workspace's email language. Not saved as the person's choice.
+    locale: Locale | None = None
 
 
 class GoogleSignInRequest(BaseModel):
@@ -22,6 +29,8 @@ class GoogleSignInRequest(BaseModel):
     tenant_name: str | None = Field(default=None, max_length=100)
     # Join that invitation's workspace (its email must be the Google one).
     invitation_token: str | None = Field(default=None, max_length=200)
+    # The browser's language, for a new account's first workspace.
+    locale: Locale | None = None
 
 
 class LoginRequest(BaseModel):
@@ -52,10 +61,16 @@ class UserResponse(BaseModel):
     email: str
     name: str | None
     created_at: datetime
+    # Their chosen language; null = follow the browser or phone.
+    locale: Locale | None = None
 
 
 class UpdateProfileRequest(BaseModel):
+    """Only the fields sent change: `{"locale": null}` goes back to following
+    the browser, and leaves the name alone."""
+
     name: str | None = Field(default=None, max_length=200)
+    locale: Locale | None = None
 
 
 class InvitationPreviewResponse(BaseModel):

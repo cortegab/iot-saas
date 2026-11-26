@@ -14,6 +14,7 @@
  */
 
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type ConditionLeaf = components["schemas"]["ConditionLeaf"];
@@ -139,19 +140,19 @@ export interface RuleDraft {
 }
 
 export const OPERATORS: { value: string; label: string }[] = [
-  { value: ">", label: "> above" },
-  { value: ">=", label: "≥ at or above" },
-  { value: "<", label: "< below" },
-  { value: "<=", label: "≤ at or below" },
-  { value: "==", label: "= equal to" },
-  { value: "!=", label: "≠ different from" },
-  { value: "between", label: "between" },
-  { value: "not_between", label: "outside" },
-  { value: "in", label: "is one of" },
-  { value: "not_in", label: "is none of" },
-  { value: "changed", label: "changes" },
-  { value: "increased", label: "increases" },
-  { value: "decreased", label: "decreases" },
+  { value: ">", get label() { return t("editor.rules.ops.gt"); } },
+  { value: ">=", get label() { return t("editor.rules.ops.gte"); } },
+  { value: "<", get label() { return t("editor.rules.ops.lt"); } },
+  { value: "<=", get label() { return t("editor.rules.ops.lte"); } },
+  { value: "==", get label() { return t("editor.rules.ops.eq"); } },
+  { value: "!=", get label() { return t("editor.rules.ops.ne"); } },
+  { value: "between", get label() { return t("editor.rules.ops.between"); } },
+  { value: "not_between", get label() { return t("editor.rules.ops.not_between"); } },
+  { value: "in", get label() { return t("editor.rules.ops.in"); } },
+  { value: "not_in", get label() { return t("editor.rules.ops.not_in"); } },
+  { value: "changed", get label() { return t("editor.rules.ops.changed"); } },
+  { value: "increased", get label() { return t("editor.rules.ops.increased"); } },
+  { value: "decreased", get label() { return t("editor.rules.ops.decreased"); } },
 ];
 
 export const OPERATOR_SYMBOL: Record<string, string> = {
@@ -606,52 +607,52 @@ export function draftToRequest(draft: RuleDraft): Record<string, unknown> {
 const EMAIL_SHAPE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 export function contactProblem(c: ContactDraft): string | null {
-  if (!c.deviceId || !c.metric.trim()) return "Every condition needs a device and a metric.";
+  if (!c.deviceId || !c.metric.trim()) return t("editor.rules.conditionNeeds");
   if (c.rhsKind === "metric" && OPERATOR_ARITY[c.operator] === "one" && (!c.rhsDeviceId || !c.rhsMetric))
-    return "A device comparison needs both a device and a metric.";
+    return t("editor.rules.comparisonNeeds");
   return null;
 }
 
 export function actionProblem(a: ActionDraft): string | null {
   switch (a.kind) {
     case "actuator":
-      return a.deviceId && a.actuator.trim() ? null : "An actuator action needs a device and an actuator.";
+      return a.deviceId && a.actuator.trim() ? null : t("editor.rules.actuatorNeeds");
     case "email": {
       const bad = parseRecipients(a.to).find((r) => !EMAIL_SHAPE.test(r));
-      if (bad) return `"${bad}" doesn't look like an email address.`;
-      return a.subject.trim() && a.body.trim() ? null : "An email needs a subject and a message.";
+      if (bad) return t("editor.rules.badEmail", { email: bad });
+      return a.subject.trim() && a.body.trim() ? null : t("editor.rules.emailNeeds");
     }
     case "webhook":
-      if (!a.url.trim()) return "A webhook needs a URL.";
+      if (!a.url.trim()) return t("editor.rules.webhookUrl");
       try {
         JSON.parse(a.body.trim() || "{}");
         return null;
       } catch {
-        return "The webhook body isn't valid JSON.";
+        return t("editor.rules.webhookJson");
       }
     case "notification":
-      return a.message.trim() ? null : "A notification needs a message.";
+      return a.message.trim() ? null : t("editor.rules.notificationNeeds");
   }
 }
 
 export function validateDraft(draft: RuleDraft): string | null {
   const w = draft.when;
-  if (w.type === "schedule" && !w.cron.trim()) return "A scheduled rule needs a cron expression.";
-  if (w.type === "device_status" && !w.statusDeviceId) return "Pick the device to watch.";
+  if (w.type === "schedule" && !w.cron.trim()) return t("editor.rules.cronNeeds");
+  if (w.type === "device_status" && !w.statusDeviceId) return t("editor.rules.pickDevice");
   if (draft.condition === null && w.type === "metric")
-    return "A rule that runs on each reading needs at least one condition.";
+    return t("editor.rules.readingNeeds");
   for (const c of contacts(draft.condition)) {
     const problem = contactProblem(c);
     if (problem) return problem;
   }
   if (draft.actions.length === 0 && draft.preserved.actions.length === 0)
-    return "Add at least one action.";
+    return t("editor.rules.addAction");
   for (const a of draft.actions) {
     const problem = actionProblem(a);
     if (problem) return problem;
   }
   if (canClear(draft) && draft.clearNotify && !draft.clearMessage.trim())
-    return "The clear notification needs a message.";
+    return t("editor.rules.clearMessage");
   return null;
 }
 
@@ -779,14 +780,15 @@ export function setGroupOp(root: DraftNode | null, id: string, op: Combinator): 
   return normalize(mapNode(root, (n) => (n.id === id && n.kind === "group" ? { ...n, op } : n)));
 }
 
-/** "10 s", "a minute", "5 min", "an hour", "2 h": a duration as it's said. */
+/** "10 s", "a minute", "5 min", "an hour", "2 h": a duration as it's said,
+ * in the language on screen. */
 export function spokenDuration(seconds: number): string {
-  if (seconds < 60 || seconds % 60 !== 0) return `${seconds} s`;
+  if (seconds < 60 || seconds % 60 !== 0) return t("rules.behaviour.seconds", { n: String(seconds) });
   const minutes = seconds / 60;
-  if (minutes === 1) return "a minute";
-  if (minutes < 60 || minutes % 60 !== 0) return `${minutes} min`;
+  if (minutes === 1) return t("rules.behaviour.aMinute");
+  if (minutes < 60 || minutes % 60 !== 0) return t("rules.behaviour.minutes", { n: String(minutes) });
   const hours = minutes / 60;
-  return hours === 1 ? "an hour" : `${hours} h`;
+  return hours === 1 ? t("rules.behaviour.anHour") : t("rules.behaviour.hours", { n: String(hours) });
 }
 
 /**
@@ -798,20 +800,20 @@ export function spokenDuration(seconds: number): string {
 export function behaviourSentence(draft: RuleDraft, unitOf?: (c: ContactDraft) => string | null | undefined): string {
   const parts: string[] = [];
   if (isReadingRule(draft)) {
-    parts.push(draft.forDuration > 0 ? `waits ${spokenDuration(draft.forDuration)} before acting` : "acts as soon as it's true");
+    parts.push(draft.forDuration > 0 ? t("rules.behaviour.waits", { d: spokenDuration(draft.forDuration) }) : t("rules.behaviour.asSoon"));
     const h = contacts(draft.condition).find((c) => c.hysteresis > 0);
     if (h) {
       const unit = unitOf?.(h);
-      parts.push(`re-arms only once the reading is ${h.hysteresis}${unit ? ` ${unit}` : ""} back past the limit`);
+      parts.push(t("rules.behaviour.rearms", { margin: `${h.hysteresis}${unit ? ` ${unit}` : ""}` }));
     }
   }
   if (draft.cooldown > 0) {
-    const every = spokenDuration(draft.cooldown);
-    parts.push(every === "a minute" || every === "an hour" ? `acts at most once ${every}` : `acts at most once every ${every}`);
+    const single = draft.cooldown === 60 || draft.cooldown === 3600;
+    parts.push(t(single ? "rules.behaviour.onceA" : "rules.behaviour.onceEvery", { d: spokenDuration(draft.cooldown) }));
   }
-  if (isReadingRule(draft) && draft.behaviour === "latch") parts.push("then stays latched until someone resets it");
-  if (canClear(draft) && draft.clearDelay > 0) parts.push(`counts as clear once it's been false for ${spokenDuration(draft.clearDelay)}`);
-  if (parts.length === 0) return "It acts every time it's true.";
-  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
-  return `It ${list}.`;
+  if (isReadingRule(draft) && draft.behaviour === "latch") parts.push(t("rules.behaviour.latch"));
+  if (canClear(draft) && draft.clearDelay > 0) parts.push(t("rules.behaviour.clear", { d: spokenDuration(draft.clearDelay) }));
+  if (parts.length === 0) return t("rules.behaviour.always");
+  const list = parts.length === 1 ? parts[0] : `${parts.slice(0, -1).join(", ")}${t("rules.behaviour.and")}${parts[parts.length - 1]}`;
+  return t("rules.behaviour.sentence", { list });
 }

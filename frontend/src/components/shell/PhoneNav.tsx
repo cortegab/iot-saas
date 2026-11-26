@@ -20,7 +20,11 @@ import { MORE_ITEMS, TAB_ITEMS, activeHref, navLabel, navVisible } from "@/compo
 import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { useShell } from "@/components/shell/shell-context";
 import { useNavCounts } from "@/components/shell/useShellData";
-import { ROLE_LABEL, toRole } from "@/lib/permissions";
+import { toRole } from "@/lib/permissions";
+import { useT } from "@/lib/i18n";
+import { Select } from "@/components/ui/Select";
+import { useLanguage } from "@/hooks/useLanguage";
+import { LOCALES, LOCALE_NAMES, isLocale } from "@iodriven/shared/i18n";
 import type { RealtimeStatus } from "@/lib/realtime";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "@/components/brand/BrandMark";
@@ -47,6 +51,7 @@ function useDown(realtime: RealtimeStatus): boolean {
  * switcher; the live indicator only while reconnecting, and search. */
 export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
   const router = useRouter();
+  const t = useT();
   const { memberships, currentTenantId } = useAuth();
   const { openPalette } = useShell();
   const down = useDown(realtime);
@@ -55,7 +60,7 @@ export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
   const name = memberships.find((m) => m.tenant_id === currentTenantId)?.tenant_name ?? "";
   return (
     <header className="sticky top-0 z-20 flex h-[calc(56px+env(safe-area-inset-top,0px))] items-center gap-2.5 border-b border-border bg-surface pl-3.5 pr-1.5 pt-[env(safe-area-inset-top,0px)] rail:hidden">
-      <Link href="/dashboards" aria-label="IO Driven, go to dashboards" className="shrink-0 rounded-[9px]">
+      <Link href="/dashboards" aria-label={t("shell.brandHome")} className="shrink-0 rounded-[9px]">
         <BrandMark size={32} />
       </Link>
       <button
@@ -63,7 +68,7 @@ export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
         onClick={() => setSwitching(true)}
         aria-haspopup="dialog"
         aria-expanded={switching}
-        aria-label={`Workspace: ${name}. Switch workspace`}
+        aria-label={t("shell.switchWorkspaceLabel", { name })}
         className="group flex min-h-11 min-w-0 flex-1 flex-col justify-center rounded-md pr-1 text-left leading-tight"
       >
         <strong className="text-sm font-semibold text-ink">IO Driven</strong>
@@ -76,12 +81,12 @@ export function PhoneTopBar({ realtime }: { realtime: RealtimeStatus }) {
       <button
         type="button"
         onClick={openPalette}
-        aria-label="Search or run"
+        aria-label={t("shell.searchOrRunLabel")}
         className="grid h-11 w-11 place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink"
       >
         <Search aria-hidden size={18} />
       </button>
-      <Sheet open={switching} onClose={() => setSwitching(false)} label="Switch workspace" side="bottom">
+      <Sheet open={switching} onClose={() => setSwitching(false)} label={t("shell.switchWorkspace")} side="bottom">
         <div className="overflow-y-auto px-2 pb-4 pt-2">
           <WorkspaceMenu
             onCreate={() => {
@@ -107,6 +112,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
   const { unreadCount } = useNavCounts();
   const [moreOpen, setMoreOpen] = useState(false);
   const { simple } = useInterfaceMode();
+  const t = useT();
   const moreActive = active != null && MORE_ITEMS.some((i) => i.href === active);
 
   useEffect(() => {
@@ -118,7 +124,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
   return (
     <>
       <nav
-        aria-label="Main"
+        aria-label={t("nav.main")}
         className="fixed inset-x-0 bottom-0 z-[50] grid grid-cols-5 border-t border-border bg-surface pb-[env(safe-area-inset-bottom,0px)] rail:hidden [:root:has(.app-shell_[data-savebar])_&]:hidden"
       >
         {TAB_ITEMS.map((item) => {
@@ -132,7 +138,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
               className={cn(cell, isActive && "text-accent-strong")}
             >
               <Icon aria-hidden size={20} />
-              <span>{item.tabLabel ?? navLabel(item, simple)}</span>
+              <span>{item.tabLabel ? t(item.tabLabel) : navLabel(item, simple, t)}</span>
               {item.alertCount && unreadCount > 0 && (
                 <AlertCount count={unreadCount} className="absolute left-[calc(50%+5px)] top-[5px] min-w-[17px] px-1 text-xs leading-4" />
               )}
@@ -147,7 +153,7 @@ export function PhoneTabBar({ realtime }: { realtime: RealtimeStatus }) {
           className={cn(cell, moreActive && "text-accent-strong")}
         >
           <Menu aria-hidden size={20} />
-          More
+          {t("common.more")}
         </button>
       </nav>
       <MoreSheet open={moreOpen} onClose={() => setMoreOpen(false)} realtime={realtime} />
@@ -166,13 +172,15 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
   const current = memberships.find((m) => m.tenant_id === currentTenantId);
   const role = toRole(current?.role);
   const { simple } = useInterfaceMode();
+  const t = useT();
+  const { choice, setChoice } = useLanguage();
   const items = MORE_ITEMS.filter((i) => navVisible(i, can, simple));
 
   return (
     <>
-      <Sheet open={open} onClose={onClose} label="More" side="bottom">
+      <Sheet open={open} onClose={onClose} label={t("common.more")} side="bottom">
         <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-3">
-          <h2 className="text-section font-semibold text-ink">More</h2>
+          <h2 className="text-section font-semibold text-ink">{t("common.more")}</h2>
           <div className="flex items-center gap-3 border-b border-border-soft pb-4">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-accent-muted text-sm font-semibold text-accent-strong">
               {user ? initialsFor(user.name, user.email) : "…"}
@@ -180,7 +188,7 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
             <div className="min-w-0 flex-1 leading-tight">
               <b className="block truncate font-medium text-ink">{user?.name?.trim() || user?.email || "…"}</b>
               <span className="block truncate text-meta text-ink-muted">
-                {[user?.email, role && current ? `${ROLE_LABEL[role]} of ${current.tenant_name}` : null]
+                {[user?.email, role && current ? t("shell.roleOf", { role: t(`roles.${role}`), workspace: current.tenant_name }) : null]
                   .filter(Boolean)
                   .join(" · ")}
               </span>
@@ -191,11 +199,11 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
               className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-md border border-border bg-surface px-3 text-sm text-ink hover:bg-surface-raised"
             >
               <LogOut aria-hidden size={14} />
-              Sign out
+              {t("common.signOut")}
             </button>
           </div>
 
-          <nav aria-label="More sections" className="overflow-hidden rounded-xl border border-border">
+          <nav aria-label={t("nav.moreSections")} className="overflow-hidden rounded-xl border border-border">
             {items.map((item, i) => {
               const Icon = item.icon;
               return (
@@ -209,12 +217,28 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
                   )}
                 >
                   <Icon aria-hidden size={17} className="text-ink-muted" />
-                  <span className="flex-1">{navLabel(item, simple)}</span>
+                  <span className="flex-1">{navLabel(item, simple, t)}</span>
                   <ChevronRight aria-hidden size={15} className="text-ink-muted" />
                 </Link>
               );
             })}
           </nav>
+
+          <label className="flex items-center justify-between gap-3 text-sm text-ink">
+            {t("language.label")}
+            <Select
+              value={choice ?? ""}
+              onChange={(e) => void setChoice(isLocale(e.target.value) ? e.target.value : null)}
+              className="w-auto"
+            >
+              <option value="">{t("language.browser")}</option>
+              {LOCALES.map((l) => (
+                <option key={l} value={l} lang={l}>
+                  {LOCALE_NAMES[l]}
+                </option>
+              ))}
+            </Select>
+          </label>
 
           <div className="flex items-center justify-between gap-3">
             <LiveIndicator realtime={realtime} className="text-meta" />
@@ -229,19 +253,18 @@ function MoreSheet({ open, onClose, realtime }: { open: boolean; onClose: () => 
 /** DESIGN.md §4 reconnecting banner: while the live connection is down. */
 export function ReconnectingBanner({ realtime }: { realtime: RealtimeStatus }) {
   const down = useDown(realtime);
+  const t = useT();
   if (!down) return null;
   return (
     <div role="status" className="flex items-start gap-2.5 rounded-xl border border-border bg-status-pending-surface px-3.5 py-2.5 text-sm text-ink">
       <WifiOff aria-hidden size={15} className="mt-0.5 shrink-0 text-status-pending" />
       {realtime === "closed" ? (
         <span>
-          <b className="font-semibold">Live updates are off.</b> Values on this page may be stale. Reload the page
-          to try again.
+          <b className="font-semibold">{t("shell.banner.offTitle")}</b> {t("shell.banner.offBody")}
         </span>
       ) : (
         <span>
-          <b className="font-semibold">Reconnecting…</b> Live updates are paused, so values on this page may be
-          stale.
+          <b className="font-semibold">{t("shell.banner.reconnectingTitle")}</b> {t("shell.banner.reconnectingBody")}
         </span>
       )}
     </div>

@@ -21,6 +21,7 @@ from app.config import settings
 from app.dashboards import service as dashboards_service
 from app.db import get_session, set_user_context
 from app.devices import service as devices_service
+from app.i18n import t
 from app.notifications.email import EmailMessage, send_after_commit
 from app.rules import service as rules_service
 from app.tenants import service
@@ -54,6 +55,7 @@ def _tenant_response(tenant: Tenant) -> TenantResponse:
         slug=tenant.slug,
         notification_emails=list(tenant.notification_emails),
         timezone=tenant.timezone,
+        locale=tenant.locale,  # type: ignore[arg-type]
         created_at=tenant.created_at,
     )
 
@@ -231,6 +233,7 @@ async def update_current_tenant(
         name=body.name,
         notification_emails=body.notification_emails,
         timezone=body.timezone,
+        locale=body.locale,
     )
     return _tenant_response(tenant)
 
@@ -362,15 +365,21 @@ async def _send_invitation(
 ) -> None:
     tenant = await service.get_tenant(session, tenant_id)
     who = inviter.name or inviter.email
+    # The inviter's language, else the workspace's (DESIGN.md §11a): the
+    # invited person has no account to ask yet.
+    lang = inviter.locale or tenant.locale
     send_after_commit(
         session,
         EmailMessage(
             to=[email],
-            subject=f"{who} invited you to {tenant.name}",
-            body=(
-                f"{who} invited you to join {tenant.name} as {role}.\n\n"
-                f"Accept the invitation:\n{settings.app_base_url}/invite/{token}\n\n"
-                "The link works once and expires in 7 days."
+            subject=t(lang, "email.invite.subject", who=who, workspace=tenant.name),
+            body=t(
+                lang,
+                "email.invite.body",
+                who=who,
+                workspace=tenant.name,
+                role=t(lang, f"role.{role}"),
+                link=f"{settings.app_base_url}/invite/{token}",
             ),
         ),
     )

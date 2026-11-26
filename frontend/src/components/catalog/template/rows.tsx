@@ -10,6 +10,7 @@ import { ItemSheet } from "@/components/ui/ItemSheet";
 import { LineRow } from "@/components/ui/LineRow";
 import type { SectionProps } from "@/components/catalog/template/section-props";
 import { usageText, type ActuatorDraft, type MetricDraft } from "@/lib/template-draft";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 export type RowKind = "metrics" | "actuators";
 type Row = MetricDraft | ActuatorDraft;
@@ -58,15 +59,15 @@ export function KeyField({
     <Field
       label={
         <span className="flex items-center gap-1.5">
-          Key {row.keyAuto && <Tag size="sm">auto</Tag>}
-          {locked && <Lock aria-label="Locked: in use" size={11} />}
+          {tr("tpls.key")} {row.keyAuto && <Tag size="sm">{tr("tpls.auto")}</Tag>}
+          {locked && <Lock aria-label={tr("tpls.locked")} size={11} />}
         </span>
       }
       {...f(path)}
       hint={
         <>
           <span className="font-mono">{topic}</span>
-          {used && <> · used by {used}</>}
+          {used && <> · {tr("tpls.usedBy", { used })}</>}
         </>
       }
     >
@@ -74,7 +75,7 @@ export function KeyField({
         <Input mono value={row.key} disabled={readOnly || locked} onChange={(e) => onChange(e.target.value)} onBlur={blur(path)} />
         {locked && !readOnly && (
           <Button variant="link" className="shrink-0 text-xs" onClick={onUnlock}>
-            Unlock
+            {tr("tpls.unlock")}
           </Button>
         )}
       </div>
@@ -107,12 +108,12 @@ export function RowLine({
   const warn = !!editor.warningFor(`${kind}.${i}.key`);
   return (
     <LineRow
-      title={row.name || <span className="text-ink-muted">Unnamed</span>}
+      title={row.name || <span className="text-ink-muted">{tr("tpls.unnamed")}</span>}
       sub={
         <>
           <span className="font-mono">{row.key || "no key"}</span>
           {desc && ` · ${desc}`}
-          {used && ` · used by ${used}`}
+          {used && ` · ${tr("tpls.usedBy", { used })}`}
         </>
       }
       end={notWired(kind, row, props) ? <NotWiredTag /> : undefined}
@@ -134,8 +135,8 @@ export function notWired(kind: RowKind, row: Row, { d }: Pick<SectionProps, "d">
 
 function NotWiredTag() {
   return (
-    <span title="No part feeds this. Your firmware must publish it.">
-      <Tag size="sm">Not wired</Tag>
+    <span title={tr("tpls.noPart")}>
+      <Tag size="sm">{tr("tpls.notWired")}</Tag>
     </span>
   );
 }
@@ -179,16 +180,16 @@ export function RowSheet({
                 onClose();
               }}
             >
-              Remove
+              {tr("tpls.remove")}
             </Button>
           )}
-          <Button onClick={onClose}>Done</Button>
+          <Button onClick={onClose}>{tr("tpls.done")}</Button>
         </>
       }
     >
       {unwired && (
         <p className="mb-4 flex items-center gap-2 text-meta text-ink-muted">
-          <NotWiredTag /> No part feeds this. Your firmware must publish it.
+          <NotWiredTag /> {tr("tpls.noPart")}
         </p>
       )}
       <div className="grid grid-cols-2 gap-x-3 gap-y-3.5 @[640px]:grid-cols-4">{children}</div>

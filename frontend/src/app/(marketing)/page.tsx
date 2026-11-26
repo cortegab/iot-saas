@@ -11,6 +11,8 @@ import { Steps } from "@/components/marketing/Steps";
 import { nightButtonClassName } from "@/components/marketing/night";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { marketingCopy } from "@/lib/marketing-copy";
+import { serverLocale } from "@/lib/i18n-server";
 
 /* iodriven.tech landing (DESIGN.md §10, demo G): a night nav and hero over
  * the network · product tour · how it works (with the control-loop log) ·
@@ -20,15 +22,6 @@ import { BrandMark } from "@/components/brand/BrandMark";
 
 const EYEBROW = "mb-3 font-mono text-[12px] uppercase tracking-[0.14em]";
 
-const NAV: [string, string][] = [
-  ["tour", "Product"],
-  ["how", "How it works"],
-  ["safety", "Safety"],
-  ["onboarding", "Onboarding"],
-  ["security", "Security"],
-  ["deployment", "Deployment"],
-  ["faq", "FAQ"],
-];
 
 const INNER = "mx-auto w-full max-w-[1180px] px-4 md:px-6";
 
@@ -75,55 +68,42 @@ function FlowNode({ icon, name, sub }: { icon: ReactNode; name: string; sub: str
   );
 }
 
+const SAFETY_ICONS = [<ShieldAlert key="a" size={18} />, <Lock key="b" size={18} />, <RefreshCw key="c" size={18} />];
+
+const SECURITY_ICONS = [
+  <Building2 key="a" size={20} />,
+  <KeyRound key="b" size={20} />,
+  <Users key="c" size={20} />,
+  <RefreshCw key="d" size={20} />,
+  <SlidersHorizontal key="e" size={20} />,
+  <Zap key="f" size={20} />,
+];
+
 const Arrow = () => <span aria-hidden className="hidden h-px w-6 shrink-0 bg-border md:block" />;
 
-const FAQ: [string, ReactNode][] = [
-  [
-    "What happens when a device is offline?",
-    "No platform can reach a device that isn't connected. Commands go to a retained desired-state topic, so the device converges to the latest intended state the moment it reconnects. Commands carry a TTL, so it never acts on an old instruction.",
-  ],
-  ["Which hardware works?", "Anything that speaks MQTT over TLS. The generated sketch targets ESP32-class boards, and boards without Wi-Fi settings expose a BLE service for provisioning from a phone."],
-  [
-    "How fast is it really?",
-    "The requirement is under two seconds from breach to command. On a single host, typical breach-to-command time is well under 500 ms because rules run in memory before anything is written.",
-  ],
-  ["Can I connect OPC UA or Modbus equipment?", "Yes, through an edge connector running on your network. It translates to the device contract and looks like any other device to the platform."],
-  ["Who can see what?", "Every workspace is isolated by Postgres row-level security. Inside a workspace, Viewers see everything and change nothing, apart from dashboards, which everyone in the workspace shares."],
-  [
-    "What does a device need to speak?",
-    <>
-      <pre className="mb-3 overflow-x-auto rounded-lg border border-border bg-canvas p-3 font-mono text-[12.5px] leading-[1.7] text-ink">
-        {`{tenant}/{device}/{metric}          telemetry      device → platform
+/** The device-contract answer's topic table (FAQ): identical in every language. */
+const TOPICS = `{tenant}/{device}/{metric}          telemetry      device → platform
 {tenant}/{device}/cmd/{actuator}    command        QoS 1
 {tenant}/{device}/state/{actuator}  desired state  retained
 {tenant}/{device}/ack/{actuator}    ack            device → platform
 {tenant}/{device}/config            profile        retained
 {tenant}/{device}/status            health         last will
 
-mosquitto_pub -t "northfield/bay1-climate/temperature" -m '{"value": 31.5}'`}
-      </pre>
-      MQTT over TLS with a per-device credential, stored hashed. The same six topics work on Cloud, Dedicated cloud and On-premise, and the generated sketch already
-      speaks them.
-    </>,
-  ],
-  [
-    "How long is history kept?",
-    "Raw readings are kept for your workspace's retention period, enforced in the database. After about a week they're compressed, and dashboards read 1-minute and 1-hour rollups. On-premise, you set the retention yourself.",
-  ],
-];
+mosquitto_pub -t "northfield/bay1-climate/temperature" -m '{"value": 31.5}'`;
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  const c = marketingCopy(await serverLocale());
   return (
     <>
       <header className="sticky top-0 z-40 border-b border-[rgba(148,163,184,0.14)] bg-[rgba(9,13,27,0.82)] backdrop-blur-md">
         <div className={cn(INNER, "flex h-[62px] items-center gap-5")}>
-          <Link href="/" className="flex items-center gap-2.5 text-[18px] font-bold tracking-[-0.01em] text-white">
+          <Link href="/" className="flex shrink-0 items-center gap-2.5 whitespace-nowrap text-[18px] font-bold tracking-[-0.01em] text-white">
             <BrandMark />
             IO Driven
           </Link>
-          <nav aria-label="Page sections" className="ml-3 hidden items-center gap-0.5 lg:flex">
-            {NAV.map(([id, label]) => (
-              <a key={id} href={`#${id}`} className="rounded-lg px-2.5 py-2 text-sm text-[#b8c4d6] hover:bg-[rgba(148,163,184,0.12)] hover:text-white">
+          <nav aria-label={c.nav.label} className="ml-3 hidden items-center gap-0.5 lg:flex">
+            {c.nav.items.map(([id, label]) => (
+              <a key={id} href={`#${id}`} className="whitespace-nowrap rounded-lg px-2.5 py-2 text-sm text-[#b8c4d6] hover:bg-[rgba(148,163,184,0.12)] hover:text-white">
                 {label}
               </a>
             ))}
@@ -132,7 +112,7 @@ export default function LandingPage() {
             <EnterButton />
             {/* Below sm the header can't fit both; the hero's Talk to us is right below. */}
             <a href="#deployment" className={cn(nightButtonClassName(), "max-sm:hidden")}>
-              Talk to us
+              {c.nav.talk}
             </a>
           </div>
         </div>
@@ -144,34 +124,30 @@ export default function LandingPage() {
           <div aria-hidden className="night-scrim-hero pointer-events-none absolute inset-0 -z-10" />
           <div className={INNER}>
             <div className="max-w-[760px]">
-              <p className={cn(EYEBROW, "mkt-fade mkt-fade-1 text-night-sky")}>IoT platform · MQTT · rules · control</p>
+              <p className={cn(EYEBROW, "mkt-fade mkt-fade-1 text-night-sky")}>{c.hero.eyebrow}</p>
               <h1 className="mkt-fade mkt-fade-2 text-balance text-[38px] font-semibold leading-[1.02] tracking-[-0.04em] text-white md:text-[64px]">
-                Your sensors report.
+                {c.hero.line1}
                 <br />
-                <span className="text-[#93a4bd]">Your rules decide.</span>
+                <span className="text-[#93a4bd]">{c.hero.line2}</span>
                 <br />
-                <span className="text-[#93a4bd]">Your actuators move.</span>
+                <span className="text-[#93a4bd]">{c.hero.line3}</span>
               </h1>
               <p className="mkt-fade mkt-fade-3 mt-5 max-w-[52ch] text-[17px] leading-[1.6] text-night-muted">
-                IO Driven takes telemetry over MQTT, checks every rule <b className="font-semibold text-white">in memory, the moment a reading arrives</b>, and sends the
-                response: an actuator command, an email, a notification or a webhook. Well inside two seconds.
+                {c.hero.leadBefore}
+                <b className="font-semibold text-white">{c.hero.leadBold}</b>
+                {c.hero.leadAfter}
               </p>
               <div className="mkt-fade mkt-fade-3 mt-7 flex flex-wrap gap-2.5">
                 <a href="#deployment" className={nightButtonClassName({ size: "lg" })}>
-                  Talk to us <ChevronRight aria-hidden size={16} />
+                  {c.nav.talk} <ChevronRight aria-hidden size={16} />
                 </a>
                 <a href="#how" className={nightButtonClassName({ kind: "ghost", size: "lg" })}>
-                  See how it works
+                  {c.hero.howLink}
                 </a>
               </div>
             </div>
             <dl className="mt-14 grid grid-cols-2 gap-4 border-t border-night-line pt-[22px] lg:grid-cols-4">
-              {[
-                ["Breach → command", "< 2 s", "the requirement every design choice protects"],
-                ["Typical on one host", "< 500 ms", "no disk, queue or batch on the hot path"],
-                ["Devices per host", "500–1,000", "one Linux VPS, Docker Compose"],
-                ["Sign-up to live data", "10 min", "template, sketch, flash"],
-              ].map(([dt, dd, note]) => (
+              {c.hero.stats.map(([dt, dd, note]) => (
                 <div key={dt}>
                   <dt className="text-[12.5px] text-night-dim">{dt}</dt>
                   <dd className="mb-0.5 mt-1 font-mono text-[22px] tracking-[-0.02em] text-white tabular-nums md:text-[28px]">{dd}</dd>
@@ -182,38 +158,38 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <Section id="tour" eyebrow="Product" title="Everything an operator needs, running without supervision.">
+        <Section id="tour" eyebrow={c.tour.eyebrow} title={c.tour.title}>
           <ProductTour />
         </Section>
 
         <Section
           id="how"
           alt
-          eyebrow="How it works"
-          title="The decision never waits on a disk."
-          note="Every reading forks at ingestion. One copy is checked against your rules in memory and can move an actuator. The other is buffered and batch-written for history. A batch flush is never between a reading and a decision."
+          eyebrow={c.how.eyebrow}
+          title={c.how.title}
+          note={c.how.note}
         >
-          <div role="img" aria-label="Readings go from devices to EMQX to ingestion, then fork into a hot path and a storage path" className="flex flex-col gap-4">
+          <div role="img" aria-label={c.how.diagram} className="flex flex-col gap-4">
             <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center">
-              <FlowNode icon={<Cpu size={16} />} name="Devices" sub="ESP32 · MQTT/TLS" />
+              <FlowNode icon={<Cpu size={16} />} name={c.how.devices[0]} sub={c.how.devices[1]} />
               <Arrow />
-              <FlowNode icon={<Send size={16} />} name="EMQX" sub="per-device ACLs" />
+              <FlowNode icon={<Send size={16} />} name={c.how.emqx[0]} sub={c.how.emqx[1]} />
               <Arrow />
-              <FlowNode icon={<Activity size={16} />} name="Ingestion" sub="validates every payload" />
+              <FlowNode icon={<Activity size={16} />} name={c.how.ingestion[0]} sub={c.how.ingestion[1]} />
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               <div className="rounded-2xl border border-accent/40 bg-accent-muted/50 p-4">
-                <p className="mb-3 text-[12.5px] font-semibold uppercase tracking-[0.06em] text-accent">Hot path · milliseconds</p>
+                <p className="mb-3 text-[12.5px] font-semibold uppercase tracking-[0.06em] text-accent">{c.how.hot}</p>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <FlowNode icon={<SlidersHorizontal size={16} />} name="Rule evaluator" sub="in memory, no DB read" />
-                  <FlowNode icon={<Zap size={16} />} name="Command service" sub="QoS 1 · TTL" />
+                  <FlowNode icon={<SlidersHorizontal size={16} />} name={c.how.evaluator[0]} sub={c.how.evaluator[1]} />
+                  <FlowNode icon={<Zap size={16} />} name={c.how.command[0]} sub={c.how.command[1]} />
                 </div>
               </div>
               <div className="rounded-2xl border border-border bg-canvas p-4">
-                <p className="mb-3 text-[12.5px] font-semibold uppercase tracking-[0.06em] text-ink-muted">Storage path · throughput</p>
+                <p className="mb-3 text-[12.5px] font-semibold uppercase tracking-[0.06em] text-ink-muted">{c.how.storage}</p>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <FlowNode icon={<RefreshCw size={16} />} name="Redis stream" sub="buffer, batched writer" />
-                  <FlowNode icon={<Building2 size={16} />} name="TimescaleDB" sub="rollups · retention" />
+                  <FlowNode icon={<RefreshCw size={16} />} name={c.how.redis[0]} sub={c.how.redis[1]} />
+                  <FlowNode icon={<Building2 size={16} />} name={c.how.timescale[0]} sub={c.how.timescale[1]} />
                 </div>
               </div>
             </div>
@@ -221,46 +197,35 @@ export default function LandingPage() {
           <div className="mt-8 grid items-center gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
             <ControlLoopLog />
             <p className="max-w-[52ch] text-[15px] leading-relaxed text-ink-muted">
-              <b className="font-semibold text-ink">One rule&apos;s life on the hot path:</b> a reading crosses the threshold, the rule holds, fires, and the actuator
-              acknowledges. All in memory, before anything is written to disk.
+              <b className="font-semibold text-ink">{c.how.lifeBold}</b> {c.how.life}
             </p>
           </div>
           <div className="mt-8">
-            <Steps
-              steps={[
-                ["Acquire", "Devices publish readings over MQTT/TLS. Malformed messages are dropped and logged, never stop the stream."],
-                ["Decide", "Rules evaluate on the reading itself, across devices, with ALL / ANY logic. No polling, no cron."],
-                ["Act", "A firing rule switches actuators, emails the alert list, posts a notification or calls a webhook."],
-                ["Confirm", "The device acknowledges the command. Failures land in Failed deliveries with the reason, and can be retried."],
-              ]}
-            />
+            <Steps steps={c.how.steps} />
           </div>
         </Section>
 
         <Section
           id="safety"
-          eyebrow="Safety"
-          title="Real relays are on the other end of the command."
+          eyebrow={c.safety.eyebrow}
+          title={c.safety.title}
           note={
             <>
-              Hold time, hysteresis and cooldown are part of every rule, not an advanced tab you forget to open, and the editor checks hardware rules before they
-              save. <b className="text-ink">A noisy sensor won&apos;t chatter your relay to death.</b>
+              {c.safety.note} <b className="text-ink">{c.safety.noteBold}</b>
             </>
           }
         >
           <div className="grid gap-4 md:grid-cols-3">
-            <Card title="Hold time">The condition must stay true this long before the rule fires, so brief spikes are ignored.</Card>
-            <Card title="Hysteresis">The reading must come back past a margin before the rule re-arms. 30 °C fires; 28 °C re-arms.</Card>
-            <Card title="Cooldown">A hard floor on the time between two firings of the same rule, whatever the data does.</Card>
+            {c.safety.cards.map(([title, body]) => (
+              <Card key={title} title={title}>
+                {body}
+              </Card>
+            ))}
           </div>
           <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {[
-              [<ShieldAlert key="a" size={18} />, "Stale data is unknown, never false.", "A silent sensor neither fires nor clears a rule."],
-              [<Lock key="b" size={18} />, "Latch until reset", "for interlocks that must stay tripped until a person looks."],
-              [<RefreshCw key="c" size={18} />, "Commands carry a TTL.", "A device back from a long outage takes the latest desired state, not a stale order."],
-            ].map(([icon, b, rest]) => (
-              <p key={b as string} className="flex gap-3 text-[14.5px] text-ink">
-                <span className="mt-0.5 shrink-0 text-accent">{icon}</span>
+            {c.safety.facts.map(([b, rest], i) => (
+              <p key={b} className="flex gap-3 text-[14.5px] text-ink">
+                <span className="mt-0.5 shrink-0 text-accent">{SAFETY_ICONS[i]}</span>
                 <span>
                   <b>{b}</b> {rest}
                 </span>
@@ -272,39 +237,26 @@ export default function LandingPage() {
         {/* G .s-split: steps on the left, the journey figure beside them. */}
         <section id="onboarding" className="scroll-mt-16 border-y border-border bg-surface py-16 md:py-[88px]">
           <div className={INNER}>
-            <OnboardingSection heading={<Heading eyebrow="Onboarding" title="From sign-up to live data in ten minutes." />} />
+            <OnboardingSection heading={<Heading eyebrow={c.onboarding.eyebrow} title={c.onboarding.title} />} />
           </div>
         </section>
 
-        <Section id="security" eyebrow="Security and operations" title="Runs on one box. Isolated by the database.">
+        <Section id="security" eyebrow={c.security.eyebrow} title={c.security.title}>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            <Card icon={<Building2 size={20} />} title="Tenant isolation in Postgres">
-              Every table carries a tenant id with a row-level-security policy, so a forgotten WHERE clause is a bug, not a data breach.
-            </Card>
-            <Card icon={<KeyRound size={20} />} title="Credentials never in plaintext">
-              Per-device tokens and API keys are hashed with argon2id and shown once. Each device can only touch its own topics.
-            </Card>
-            <Card icon={<Users size={20} />} title="Roles that match the work">
-              Owner, Admin and Viewer. Only an owner grants ownership, and API keys can never be Owner.
-            </Card>
-            <Card icon={<RefreshCw size={20} />} title="Backups you've restored">
-              Daily backups and a restore runbook that has actually been run. Recovery in minutes, no cluster to keep alive at 3 am.
-            </Card>
-            <Card icon={<SlidersHorizontal size={20} />} title="Edge connectors">
-              OPC UA, Modbus or a vendor cloud? A small connector on your network speaks MQTT to the platform. Industrial servers stay off the internet.
-            </Card>
-            <Card icon={<Zap size={20} />} title="Anomaly detection next">
-              It arrives as one more rule evaluator on the same in-memory path, able to drive actuators, not another service to run.
-            </Card>
+            {c.security.cards.map(([title, body], i) => (
+              <Card key={title} icon={SECURITY_ICONS[i]} title={title}>
+                {body}
+              </Card>
+            ))}
           </div>
         </Section>
 
         <Section
           id="deployment"
           alt
-          eyebrow="Deployment"
-          title="Run it where your data needs to live."
-          note="Same product, same firmware, same device contract. Choose who operates it and where the data sits. Devices flashed for one option work on the others without a reflash."
+          eyebrow={c.deployment.eyebrow}
+          title={c.deployment.title}
+          note={c.deployment.note}
         >
           <Deployment />
         </Section>
@@ -313,16 +265,22 @@ export default function LandingPage() {
         <section id="faq" className="scroll-mt-16 py-16 md:py-[88px]">
           <div className={cn(INNER, "grid gap-12 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]")}>
             <div>
-              <Heading eyebrow="FAQ" title="Questions operators ask first." />
+              <Heading eyebrow={c.faq.eyebrow} title={c.faq.title} />
             </div>
             <div className="flex flex-col border-t border-border">
-              {FAQ.map(([q, a], i) => (
+              {c.faq.items.map(([q, text], i) => (
                 <details key={q} open={i === 0} className="group border-b border-border">
                   <summary className="flex cursor-pointer list-none justify-between gap-3 py-[18px] text-[16px] font-semibold text-ink [&::-webkit-details-marker]:hidden">
                     {q}
                     <ChevronDown aria-hidden size={16} className="mt-[3px] shrink-0 text-ink-muted transition-transform group-open:rotate-180" />
                   </summary>
-                  <div className="max-w-[64ch] pb-[18px] leading-[1.65] text-ink-muted">{a}</div>
+                  <div className="max-w-[64ch] pb-[18px] leading-[1.65] text-ink-muted">
+                    {/* The device-contract answer shows the topics first. */}
+                    {i === 5 && (
+                      <pre className="mb-3 overflow-x-auto rounded-lg border border-border bg-canvas p-3 font-mono text-[12.5px] leading-[1.7] text-ink">{TOPICS}</pre>
+                    )}
+                    {text}
+                  </div>
                 </details>
               ))}
             </div>
@@ -331,11 +289,11 @@ export default function LandingPage() {
 
         <section className="night-close py-16 text-center text-white md:py-[88px]">
           <div className={INNER}>
-            <h2 className="mx-auto max-w-[22ch] text-balance text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] md:text-[40px]">Ready when your devices are.</h2>
-            <p className="mt-3 text-[16px] text-night-muted">Tell us about your sites and how you want to run it. Already have a workspace? Sign in.</p>
+            <h2 className="mx-auto max-w-[22ch] text-balance text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] md:text-[40px]">{c.close.title}</h2>
+            <p className="mt-3 text-[16px] text-night-muted">{c.close.body}</p>
             <div className="mt-7 flex flex-wrap justify-center gap-2.5">
               <a href="#deployment" className={nightButtonClassName({ size: "lg" })}>
-                Talk to us <ChevronRight aria-hidden size={16} />
+                {c.nav.talk} <ChevronRight aria-hidden size={16} />
               </a>
               <EnterButton size="lg" />
             </div>
@@ -352,7 +310,7 @@ export default function LandingPage() {
           <span>MQTT/TLS · FastAPI · TimescaleDB · EMQX · Docker Compose</span>
           <span className="flex items-center gap-4">
             <Link href="/privacy" className="hover:text-night-ink hover:underline">
-              Privacy
+              {c.footer.privacy}
             </Link>
             <span>© 2026 IO Driven</span>
           </span>

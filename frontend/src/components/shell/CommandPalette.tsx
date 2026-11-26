@@ -23,10 +23,13 @@ import { usePermissions } from "@/hooks/usePermissions";
 import { useTheme } from "@/hooks/useTheme";
 import type { Action } from "@/lib/permissions";
 import { cn } from "@/lib/cn";
+import { useT, type MessageKey } from "@/lib/i18n";
+
+type Group = "goTo" | "actions" | "devices" | "rules" | "templates" | "dashboards" | "zones" | "members";
 
 interface Command {
   id: string;
-  group: string;
+  group: Group;
   label: string;
   hint?: string;
   icon: LucideIcon;
@@ -56,40 +59,41 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   useFocusTrap(ref, true);
 
   const { simple } = useInterfaceMode();
+  const t = useT();
   const commands = useMemo<Command[]>(() => {
     const go = (href: string) => () => router.push(href);
     const out: Command[] = [];
     for (const g of NAV_GROUPS) {
       for (const item of g.items) {
         if (!navVisible(item, can, simple)) continue;
-        out.push({ id: `go:${item.href}`, group: "Go to", label: navLabel(item, simple), icon: item.icon, run: go(item.href) });
+        out.push({ id: `go:${item.href}`, group: "goTo", label: navLabel(item, simple, t), icon: item.icon, run: go(item.href) });
       }
     }
-    const create: { label: string; href: string; icon: LucideIcon; requires: Action }[] = [
-      { label: "New dashboard", href: "/dashboards/new", icon: LayoutDashboard, requires: "dashboards.write" },
-      { label: "Add device", href: "/devices/new", icon: Cpu, requires: "devices.write" },
-      { label: "New rule", href: "/rules/new", icon: ListChecks, requires: "rules.write" },
-      { label: "New device template", href: "/templates/new", icon: Boxes, requires: "templates.write" },
-      { label: "New zone", href: "/zones/new", icon: MapPin, requires: "zones.write" },
-      { label: "Invite member", href: "/members/invite", icon: UserRound, requires: "members.manage" },
-      { label: "New API key", href: "/keys/new", icon: Plus, requires: "keys.manage" },
+    const create: { label: MessageKey; href: string; icon: LucideIcon; requires: Action }[] = [
+      { label: "palette.actions.newDashboard", href: "/dashboards/new", icon: LayoutDashboard, requires: "dashboards.write" },
+      { label: "palette.actions.addDevice", href: "/devices/new", icon: Cpu, requires: "devices.write" },
+      { label: "palette.actions.newRule", href: "/rules/new", icon: ListChecks, requires: "rules.write" },
+      { label: "palette.actions.newTemplate", href: "/templates/new", icon: Boxes, requires: "templates.write" },
+      { label: "palette.actions.newZone", href: "/zones/new", icon: MapPin, requires: "zones.write" },
+      { label: "palette.actions.inviteMember", href: "/members/invite", icon: UserRound, requires: "members.manage" },
+      { label: "palette.actions.newKey", href: "/keys/new", icon: Plus, requires: "keys.manage" },
     ];
     for (const c of create) {
-      if (can(c.requires)) out.push({ id: `new:${c.href}`, group: "Actions", label: c.label, icon: Plus, run: go(c.href) });
+      if (can(c.requires)) out.push({ id: `new:${c.href}`, group: "actions", label: t(c.label), icon: Plus, run: go(c.href) });
     }
     out.push({
       id: "theme",
-      group: "Actions",
-      label: theme === "dark" ? "Switch to light theme" : "Switch to dark theme",
+      group: "actions",
+      label: theme === "dark" ? t("shell.theme.toLight") : t("shell.theme.toDark"),
       icon: Moon,
       run: () => setPreference(theme === "dark" ? "light" : "dark"),
     });
     for (const d of data.devices) {
       out.push({
         id: `dev:${d.id}`,
-        group: "Devices",
+        group: "devices",
         label: d.name,
-        hint: d.connection_state === "online" ? "Online" : d.connection_state === "offline" ? "Offline" : "Never connected",
+        hint: t(d.connection_state === "online" ? "palette.hints.online" : d.connection_state === "offline" ? "palette.hints.offline" : "palette.hints.neverConnected"),
         icon: Cpu,
         run: go(`/devices/${d.id}`),
       });
@@ -97,29 +101,29 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     for (const r of data.rules) {
       out.push({
         id: `rule:${r.id}`,
-        group: "Rules",
+        group: "rules",
         label: r.name,
-        hint: r.enabled ? (r.latched ? "Latched" : "Armed") : "Disabled",
+        hint: t(r.enabled ? (r.latched ? "palette.hints.latched" : "palette.hints.armed") : "palette.hints.disabled"),
         icon: ListChecks,
         run: go(`/rules/${r.id}`),
       });
     }
-    for (const t of data.templates) {
+    for (const tpl of data.templates) {
       out.push({
-        id: `tpl:${t.id}`,
-        group: "Device templates",
-        label: t.name,
-        hint: `${t.metrics.length} metric${t.metrics.length === 1 ? "" : "s"}`,
+        id: `tpl:${tpl.id}`,
+        group: "templates",
+        label: tpl.name,
+        hint: t("palette.hints.metrics", { count: tpl.metrics.length }),
         icon: Boxes,
-        run: go(`/templates/${t.id}`),
+        run: go(`/templates/${tpl.id}`),
       });
     }
     for (const db of data.dashboards) {
       out.push({
         id: `dash:${db.id}`,
-        group: "Dashboards",
+        group: "dashboards",
         label: db.name,
-        hint: `${db.layout.length} widget${db.layout.length === 1 ? "" : "s"}`,
+        hint: t("palette.hints.widgets", { count: db.layout.length }),
         icon: LayoutDashboard,
         run: go(`/dashboards/${db.id}`),
       });
@@ -127,30 +131,30 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     for (const z of data.zones) {
       out.push({
         id: `zone:${z.id}`,
-        group: "Zones",
+        group: "zones",
         label: z.name,
-        hint: `${z.device_count} device${z.device_count === 1 ? "" : "s"}`,
+        hint: t("common.deviceCount", { count: z.device_count }),
         icon: MapPin,
         run: go(`/zones/${z.id}`),
       });
     }
     for (const m of data.members) {
-      out.push({ id: `mem:${m.user_id}`, group: "Members", label: m.email, hint: m.role, icon: UserRound, run: go(`/members/${m.user_id}`) });
+      out.push({ id: `mem:${m.user_id}`, group: "members", label: m.email, hint: m.role === "owner" || m.role === "admin" || m.role === "viewer" ? t(`roles.${m.role}`) : m.role, icon: UserRound, run: go(`/members/${m.user_id}`) });
     }
     return out;
-  }, [can, data, router, setPreference, simple, theme]);
+  }, [can, data, router, setPreference, simple, t, theme]);
 
   const q = query.trim().toLowerCase();
   // Without a query: navigation, a few records and actions; everything else once you type.
   const items = (
     q
-      ? commands.filter((c) => `${c.label} ${c.hint ?? ""} ${c.group}`.toLowerCase().includes(q))
+      ? commands.filter((c) => `${c.label} ${c.hint ?? ""} ${t(`palette.groups.${c.group}`)}`.toLowerCase().includes(q))
       : [
           // Before you type (demo H): where to go, a few devices and rules, then actions.
-          ...commands.filter((c) => c.group === "Go to"),
-          ...commands.filter((c) => c.group === "Devices").slice(0, 3),
-          ...commands.filter((c) => c.group === "Rules").slice(0, 3),
-          ...commands.filter((c) => c.group === "Actions"),
+          ...commands.filter((c) => c.group === "goTo"),
+          ...commands.filter((c) => c.group === "devices").slice(0, 3),
+          ...commands.filter((c) => c.group === "rules").slice(0, 3),
+          ...commands.filter((c) => c.group === "actions"),
         ]
   ).slice(0, MAX_RESULTS);
   const safeSel = Math.max(0, Math.min(sel, items.length - 1));
@@ -166,7 +170,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
     c.run();
   }
 
-  let lastGroup: string | null = null;
+  let lastGroup: Group | null = null;
   const rows: ReactNode[] = [];
   items.forEach((c, i) => {
     if (c.group !== lastGroup) {
@@ -177,7 +181,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
           role="presentation"
           className="px-2 pb-1 pt-2 text-xs font-semibold uppercase tracking-[0.06em] text-ink-muted"
         >
-          {c.group}
+          {t(`palette.groups.${c.group}`)}
         </li>,
       );
     }
@@ -215,7 +219,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         ref={ref}
         role="dialog"
         aria-modal="true"
-        aria-label="Command palette"
+        aria-label={t("palette.label")}
         className="w-[min(600px,calc(100vw-32px))] overflow-hidden rounded-2xl border border-border bg-pop shadow-pop"
       >
         <div className="flex items-center gap-2.5 border-b border-border px-3.5 py-3 text-ink-muted">
@@ -247,8 +251,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
             aria-controls={listId}
             aria-autocomplete="list"
             aria-activedescendant={items.length ? `${listId}-${safeSel}` : undefined}
-            aria-label="Search or run a command"
-            placeholder="Search or run…"
+            aria-label={t("palette.inputLabel")}
+            placeholder={t("shell.searchOrRun")}
             autoComplete="off"
             spellCheck={false}
             className="min-w-0 flex-1 border-0 bg-transparent text-section text-ink outline-none placeholder:text-ink-muted/70 focus-visible:outline-none"
@@ -260,14 +264,14 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
             rows
           ) : (
             <li role="presentation" className="p-5 text-center text-sm text-ink-muted">
-              No matches
+              {t("palette.noMatches")}
             </li>
           )}
         </ul>
         <div className="flex gap-4 border-t border-border px-3.5 py-2 text-xs text-ink-muted">
-          <span>↑↓ move</span>
-          <span>↵ open</span>
-          <span>Esc close</span>
+          <span>{t("palette.move")}</span>
+          <span>{t("palette.open")}</span>
+          <span>{t("palette.close")}</span>
         </div>
       </div>
     </div>

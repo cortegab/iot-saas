@@ -3,6 +3,7 @@
  * the safety checks shown while typing, and the exact messages a draft
  * would send.
  */
+import { tActive as t } from "@iodriven/shared/i18n";
 import {
   actionProblem,
   canClear,
@@ -37,38 +38,38 @@ export function ruleChecks(d: RuleDraft): Check[] {
   const leafs = contacts(d.condition);
   const conditionProblem =
     reading && d.condition === null
-      ? "A rule that runs on each reading needs at least one condition."
+      ? t("editor.rules.readingNeeds")
       : (leafs.map(contactProblem).find(Boolean) ?? null);
   const actionsProblem =
-    d.actions.length === 0 && d.preserved.actions.length === 0 ? "Add at least one action." : (d.actions.map(actionProblem).find(Boolean) ?? null);
+    d.actions.length === 0 && d.preserved.actions.length === 0 ? t("editor.rules.addAction") : (d.actions.map(actionProblem).find(Boolean) ?? null);
   const checks: Check[] = [
-    { id: "conditions", label: "Conditions complete", ok: !conditionProblem, blocking: true, detail: conditionProblem ?? undefined },
-    { id: "actions", label: "Actions complete", ok: !actionsProblem, blocking: true, detail: actionsProblem ?? undefined },
+    { id: "conditions", label: t("editor.rules.conditionsComplete"), ok: !conditionProblem, blocking: true, detail: conditionProblem ?? undefined },
+    { id: "actions", label: t("editor.rules.actionsComplete"), ok: !actionsProblem, blocking: true, detail: actionsProblem ?? undefined },
   ];
   if (reading) {
     checks.push({
       id: "hold",
-      label: `Hold for at least ${MIN_HOLD} s`,
+      label: t("editor.rules.holdAtLeast", { n: MIN_HOLD }),
       ok: d.forDuration >= MIN_HOLD,
       blocking: false,
-      detail: d.forDuration >= MIN_HOLD ? undefined : "A single noisy reading could fire it. Hold the condition for a few seconds first.",
+      detail: d.forDuration >= MIN_HOLD ? undefined : t("editor.rules.holdDetail"),
     });
   }
   checks.push({
     id: "interval",
-    label: `Minimum interval of at least ${MIN_INTERVAL} s`,
+    label: t("editor.rules.intervalAtLeast", { n: MIN_INTERVAL }),
     ok: d.cooldown >= MIN_INTERVAL,
     blocking: false,
-    detail: d.cooldown >= MIN_INTERVAL ? undefined : "It could fire again within seconds of the last time.",
+    detail: d.cooldown >= MIN_INTERVAL ? undefined : t("editor.rules.intervalDetail"),
   });
   if (reading && switchesHardware(d)) {
     const bare = leafs.filter((c) => HYSTERESIS_OPERATORS.has(c.operator) && !(c.hysteresis > 0));
     checks.push({
       id: "hysteresis",
-      label: "Hysteresis above 0 on thresholds",
+      label: t("editor.rules.hysteresisAbove"),
       ok: bare.length === 0,
       blocking: false,
-      detail: bare.length === 0 ? undefined : "A reading hovering at the threshold would toggle the relay. Add a margin it must clear first.",
+      detail: bare.length === 0 ? undefined : t("editor.rules.hysteresisDetail"),
     });
   }
   return checks;
@@ -77,11 +78,11 @@ export function ruleChecks(d: RuleDraft): Check[] {
 /** The editor's sections, in rail order (DESIGN.md §9.2). */
 export type RuleSection = "when" | "if" | "then" | "behaviour" | "name";
 export const RULE_SECTIONS: { id: RuleSection; label: string; sub: string }[] = [
-  { id: "when", label: "When", sub: "Trigger" },
-  { id: "if", label: "If", sub: "Conditions" },
-  { id: "then", label: "Then", sub: "Actions" },
-  { id: "behaviour", label: "Behaviour", sub: "Hold, interval, clear" },
-  { id: "name", label: "Name", sub: "Name and status" },
+  { id: "when", get label() { return t("editor.rules.sections.when"); }, get sub() { return t("editor.rules.sections.whenSub"); } },
+  { id: "if", get label() { return t("editor.rules.sections.if"); }, get sub() { return t("editor.rules.sections.ifSub"); } },
+  { id: "then", get label() { return t("editor.rules.sections.then"); }, get sub() { return t("editor.rules.sections.thenSub"); } },
+  { id: "behaviour", get label() { return t("editor.rules.sections.behaviour"); }, get sub() { return t("editor.rules.sections.behaviourSub"); } },
+  { id: "name", get label() { return t("editor.rules.sections.name"); }, get sub() { return t("editor.rules.sections.nameSub"); } },
 ];
 
 export interface SectionIssue {
@@ -102,28 +103,28 @@ export function sectionIssues(d: RuleDraft): SectionIssue[] {
   const reading = isReadingRule(d);
   const leafs = contacts(d.condition);
 
-  if (w.type === "schedule" && !w.cron.trim()) add("when", "Pick when it runs.", true);
-  if (w.type === "device_status" && !w.statusDeviceId) add("when", "Pick the device to watch.", true);
+  if (w.type === "schedule" && !w.cron.trim()) add("when", t("editor.rules.issueCron"), true);
+  if (w.type === "device_status" && !w.statusDeviceId) add("when", t("editor.rules.issueStatusDevice"), true);
 
-  if (reading && d.condition === null) add("if", "A rule that runs on each reading needs at least one condition.", true);
+  if (reading && d.condition === null) add("if", t("editor.rules.readingNeeds"), true);
   for (const c of leafs) {
     const p = contactProblem(c);
     if (p) add("if", p, true);
   }
   if (reading && switchesHardware(d) && leafs.some((c) => HYSTERESIS_OPERATORS.has(c.operator) && !(c.hysteresis > 0)))
-    add("if", "Add hysteresis to the thresholds so a reading hovering at the line doesn't toggle the relay.", false);
+    add("if", t("editor.rules.issueHysteresis"), false);
 
-  if (d.actions.length === 0 && d.preserved.actions.length === 0) add("then", "Add at least one action.", true);
+  if (d.actions.length === 0 && d.preserved.actions.length === 0) add("then", t("editor.rules.addAction"), true);
   for (const a of d.actions) {
     const p = actionProblem(a);
     if (p) add("then", p, true);
   }
 
-  if (reading && d.forDuration < MIN_HOLD) add("behaviour", `Hold for at least ${MIN_HOLD} s so one noisy reading can't fire it.`, false);
-  if (d.cooldown < MIN_INTERVAL) add("behaviour", `Keep at least ${MIN_INTERVAL} s between firings.`, false);
-  if (canClear(d) && d.clearNotify && !d.clearMessage.trim()) add("behaviour", "The clear notification needs a message.", true);
+  if (reading && d.forDuration < MIN_HOLD) add("behaviour", t("editor.rules.issueHold", { n: MIN_HOLD }), false);
+  if (d.cooldown < MIN_INTERVAL) add("behaviour", t("editor.rules.issueInterval", { n: MIN_INTERVAL }), false);
+  if (canClear(d) && d.clearNotify && !d.clearMessage.trim()) add("behaviour", t("editor.rules.issueClearMessage"), true);
 
-  if (d.name.trim().length > MAX_NAME) add("name", `Keep the name to ${MAX_NAME} characters.`, true);
+  if (d.name.trim().length > MAX_NAME) add("name", t("editor.rules.issueName", { n: MAX_NAME }), true);
   return out;
 }
 
@@ -161,14 +162,14 @@ export function wouldSend(
   for (const a of body.actions as Record<string, unknown>[]) {
     if (a.type === "actuator_command") command(a, "command");
     else if (a.type === "email") {
-      const to = Array.isArray(a.to) && a.to.length ? (a.to as string[]).join(", ") : "the workspace's alert recipients";
+      const to = Array.isArray(a.to) && a.to.length ? (a.to as string[]).join(", ") : t("editor.rules.alertRecipients");
       out.push({ kind: "email", target: to, payload: String(a.subject ?? "") });
     } else if (a.type === "webhook") out.push({ kind: "webhook", target: String(a.url ?? ""), payload: JSON.stringify(a.body ?? {}) });
-    else if (a.type === "notification") out.push({ kind: "notification", target: "Notifications", payload: String(a.message ?? "") });
+    else if (a.type === "notification") out.push({ kind: "notification", target: t("editor.rules.sendNotifications"), payload: String(a.message ?? "") });
   }
   for (const a of body.clear_actions as Record<string, unknown>[]) {
     if (a.type === "actuator_command") command(a, "clear");
-    else if (a.type === "notification") out.push({ kind: "notification", target: "Notifications (on clear)", payload: String(a.message ?? "") });
+    else if (a.type === "notification") out.push({ kind: "notification", target: t("editor.rules.sendNotificationsClear"), payload: String(a.message ?? "") });
   }
   return out;
 }

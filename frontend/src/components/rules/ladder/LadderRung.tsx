@@ -30,6 +30,7 @@ import {
 import { actionLabel, isBoolContact } from "@/components/rules/editor/fields";
 import type { RuleCatalog } from "@/components/rules/editor/useRuleCatalog";
 import { cn } from "@/lib/cn";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 export type LadderSelection =
   | { kind: "when" }
@@ -67,17 +68,17 @@ function rowMid(row: number): number {
 function triggerLabel(draft: RuleDraft, catalog: RuleCatalog): string {
   const w = draft.when;
   if (w.type === "schedule") return `⏱ ${w.cron}${w.timezone && w.timezone !== "UTC" ? ` ${w.timezone}` : ""}`;
-  if (w.type === "manual") return "✋ Run manually";
+  if (w.type === "manual") return tr("ladder.runManually");
   if (w.type === "device_status") {
-    const name = catalog.deviceNameById[w.statusDeviceId] ?? "device";
-    return `⏻ ${name} ${w.transition === "connected" ? "connects" : "disconnects"}`;
+    const name = catalog.deviceNameById[w.statusDeviceId] ?? tr("ladder.device");
+    return tr(w.transition === "connected" ? "ladder.connects" : "ladder.disconnects", { device: name });
   }
-  return "⚡ On reading";
+  return tr("ladder.onReading");
 }
 
 function contactText(c: ContactDraft, catalog: RuleCatalog): { top: string; bottom: string } {
-  const metric = catalog.metricFor(c.deviceId, c.metric)?.name ?? (c.metric || "metric?");
-  const device = catalog.deviceNameById[c.deviceId] ?? "device?";
+  const metric = catalog.metricFor(c.deviceId, c.metric)?.name ?? (c.metric || tr("ladder.metricQ"));
+  const device = catalog.deviceNameById[c.deviceId] ?? tr("ladder.deviceQ");
   if (isBoolContact(c, catalog)) return { top: metric, bottom: device };
   const arity = OPERATOR_ARITY[c.operator] ?? "one";
   const sym = OPERATOR_SYMBOL[c.operator] ?? c.operator;
@@ -126,11 +127,11 @@ function clearCoils(draft: RuleDraft, catalog: RuleCatalog): ClearCoil[] {
     coils.push({
       id: `clear-${act.id}`,
       actionId: act.id,
-      title: `${actuator?.name ?? (act.actuator || "actuator")} = ${back}`,
-      detail: catalog.deviceNameById[act.deviceId] ?? "device",
+      title: `${actuator?.name ?? (act.actuator || tr("ladder.actuator"))} = ${back}`,
+      detail: catalog.deviceNameById[act.deviceId] ?? tr("ladder.device"),
     });
   }
-  if (draft.clearNotify) coils.push({ id: "clear-notify", title: "Notify", detail: draft.clearMessage || "condition cleared" });
+  if (draft.clearNotify) coils.push({ id: "clear-notify", title: tr("ladder.notify"), detail: draft.clearMessage || tr("ladder.conditionCleared") });
   return coils;
 }
 
@@ -297,7 +298,7 @@ export function LadderRung({
       <line x1={rightRail} y1={TOP - 6} x2={rightRail} y2={height - 4} stroke={MUTED} strokeWidth={2} opacity={0.5} />
 
       {/* WHEN label on the rail */}
-      <Selectable label={`Trigger: ${triggerLabel(draft, catalog)}`} onSelect={select({ kind: "when" })}>
+      <Selectable label={tr("ladder.triggerAria", { label: triggerLabel(draft, catalog) })} onSelect={select({ kind: "when" })}>
         <rect
           x={RAIL_X - 4}
           y={2}
@@ -346,7 +347,7 @@ export function LadderRung({
         const nc = isBoolContact(node, catalog) && node.value === 0;
         const selected = selection?.kind === "node" && selection.id === node.id;
         return (
-          <Selectable key={cell.id} label={`Condition ${text.top} on ${text.bottom}${nc ? " (normally closed)" : ""}`} onSelect={select({ kind: "node", id: node.id })}>
+          <Selectable key={cell.id} label={tr(nc ? "ladder.conditionNcAria" : "ladder.conditionAria", { top: text.top, bottom: text.bottom })} onSelect={select({ kind: "node", id: node.id })}>
             <rect x={left + 6} y={y - ROW_H / 2 + 4} width={CELL_W - 12} height={ROW_H - 8} rx={8} fill={selected ? ACCENT_FILL : "transparent"} stroke={selected ? ACCENT : "transparent"} />
             <line x1={left} y1={y} x2={mid - BRACKET} y2={y} stroke={WIRE} strokeWidth={1.6} />
             <line x1={mid + BRACKET} y1={y} x2={left + CELL_W} y2={y} stroke={WIRE} strokeWidth={1.6} />
@@ -365,17 +366,17 @@ export function LadderRung({
 
       {/* Condition exit → (+) → hold timer → coil bus */}
       <line x1={condEnd} y1={y0} x2={busX} y2={y0} stroke={WIRE} strokeWidth={1.6} />
-      {interactive && onAddSeriesAtEnd && <PlusHotspot x={plusX} y={y0} label="Add a condition in series at the end" onClick={onAddSeriesAtEnd} />}
+      {interactive && onAddSeriesAtEnd && <PlusHotspot x={plusX} y={y0} label={tr("ladder.addSeriesEnd")} onClick={onAddSeriesAtEnd} />}
       {showTimer && (
-        <TimerBox x={timerX} y={y0} text={`TON ${draft.forDuration}s`} label={`Hold for ${draft.forDuration} seconds`} selected={selection?.kind === "timing"} onSelect={select({ kind: "timing" })} />
+        <TimerBox x={timerX} y={y0} text={`TON ${draft.forDuration}s`} label={tr("ladder.holdAria", { n: draft.forDuration })} selected={selection?.kind === "timing"} onSelect={select({ kind: "timing" })} />
       )}
 
       {/* The minimum interval, over the coils: they fire at most this often. */}
       {cooldown && (
-        <Selectable label={`Minimum interval ${draft.cooldown} seconds`} onSelect={select({ kind: "timing" })}>
+        <Selectable label={tr("ladder.intervalAria", { n: draft.cooldown })} onSelect={select({ kind: "timing" })}>
           <rect x={coilX - 6} y={TOP - 22} width={150} height={18} rx={4} fill={SURFACE} stroke="var(--color-border)" />
           <text x={coilX + 2} y={TOP - 9} fontSize={10.5} fontWeight={600} fill={MUTED}>
-            {`MIN INTERVAL ${draft.cooldown}s`}
+            {tr("ladder.minInterval", { n: draft.cooldown })}
           </text>
         </Selectable>
       )}
@@ -389,14 +390,14 @@ export function LadderRung({
         const label = actionLabel(action, catalog);
         const selected = selection?.kind === "action" && selection.id === action.id;
         return (
-          <Selectable key={action.id} label={`Action ${label.title} — ${label.detail}`} onSelect={select({ kind: "action", id: action.id })}>
+          <Selectable key={action.id} label={tr("ladder.actionAria", { title: label.title, detail: label.detail })} onSelect={select({ kind: "action", id: action.id })}>
             <line x1={busX} y1={y} x2={coilX + 4} y2={y} stroke={WIRE} strokeWidth={1.6} />
             <Coil x={coilX} y={y} glyph={coilGlyph(action, draft)} title={label.title} detail={label.detail} selected={selected} />
           </Selectable>
         );
       })}
 
-      {interactive && <PlusHotspot x={coilX + 18} y={rowMid(draft.actions.length)} label="Add an action" onClick={() => onSelect?.({ kind: "add-action" })} />}
+      {interactive && <PlusHotspot x={coilX + 18} y={rowMid(draft.actions.length)} label={tr("ladder.addAction")} onClick={() => onSelect?.({ kind: "add-action" })} />}
 
       {/* CLEAR rung: condition false → clear delay → what turns back. */}
       {g.clears.length > 0 && (
@@ -421,13 +422,13 @@ export function LadderRung({
                     </text>
                     <line x1={mid + BRACKET} y1={y} x2={busX} y2={y} stroke={WIRE} strokeWidth={1.6} />
                     {draft.clearDelay > 0 && (
-                      <TimerBox x={timerX} y={y} text={`TON ${draft.clearDelay}s`} label={`Clear delay ${draft.clearDelay} seconds`} selected={selection?.kind === "timing"} onSelect={select({ kind: "timing" })} />
+                      <TimerBox x={timerX} y={y} text={`TON ${draft.clearDelay}s`} label={tr("ladder.clearDelayAria", { n: draft.clearDelay })} selected={selection?.kind === "timing"} onSelect={select({ kind: "timing" })} />
                     )}
                   </>
                 )}
                 {i > 0 && <line x1={busX} y1={y - ROW_H} x2={busX} y2={y} stroke={WIRE} strokeWidth={1.6} />}
                 <Selectable
-                  label={`On clear ${c.title} — ${c.detail}`}
+                  label={tr("ladder.onClearAria", { title: c.title, detail: c.detail })}
                   onSelect={c.actionId ? select({ kind: "action", id: c.actionId }) : select({ kind: "timing" })}
                 >
                   <line x1={busX} y1={y} x2={coilX + 4} y2={y} stroke={WIRE} strokeWidth={1.6} />
@@ -449,7 +450,7 @@ export function LadderRung({
             const y = g.resetTop + ROW_H / 2;
             const mid = x0 + CELL_W / 2;
             return (
-              <Selectable label="Latch: reset by a person (Reset latch)" onSelect={select({ kind: "timing" })}>
+              <Selectable label={tr("ladder.latchAria")} onSelect={select({ kind: "timing" })}>
                 <line x1={RAIL_X} y1={y} x2={mid - BRACKET} y2={y} stroke={WIRE} strokeWidth={1.6} />
                 <line x1={mid - BRACKET} y1={y - 13} x2={mid - BRACKET} y2={y + 13} stroke={INK} strokeWidth={2.2} />
                 <line x1={mid + BRACKET} y1={y - 13} x2={mid + BRACKET} y2={y + 13} stroke={INK} strokeWidth={2.2} />
@@ -460,7 +461,7 @@ export function LadderRung({
                   by a person
                 </text>
                 <line x1={mid + BRACKET} y1={y} x2={coilX + 4} y2={y} stroke={WIRE} strokeWidth={1.6} />
-                <Coil x={coilX} y={y} glyph="R" title="Latch released" detail="fires again when true" selected={false} />
+                <Coil x={coilX} y={y} glyph="R" title={tr("ladder.latchReleased")} detail={tr("ladder.firesAgain")} selected={false} />
               </Selectable>
             );
           })()}
@@ -522,11 +523,11 @@ export function VerticalRung({
     if (n.kind === "contact") {
       const t = contactText(n, catalog);
       const nc = isBoolContact(n, catalog) && n.value === 0;
-      return item(n.id, nc ? "[/]" : "[ ]", t.top, t.bottom, `Condition ${t.top} on ${t.bottom}`, { kind: "node", id: n.id }, selection?.kind === "node" && selection.id === n.id);
+      return item(n.id, nc ? "[/]" : "[ ]", t.top, t.bottom, tr("ladder.conditionAria", { top: t.top, bottom: t.bottom }), { kind: "node", id: n.id }, selection?.kind === "node" && selection.id === n.id);
     }
     return (
       <div key={n.id} className={cn("flex flex-col gap-1", n.op === "OR" && "border-l-2 border-dashed border-accent pl-3")}>
-        <span className="font-mono text-xs font-bold tracking-[0.05em] text-accent-strong">{n.op === "AND" ? "ALL OF" : "ANY OF"}</span>
+        <span className="font-mono text-xs font-bold tracking-[0.05em] text-accent-strong">{n.op === "AND" ? tr("ladder.allOf") : tr("ladder.anyOf")}</span>
         <div className="flex flex-col gap-1">{n.children.map((c) => node(c))}</div>
       </div>
     );
@@ -534,42 +535,42 @@ export function VerticalRung({
 
   return (
     <div role={interactive ? "group" : "img"} aria-label={ariaLabel} className="flex flex-col gap-1.5">
-      {caption("When")}
-      {item("when", "⚡", triggerLabel(draft, catalog).replace(/^\S+\s/, ""), null, `Trigger: ${triggerLabel(draft, catalog)}`, { kind: "when" }, selection?.kind === "when")}
+      {caption(tr("ladder.when"))}
+      {item("when", "⚡", triggerLabel(draft, catalog).replace(/^\S+\s/, ""), null, tr("ladder.triggerAria", { label: triggerLabel(draft, catalog) }), { kind: "when" }, selection?.kind === "when")}
       {draft.condition && (
         <>
-          {caption("If")}
+          {caption(tr("ladder.if"))}
           <div className="flex flex-col gap-1 border-l-[2.5px] border-ink pl-3.5">{node(draft.condition)}</div>
         </>
       )}
       {interactive && onAddSeriesAtEnd && (
         <button type="button" data-rung-el="" onClick={onAddSeriesAtEnd} className="flex min-h-9 items-center gap-2 rounded-lg border border-dashed border-accent px-2.5 text-meta text-accent">
-          + Add a condition in series at the end
+          {tr("ladder.addSeriesEndButton")}
         </button>
       )}
-      {isReadingRule(draft) && draft.forDuration > 0 && item("hold", "TON", `Hold ${draft.forDuration} s`, "the condition must stay true this long", `Hold for ${draft.forDuration} seconds`, { kind: "timing" }, selection?.kind === "timing", true)}
-      {caption(draft.cooldown > 0 && draft.actions.length ? `Then · at most every ${draft.cooldown} s` : "Then")}
+      {isReadingRule(draft) && draft.forDuration > 0 && item("hold", "TON", tr("ladder.hold", { n: draft.forDuration }), tr("ladder.holdDetail"), tr("ladder.holdAria", { n: draft.forDuration }), { kind: "timing" }, selection?.kind === "timing", true)}
+      {caption(draft.cooldown > 0 && draft.actions.length ? tr("ladder.thenEvery", { n: draft.cooldown }) : tr("ladder.then"))}
       {draft.actions.map((a) => {
         const l = actionLabel(a, catalog);
         const glyph = coilGlyph(a, draft);
-        return item(a.id, `(${glyph || " "})`, l.title, l.detail, `Action ${l.title} — ${l.detail}`, { kind: "action", id: a.id }, selection?.kind === "action" && selection.id === a.id);
+        return item(a.id, `(${glyph || " "})`, l.title, l.detail, tr("ladder.actionAria", { title: l.title, detail: l.detail }), { kind: "action", id: a.id }, selection?.kind === "action" && selection.id === a.id);
       })}
       {interactive && (
-        <button type="button" data-rung-el="" aria-label="Add an action" onClick={() => onSelect?.({ kind: "add-action" })} className="flex min-h-9 items-center gap-2 rounded-lg border border-dashed border-accent px-2.5 text-meta text-accent">
-          + Add an action
+        <button type="button" data-rung-el="" aria-label={tr("ladder.addAction")} onClick={() => onSelect?.({ kind: "add-action" })} className="flex min-h-9 items-center gap-2 rounded-lg border border-dashed border-accent px-2.5 text-meta text-accent">
+          {tr("ladder.addActionButton")}
         </button>
       )}
       {clears.length > 0 && (
         <>
-          {caption("Clear")}
-          {item("clear-when", "[/]", "Condition false", draft.clearDelay > 0 ? `for ${draft.clearDelay} s (clear delay)` : null, "When the condition is false", { kind: "timing" }, false, draft.clearDelay > 0)}
-          {clears.map((c) => item(c.id, c.actionId ? "(R)" : "(!)", c.title, c.detail, `On clear ${c.title} — ${c.detail}`, c.actionId ? { kind: "action", id: c.actionId } : { kind: "timing" }, false))}
+          {caption(tr("ladder.clear"))}
+          {item("clear-when", "[/]", tr("ladder.conditionFalse"), draft.clearDelay > 0 ? tr("ladder.clearFor", { n: draft.clearDelay }) : null, tr("ladder.whenFalse"), { kind: "timing" }, false, draft.clearDelay > 0)}
+          {clears.map((c) => item(c.id, c.actionId ? "(R)" : "(!)", c.title, c.detail, tr("ladder.onClearAria", { title: c.title, detail: c.detail }), c.actionId ? { kind: "action", id: c.actionId } : { kind: "timing" }, false))}
         </>
       )}
       {latching(draft) && (
         <>
-          {caption("Reset")}
-          {item("reset", "(R)", "Reset latch, by a person", "then it fires again when true", "Latch: reset by a person (Reset latch)", { kind: "timing" }, false)}
+          {caption(tr("ladder.reset"))}
+          {item("reset", "(R)", tr("ladder.resetByPerson"), tr("ladder.thenFires"), tr("ladder.latchAria"), { kind: "timing" }, false)}
         </>
       )}
     </div>

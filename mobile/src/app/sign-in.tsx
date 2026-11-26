@@ -10,6 +10,7 @@ import { useTheme } from "@/theme/useTheme";
 import { Button } from "@/ui/Button";
 import { Text } from "@/ui/Text";
 import { TextField, type TextInputRef } from "@/ui/TextField";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 /** Sign in with the same account as the web. New accounts and password
  * resets happen on the web (DESIGN.md §15). */
@@ -28,7 +29,7 @@ export default function SignIn() {
 
   async function submit() {
     if (!email.trim() || !password) {
-      setError("Enter your email and password.");
+      setError(t("app.screens.enterBoth"));
       return;
     }
     setBusy(true);
@@ -53,13 +54,13 @@ export default function SignIn() {
               </Text>
             </View>
             <Text size="title" weight="semibold" accessibilityRole="header">
-              Sign in
+              {t("auth.signIn")}
             </Text>
             <Text color="inkMuted">Use your IO Driven account.</Text>
           </View>
           <View style={[styles.card, { backgroundColor: theme.surface, borderColor: theme.border }]}>
             <TextField
-              label="Email"
+              label={t("auth.email")}
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
@@ -71,7 +72,7 @@ export default function SignIn() {
             />
             <TextField
               ref={passwordRef}
-              label="Password"
+              label={t("auth.password")}
               password
               value={password}
               onChangeText={setPassword}
@@ -85,10 +86,10 @@ export default function SignIn() {
                 {error}
               </Text>
             )}
-            <Button label={busy ? "Signing in…" : "Sign in"} busy={busy} onPress={() => void submit()} />
+            <Button label={busy ? t("auth.login.signingIn") : t("auth.signIn")} busy={busy} onPress={() => void submit()} />
           </View>
           <View style={styles.links}>
-            <Button variant="secondary" label="Forgot password?" onPress={() => void Linking.openURL(`${webUrl()}/forgot-password`)} />
+            <Button variant="secondary" label={t("auth.login.forgot")} onPress={() => void Linking.openURL(`${webUrl()}/forgot-password`)} />
             <Text size="meta" color="inkMuted">
               No account yet? Create one at {webUrl().replace(/^https?:\/\//, "")}.
             </Text>

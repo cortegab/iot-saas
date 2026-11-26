@@ -3,6 +3,7 @@ import Link from "next/link";
 import { NetworkCanvas } from "@/components/marketing/NetworkCanvas";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "@/components/brand/BrandMark";
+import { useT } from "@/lib/i18n";
 
 /** The sign-in card (demo G `.auth-card`) used by the account pages: login,
  * register, forgot/reset password, invitation. */
@@ -41,10 +42,11 @@ const CHIPS: { at: string; cmd?: boolean; body: ReactNode }[] = [
  * beside the card. Below `lg` the panel becomes a band above the card, with
  * the network drawn in its own strip under the text, never behind it. */
 export function AuthScreen({ children }: { children: ReactNode }) {
+  const t = useT();
   return (
     <div className="grid min-h-screen lg:grid-cols-[minmax(0,1.15fr)_minmax(440px,1fr)]">
       <section
-        aria-label="About IO Driven"
+        aria-label={t("auth.side.about")}
         className="night-bg relative isolate flex flex-col justify-between gap-6 overflow-hidden px-5 pt-6 text-night-ink lg:min-h-screen lg:px-11 lg:py-9"
       >
         <NetworkCanvas className="relative -z-20 -mx-5 h-[140px] w-[calc(100%+40px)] max-lg:order-last lg:absolute lg:inset-0 lg:m-0 lg:h-full lg:w-full" />
@@ -54,13 +56,12 @@ export function AuthScreen({ children }: { children: ReactNode }) {
           IO Driven
         </Link>
         <div className="relative z-[2] mb-auto mt-6 max-w-[31rem] lg:mt-[8vh]">
-          <p className="mb-3.5 font-mono text-xs uppercase tracking-[0.14em] text-night-sky">Telemetry · Rules · Control</p>
+          <p className="mb-3.5 font-mono text-xs uppercase tracking-[0.14em] text-night-sky">{t("auth.side.eyebrow")}</p>
           <h2 className="text-[27px] font-semibold leading-[1.06] tracking-[-0.035em] text-white lg:text-[clamp(30px,3.3vw,46px)]">
-            From sensor to switch in under two seconds.
+            {t("auth.side.headline")}
           </h2>
           <p className="mt-4 max-w-[44ch] text-section leading-[1.6] text-night-muted">
-            Every reading is checked against your rules the moment it arrives, before it&rsquo;s even stored. Actuators get their command while the data is still
-            fresh.
+            {t("auth.side.body")}
           </p>
         </div>
         <div aria-hidden className="pointer-events-none absolute inset-0 z-[1] max-lg:hidden">
@@ -86,9 +87,9 @@ export function AuthScreen({ children }: { children: ReactNode }) {
         </div>
         <dl className="relative z-[2] m-0 hidden max-w-[38rem] grid-cols-3 gap-4 border-t border-night-line pt-[18px] lg:grid">
           {[
-            ["Breach → command", "< 2 s"],
-            ["Typical on one host", "< 500 ms"],
-            ["Devices per host", "500–1,000"],
+            [t("auth.side.breach"), "< 2 s"],
+            [t("auth.side.typical"), "< 500 ms"],
+            [t("auth.side.perHost"), "500–1,000"],
           ].map(([dt, dd]) => (
             <div key={dt}>
               <dt className="text-xs text-night-dim">{dt}</dt>
@@ -104,7 +105,7 @@ export function AuthScreen({ children }: { children: ReactNode }) {
             iodriven.tech
           </Link>
           <Link href="/privacy" className="hover:text-ink">
-            Privacy
+            {t("auth.side.privacy")}
           </Link>
           <span>© 2026 IO Driven</span>
         </p>

@@ -16,6 +16,9 @@ export default defineConfig({
   use: {
     ...devices["Desktop Chrome"],
     baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3000",
+    // Specs select by English text; a Spanish machine would otherwise get the
+    // Spanish UI (DESIGN.md §11a). e2e/spanish.spec.ts sets its own.
+    locale: "en-US",
     trace: "on-first-retry",
   },
 });

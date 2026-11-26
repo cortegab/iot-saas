@@ -24,6 +24,7 @@ import { usePeek } from "@/components/list/usePeek";
 import { ApiRequestError } from "@/lib/api-client";
 import { deviceStatusKey } from "@/lib/device-status";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 type DeviceResponse = components["schemas"]["DeviceResponse"];
@@ -62,15 +63,15 @@ export default function ZonesPage() {
   const deleteZone = useDeleteZone(peek.close);
 
   const status = (z: ZoneResponse) => {
-    if (z.device_count === 0) return <Badge tone="unknown" shape="square" label="No devices" />;
+    if (z.device_count === 0) return <Badge tone="unknown" shape="square" label={tr("zone.noDevices")} />;
     const off = offline.get(z.id) ?? 0;
-    return off ? <Badge tone="offline" variant="dot" label={`${off} offline`} /> : <Badge tone="online" variant="dot" label="All reporting" />;
+    return off ? <Badge tone="offline" variant="dot" label={tr("zone.offline", { count: off })} /> : <Badge tone="online" variant="dot" label={tr("zone.allReporting")} />;
   };
 
   const columns: DataColumn<ZoneResponse>[] = [
     {
       id: "name",
-      header: "Zone",
+      get header() { return tr("zone.zone"); },
       sortable: true,
       cell: (z) => (
         <NameCell
@@ -79,28 +80,28 @@ export default function ZonesPage() {
               {z.name}
             </Link>
           }
-          sub={z.notes || "No notes"}
+          sub={z.notes || tr("zone.noNotes")}
         />
       ),
     },
-    { id: "devices", header: "Devices", sortable: true, numeric: true, cell: (z) => `${z.device_count} device${z.device_count === 1 ? "" : "s"}` },
-    { id: "status", header: "Status", cell: status },
+    { id: "devices", get header() { return tr("zone.devices"); }, sortable: true, numeric: true, cell: (z) => tr("zone.deviceCount", { count: z.device_count }) },
+    { id: "status", get header() { return tr("zone.status"); }, cell: status },
   ];
 
   const rowMenu = (z: ZoneResponse): DropdownMenuItem[][] => [
     [
-      { label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/zones/${z.id}`) },
-      { label: "View devices", icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${z.id}`) },
+      { label: tr("zone.open"), icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/zones/${z.id}`) },
+      { label: tr("zone.viewDevices"), icon: <Cpu size={15} />, onClick: () => router.push(`/devices?zone=${z.id}`) },
     ],
     ...(canWrite ? [[deleteZone.menuItem(z)]] : []),
   ];
 
-  const chips: FilterChip[] = list.q ? [{ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") }] : [];
+  const chips: FilterChip[] = list.q ? [{ id: "q", label: tr("zone.searchChip", { q: list.q }), onRemove: () => list.setQuery("") }] : [];
   const total = zones?.length ?? 0;
   const newButton = canWrite ? (
     <Link href="/zones/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
-      New zone
+      {tr("zone.newZone")}
     </Link>
   ) : null;
 
@@ -108,14 +109,14 @@ export default function ZonesPage() {
     <>
       {/* DESIGN.md §6: the primary action lives in the toolbar; the header
           holds it only while there's no toolbar (loading, error, first use). */}
-      <PageHeader inline title="Zones" description="Places your devices live in." actions={!error && zones && total > 0 ? undefined : newButton} />
+      <PageHeader inline title={tr("zone.title")} description={tr("zone.description")} actions={!error && zones && total > 0 ? undefined : newButton} />
       {error ? (
-        <ErrorState title="Couldn't load zones" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
+        <ErrorState title={tr("zone.loadListFailed")} message={error instanceof ApiRequestError ? error.message : tr("zone.noResponse")} onRetry={() => void mutate()} />
       ) : isLoading || !zones ? (
         <TableSkeleton rows={4} columns={3} />
       ) : (
         <ListWithPeek
-          label="Zone"
+          label={tr("zone.zone")}
           onClose={peek.close}
           nav={peek.nav}
           peek={
@@ -133,26 +134,26 @@ export default function ZonesPage() {
           {total === 0 ? (
             <FirstUse
               icon={<MapPin aria-hidden size={26} />}
-              title="No zones yet"
-              description="Create zones for the places your devices live — a greenhouse bay, a cold room, a pump house — then pick one in each device's settings."
+              title={tr("zone.emptyTitle")}
+              description={tr("zone.emptyBody")}
               action={newButton ?? undefined}
-              readOnlyNote="Ask an admin to create zones."
+              readOnlyNote={tr("zone.askAdmin")}
             />
           ) : (
             <>
               <ListToolbar
                 query={list.q}
                 onQuery={list.setQuery}
-                placeholder="Search zones"
+                placeholder={tr("zone.search")}
                 actions={newButton}
                 quick={{
-                  label: "Show",
+                  label: tr("zone.show"),
                   value: list.filters.show,
                   onChange: (v) => list.setFilter("show", v),
                   options: [
-                    { value: "all", label: "All", count: counts.all },
-                    { value: "used", label: "In use", count: counts.used },
-                    { value: "empty", label: "Empty", count: counts.all - counts.used },
+                    { value: "all", label: tr("zone.all"), count: counts.all },
+                    { value: "used", label: tr("zone.inUse"), count: counts.used },
+                    { value: "empty", label: tr("zone.empty"), count: counts.all - counts.used },
                   ],
                 }}
               />
@@ -162,7 +163,7 @@ export default function ZonesPage() {
               ) : (
                 <div className="flex flex-col gap-2">
                   <DataTable
-                    label="Zones"
+                    label={tr("zone.title")}
                     columns={columns}
                     rows={pageRows}
                     rowKey={(z) => z.id}
@@ -171,7 +172,7 @@ export default function ZonesPage() {
                     onRowClick={peek.onRowClick}
                     onRowEnter={peek.onRowEnter}
                     rowMenu={rowMenu}
-                    rowMenuLabel={(z) => `Actions for ${z.name}`}
+                    rowMenuLabel={(z) => tr("zone.actionsFor", { name: z.name })}
                     currentKey={peek.peekId}
                   />
                   <TableFooter

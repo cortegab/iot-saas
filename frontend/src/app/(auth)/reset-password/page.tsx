@@ -8,11 +8,13 @@ import { Field } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { ApiRequestError, apiClient } from "@/lib/api-client";
+import { useT } from "@/lib/i18n";
 
 /** Choose a new password from an emailed link (`?token=`). Every other
  * session of the account is signed out. */
 export default function ResetPasswordPage() {
   const router = useRouter();
+  const t = useT();
   const token = useSearchParams().get("token") ?? "";
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -20,8 +22,8 @@ export default function ResetPasswordPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const tooShort = password.length > 0 && password.length < 8 ? "Use at least 8 characters." : null;
-  const mismatch = touched && confirm !== password ? "The two passwords don't match." : null;
+  const tooShort = password.length > 0 && password.length < 8 ? t("auth.use8") : null;
+  const mismatch = touched && confirm !== password ? t("auth.reset.mismatch") : null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -33,7 +35,7 @@ export default function ResetPasswordPage() {
       await apiClient.post("/auth/reset-password", {}, { token, password });
       router.replace("/login?reset=1");
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't change the password. Try again.");
+      setError(err instanceof ApiRequestError ? err.message : t("auth.reset.failed"));
     } finally {
       setBusy(false);
     }
@@ -41,24 +43,24 @@ export default function ResetPasswordPage() {
 
   const footer = (
     <Link href="/forgot-password" className="font-medium text-accent hover:underline">
-      Ask for a new link
+      {t("auth.reset.newLink")}
     </Link>
   );
 
   if (!token) {
     return (
-      <AuthCard title="This link is incomplete" description="Open the link from the email again, or ask for a new one." footer={footer}>
+      <AuthCard title={t("auth.reset.incompleteTitle")} description={t("auth.reset.incompleteDescription")} footer={footer}>
       </AuthCard>
     );
   }
 
   return (
-    <AuthCard title="Choose a new password" description="Other sessions of this account will be signed out." footer={footer}>
+    <AuthCard title={t("auth.reset.title")} description={t("auth.reset.description")} footer={footer}>
       <form onSubmit={(e) => void submit(e)} className="flex flex-col gap-3.5">
-        <Field label="New password" error={tooShort} hint="At least 8 characters.">
+        <Field label={t("auth.reset.newPassword")} error={tooShort} hint={t("auth.atLeast8")}>
           <Input type="password" required autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
         </Field>
-        <Field label="Repeat it" error={mismatch}>
+        <Field label={t("auth.reset.repeat")} error={mismatch}>
           <Input
             type="password"
             required
@@ -74,7 +76,7 @@ export default function ResetPasswordPage() {
           </p>
         )}
         <Button type="submit" disabled={busy} className="w-full">
-          {busy ? "Saving…" : "Change password"}
+          {busy ? t("auth.reset.saving") : t("auth.reset.change")}
         </Button>
       </form>
     </AuthCard>

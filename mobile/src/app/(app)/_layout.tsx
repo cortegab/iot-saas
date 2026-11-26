@@ -1,5 +1,7 @@
 import { Redirect, Tabs } from "expo-router";
 import { useInterfaceMode } from "@/hooks/useInterfaceMode";
+import { LocaleSync } from "@/hooks/useLanguage";
+import { useLocale, useT } from "@/i18n/I18nProvider";
 import { Bell, Cpu, LayoutDashboard, ListChecks, Menu } from "lucide-react-native";
 import { AppState, View } from "react-native";
 import { SWRConfig } from "swr";
@@ -51,11 +53,14 @@ export default function AppLayout() {
 /** IO Driven and the workspace above every screen (DESIGN.md §15), then the tabs. */
 function AppFrame() {
   const theme = useTheme();
+  const locale = useLocale();
   return (
     <View style={{ flex: 1, backgroundColor: theme.canvas }}>
+      <LocaleSync />
       <BrandBar />
       <ReconnectingBanner />
-      <AppTabs />
+      {/* Keyed by language: a switch re-renders every tab's words. */}
+      <AppTabs key={locale} />
     </View>
   );
 }
@@ -66,6 +71,7 @@ function AppTabs() {
   const { unread } = useNotificationSummary();
   // Simple view (DESIGN.md §15a): Rules reads Automations.
   const { simple } = useInterfaceMode();
+  const t = useT();
   return (
       <Tabs
         screenOptions={{
@@ -80,16 +86,16 @@ function AppTabs() {
       >
         <Tabs.Screen
           name="dashboards"
-          options={{ title: "Dashboards", headerShown: false, tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} /> }}
+          options={{ title: t("nav.dashboards"), headerShown: false, tabBarIcon: ({ color, size }) => <LayoutDashboard color={color} size={size} /> }}
         />
         <Tabs.Screen
           name="devices"
-          options={{ title: "Devices", headerShown: false, tabBarIcon: ({ color, size }) => <Cpu color={color} size={size} /> }}
+          options={{ title: t("nav.devices"), headerShown: false, tabBarIcon: ({ color, size }) => <Cpu color={color} size={size} /> }}
         />
         <Tabs.Screen
           name="alerts"
           options={{
-            title: "Alerts",
+            title: t("nav.alerts"),
             headerShown: false,
             tabBarIcon: ({ color, size }) => <Bell color={color} size={size} />,
             // The unread count, as on the web's tab bar.
@@ -99,9 +105,9 @@ function AppTabs() {
         />
         <Tabs.Screen
           name="rules"
-          options={{ title: simple ? "Automations" : "Rules", headerShown: false, tabBarIcon: ({ color, size }) => <ListChecks color={color} size={size} /> }}
+          options={{ title: t(simple ? "nav.automations" : "nav.rules"), headerShown: false, tabBarIcon: ({ color, size }) => <ListChecks color={color} size={size} /> }}
         />
-        <Tabs.Screen name="more" options={{ title: "More", tabBarIcon: ({ color, size }) => <Menu color={color} size={size} /> }} />
+        <Tabs.Screen name="more" options={{ title: t("common.more"), tabBarIcon: ({ color, size }) => <Menu color={color} size={size} /> }} />
       </Tabs>
   );
 }

@@ -18,10 +18,10 @@ import { useToast } from "@/components/ui/Toast";
 import { ApiRequestError } from "@/lib/api-client";
 import { ROLE_LABEL } from "@/lib/permissions";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type SetupStatusResponse = components["schemas"]["SetupStatusResponse"];
 
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** Welcome (DESIGN.md §10.2): once, while the workspace has no dashboard
  * (dashboards are shared, so someone joining a workspace that has them lands
@@ -47,15 +47,15 @@ export default function WelcomePage() {
       await api.post("/tenants/current/welcome");
       router.replace(path);
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't do that", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("welcome.failed"), detail: err instanceof ApiRequestError ? err.message : undefined });
       setBusy(false);
     }
   }
 
   async function buildMine() {
-    const name = `${ws?.name ?? "My"} overview`;
+    const name = t("start.overview", { name: ws?.name ?? t("start.my") });
     const id = await build(name);
-    toast({ title: `${name} is ready`, detail: "It's your default dashboard. Change it any time in Edit layout." });
+    toast({ title: t("welcome.ready", { name }), detail: t("welcome.readyDetail") });
     return `/dashboards/${id}`;
   }
 
@@ -63,40 +63,40 @@ export default function WelcomePage() {
 
   const devices = counts.devices ?? 0;
   const alerts = summary?.unread ?? 0;
-  const facts = [plural(devices, "device"), plural(counts.rules ?? 0, "rule"), alerts ? `${plural(alerts, "alert")} need attention` : "no alerts waiting"];
+  const facts = [t("welcome.devices", { count: devices }), t("welcome.rules", { count: counts.rules ?? 0 }), alerts ? t("welcome.alerts", { count: alerts }) : t("welcome.noAlerts")];
 
   return (
     <div className="flex max-w-[760px] flex-col gap-5">
-      <PageHeader title={`Welcome to ${ws.name}`} description={role ? `You're in as ${ROLE_LABEL[role]}.` : undefined} />
+      <PageHeader title={t("welcome.title", { name: ws.name })} description={role ? t("welcome.youreIn", { role: ROLE_LABEL[role] }) : undefined} />
       <p className="text-ink">
-        <span className="text-ink-muted">Here now: </span>
+        <span className="text-ink-muted">{t("welcome.hereNow")} </span>
         {facts.join(" · ")}.
       </p>
       {!setup.complete && role === "viewer" && (
-        <Callout tone="info" title="Your workspace is being set up">
-          An owner or admin is still adding devices and rules. What&apos;s there already is yours to look at.
+        <Callout tone="info" title={t("start.beingSetUp")}>
+          {t("welcome.beingSetUpBody")}
         </Callout>
       )}
       <section className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-5">
         <h2 className="flex items-center gap-2 text-section font-semibold text-ink">
           <LayoutDashboard aria-hidden size={18} className="text-accent" />
-          A first dashboard
+          {t("welcome.firstDashboard")}
         </h2>
         <p className="text-meta text-ink-muted">
           {role === "viewer"
-            ? "Owners and admins make the workspace's dashboards. Open one from Dashboards and set it as where you land."
+            ? t("welcome.viewerBody")
             : devices > 0
-              ? `A chart for each device's main reading (up to 8), shared with everyone in the workspace and set as where you land. Change it any time.`
-              : "There are no devices yet, so there's nothing to chart. Look around first; you can make one later from Dashboards."}
+              ? t("welcome.buildBody")
+              : t("welcome.noDevicesBody")}
         </p>
         <div className="flex flex-wrap items-center gap-2">
           {devices > 0 && role !== "viewer" && (
             <Button disabled={busy} onClick={() => void answer(buildMine)}>
-              {busy ? "Building…" : "Build my dashboard"}
+              {busy ? t("welcome.building") : t("welcome.build")}
             </Button>
           )}
           <Button variant={devices > 0 && role !== "viewer" ? "ghost" : "primary"} disabled={busy} onClick={() => void answer(async () => "/devices")}>
-            Look around first
+            {t("welcome.lookAround")}
           </Button>
         </div>
       </section>

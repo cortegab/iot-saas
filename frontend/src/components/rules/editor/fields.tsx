@@ -35,6 +35,10 @@ import {
   type WhenDraft,
 } from "@/lib/rule-draft";
 import type { CatalogActuator, RuleCatalog, WireOption } from "./useRuleCatalog";
+import { nounWord, tActive as tr } from "@iodriven/shared/i18n";
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+import { richT } from "@/lib/i18n";
 
 export const SECTION_LABEL = "text-xs font-medium uppercase tracking-wide text-ink-muted";
 
@@ -43,12 +47,6 @@ const TYPE_TO_KIND: Record<CatalogActuator["value_type"], ValueKind> = {
   float: "number",
   string: "text",
 };
-const VALUE_TYPE_WORD: Record<CatalogActuator["value_type"], string> = {
-  bool: "boolean",
-  float: "numeric",
-  string: "text",
-};
-
 
 /** True inside a narrow panel (the ladder inspector): field rows stack one
  * per line instead of going wide on viewport breakpoints. */
@@ -88,8 +86,8 @@ export function NumberSafetyField({
           {hint}
           {!disabled && value < min && (
             <span className="block text-status-pending">
-              {hardware ? "Low values make relays cycle rapidly on noisy readings" : "Low values can send an alert for every noisy reading"} — consider {min} or
-              higher.
+              {hardware ? tr("editor.lowHardware") : tr("editor.lowAlert")}
+              {tr("editor.consider", { min })}
             </span>
           )}
         </>
@@ -116,7 +114,7 @@ export function DeviceSelect({
   return (
     <Select compact aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="" disabled>
-        Choose a device…
+        {tr("editor.chooseDevice")}
       </option>
       {catalog.devices.map((d) => (
         <option key={d.id} value={d.id}>
@@ -145,7 +143,7 @@ function WireControl({
       <Input
         compact
         aria-label={ariaLabel}
-        placeholder={`${noun} name`}
+        placeholder={tr("frame.namePlaceholder", { noun: nounWord(noun), Noun: cap(nounWord(noun)) })}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       />
@@ -154,7 +152,7 @@ function WireControl({
   return (
     <Select compact aria-label={ariaLabel} value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="" disabled>
-        Choose a{/^[aeiou]/.test(noun) ? "n" : ""} {noun}…
+        {tr("frame.choose", { noun: nounWord(noun), article: /^[aeiou]/.test(noun) ? "an" : "a" })}
       </option>
       {options.map((o) => (
         <option key={o.id} value={o.id}>
@@ -169,10 +167,10 @@ function WireControl({
 
 /** The four starts as radio cards (demo H When). */
 const TRIGGER_CARDS: { value: TriggerType; title: string; description: string }[] = [
-  { value: "metric", title: "On each reading", description: "Checks every new reading." },
-  { value: "schedule", title: "On a schedule", description: "Every day, certain days, or repeatedly." },
-  { value: "manual", title: "Manually", description: "Only when someone runs it." },
-  { value: "device_status", title: "Device connects or disconnects", description: "Online and offline events." },
+  { value: "metric", get title() { return tr("editor.triggerCards.metric"); }, get description() { return tr("editor.triggerCards.metricHint"); } },
+  { value: "schedule", get title() { return tr("editor.triggerCards.schedule"); }, get description() { return tr("editor.triggerCards.scheduleHint"); } },
+  { value: "manual", get title() { return tr("editor.triggerCards.manual"); }, get description() { return tr("editor.triggerCards.manualHint"); } },
+  { value: "device_status", get title() { return tr("editor.triggerCards.status"); }, get description() { return tr("editor.triggerCards.statusHint"); } },
 ];
 
 export function WhenFields({
@@ -186,31 +184,31 @@ export function WhenFields({
 }) {
   return (
     <div className="flex flex-col gap-4">
-      <ChoiceCards ariaLabel="Trigger" value={when.type} onChange={(type) => onChange({ ...when, type })} options={TRIGGER_CARDS} />
-      {when.type === "metric" && <p className="text-sm text-ink-muted">It checks every reading from the devices in its conditions, the moment it arrives.</p>}
+      <ChoiceCards ariaLabel={tr("editor.trigger")} value={when.type} onChange={(type) => onChange({ ...when, type })} options={TRIGGER_CARDS} />
+      {when.type === "metric" && <p className="text-sm text-ink-muted">{tr("editor.metricNote")}</p>}
       {when.type === "manual" && (
         <p className="text-sm text-ink-muted">
-          It fires only when someone presses <b className="font-medium text-ink">Run now</b>. Any conditions are checked at that moment.
+          {richT(tr, "editor.manualNote", { runNow: <b className="font-medium text-ink">{tr("editor.runNow")}</b> })}
         </p>
       )}
       {when.type === "device_status" && (
         <FieldRow wide="sm:grid-cols-2">
-          <Field label="Device">
+          <Field label={tr("editor.device")}>
             <DeviceSelect
-              ariaLabel="Watched device"
+              ariaLabel={tr("editor.watchedDevice")}
               value={when.statusDeviceId}
               catalog={catalog}
               onChange={(statusDeviceId) => onChange({ ...when, statusDeviceId })}
             />
           </Field>
-          <Field label="When it" hint="Disconnects comes from its Last-Will, so it's immediate.">
+          <Field label={tr("editor.whenIt")} hint={tr("editor.lastWillHint")}>
             <SegmentedControl
-              ariaLabel="Transition"
+              ariaLabel={tr("editor.transition")}
               value={when.transition}
               onChange={(transition) => onChange({ ...when, transition })}
               options={[
-                { value: "disconnected", label: "Disconnects" },
-                { value: "connected", label: "Connects" },
+                { value: "disconnected", label: tr("editor.disconnects") },
+                { value: "connected", label: tr("editor.connects") },
               ]}
             />
           </Field>
@@ -243,7 +241,7 @@ function RhsValueControl({
           compact
           type="number"
           step="any"
-          aria-label="Low"
+          aria-label={tr("editor.low")}
           value={contact.low}
           onChange={(e) => onChange({ low: Number(e.target.value) })}
         />
@@ -252,7 +250,7 @@ function RhsValueControl({
           compact
           type="number"
           step="any"
-          aria-label="High"
+          aria-label={tr("editor.high")}
           value={contact.high}
           onChange={(e) => onChange({ high: Number(e.target.value) })}
         />
@@ -269,13 +267,13 @@ function RhsValueControl({
       />
     );
   }
-  if (contact.rhsKind === "metric") return <span className="flex h-9 items-center text-sm text-ink-muted">see below</span>;
+  if (contact.rhsKind === "metric") return <span className="flex h-9 items-center text-sm text-ink-muted">{tr("editor.seeBelow")}</span>;
   return (
     <Input
       compact
       type="number"
       step="any"
-      aria-label="Threshold"
+      aria-label={tr("editor.threshold")}
       value={contact.value}
       onChange={(e) => onChange({ value: Number(e.target.value) })}
     />
@@ -318,17 +316,17 @@ export function ContactFields({
   return (
     <div className="flex flex-col gap-3">
       <FieldRow wide="sm:grid-cols-2 lg:grid-cols-[1.4fr_1.4fr_1.2fr_1fr]">
-        <Field label="Device">
+        <Field label={tr("editor.device")}>
           <DeviceSelect
-            ariaLabel="Condition device"
+            ariaLabel={tr("editor.conditionDevice")}
             value={contact.deviceId}
             catalog={catalog}
             onChange={(deviceId) => onChange({ deviceId, metric: "" })}
           />
         </Field>
-        <Field label="Metric">
+        <Field label={tr("editor.metric")}>
           <WireControl
-            ariaLabel="Condition metric"
+            ariaLabel={tr("editor.conditionMetric")}
             noun="metric"
             value={contact.metric}
             options={catalog.metricOptionsFor(contact.deviceId)}
@@ -336,24 +334,24 @@ export function ContactFields({
           />
         </Field>
         {boolMode ? (
-          <Field label="Is" className={compact ? undefined : "lg:col-span-2"}>
+          <Field label={tr("editor.is")} className={compact ? undefined : "lg:col-span-2"}>
             <SegmentedControl
-              ariaLabel="Contact state"
+              ariaLabel={tr("editor.contactState")}
               variant="solid"
               value={contact.value === 1 ? "on" : "off"}
               onChange={(v) => onChange({ value: v === "on" ? 1 : 0 })}
               options={[
-                { value: "on", label: "ON (normally open)" },
-                { value: "off", label: "OFF (normally closed)" },
+                { value: "on", label: tr("editor.contactOn") },
+                { value: "off", label: tr("editor.contactOff") },
               ]}
             />
           </Field>
         ) : (
           <>
-            <Field label="Comparison">
+            <Field label={tr("editor.comparison")}>
               <Select
                 compact
-                aria-label="Comparison"
+                aria-label={tr("editor.comparison")}
                 value={contact.operator}
                 onChange={(e) => onChange({ operator: e.target.value })}
               >
@@ -364,7 +362,7 @@ export function ContactFields({
                 ))}
               </Select>
             </Field>
-            <Field label="Value">
+            <Field label={tr("editor.value")}>
               <RhsValueControl contact={contact} onChange={onChange} />
             </Field>
           </>
@@ -380,22 +378,22 @@ export function ContactFields({
             onClick={() => onChange({ rhsKind: contact.rhsKind === "metric" ? "static" : "metric" })}
           >
             {contact.rhsKind === "metric"
-              ? "Compare to a fixed value instead"
-              : "Compare to another device instead"}
+              ? tr("editor.compareFixed")
+              : tr("editor.compareDevice")}
           </Button>
           {contact.rhsKind === "metric" && (
             <FieldRow wide="sm:grid-cols-2">
-              <Field label="Other device">
+              <Field label={tr("editor.otherDevice")}>
                 <DeviceSelect
-                  ariaLabel="Comparison device"
+                  ariaLabel={tr("editor.comparisonDevice")}
                   value={contact.rhsDeviceId}
                   catalog={catalog}
                   onChange={(rhsDeviceId) => onChange({ rhsDeviceId, rhsMetric: "" })}
                 />
               </Field>
-              <Field label="Its metric">
+              <Field label={tr("editor.itsMetric")}>
                 <WireControl
-                  ariaLabel="Comparison metric"
+                  ariaLabel={tr("editor.comparisonMetric")}
                   noun="metric"
                   value={contact.rhsMetric}
                   options={catalog.metricOptionsFor(contact.rhsDeviceId)}
@@ -410,8 +408,8 @@ export function ContactFields({
       {HYSTERESIS_OPERATORS.has(contact.operator) && (
         <div className="max-w-xs">
           <Field
-            label="Hysteresis"
-            hint="How far the reading must come back past the threshold before this counts as cleared — stops a relay chattering on a noisy reading."
+            label={tr("editor.hysteresis")}
+            hint={tr("editor.hysteresisHint")}
           >
             <Input
               compact
@@ -493,8 +491,8 @@ function ActuatorFields({
   const catalogKind = selected ? TYPE_TO_KIND[selected.value_type] : null;
   const kind = catalogKind ?? action.valueKind;
   const labels = {
-    off: String(selected?.off_value ?? "Off"),
-    on: String(selected?.on_value ?? "On"),
+    off: String(selected?.off_value ?? tr("editor.off")),
+    on: String(selected?.on_value ?? tr("editor.on")),
   };
   const patch = (p: Partial<ActuatorActionDraft>) => onChange({ ...action, ...p });
 
@@ -506,17 +504,17 @@ function ActuatorFields({
   return (
     <div className="flex flex-col gap-4">
       <FieldRow wide="sm:grid-cols-2">
-        <Field label="Device">
+        <Field label={tr("editor.device")}>
           <DeviceSelect
-            ariaLabel="Actuator device"
+            ariaLabel={tr("editor.actuatorDevice")}
             value={action.deviceId}
             catalog={catalog}
             onChange={(deviceId) => patch({ deviceId, actuator: "" })}
           />
         </Field>
-        <Field label="Actuator">
+        <Field label={tr("editor.actuator")}>
           <WireControl
-            ariaLabel="Actuator"
+            ariaLabel={tr("editor.actuator")}
             noun="actuator"
             value={action.actuator}
             options={catalog.actuatorOptionsFor(action.deviceId)}
@@ -525,28 +523,28 @@ function ActuatorFields({
         </Field>
       </FieldRow>
       {action.actuator.trim() !== "" && !selected && (
-        <Field label="Value kind" hint="This actuator isn't in the device template — pick how its value is sent.">
+        <Field label={tr("editor.valueKind")} hint={tr("editor.valueKindHint")}>
           <Select
             compact
             value={action.valueKind}
             onChange={(e) => patch({ valueKind: e.target.value as ValueKind })}
           >
-            <option value="boolean">On / Off</option>
-            <option value="number">Number</option>
-            <option value="text">Text</option>
+            <option value="boolean">{tr("editor.onOff")}</option>
+            <option value="number">{tr("editor.number")}</option>
+            <option value="text">{tr("editor.text")}</option>
           </Select>
         </Field>
       )}
       <Field
-        label="Set it to"
+        label={tr("editor.setItTo")}
         hint={
           selected
-            ? `Detected from “${selected.name}” — a ${VALUE_TYPE_WORD[selected.value_type]} actuator.`
+            ? tr("editor.detected", { name: selected.name, kind: tr(`editor.kinds.${selected.value_type}`) })
             : undefined
         }
       >
         <ActuatorValue
-          ariaLabel="Actuator value"
+          ariaLabel={tr("editor.actuatorValue")}
           kind={kind}
           bool={action.bool}
           num={action.num}
@@ -559,21 +557,21 @@ function ActuatorFields({
       {clearing && (
         <div className="flex flex-col gap-3 rounded-lg border border-border p-3">
           <SwitchField
-            label="Turn it back when the condition clears"
+            label={tr("editor.turnBack")}
             checked={action.revertOnClear}
             onChange={(revertOnClear) => patch({ revertOnClear })}
-            onLabel="On"
-            offLabel="Off"
-            onHint="Runs once when the condition is known to be false again."
-            offHint="It stays as the rule left it."
+            onLabel={tr("editor.on")}
+            offLabel={tr("editor.off")}
+            onHint={tr("editor.turnBackOnHint")}
+            offHint={tr("editor.turnBackOffHint")}
           />
           {action.revertOnClear && (
             <Field
-              label="Back to"
-              hint={kind === "boolean" && action.clearBool === null ? "The opposite of the value above." : undefined}
+              label={tr("editor.backTo")}
+              hint={kind === "boolean" && action.clearBool === null ? tr("editor.opposite") : undefined}
             >
               <ActuatorValue
-                ariaLabel="Value on clear"
+                ariaLabel={tr("editor.valueOnClear")}
                 kind={kind}
                 bool={action.clearBool ?? !action.bool}
                 num={action.clearNum}
@@ -607,8 +605,8 @@ function EmailRecipients({ action, onChange }: { action: EmailActionDraft; onCha
       from="the workspace"
       what="recipients"
       overridden={own}
-      overrideLabel="Use different recipients"
-      resetLabel="Use the workspace's"
+      overrideLabel={tr("editor.differentRecipients")}
+      resetLabel={tr("editor.workspaceRecipients")}
       onOverride={() => setOwn(true)}
       onReset={() => {
         setOwn(false);
@@ -616,7 +614,7 @@ function EmailRecipients({ action, onChange }: { action: EmailActionDraft; onCha
       }}
     >
       {own ? (
-        <Field label="To" hint="Comma-separated.">
+        <Field label={tr("editor.to")} hint={tr("editor.commaSeparated")}>
           <Input
             compact
             autoFocus={action.to.trim() === ""}
@@ -629,8 +627,8 @@ function EmailRecipients({ action, onChange }: { action: EmailActionDraft; onCha
         <FactList
           facts={[
             [
-              "To",
-              workspace ? (theirs.length ? theirs.join(", ") : "Owners and admins (nobody is listed)") : "…",
+              tr("editor.to"),
+              workspace ? (theirs.length ? theirs.join(", ") : tr("editor.ownersAdmins")) : "…",
             ],
           ]}
         />
@@ -658,10 +656,10 @@ export function ActionFields({
     return (
       <div className="flex flex-col gap-4">
         <EmailRecipients action={action} onChange={onChange} />
-        <Field label="Subject">
+        <Field label={tr("editor.subject")}>
           <Input compact value={action.subject} onChange={(e) => onChange({ ...action, subject: e.target.value })} />
         </Field>
-        <Field label="Message">
+        <Field label={tr("editor.message")}>
           <Textarea compact rows={3} value={action.body} onChange={(e) => onChange({ ...action, body: e.target.value })} />
         </Field>
       </div>
@@ -670,7 +668,7 @@ export function ActionFields({
   if (action.kind === "webhook") {
     return (
       <div className="flex flex-col gap-4">
-        <Field label="URL">
+        <Field label={tr("editor.url")}>
           <Input
             compact
             value={action.url}
@@ -678,7 +676,7 @@ export function ActionFields({
             placeholder="https://example.com/hook"
           />
         </Field>
-        <Field label="Body (JSON)">
+        <Field label={tr("editor.bodyJson")}>
           <Textarea
             compact
             rows={3}
@@ -691,7 +689,7 @@ export function ActionFields({
     );
   }
   return (
-    <Field label="Message" hint="Shown in the in-app activity feed.">
+    <Field label={tr("editor.message")} hint={tr("editor.feedHint")}>
       <Textarea compact rows={2} value={action.message} onChange={(e) => onChange({ ...action, message: e.target.value })} />
     </Field>
   );
@@ -705,39 +703,39 @@ export function actionLabel(action: ActionDraft, catalog: RuleCatalog): { title:
       const actuator = catalog.actuatorFor(action.deviceId, action.actuator);
       const name = actuator?.name ?? (action.actuator || "actuator");
       // demo H: actions read as sentences — "Turn Fan on", "Set Mode to eco".
-      if (action.valueKind === "boolean") return { title: `Turn ${name} ${action.bool ? "on" : "off"}`, detail: device };
+      if (action.valueKind === "boolean") return { title: tr(action.bool ? "editor.turnOn" : "editor.turnOff", { name }), detail: device };
       const value = action.valueKind === "number" ? String(action.num) : action.text || "…";
-      return { title: `Set ${name} to ${value}`, detail: device };
+      return { title: tr("editor.setTo", { name, value }), detail: device };
     }
     case "email": {
       const to = action.to.trim();
-      return { title: "Send an email", detail: to ? to : "alert recipients" };
+      return { title: tr("editor.sendEmail"), detail: to ? to : tr("editor.alertRecipients") };
     }
     case "webhook":
-      return { title: "Call a webhook", detail: action.url.replace(/^https?:\/\//, "") || "no address" };
+      return { title: tr("editor.callWebhook"), detail: action.url.replace(/^https?:\/\//, "") || tr("editor.noAddress") };
     case "notification":
-      return { title: "Post a notification", detail: action.message || "no message" };
+      return { title: tr("editor.postNotification"), detail: action.message || tr("editor.noMessage") };
   }
 }
 
 /** Add action (demo H): one button opening a menu of the four kinds. */
 const ADD_ACTIONS: { kind: ActionDraft["kind"]; label: string; Icon: typeof Power }[] = [
-  { kind: "actuator", label: "Switch an actuator", Icon: Power },
-  { kind: "email", label: "Send an email", Icon: Mail },
-  { kind: "webhook", label: "Call a webhook", Icon: Globe },
-  { kind: "notification", label: "Post a notification", Icon: Bell },
+  { kind: "actuator", get label() { return tr("editor.switchActuator"); }, Icon: Power },
+  { kind: "email", get label() { return tr("editor.sendEmail"); }, Icon: Mail },
+  { kind: "webhook", get label() { return tr("editor.callWebhook"); }, Icon: Globe },
+  { kind: "notification", get label() { return tr("editor.postNotification"); }, Icon: Bell },
 ];
 
 export function AddActionMenu({ onAdd }: { onAdd: (kind: ActionDraft["kind"]) => void }) {
   return (
     <DropdownMenu
-      label="Add action"
+      label={tr("editor.addAction")}
       align="start"
       triggerClassName={buttonClassName({ variant: "secondary" })}
       trigger={
         <>
           <Plus aria-hidden size={15} />
-          Add action
+          {tr("editor.addAction")}
         </>
       }
       groups={[ADD_ACTIONS.map(({ kind, label, Icon }) => ({ label, icon: <Icon size={15} />, onClick: () => onAdd(kind) }))]}

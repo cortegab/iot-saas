@@ -7,6 +7,8 @@ import { WidgetCard } from "@/components/dashboards/WidgetCard";
 import { useWidgetDevice, WidgetFoot } from "@/components/dashboards/widget-common";
 import { formatReading, isBoolMetric } from "@/lib/format-reading";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 
@@ -20,14 +22,14 @@ export function ValueCardWidget({ deviceId, metric }: { deviceId: string; metric
   const value = reading ? formatReading(reading.value, meta) : "—";
 
   return (
-    <WidgetCard title={meta?.name ?? metric ?? "Value"} device={device}>
+    <WidgetCard title={meta?.name ?? metric ?? t("dashboards.value")} device={device}>
       <div className="flex h-full flex-col justify-between gap-1">
         {isLoading ? (
           <LoadingSkeleton rows={1} rowClassName="h-10" />
         ) : (
           <Readout value={value} unit={reading && !isBool ? (meta?.unit ?? undefined) : undefined} size="lg" stale={stale && !!reading} framed={false} />
         )}
-        {reading ? <WidgetFoot stale={stale} time={reading.time} /> : <span className="text-xs text-ink-muted">No data</span>}
+        {reading ? <WidgetFoot stale={stale} time={reading.time} /> : <span className="text-xs text-ink-muted">{tr("wsheet.noData")}</span>}
       </div>
     </WidgetCard>
   );

@@ -6,6 +6,7 @@
  */
 
 import { tzCity, tzOffset } from "./timezones";
+import { activeLocale, tActive } from "./i18n";
 
 export type ScheduleMode = "daily" | "days" | "every" | "monthly" | "custom";
 
@@ -39,6 +40,12 @@ export const DOW_ORDER = [1, 2, 3, 4, 5, 6, 0] as const;
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 export const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** A weekday's short name in the language on screen ("Mon", "lun"). */
+export function dowName(d: number): string {
+  return activeLocale() === "en" ? DOW[d] : tActive("schedule.dow").split(",")[d];
+}
+const monthName = (m: number) => (activeLocale() === "en" ? MONTHS[m - 1] : tActive("schedule.months").split(",")[m - 1]);
 
 export function ordinal(n: number): string {
   const s = n % 100 >= 11 && n % 100 <= 13 ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
@@ -103,9 +110,9 @@ export function cronParts(cron: string): CronParts | null {
 /** Plain-language error for a cron that can't be read, or null. */
 export function validateCron(cron: string): string | null {
   const p = (cron || "").trim().split(/\s+/).filter(Boolean);
-  if (p.length !== 5) return "Enter five fields: minute, hour, day, month, weekday.";
+  if (p.length !== 5) return tActive("schedule.cronFields");
   if (!cronParts(cron)) {
-    return "One of the fields isn't valid. Use numbers, *, ranges (1-5), lists (1,3) or steps (*/15).";
+    return tActive("schedule.cronInvalid");
   }
   return null;
 }
@@ -163,11 +170,12 @@ export function clampRepeat(n: number, unit: "min" | "h"): number {
 
 export function daysText(days: number[]): string {
   const k = [...days].sort((a, b) => a - b).join(",");
-  if (k === "1,2,3,4,5") return "weekdays";
-  if (k === "0,6") return "weekends";
-  if (days.length === 7) return "every day";
+  if (k === "1,2,3,4,5") return tActive("schedule.weekdays");
+  if (k === "0,6") return tActive("schedule.weekends");
+  if (days.length === 7) return tActive("schedule.everyDay");
+  const names = activeLocale() === "en" ? DOW : tActive("schedule.dow").split(",");
   return DOW_ORDER.filter((d) => days.includes(d))
-    .map((d) => DOW[d])
+    .map((d) => names[d])
     .join(", ");
 }
 
@@ -176,15 +184,17 @@ export function daysText(days: number[]): string {
  * "on the 1st of each month at 09:00", "weekdays at 08:00 and 20:00". */
 export function cronHuman(cron: string): string {
   const s = scheduleFromCron(cron);
-  if (s.mode === "daily") return `every day at ${s.time}`;
-  if (s.mode === "days") return `${daysText(s.days ?? [])} at ${s.time}`;
-  if (s.mode === "monthly") return `on the ${ordinal(s.dom ?? 1)} of each month at ${s.time}`;
+  const nth = (n: number) => (activeLocale() === "en" ? ordinal(n) : String(n));
+  if (s.mode === "daily") return tActive("schedule.dailyAt", { time: s.time ?? "" });
+  if (s.mode === "days") return tActive("schedule.daysAt", { days: daysText(s.days ?? []), time: s.time ?? "" });
+  if (s.mode === "monthly") return tActive("schedule.monthlyAt", { nth: nth(s.dom ?? 1), time: s.time ?? "" });
   if (s.mode === "every") {
-    if (s.unit === "min") return `every ${s.n} min`;
-    return s.n === 1 ? `every hour at :${pad2(s.at ?? 0)}` : `every ${s.n} hours at :${pad2(s.at ?? 0)}`;
+    if (s.unit === "min") return tActive("schedule.everyMin", { n: String(s.n) });
+    const mm = pad2(s.at ?? 0);
+    return s.n === 1 ? tActive("schedule.everyHourAt", { mm }) : tActive("schedule.everyHoursAt", { n: String(s.n), mm });
   }
   const P = cronParts(cron);
-  if (!P) return "invalid schedule";
+  if (!P) return tActive("schedule.invalid");
   const [, , dom, mon, dow] = P.raw;
   const times =
     P.minutes.length * P.hours.length <= 4
@@ -192,15 +202,16 @@ export function cronHuman(cron: string): string {
       : null;
   let when: string | null = null;
   if (mon === "*") {
-    if (dom === "*" && dow === "*") when = "every day";
+    if (dom === "*" && dow === "*") when = tActive("schedule.everyDay");
     else if (dom === "*") when = daysText(P.dow);
-    else if (dow === "*" && P.dom.length === 1) when = `on the ${ordinal(P.dom[0])} of each month`;
+    else if (dow === "*" && P.dom.length === 1) when = tActive("schedule.monthly", { nth: nth(P.dom[0]) });
   }
   if (times && when) {
     const last = times[times.length - 1];
-    return `${when} at ${times.slice(0, -1).join(", ")}${times.length > 1 ? " and " : ""}${last}`;
+    const list = `${times.slice(0, -1).join(", ")}${times.length > 1 ? tActive("schedule.timesAnd") : ""}${last}`;
+    return tActive("schedule.whenAt", { when, times: list });
   }
-  return "on a custom schedule";
+  return tActive("schedule.custom");
 }
 
 /** A wall-clock moment in a given zone. */
@@ -288,9 +299,9 @@ export function runText(run: WallTime, zone: string, from: Date = new Date()): s
   const b = Date.UTC(run.year, run.month - 1, run.day);
   const diff = Math.round((b - a) / 864e5);
   const hm = `${pad2(run.hour)}:${pad2(run.minute)}`;
-  if (diff === 0) return `Today ${hm}`;
-  if (diff === 1) return `Tomorrow ${hm}`;
-  return `${DOW[run.dow]} ${run.day} ${MONTHS[run.month - 1]} ${hm}`;
+  if (diff === 0) return tActive("schedule.today", { time: hm });
+  if (diff === 1) return tActive("schedule.tomorrow", { time: hm });
+  return tActive("schedule.runDate", { dow: dowName(run.dow), day: String(run.day), month: monthName(run.month), time: hm });
 }
 
 /** "Runs weekdays at 22:00 (Mexico City, GMT-6)" parts for the summary line. */

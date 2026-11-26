@@ -16,19 +16,20 @@ import { DataTable, type DataColumn } from "@/components/list/DataTable";
 import { ApiRequestError } from "@/lib/api-client";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type FailedActionResponse = components["schemas"]["FailedActionResponse"];
 
 const ACTION_TYPE_LABELS: Record<string, string> = {
-  actuator_command: "Actuator command",
-  webhook: "Webhook",
-  notification: "In-app notification",
-  email: "Email",
-  unknown: "Unknown",
+  get actuator_command() { return tr("editor.failed.types.actuator_command"); },
+  get webhook() { return tr("editor.failed.types.webhook"); },
+  get notification() { return tr("editor.failed.types.notification"); },
+  get email() { return tr("editor.failed.types.email"); },
+  get unknown() { return tr("editor.failed.types.unknown"); },
 };
 
 function detailSummary(detail: FailedActionResponse["detail"]): string {
-  if (!detail) return "No details";
+  if (!detail) return tr("editor.failed.noDetails");
   const d = detail as Record<string, unknown>;
   if (typeof d.error === "string") return d.error;
   if (typeof d.reason === "string") return String(d.reason).replace(/_/g, " ");
@@ -58,9 +59,9 @@ export function FailedActionsList() {
       // The new attempt lands in the background; a failure comes back as a
       // fresh row (and a notification), success just clears this one.
       await mutate();
-      toast({ tone: "info", title: "Retrying the delivery", detail: `${ACTION_TYPE_LABELS[a.action_type] ?? a.action_type} for ${a.rule_name ?? "the rule"}` });
+      toast({ tone: "info", title: tr("editor.failed.retrying"), detail: tr("editor.failed.retryingDetail", { action: ACTION_TYPE_LABELS[a.action_type] ?? a.action_type, rule: a.rule_name ?? tr("editor.failed.theRule") }) });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't retry", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: tr("editor.failed.retryFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     } finally {
       setRetrying(null);
     }
@@ -69,8 +70,8 @@ export function FailedActionsList() {
   if (error) {
     return (
       <ErrorState
-        title="Couldn't load failed deliveries"
-        message={error instanceof ApiRequestError ? error.message : "The API didn't respond."}
+        title={tr("editor.failed.loadFailed")}
+        message={error instanceof ApiRequestError ? error.message : tr("devices.apiDown")}
         onRetry={() => void mutate()}
       />
     );
@@ -80,8 +81,8 @@ export function FailedActionsList() {
     return (
       <EmptyState
         icon={<CheckCircle2 aria-hidden size={26} />}
-        title="Nothing failed"
-        description="Webhook, email and actuator deliveries that fail show up here with the reason."
+        title={tr("editor.failed.emptyTitle")}
+        description={tr("editor.failed.emptyBody")}
       />
     );
   }
@@ -89,7 +90,7 @@ export function FailedActionsList() {
   const columns: DataColumn<FailedActionResponse>[] = [
     {
       id: "when",
-      header: "When",
+      header: tr("editor.failed.when"),
       cell: (a) => (
         <span className="whitespace-nowrap text-ink-muted" title={new Date(a.created_at).toLocaleString()}>
           {timeAgo(a.created_at)}
@@ -98,15 +99,15 @@ export function FailedActionsList() {
     },
     {
       id: "rule",
-      header: "Rule",
+      header: tr("editor.failed.rule"),
       cell: (a) => (
         <div className="flex min-w-0 flex-col">
           {a.rule_id ? (
             <Link href={`/rules/${a.rule_id}`} className="font-medium text-ink hover:text-accent hover:underline">
-              {a.rule_name ?? "Rule"}
+              {a.rule_name ?? tr("editor.failed.rule")}
             </Link>
           ) : (
-            <span className="text-ink-muted">{a.rule_name ?? "Deleted rule"}</span>
+            <span className="text-ink-muted">{a.rule_name ?? tr("editor.failed.deletedRule")}</span>
           )}
           {a.summary && <span className="block max-w-[44ch] truncate text-xs text-ink-muted">{a.summary}</span>}
         </div>
@@ -114,13 +115,13 @@ export function FailedActionsList() {
     },
     {
       id: "action",
-      header: "Action",
+      header: tr("editor.failed.action"),
       hideOnPhone: true,
       cell: (a) => ACTION_TYPE_LABELS[a.action_type] ?? a.action_type,
     },
     {
       id: "error",
-      header: "Error",
+      header: tr("editor.failed.error"),
       cell: (a) => (
         <span className="text-xs text-status-error" title={a.detail ? JSON.stringify(a.detail) : undefined}>
           {detailSummary(a.detail)}
@@ -131,16 +132,16 @@ export function FailedActionsList() {
       ? [
           {
             id: "retry",
-            header: "Retry",
+            header: tr("editor.failed.retry"),
             cell: (a: FailedActionResponse) =>
               RETRYABLE.has(a.action_type) ? (
                 <Button size="sm" variant="secondary" disabled={retrying === a.id} onClick={() => void retry(a)}>
                   <RotateCw aria-hidden size={13} />
-                  {retrying === a.id ? "Retrying…" : "Retry"}
+                  {retrying === a.id ? tr("editor.failed.retryingDots") : tr("editor.failed.retry")}
                 </Button>
               ) : (
-                <span className="text-xs text-ink-muted" title="A late actuator command could act on state that has moved on. The rule fires again when its condition holds.">
-                  Not retried
+                <span className="text-xs text-ink-muted" title={tr("editor.failed.notRetriedHint")}>
+                  {tr("editor.failed.notRetried")}
                 </span>
               ),
           },
@@ -150,7 +151,7 @@ export function FailedActionsList() {
 
   return (
     <div className="flex flex-col gap-2">
-      <DataTable label="Failed deliveries" columns={columns} rows={data} rowKey={(a) => a.id} />
+      <DataTable label={tr("editor.failed.label")} columns={columns} rows={data} rowKey={(a) => a.id} />
       <TableFooter
         shown={total}
         total={total}

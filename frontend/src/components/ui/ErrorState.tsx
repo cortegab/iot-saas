@@ -1,5 +1,6 @@
 import { AlertCircle } from "lucide-react";
 import { buttonClassName } from "@/components/ui/Button";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 export interface ErrorStateProps {
   /** What failed, in plain words ("Couldn't load devices"). */
@@ -24,7 +25,7 @@ export function ErrorState({ title, message, onRetry }: ErrorStateProps) {
       </div>
       {onRetry && (
         <button type="button" onClick={onRetry} className={buttonClassName({ variant: "secondary", size: "sm" })}>
-          Retry
+          {t("ui.retry")}
         </button>
       )}
     </div>

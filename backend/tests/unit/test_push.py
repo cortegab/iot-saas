@@ -137,3 +137,20 @@ async def test_client_gets_a_token_once_and_refreshes_on_401(account: ServiceAcc
         assert await client.send({"token": "t"}) is SendResult.SENT  # cached token
     assert calls.count("oauth2.example") == 2
     assert calls.count("fcm.googleapis.com") == 3
+
+
+async def test_push_loop_off_stays_parked_instead_of_returning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Off (no FCM service account) must not return: the worker's supervisor
+    would take that for a crash and restart and log it every 30 s forever."""
+    import asyncio
+
+    from app.config import settings
+    from app.push import sender
+
+    monkeypatch.setattr(settings, "fcm_service_account_file", None)
+    task = asyncio.create_task(sender.push_loop(None))  # type: ignore[arg-type]
+    await asyncio.sleep(0.05)
+    assert not task.done()
+    task.cancel()

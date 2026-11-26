@@ -15,6 +15,7 @@ import { contacts, draftToRequest, isReadingRule, validateDraft, type RuleDraft 
 import { ruleChecks, wouldSend } from "@/lib/rule-preview";
 import type { RuleCatalog } from "./useRuleCatalog";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type SimulateResponse = components["schemas"]["SimulateResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -39,7 +40,7 @@ function draftBody(draft: RuleDraft): Record<string, unknown> | null {
   if (validateDraft(draft)) return null;
   try {
     const body = draftToRequest(draft);
-    return { ...body, name: (body.name as string | undefined) || "Draft" };
+    return { ...body, name: (body.name as string | undefined) || tr("editor.preview.draft") };
   } catch {
     return null;
   }
@@ -92,7 +93,7 @@ export function RulePreview({
     api
       .query<SimulateResponse>("/rules/simulate", { rule: JSON.parse(bodyKey), replay: { from: from.toISOString(), to: to.toISOString() } })
       .then((r) => !cancelled && setReplay({ fired: r.replay?.would_have_fired_at ?? [] }))
-      .catch((err) => !cancelled && setReplay({ fired: [], error: err instanceof ApiRequestError ? err.message : "Couldn't replay." }));
+      .catch((err) => !cancelled && setReplay({ fired: [], error: err instanceof ApiRequestError ? err.message : tr("editor.preview.replayFailed") }));
     return () => {
       cancelled = true;
     };
@@ -120,7 +121,7 @@ export function RulePreview({
       const result = await api.query<SimulateResponse>("/rules/simulate", { rule: body, overrides });
       setDry({ result });
     } catch (err) {
-      setDry({ error: err instanceof ApiRequestError ? err.message : "Couldn't run it." });
+      setDry({ error: err instanceof ApiRequestError ? err.message : tr("editor.preview.runFailed") });
     }
   }
 
@@ -150,7 +151,7 @@ export function RulePreview({
       seen.set(`${c.deviceId}/${c.metric}`, {
         device_id: c.deviceId,
         metric: c.metric,
-        label: `${catalog.metricFor(c.deviceId, c.metric)?.name ?? c.metric} · ${catalog.deviceNameById[c.deviceId] ?? "device"}`,
+        label: `${catalog.metricFor(c.deviceId, c.metric)?.name ?? c.metric} · ${catalog.deviceNameById[c.deviceId] ?? tr("editor.preview.device")}`,
       });
     }
     return [...seen.values()];
@@ -183,43 +184,43 @@ export function RulePreview({
 
   const fired = replay?.fired ?? [];
   return (
-    <div className={cn(layout === "grid" ? "grid gap-3 md:grid-cols-2 xl:grid-cols-3" : "flex flex-col gap-3")} aria-label="Preview">
-      <PreviewCard title="Last 24 hours">
+    <div className={cn(layout === "grid" ? "grid gap-3 md:grid-cols-2 xl:grid-cols-3" : "flex flex-col gap-3")} aria-label={tr("editor.preview.label")}>
+      <PreviewCard title={tr("editor.preview.last24")}>
         {!reading ? (
-          <p className="text-meta text-ink-muted">{draft.when.type === "schedule" ? "Fires on its schedule." : "Fires on each event, not on readings."}</p>
+          <p className="text-meta text-ink-muted">{draft.when.type === "schedule" ? tr("editor.preview.firesSchedule") : tr("editor.preview.firesEvent")}</p>
         ) : !body ? (
-          <p className="text-meta text-ink-muted">Finish the conditions and actions to replay the last 24 hours.</p>
+          <p className="text-meta text-ink-muted">{tr("editor.preview.finish")}</p>
         ) : !replay ? (
-          <p className="text-meta text-ink-muted">Replaying…</p>
+          <p className="text-meta text-ink-muted">{tr("editor.preview.replaying")}</p>
         ) : replay.error ? (
           <p className="text-meta text-status-error">{replay.error}</p>
         ) : (
           <>
-            <MiniStrip variant="replay" cells={replayCells} axis={["24 h ago", "12 h ago", "now"]} label={`Would have fired ${fired.length} times in 24 h`} />
+            <MiniStrip variant="replay" cells={replayCells} axis={[tr("editor.preview.ago24"), tr("editor.preview.ago12"), tr("editor.preview.now")]} label={tr("editor.preview.wouldTimes", { count: fired.length })} />
             <p className="text-meta text-ink">
               {fired.length === 0
-                ? "Wouldn't have fired in the last 24 hours."
-                : `Would have fired ${fired.length}× at ${fired.slice(0, 3).map(hhmm).join(", ")}${fired.length > 3 ? "…" : ""}`}
+                ? tr("editor.preview.wouldnt")
+                : tr("editor.preview.wouldAt", { count: fired.length, times: `${fired.slice(0, 3).map(hhmm).join(", ")}${fired.length > 3 ? "…" : ""}` })}
             </p>
             {fired.length > NOISY && (
               <p className="flex gap-1.5 text-xs text-status-pending">
                 <AlertTriangle aria-hidden size={13} className="mt-0.5 shrink-0" />
-                Noisy: it would fire more than {NOISY} times a day. Raise the threshold, hold longer, or widen the interval.
+                {tr("editor.preview.noisy", { n: NOISY })}
               </p>
             )}
           </>
         )}
       </PreviewCard>
 
-      <PreviewCard title="Would send">
+      <PreviewCard title={tr("editor.preview.wouldSend")}>
         {sends.length === 0 ? (
-          <p className="text-meta text-ink-muted">No actions yet.</p>
+          <p className="text-meta text-ink-muted">{tr("editor.preview.noActions")}</p>
         ) : (
           <ul className="flex flex-col gap-2">
             {sends.map((s, i) => (
               <li key={i} className="flex flex-col gap-0.5">
                 <span className="text-xs text-ink-muted">
-                  {s.kind === "command" ? "Command" : s.kind === "clear" ? "When it clears" : s.kind === "email" ? "Email to" : s.kind === "webhook" ? "Webhook" : "Notification"}
+                  {tr(s.kind === "command" ? "editor.preview.command" : s.kind === "clear" ? "editor.preview.whenClears" : s.kind === "email" ? "editor.preview.emailTo" : s.kind === "webhook" ? "editor.preview.webhook" : "editor.preview.notification")}
                 </span>
                 <code className="break-all font-mono text-xs text-ink">{s.target}</code>
                 {s.payload && <code className="break-all font-mono text-xs text-ink-muted">{s.payload}</code>}
@@ -230,23 +231,25 @@ export function RulePreview({
         <div className="flex flex-col gap-1.5 border-t border-border pt-2.5">
           <Button size="sm" variant="secondary" disabled={!body || dry.busy} onClick={() => void dryRun()}>
             <Play aria-hidden size={13} />
-            {dry.busy ? "Checking…" : "Dry run with live readings"}
+            {dry.busy ? tr("editor.preview.checking") : tr("editor.preview.dryRun")}
           </Button>
-          <p className="text-xs text-ink-muted">Reports what would happen now. Sends nothing.</p>
+          <p className="text-xs text-ink-muted">{tr("editor.preview.dryRunHint")}</p>
           {dry.error && <p className="text-xs text-status-error">{dry.error}</p>}
           {dry.result && (
             <p role="status" className={cn("text-meta", dry.result.would_fire ? "text-status-pending" : "text-ink")}>
               {dry.result.unavailable_signals.length > 0
-                ? `Can't tell now: ${dry.result.unavailable_signals.map((s) => `${s.metric} on ${s.device_name ?? "a device"} is ${s.state}`).join("; ")}. Unknown data never fires.`
+                ? tr("editor.preview.cantTell", {
+                    list: dry.result.unavailable_signals.map((s) => tr("editor.preview.signal", { metric: s.metric, device: s.device_name ?? tr("editor.sum.aDevice"), state: s.state })).join("; "),
+                  })
                 : dry.result.would_fire
-                  ? "It would fire right now."
-                  : "It wouldn't fire right now."}
+                  ? tr("editor.preview.wouldFire")
+                  : tr("editor.preview.wouldntFire")}
             </p>
           )}
         </div>
       </PreviewCard>
 
-      <PreviewCard title="Checks">
+      <PreviewCard title={tr("editor.preview.checks")}>
         <ul className="flex flex-col gap-1.5">
           {checks.map((c) => (
             <li key={c.id} className="flex gap-2 text-meta">
@@ -262,7 +265,7 @@ export function RulePreview({
               <span className="flex flex-col">
                 <span className={c.ok ? "text-ink" : "font-medium text-ink"}>
                   {c.label}
-                  <span className="sr-only">{c.ok ? ": passes" : c.blocking ? ": needs fixing" : ": warning"}</span>
+                  <span className="sr-only">{c.ok ? tr("editor.preview.passes") : c.blocking ? tr("editor.preview.needsFixing") : tr("editor.preview.warning")}</span>
                 </span>
                 {c.detail && <span className="text-xs text-ink-muted">{c.detail}</span>}
               </span>
@@ -273,7 +276,7 @@ export function RulePreview({
 
       {/* Only when there are some (demo H). */}
       {others.length > 0 && (
-        <PreviewCard title="Other rules on these actuators">
+        <PreviewCard title={tr("editor.preview.others")}>
           <ul className="flex flex-col gap-1.5">
             {others.map((o, i) => (
               <li key={i} className="flex flex-col text-meta">
@@ -281,7 +284,7 @@ export function RulePreview({
                   {o.rule.name}
                 </Link>
                 <span className={cn("text-xs", o.conflict ? "text-status-pending" : "text-ink-muted")}>
-                  {o.conflict ? `Also sets ${o.actuator} to a different value. The last command wins.` : `Also drives ${o.actuator}, the same way.`}
+                  {o.conflict ? tr("editor.preview.conflict", { actuator: o.actuator }) : tr("editor.preview.same", { actuator: o.actuator })}
                 </span>
               </li>
             ))}
@@ -291,19 +294,19 @@ export function RulePreview({
 
       {signals.length > 0 && (
         <details className="group rounded-xl border border-border bg-surface p-4 shadow-card">
-          <summary className="cursor-pointer text-meta font-semibold text-ink">Try other values</summary>
+          <summary className="cursor-pointer text-meta font-semibold text-ink">{tr("editor.preview.tryOther")}</summary>
           <div className="mt-3 flex flex-col gap-2">
             {signals.map((s) => {
               const k = `${s.device_id}/${s.metric}`;
               return (
                 <label key={k} className="flex flex-col gap-1 text-xs text-ink-muted">
                   {s.label}
-                  <Input inputMode="decimal" value={tryValues[k] ?? ""} placeholder="live value" onChange={(e) => setTryValues((v) => ({ ...v, [k]: e.target.value }))} />
+                  <Input inputMode="decimal" value={tryValues[k] ?? ""} placeholder={tr("editor.preview.liveValue")} onChange={(e) => setTryValues((v) => ({ ...v, [k]: e.target.value }))} />
                 </label>
               );
             })}
             <p role="status" className="text-meta text-ink">
-              {tryResult ? (tryResult.would_fire ? "With these values it would fire." : "With these values it wouldn't fire.") : "Type a value to see the outcome."}
+              {tryResult ? (tryResult.would_fire ? tr("editor.preview.tryFires") : tr("editor.preview.tryQuiet")) : tr("editor.preview.tryType")}
             </p>
           </div>
         </details>

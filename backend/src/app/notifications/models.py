@@ -11,8 +11,10 @@ notification, it's read for the whole tenant.
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -39,6 +41,9 @@ class Notification(Base):
     message: Mapped[str] = mapped_column(nullable=False)
     # Optional second line under the message.
     detail: Mapped[str | None] = mapped_column(nullable=True)
+    # The platform's own wording as keys and values, for each reader's
+    # language (DESIGN.md §11a): {"message": {"key", "params"}, "detail": …}.
+    i18n: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     severity: Mapped[str] = mapped_column(nullable=False, server_default="warning")
     # What produced it — see NotificationKind.
     kind: Mapped[str] = mapped_column(nullable=False, server_default="rule_fired")

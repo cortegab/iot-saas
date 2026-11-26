@@ -41,6 +41,7 @@ import { RulePreview } from "./RulePreview";
 import { SAVE_BAR } from "@/components/editor/save-bar";
 import { useRuleCatalog } from "./useRuleCatalog";
 import { useInterfaceMode } from "@/hooks/useInterfaceMode";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
@@ -49,25 +50,25 @@ type RuleTab = "basics" | "when" | "if" | "then" | "behaviour" | "activity" | "r
 
 const MODE_KEY = "rule-editor-mode";
 const TAB_LABEL: Record<RuleTab, string> = {
-  basics: "Basics",
-  when: "When",
-  if: "If",
-  then: "Then",
-  behaviour: "Behaviour",
-  activity: "Activity",
-  review: "Review",
+  get basics() { return tr("editor.frame.tabs.basics"); },
+  get when() { return tr("editor.frame.tabs.when"); },
+  get if() { return tr("editor.frame.tabs.if"); },
+  get then() { return tr("editor.frame.tabs.then"); },
+  get behaviour() { return tr("editor.frame.tabs.behaviour"); },
+  get activity() { return tr("editor.frame.tabs.activity"); },
+  get review() { return tr("editor.frame.tabs.review"); },
 };
 // A new rule is a wizard (DESIGN.md §9.1): one question per step. Behaviour
 // is only for rules on a reading; the others keep their one timer in Then.
 const QUESTION: Partial<Record<RuleTab, [string, string]>> = {
-  when: ["What starts it?", "A reading, a schedule, a person, or a device going online or offline."],
-  if: ["What has to be true?", "Add conditions. Combine them with All (and) or Any (or)."],
-  then: ["What should happen?", "Switch something, send an email, call a webhook or post a notification."],
-  review: ["Check and create", "Name it, see what it would have done, and create it."],
+  get when(): [string, string] { return [tr("editor.frame.whenQ"), tr("editor.frame.whenSub")]; },
+  get if(): [string, string] { return [tr("editor.frame.ifQ"), tr("editor.frame.ifSub")]; },
+  get then(): [string, string] { return [tr("editor.frame.thenQ"), tr("editor.frame.thenSub")]; },
+  get review(): [string, string] { return [tr("editor.frame.reviewQ"), tr("editor.frame.reviewSub")]; },
 };
 const BEHAVIOUR_QUESTION = (hardware: boolean): [string, string] => [
-  "How should it behave?",
-  hardware ? "Re-arm or latch, and the safety timers that stop hardware flapping." : "Re-arm or latch, and the timers that stop repeat alerts.",
+  tr("editor.frame.behaviourQ"),
+  hardware ? tr("editor.frame.behaviourHardware") : tr("editor.frame.behaviourAlerts"),
 ];
 // The rule page's older tab names (Logic / Activity, before them Simulate / Versions).
 // A rule page link to Behaviour on a rule without one lands on Then.
@@ -262,7 +263,7 @@ export function RuleEditor({
   function next() {
     const stopping = blocking.filter((i) => tabOf(i.section) === tab);
     if (stopping.length > 0) {
-      toast({ tone: "error", title: "Fix the marked items first", detail: stopping[0].message });
+      toast({ tone: "error", title: tr("ui.editor.fixFirst"), detail: stopping[0].message });
       return;
     }
     setTab(tabs[stepIndex + 1]);
@@ -284,9 +285,9 @@ export function RuleEditor({
     }
     // A live rule acts on the next reading: say so before saving (§9.8).
     if (existing?.enabled) {
-      const ok = await confirm(`${existing.name} is enabled, so the change applies within a second. Its history and versions are kept.`, {
-        title: "Save and apply now?",
-        confirmLabel: "Save rule",
+      const ok = await confirm(tr("editor.frame.applyBody", { name: existing.name }), {
+        title: tr("editor.frame.applyTitle"),
+        confirmLabel: tr("editor.frame.saveRule"),
         danger: false,
       });
       if (!ok) return;
@@ -301,16 +302,16 @@ export function RuleEditor({
       let detail: string | undefined;
       try {
         const [latest] = await api.get<RuleVersionResponse[]>(`/rules/${saved.id}/versions`);
-        if (existing && latest) detail = `${latest.change_lines.length} change${latest.change_lines.length === 1 ? "" : "s"}: ${latest.change_lines.join("; ")}`;
+        if (existing && latest) detail = tr("editor.frame.changes", { count: latest.change_lines.length, list: latest.change_lines.join("; ") });
       } catch {
         // The save succeeded; only the summary is missing.
       }
-      toast({ title: existing ? `${saved.name} saved` : `${saved.name} created`, detail });
+      toast({ title: tr(existing ? "editor.frame.saved" : "editor.frame.created", { name: saved.name }), detail });
       // The editor stays on the record (DESIGN.md §7): what's saved is the new baseline.
       setBaseline(draft);
       onSaved(saved);
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't save this rule.");
+      setError(err instanceof ApiRequestError ? err.message : tr("editor.frame.saveFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -349,17 +350,17 @@ export function RuleEditor({
 
   const nameFields = (
     <>
-      <Field label="Name" error={draft.name.trim().length > MAX_NAME ? `Keep the name to ${MAX_NAME} characters.` : undefined}>
-        <Input ref={nameRef} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Left blank, a name is generated" />
+      <Field label={tr("rules.quick.name")} error={draft.name.trim().length > MAX_NAME ? tr("editor.frame.nameLong", { max: String(MAX_NAME) }) : undefined}>
+        <Input ref={nameRef} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={tr("editor.frame.namePlaceholder")} />
       </Field>
       <SwitchField
-        label="Status"
+        label={tr("editor.frame.status")}
         checked={draft.enabled}
         onChange={(enabled) => setDraft({ ...draft, enabled })}
-        onLabel="Enabled"
-        offLabel="Disabled"
-        onHint="Fires when its trigger and conditions are met."
-        offHint="Keeps its settings and history, but won't fire."
+        onLabel={tr("editor.frame.enabled")}
+        offLabel={tr("editor.frame.disabled")}
+        onHint={tr("rules.actions.enabledDetail")}
+        offHint={tr("rules.actions.disabledDetail")}
       />
     </>
   );
@@ -373,25 +374,25 @@ export function RuleEditor({
   const modeSwitch = simple ? null : (
     <div className="flex flex-wrap items-center gap-2.5">
       <SegmentedControl
-        ariaLabel="Editor view"
+        ariaLabel={tr("editor.frame.view")}
         value={mode}
         onChange={changeMode}
         options={[
-          { value: "form", label: "Form" },
+          { value: "form", label: tr("editor.frame.form") },
           {
             value: "ladder",
             label: (
               <span className="inline-flex items-center gap-1.5">
-                Ladder
+                {tr("rules.ladder")}
                 <Tag tone="neutral" size="sm">
-                  expert
+                  {tr("editor.frame.expert")}
                 </Tag>
               </span>
             ),
           },
         ]}
       />
-      {mode === "ladder" && <span className="text-meta text-ink-muted">Click any element to change it.</span>}
+      {mode === "ladder" && <span className="text-meta text-ink-muted">{tr("editor.frame.clickElement")}</span>}
     </div>
   );
   // DESIGN.md §9.10: the trigger opens When and a timer Behaviour; the rest open their sheet.
@@ -426,7 +427,7 @@ export function RuleEditor({
       )}
       <form onSubmit={handleSubmit} className="@container flex flex-1 flex-col gap-4">
         {readOnly && (
-          <p className="max-w-[760px] rounded-lg bg-surface-raised px-3 py-2 text-meta text-ink-muted">View only. Ask an owner or admin to make changes.</p>
+          <p className="max-w-[760px] rounded-lg bg-surface-raised px-3 py-2 text-meta text-ink-muted">{tr("editor.frame.viewOnly")}</p>
         )}
         {/* DESIGN.md §9.2: the 760px editor column every editor has; the
             preview is behind its button at every width. */}
@@ -457,7 +458,7 @@ export function RuleEditor({
                 </div>
               ) : (
                 <Tabs
-                  ariaLabel="Rule sections"
+                  ariaLabel={tr("editor.frame.sections")}
                   className="min-w-0 flex-1"
                   tabs={tabs.map((t) => {
                     const its = tabIssues(t);
@@ -471,7 +472,7 @@ export function RuleEditor({
               {tab !== "review" && tab !== "basics" && tab !== "activity" && (
                 <Button type="button" variant="secondary" size="sm" className="mb-1.5" onClick={() => setPreviewOpen(true)}>
                   <Activity aria-hidden size={14} />
-                  Preview
+                  {tr("editor.frame.preview")}
                 </Button>
               )}
             </div>
@@ -530,18 +531,18 @@ export function RuleEditor({
           <div className="flex min-w-[150px] flex-1 flex-wrap items-center gap-2.5 text-meta text-ink-muted">
             <span aria-live="polite" className="inline-flex items-center gap-1.5">
               {submitting ? (
-                "Saving…"
+                tr("ui.saving")
               ) : isNew ? (
-                "Not created yet"
+                tr("ui.editor.notCreated")
               ) : dirty ? (
                 <>
                   <span aria-hidden className="h-2 w-2 rounded-full bg-status-pending" />
-                  Unsaved changes
+                  {tr("ui.editor.unsaved")}
                 </>
               ) : (
                 <>
                   <Check aria-hidden size={14} className="text-status-online" />
-                  All changes saved
+                  {tr("ui.editor.allSaved")}
                 </>
               )}
             </span>
@@ -567,13 +568,13 @@ export function RuleEditor({
               {stepIndex > 0 ? (
                 <Button type="button" variant="ghost" onClick={() => setTab(tabs[stepIndex - 1])}>
                   <ChevronLeft aria-hidden size={15} />
-                  Back
+                  {tr("ui.back")}
                 </Button>
               ) : (
                 onCancel && (
                   <Button type="button" variant="ghost" onClick={() => void cancel()}>
                     <ChevronLeft aria-hidden size={15} />
-                    Recipes
+                    {tr("rules.quick.recipes")}
                   </Button>
                 )
               )}
@@ -581,29 +582,29 @@ export function RuleEditor({
                 // Keyed apart: React would otherwise reuse this element as the submit
                 // button mid-click, and the click would create the rule.
                 <Button key="next" type="button" onClick={next}>
-                  Next: {TAB_LABEL[tabs[stepIndex + 1]]}
+                  {tr("ui.editor.nextStep", { step: TAB_LABEL[tabs[stepIndex + 1]] })}
                   <ChevronRight aria-hidden size={15} />
                 </Button>
               ) : (
                 <Button key="create" type="submit" disabled={submitting}>
-                  {submitting ? "Saving…" : "Create rule"}
+                  {submitting ? tr("ui.saving") : tr("editor.frame.createRule")}
                 </Button>
               )}
             </div>
           ) : (
             <div className="flex items-center gap-2">
               <Button type="button" variant="ghost" disabled={!dirty || submitting} onClick={() => setDraft(baseline)}>
-                Discard
+                {tr("ui.discard")}
               </Button>
               <Button type="submit" disabled={submitting || !dirty}>
-                {submitting ? "Saving…" : "Save rule"}
+                {submitting ? tr("ui.saving") : tr("editor.frame.saveRule")}
               </Button>
             </div>
           )}
         </div>
         )}
       </form>
-      <ItemSheet open={previewOpen} onClose={() => setPreviewOpen(false)} title="Preview" sub="What this draft would do. Nothing is sent.">
+      <ItemSheet open={previewOpen} onClose={() => setPreviewOpen(false)} title={tr("editor.frame.preview")} sub={tr("editor.frame.previewSub")}>
         <div className="flex flex-col gap-3">{preview}</div>
       </ItemSheet>
       {dialog}

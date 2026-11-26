@@ -6,6 +6,8 @@ import { WidgetCard } from "@/components/dashboards/WidgetCard";
 import { useWidgetDevice, WidgetFoot } from "@/components/dashboards/widget-common";
 import { cn } from "@/lib/cn";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 
@@ -36,12 +38,12 @@ export function GaugeWidget({
   const shown = reading ? (meta?.decimals != null ? reading.value.toFixed(meta.decimals) : reading.value.toLocaleString()) : "—";
 
   return (
-    <WidgetCard title={meta?.name ?? metric ?? "Gauge"} device={device}>
+    <WidgetCard title={meta?.name ?? metric ?? t("dashboards.widgets.gauge")} device={device}>
       <div className="flex h-full flex-col items-center justify-between gap-1">
         {isLoading ? (
           <LoadingSkeleton rows={1} rowClassName="h-16" />
         ) : (
-          <svg viewBox="0 0 120 66" role="img" aria-label={`${shown} ${meta?.unit ?? ""} on a ${lo} to ${hi} scale`} className="w-full max-w-[200px] min-h-0 flex-1">
+          <svg viewBox="0 0 120 66" role="img" aria-label={tr("wsheet.gaugeAria", { value: shown, unit: meta?.unit ?? "", min: lo, max: hi })} className="w-full max-w-[200px] min-h-0 flex-1">
             <path d={ARC} fill="none" stroke="var(--color-surface-raised)" strokeWidth={10} strokeLinecap="round" />
             {reading && (
               <path
@@ -61,7 +63,7 @@ export function GaugeWidget({
           </svg>
         )}
         {!reading ? (
-          <span className="text-xs text-ink-muted">No data</span>
+          <span className="text-xs text-ink-muted">{tr("wsheet.noData")}</span>
         ) : stale ? (
           <WidgetFoot stale time={reading.time} />
         ) : (

@@ -9,6 +9,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
 import { formatWhen } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type RuleVersionResponse = components["schemas"]["RuleVersionResponse"];
 
@@ -29,14 +30,14 @@ export function RuleVersions({
   const { rows: data, total, isLoading, error, mutate } = pager;
 
   if (error) {
-    return <ErrorState title="Couldn't load versions" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />;
+    return <ErrorState title={tr("editor.versions.loadFailed")} message={error instanceof ApiRequestError ? error.message : tr("devices.apiDown")} onRetry={() => void mutate()} />;
   }
   if (isLoading && data.length === 0) return <LoadingSkeleton rows={3} rowClassName="h-12" />;
-  if (total === 0) return <p className="text-sm text-ink-muted">Each save from now on is kept here, with what changed.</p>;
+  if (total === 0) return <p className="text-sm text-ink-muted">{tr("editor.versions.empty")}</p>;
 
   return (
     <div className="flex flex-col gap-2">
-    <ol aria-label="Versions" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+    <ol aria-label={tr("editor.versions.label")} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
       {data.map((v, i) => (
         <li key={v.id} className="flex min-h-12 items-center gap-3 border-t border-border-soft px-3.5 py-2.5 text-sm first:border-t-0">
           <span className="flex min-w-0 flex-1 flex-col">
@@ -45,13 +46,13 @@ export function RuleVersions({
               {i === 0 && pager.page === 1 ? " · current" : ""}
             </b>
             <span className="text-xs text-ink-muted">
-              {[v.author ?? "API key or removed member", formatWhen(v.created_at), v.change_lines.join("; ")].filter(Boolean).join(" · ")}
+              {[v.author ?? tr("editor.versions.unknownAuthor"), formatWhen(v.created_at), v.change_lines.join("; ")].filter(Boolean).join(" · ")}
             </span>
           </span>
           {(i > 0 || pager.page > 1) && canRestore && (
             <Button size="sm" variant="secondary" onClick={() => onRestore(v)}>
               <RotateCcw aria-hidden size={13} />
-              Restore
+              {tr("editor.versions.restore")}
             </Button>
           )}
         </li>

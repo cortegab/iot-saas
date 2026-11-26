@@ -27,6 +27,7 @@ import { ROLE_LABEL, type Role } from "@/lib/permissions";
 import { formatWhen } from "@/lib/time-ago";
 import type { components } from "@/types/api";
 import { NotFound } from "@/components/ui/NotFound";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type MemberResponse = components["schemas"]["MemberResponse"];
 type InvitationResponse = components["schemas"]["InvitationResponse"];
@@ -38,15 +39,15 @@ interface MemberDraft {
 
 /** The invite's role hint (demo H wording). */
 const INVITE_HINT: Record<Role, string> = {
-  owner: "Everything, including renaming the workspace and managing owners.",
-  admin: "Can change devices, rules and members (not owners).",
-  viewer: "Can see everything, change nothing.",
+  get owner() { return tr("mem.hintOwner"); },
+  get admin() { return tr("mem.hintAdmin"); },
+  get viewer() { return tr("mem.hintViewer"); },
 };
 
 export const ROLE_HELP: Record<Role, string> = {
-  owner: "Everything, including renaming the workspace and managing owners.",
-  admin: "Manage devices, templates, rules, members and API keys.",
-  viewer: "See everything, change nothing.",
+  get owner() { return tr("mem.hintOwner"); },
+  get admin() { return tr("mem.helpAdmin"); },
+  get viewer() { return tr("mem.helpViewer"); },
 };
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -88,11 +89,11 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
       const warnings: Record<string, string> = {};
       if (isNew) {
         const email = d.email.trim().toLowerCase();
-        if (!EMAIL.test(email)) errors["member.email"] = "Enter an email address.";
-        else if (taken.has(email)) errors["member.email"] = "This person is already a member or has an invite.";
+        if (!EMAIL.test(email)) errors["member.email"] = tr("mem.enterEmail");
+        else if (taken.has(email)) errors["member.email"] = tr("mem.taken");
       }
-      if (d.role === "owner" && !iAmOwner && member?.role !== "owner") errors["member.role"] = "Only an owner can make someone an owner.";
-      if (isMe && member && d.role !== member.role) warnings["member.role"] = "You're changing your own role. You may lose access to this page.";
+      if (d.role === "owner" && !iAmOwner && member?.role !== "owner") errors["member.role"] = tr("mem.ownerOnly");
+      if (isMe && member && d.role !== member.role) warnings["member.role"] = tr("mem.selfWarn");
       return { errors, warnings };
     },
     [isNew, taken, iAmOwner, member, isMe],
@@ -106,8 +107,8 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
     if (!d) return false;
     if (isMe && member && d.role !== member.role) {
       const ok = await confirm(
-        `You'll go from ${ROLE_LABEL[member.role as Role]} to ${ROLE_LABEL[d.role]}. Only another ${d.role === "viewer" ? "admin" : "owner"} can undo this.`,
-        { title: "Change your own role?", confirmLabel: `Become ${ROLE_LABEL[d.role]}` },
+        tr(d.role === "viewer" ? "mem.selfBodyAdmin" : "mem.selfBodyOwner", { from: ROLE_LABEL[member.role as Role], to: ROLE_LABEL[d.role] }),
+        { title: tr("mem.selfTitle"), confirmLabel: tr("mem.become", { role: ROLE_LABEL[d.role] }) },
       );
       if (!ok) return false;
     }
@@ -118,17 +119,17 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
             const email = v.email.trim().toLowerCase();
             const sent = await api.post<InvitationResponse>("/tenants/invitations", { email, role: v.role });
             await revalidate("/tenants/invitations");
-            toast({ title: "Invite sent", detail: `${email} has 7 days to accept.` });
+            toast({ title: tr("mem.inviteSent"), detail: tr("mem.inviteSentDetail", { email }) });
             // An invite has no page of its own: back to the list, showing it.
             router.push(`/members?peek=invite.${sent.id}`);
           } else {
             await api.patch(`/tenants/members/${memberId}`, { role: v.role });
             await mutate();
             if (isMe) await refresh();
-            toast({ title: `${member?.name || member?.email} is now ${ROLE_LABEL[v.role]}` });
+            toast({ title: tr("mem.nowRole", { name: member?.name || member?.email || "", role: ROLE_LABEL[v.role] }) });
           }
         } catch (err) {
-          toast({ tone: "error", title: "The server rejected the change", detail: err instanceof ApiRequestError ? err.message : undefined });
+          toast({ tone: "error", title: tr("mem.rejected"), detail: err instanceof ApiRequestError ? err.message : undefined });
           throw err;
         }
       })
@@ -138,12 +139,12 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
   if (error) {
     return (
       <div className="p-5">
-        <ErrorState title="Couldn't load this member" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
+        <ErrorState title={tr("mem.loadFailed")} message={error instanceof ApiRequestError ? error.message : tr("mem.noResponse")} onRetry={() => void mutate()} />
       </div>
     );
   }
   // The list has loaded and the member isn't in it: gone, not still loading.
-  if (!isNew && members && !member) return <NotFound noun="member" href="/members" list="members" description="They may have left or been removed, or the link belongs to another workspace." />;
+  if (!isNew && members && !member) return <NotFound noun="member" href="/members" list="members" description={tr("mem.gone")} />;
   const d = editor.draft;
   if (!d || (!isNew && !member)) {
     return (
@@ -160,35 +161,35 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
       <EditorFrame
         mode={mode}
         noun={isNew ? "invite" : "member"}
-        title={isNew ? "Invite a member" : member!.name || member!.email}
+        title={isNew ? tr("mem.inviteTitle") : member!.name || member!.email}
         eyebrow={
           isNew ? (
             undefined
           ) : (
             <>
-              {member!.joined_at && <span>Joined {formatWhen(member!.joined_at)}</span>}
-              {isMe && <span>{member!.joined_at ? "· you" : "You"}</span>}
+              {member!.joined_at && <span>{tr("mem.joined", { when: formatWhen(member!.joined_at) })}</span>}
+              {isMe && <span>{member!.joined_at ? tr("mem.youSuffix") : tr("mem.you")}</span>}
             </>
           )
         }
-        consequence={isNew ? "They get an email with a link that works for 7 days." : "A role change applies on their next request."}
-        sections={[{ id: "member", label: "Member" }]}
+        consequence={isNew ? tr("mem.consNew") : tr("mem.consEdit")}
+        sections={[{ id: "member", label: tr("mem.member") }]}
         status={editor}
         readOnly={readOnly}
-        saveLabel={isNew ? "Send invite" : "Save role"}
+        saveLabel={isNew ? tr("mem.sendInvite") : tr("mem.saveRole")}
         onSave={onSave}
         onDiscard={editor.discard}
         menu={
           !isNew && !readOnly && !isMe
-            ? [[{ label: "Remove from workspace…", icon: <Trash2 size={15} />, danger: true, onClick: () => void removeMember(member!) }]]
+            ? [[{ label: tr("mem.remove"), icon: <Trash2 size={15} />, danger: true, onClick: () => void removeMember(member!) }]]
             : undefined
         }
       >
         {isNew ? (
           // demo H Invite: Email and Role side by side, the role as a segmented control.
-          <EditorSection id="member" title="Who">
+          <EditorSection id="member" title={tr("mem.who")}>
             <div className="grid items-start gap-4 sm:grid-cols-2">
-              <Field label="Email" error={editor.errorFor("member.email")}>
+              <Field label={tr("mem.email")} error={editor.errorFor("member.email")}>
                 <Input
                   type="email"
                   autoFocus
@@ -199,9 +200,9 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
                 />
               </Field>
               <div className="flex flex-col gap-[5px]">
-                <span className="text-meta font-medium text-ink">Role</span>
+                <span className="text-meta font-medium text-ink">{tr("mem.role")}</span>
                 <SegmentedControl
-                  ariaLabel="Role"
+                  ariaLabel={tr("mem.role")}
                   size="md"
                   value={d.role}
                   onChange={(role) => {
@@ -215,9 +216,9 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
             </div>
           </EditorSection>
         ) : (
-        <EditorSection id="member" title="Member">
+        <EditorSection id="member" title={tr("mem.member")}>
           {isNew ? (
-            <Field label="Email" error={editor.errorFor("member.email")} hint="They get an email with a link that expires in 7 days.">
+            <Field label={tr("mem.email")} error={editor.errorFor("member.email")} hint={tr("mem.emailHint")}>
               <Input
                 type="email"
                 autoFocus
@@ -228,10 +229,10 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
               />
             </Field>
           ) : (
-            <FactList facts={[["Email", <span key="email" className="font-mono">{member!.email}</span>]]} />
+            <FactList facts={[[tr("mem.email"), <span key="email" className="font-mono">{member!.email}</span>]]} />
           )}
           <fieldset className="flex flex-col gap-2" aria-describedby="member-role-msg">
-            <legend className="mb-1.5 text-meta font-medium text-ink">Role</legend>
+            <legend className="mb-1.5 text-meta font-medium text-ink">{tr("mem.role")}</legend>
             {ROLES.map((r) => {
               const locked = r === "owner" && !iAmOwner && member?.role !== "owner";
               const on = d.role === r;
@@ -263,7 +264,7 @@ export function MemberEditor({ memberId, mode = "page" }: { memberId: string | n
                     </strong>
                     <small className="text-xs text-ink-muted">
                       {ROLE_HELP[r]}
-                      {locked && " Only an owner can grant it."}
+                      {locked && tr("mem.ownerGrant")}
                     </small>
                   </span>
                 </label>

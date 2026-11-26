@@ -4,6 +4,7 @@
  */
 
 import { cronHuman } from "./schedule";
+import { tActive } from "./i18n";
 import type { components } from "./api";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
@@ -11,21 +12,15 @@ type ConditionLeaf = components["schemas"]["ConditionLeaf"];
 type ConditionGroup = components["schemas"]["ConditionGroup-Output"];
 type ConditionNode = ConditionLeaf | ConditionGroup;
 
-const OP_SYMBOL: Record<string, string> = {
-  ">": ">",
-  ">=": "≥",
-  "<": "<",
-  "<=": "≤",
-  "==": "=",
-  "!=": "≠",
-  between: "between",
-  not_between: "outside",
-  in: "in",
-  not_in: "not in",
-  changed: "changes",
-  increased: "increases",
-  decreased: "decreases",
-};
+const OP_SYMBOL: Record<string, string> = { ">": ">", ">=": "≥", "<": "<", "<=": "≤", "==": "=", "!=": "≠" };
+const OP_WORDS = ["between", "not_between", "in", "not_in", "changed", "increased", "decreased"] as const;
+
+/** An operator as the sentence writes it: a symbol, or a word in the
+ * language on screen ("between" / "entre"). */
+function opText(op: string): string {
+  if (op in OP_SYMBOL) return OP_SYMBOL[op];
+  return (OP_WORDS as readonly string[]).includes(op) ? tActive(`ruleText.ops.${op as (typeof OP_WORDS)[number]}`) : op;
+}
 
 function rhsText(leaf: ConditionLeaf): string {
   const rhs = leaf.rhs;
@@ -40,11 +35,11 @@ function rhsText(leaf: ConditionLeaf): string {
 export function conditionText(node: ConditionNode | null | undefined, nested = false): string {
   if (!node) return "";
   if (node.kind === "leaf") {
-    const op = OP_SYMBOL[node.operator] ?? node.operator;
+    const op = opText(node.operator);
     const rhs = ["changed", "increased", "decreased"].includes(node.operator) ? "" : ` ${rhsText(node)}`;
     return `${node.metric} ${op}${rhs}`;
   }
-  const inner = node.predicates.map((p) => conditionText(p, true)).join(node.op === "AND" ? " and " : " or ");
+  const inner = node.predicates.map((p) => conditionText(p, true)).join(tActive(node.op === "AND" ? "ruleText.and" : "ruleText.or"));
   return nested && node.predicates.length > 1 ? `(${inner})` : inner;
 }
 
@@ -53,38 +48,43 @@ export function triggerText(rule: Pick<RuleResponse, "trigger" | "condition" | "
   const t = rule.trigger as Record<string, unknown>;
   const type = (t.type as string) ?? "metric";
   if (type === "schedule") return cronHuman(String(t.cron ?? ""));
-  if (type === "manual") return "Run manually";
+  if (type === "manual") return tActive("ruleText.runManually");
   if (type === "device_status") {
     const id = t.device_id as string | undefined;
-    const name = rule.devices.find((d) => d.device_id === id)?.device_name ?? "a device";
-    return `${name} ${t.transition === "connected" ? "connects" : "disconnects"}`;
+    const name = rule.devices.find((d) => d.device_id === id)?.device_name ?? tActive("ruleText.aDevice");
+    return tActive(t.transition === "connected" ? "ruleText.connects" : "ruleText.disconnects", { name });
   }
   return conditionText(rule.condition) || "—";
 }
 
 /** The "Then" column: "Turn fan1 on", "Email 2 people", "Call webhook"… */
 export function actionsText(actions: Record<string, unknown>[]): string {
-  if (actions.length === 0) return "Nothing";
+  if (actions.length === 0) return tActive("ruleText.nothing");
   const parts = actions.map((a) => {
     switch (a.type) {
       case "actuator_command": {
         const v = a.value;
-        const val = typeof v === "boolean" ? (v ? "on" : "off") : String(v);
-        return `Turn ${String(a.actuator)} ${val}`;
+        const actuator = String(a.actuator);
+        if (typeof v === "boolean") return tActive(v ? "ruleText.turnOn" : "ruleText.turnOff", { actuator });
+        return tActive("ruleText.setTo", { actuator, value: String(v) });
       }
       case "email": {
         const to = Array.isArray(a.to) ? a.to : [];
-        return to.length === 1 ? `Email ${String(to[0])}` : to.length > 1 ? `Email ${to.length} people` : "Email the alert recipients";
+        return to.length === 1
+          ? tActive("ruleText.emailOne", { to: String(to[0]) })
+          : to.length > 1
+            ? tActive("ruleText.emailMany", { count: to.length })
+            : tActive("ruleText.emailRecipients");
       }
       case "webhook":
-        return "Call a webhook";
+        return tActive("ruleText.webhook");
       case "notification":
-        return "Post a notification";
+        return tActive("ruleText.notification");
       default:
-        return "Unknown action";
+        return tActive("ruleText.unknownAction");
     }
   });
-  return parts.length > 2 ? `${parts[0]} +${parts.length - 1} more` : parts.join(", ");
+  return parts.length > 2 ? tActive("ruleText.more", { first: parts[0], count: parts.length - 1 }) : parts.join(", ");
 }
 
 /** Which device an actuator command targets: its own `device_id`, else the
@@ -137,13 +137,13 @@ export function ruleStateKey(r: Pick<RuleResponse, "enabled" | "latched"> & { he
 
 /** How each state reads as a badge (rules list, rule page, peek, device Rules tab). */
 export const RULE_STATE: Record<RuleStateKey, { label: string; tone: "online" | "pending" | "unknown"; shape: "solid" | "square" | "hollow" }> = {
-  armed: { label: "Armed", tone: "online", shape: "solid" },
-  stale: { label: "Can't evaluate", tone: "unknown", shape: "hollow" },
-  latched: { label: "Latched", tone: "pending", shape: "square" },
-  disabled: { label: "Disabled", tone: "unknown", shape: "square" },
+  armed: { get label() { return tActive("status.rule.armed"); }, tone: "online", shape: "solid" },
+  stale: { get label() { return tActive("status.rule.stale"); }, tone: "unknown", shape: "hollow" },
+  latched: { get label() { return tActive("status.rule.latched"); }, tone: "pending", shape: "square" },
+  disabled: { get label() { return tActive("status.rule.disabled"); }, tone: "unknown", shape: "square" },
 };
 
 /** The rules list's Trigger column (demo H): what starts it, in words. */
 export function triggerKindText(rule: Pick<RuleResponse, "trigger" | "condition" | "devices">): string {
-  return (rule.trigger as Record<string, unknown>).type === "metric" || !(rule.trigger as Record<string, unknown>).type ? "On each reading" : triggerText(rule);
+  return (rule.trigger as Record<string, unknown>).type === "metric" || !(rule.trigger as Record<string, unknown>).type ? tActive("ruleText.onEachReading") : triggerText(rule);
 }

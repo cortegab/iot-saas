@@ -32,6 +32,7 @@ import { useMediaQuery } from "@/hooks/useMediaQuery";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
 import { NotFound, isNotFound } from "@/components/ui/NotFound";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DashboardResponse = components["schemas"]["DashboardResponse"];
 type Widget = components["schemas"]["Widget"];
@@ -104,7 +105,7 @@ export default function DashboardDetailPage() {
         await api.patch(`/dashboards/${dashboardId}`, { layout: next });
         void revalidate("/dashboards");
       } catch (err) {
-        toast({ tone: "error", title: "Couldn't save the layout", detail: err instanceof ApiRequestError ? err.message : undefined });
+        toast({ tone: "error", title: t("dashboards.saveFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
       }
     });
     return saveChain.current;
@@ -116,7 +117,7 @@ export default function DashboardDetailPage() {
     // is an int, so "place at the bottom" is computed here.
     const y = widgets.length === 0 ? 0 : Math.max(...widgets.map((x) => x.y + x.h));
     void saveLayout([...widgets, { ...w, x: 0, y }]);
-    toast({ title: `${WIDGET_LABEL[w.type]} added`, detail: `${devices?.find((d) => d.id === w.device_id)?.name ?? ""}${w.metric ? ` · ${w.metric}` : ""}` });
+    toast({ title: t("dashboards.widgetAdded", { widget: WIDGET_LABEL[w.type] }), detail: `${devices?.find((d) => d.id === w.device_id)?.name ?? ""}${w.metric ? ` · ${w.metric}` : ""}` });
   }
 
   function removeWidget(id: string) {
@@ -124,7 +125,7 @@ export default function DashboardDetailPage() {
     const before = widgets;
     const gone = widgets.find((w) => w.id === id);
     void saveLayout(widgets.filter((w) => w.id !== id));
-    if (gone) toast({ title: `${WIDGET_LABEL[gone.type]} removed`, action: { label: "Undo", onClick: () => void saveLayout(before) } });
+    if (gone) toast({ title: t("dashboards.widgetRemoved", { widget: WIDGET_LABEL[gone.type] }), action: { label: t("devices.toast.undo"), onClick: () => void saveLayout(before) } });
   }
 
   /** A widget changed in its sheet: applied as you go. */
@@ -137,22 +138,22 @@ export default function DashboardDetailPage() {
     await api.patch(`/dashboards/${dashboardId}`, { name });
     await mutate();
     void revalidate("/dashboards");
-    toast({ title: "Dashboard renamed", detail: name });
+    toast({ title: t("dashboards.renamed"), detail: name });
   }
 
   async function duplicate(name: string) {
     const copy = await api.post<DashboardResponse>("/dashboards", { name });
     await api.patch(`/dashboards/${copy.id}`, { layout: (widgets ?? []).map((w) => ({ ...w, id: crypto.randomUUID() })) });
     void revalidate("/dashboards");
-    toast({ title: "Dashboard duplicated", detail: name });
+    toast({ title: t("dashboards.duplicatedToast"), detail: name });
     router.push(`/dashboards/${copy.id}`);
   }
 
   async function remove() {
     if (!data || !widgets) return;
-    const ok = await confirm(`${defaultNote(data)}Its ${plural(widgets.length, "widget")} are removed. Devices, rules and data aren't affected.`, {
-      title: `Delete ${data.name}?`,
-      confirmLabel: "Delete dashboard",
+    const ok = await confirm(`${defaultNote(data)}${t("dashboards.deleteBody")}`, {
+      title: t("dashboards.deleteTitle", { name: data.name }),
+      confirmLabel: t("dashboards.deleteConfirm"),
     });
     if (!ok) return;
     const snapshot = { name: data.name, layout: widgets };
@@ -161,9 +162,9 @@ export default function DashboardDetailPage() {
       void revalidate("/dashboards");
       router.replace("/dashboards");
       toast({
-        title: "Dashboard deleted",
+        title: t("dashboards.deleted"),
         action: {
-          label: "Undo",
+          label: t("devices.toast.undo"),
           onClick: () =>
             void (async () => {
               const back = await api.post<DashboardResponse>("/dashboards", { name: snapshot.name });
@@ -174,7 +175,7 @@ export default function DashboardDetailPage() {
         },
       });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete the dashboard", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("dashboards.deleteFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -184,13 +185,13 @@ export default function DashboardDetailPage() {
     if (isNotFound(error)) {
       return <NotFound noun="dashboard" href="/dashboards" list="dashboards" />;
     }
-    return <ErrorState title="Couldn't load this dashboard" message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />;
+    return <ErrorState title={t("dashboards.loadFailed")} message={error instanceof ApiRequestError ? error.message : t("devices.apiDown")} onRetry={() => void mutate()} />;
   }
   if (isLoading || !data || widgets === null) return <LoadingSkeleton rows={3} rowClassName="h-24" />;
 
   const switcher = (
     <DropdownMenu
-      label="Switch dashboard"
+      label={t("dashboards.switch")}
       align="start"
       triggerClassName="inline-flex items-center gap-1.5 rounded-md text-left hover:text-accent"
       trigger={
@@ -207,8 +208,8 @@ export default function DashboardDetailPage() {
           onClick: () => router.push(`/dashboards/${d.id}`),
         })),
         [
-          { label: "All dashboards", icon: <List size={15} />, onClick: () => router.push("/dashboards") },
-          { label: "New dashboard…", icon: <Plus size={15} />, onClick: () => router.push("/dashboards/new") },
+          { label: t("dashboards.all"), icon: <List size={15} />, onClick: () => router.push("/dashboards") },
+          { label: t("dashboards.newDots"), icon: <Plus size={15} />, onClick: () => router.push("/dashboards/new") },
         ],
       ]}
     />
@@ -219,7 +220,7 @@ export default function DashboardDetailPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title={switcher}
-        breadcrumbs={[{ label: "Dashboards", href: "/dashboards" }]}
+        breadcrumbs={[{ label: t("dashboards.title"), href: "/dashboards" }]}
         eyebrow={data.is_default ? <Tag size="sm">Default</Tag> : undefined}
         description={`${plural(widgets.length, "widget")} · live`}
         actions={
@@ -227,7 +228,7 @@ export default function DashboardDetailPage() {
             <>
               {hasTrend && (
                 <SegmentedControl
-                  ariaLabel="Range"
+                  ariaLabel={t("dashboards.range")}
                   value={String(range)}
                   onChange={(v) => setRange(Number(v))}
                   options={RANGE_OPTIONS.map((o) => ({ value: String(o.ms), label: o.label }))}
@@ -238,22 +239,22 @@ export default function DashboardDetailPage() {
                   <>
                     <Button variant="secondary" onClick={() => setAdding(true)}>
                       <Plus aria-hidden size={15} />
-                      Add widget
+                      {t("dashboards.addWidget")}
                     </Button>
                     <Button
                       onClick={() => {
                         setEditing(false);
-                        toast({ title: "Layout saved" });
+                        toast({ title: t("dashboards.layoutSaved") });
                       }}
                     >
                       <Check aria-hidden size={15} />
-                      Done
+                      {t("dashboards.done")}
                     </Button>
                   </>
                 ) : (
                   <Button variant="secondary" onClick={() => setEditing(true)}>
                     <LayoutGrid aria-hidden size={15} />
-                    Edit layout
+                    {t("dashboards.editLayout")}
                   </Button>
                 ))}
             </>
@@ -263,14 +264,14 @@ export default function DashboardDetailPage() {
           canEdit &&
           !editing && (
             <DropdownMenu
-              label="More dashboard actions"
+              label={t("dashboards.moreActions")}
               groups={[
                 [
                   defaults.item(data),
-                  { label: "Rename…", icon: <Pencil size={15} />, onClick: () => setRenaming(true) },
-                  { label: "Duplicate…", icon: <Copy size={15} />, onClick: () => setDuplicating(true) },
+                  { label: t("dashboards.rename"), icon: <Pencil size={15} />, onClick: () => setRenaming(true) },
+                  { label: t("dashboards.duplicate"), icon: <Copy size={15} />, onClick: () => setDuplicating(true) },
                 ],
-                [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }],
+                [{ label: t("dashboards.deleteDots"), icon: <Trash2 size={15} />, danger: true, onClick: () => void remove() }],
               ]}
             />
           )
@@ -286,8 +287,8 @@ export default function DashboardDetailPage() {
           <span>
             <strong>Editing layout.</strong>{" "}
             {phone
-              ? "Open a widget to change it, or move it up and down. Changes save as you go."
-              : "Click a widget to change what it shows and its size, or drag it by its handle and resize it from the corner. Changes save as you go."}
+              ? t("dashboards.editPhone")
+              : t("dashboards.editDesktop")}
           </span>
         </p>
       )}
@@ -295,13 +296,13 @@ export default function DashboardDetailPage() {
       {widgets.length === 0 ? (
         <EmptyState
           icon={<LayoutDashboard aria-hidden size={26} />}
-          title="No widgets yet"
-          description="Add value cards, trend charts, gauges, device status and controls."
+          title={t("dashboards.emptyTitle")}
+          description={t("dashboards.emptyBody")}
           action={
             canEdit ? (
               <Button onClick={() => (editing ? setAdding(true) : (setEditing(true), setAdding(true)))}>
                 <Plus aria-hidden size={14} />
-                Add widget
+                {t("dashboards.addWidget")}
               </Button>
             ) : undefined
           }
@@ -336,14 +337,14 @@ export default function DashboardDetailPage() {
         onClose={() => setOpenId(null)}
       />
       <AddWidgetSheet open={adding} src={{ devices: devices ?? [], templates: templates ?? [] }} onAdd={addWidget} onClose={() => setAdding(false)} />
-      <NameDialog open={renaming} onClose={() => setRenaming(false)} title="Rename dashboard" initial={data.name} confirmLabel="Rename" onSubmit={rename} />
+      <NameDialog open={renaming} onClose={() => setRenaming(false)} title={t("dashboards.renameTitle")} initial={data.name} confirmLabel={t("dashboards.renameConfirm")} onSubmit={rename} />
       <NameDialog
         open={duplicating}
         onClose={() => setDuplicating(false)}
-        title="Duplicate dashboard"
-        description="Copies every widget and its position."
-        initial={`${data.name} copy`}
-        confirmLabel="Duplicate"
+        title={t("dashboards.duplicateTitle")}
+        description={t("dashboards.duplicateBody")}
+        initial={t("dashboards.copyName", { name: data.name })}
+        confirmLabel={t("dashboards.duplicateConfirm")}
         onSubmit={duplicate}
       />
       {dialog}

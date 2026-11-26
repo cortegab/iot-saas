@@ -9,6 +9,7 @@ import { KEY_STATUS_LABEL, KEY_STATUS_TONE, keyStatus, type ApiKey } from "@/lib
 import { ROLE_LABEL, toRole } from "@/lib/permissions";
 import { formatDate, timeAgo } from "@/lib/time-ago";
 import { useRevokeKey } from "./useRevokeKey";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 /** An API key at a glance; its page is /keys/{id}. */
 export function KeyPeek({ apiKey, onClose }: { apiKey: ApiKey | undefined; onClose: () => void }) {
@@ -21,12 +22,12 @@ export function KeyPeek({ apiKey, onClose }: { apiKey: ApiKey | undefined; onClo
   const copy = (text: string, title: string) =>
     void navigator.clipboard.writeText(text).then(
       () => toast({ tone: "info", title }),
-      () => toast({ tone: "error", title: "Couldn't reach the clipboard", detail: text }),
+      () => toast({ tone: "error", title: tr("apik.clipboard"), detail: text }),
     );
   const menu: DropdownMenuItem[][] = [
     [
-      { label: "Copy prefix", icon: <Copy size={15} />, onClick: () => copy(apiKey.key_prefix, "Prefix copied") },
-      { label: "Copy link", icon: <Link2 size={15} />, onClick: () => copy(`${window.location.origin}/keys/${apiKey.id}`, "Link copied") },
+      { label: tr("apik.copyPrefix"), icon: <Copy size={15} />, onClick: () => copy(apiKey.key_prefix, tr("apik.prefixCopied")) },
+      { label: tr("apik.copyLink"), icon: <Link2 size={15} />, onClick: () => copy(`${window.location.origin}/keys/${apiKey.id}`, tr("apik.linkCopied")) },
     ],
     ...endItems(apiKey, onClose),
   ];
@@ -42,11 +43,11 @@ export function KeyPeek({ apiKey, onClose }: { apiKey: ApiKey | undefined; onClo
           </>
         }
         facts={[
-          ["Prefix", <code key="p" className="font-mono text-meta">{apiKey.key_prefix}…</code>],
-          ["Role", role ? ROLE_LABEL[role] : apiKey.role],
-          ["Last used", apiKey.last_used_at ? timeAgo(apiKey.last_used_at) : "Never"],
-          ["Expires", apiKey.expires_at ? formatDate(apiKey.expires_at) : "Never"],
-          ["Created", formatDate(apiKey.created_at)],
+          [tr("apik.prefix"), <code key="p" className="font-mono text-meta">{apiKey.key_prefix}…</code>],
+          [tr("apik.role"), role ? ROLE_LABEL[role] : apiKey.role],
+          [tr("apik.lastUsed"), apiKey.last_used_at ? timeAgo(apiKey.last_used_at) : tr("apik.never")],
+          [tr("apik.expires"), apiKey.expires_at ? formatDate(apiKey.expires_at) : tr("apik.never")],
+          [tr("apik.created2"), formatDate(apiKey.created_at)],
         ]}
         primary={<PeekOpen href={`/keys/${apiKey.id}`} noun="key" />}
         menu={menu}

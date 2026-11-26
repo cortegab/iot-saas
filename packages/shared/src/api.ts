@@ -2369,6 +2369,8 @@ export interface components {
             tenant_name?: string | null;
             /** Invitation Token */
             invitation_token?: string | null;
+            /** Locale */
+            locale?: ("en" | "es") | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -2687,6 +2689,10 @@ export interface components {
             message: string;
             /** Detail */
             detail: string | null;
+            /** I18N */
+            i18n?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Severity
              * @enum {string}
@@ -2833,6 +2839,8 @@ export interface components {
             tenant_name: string;
             /** Name */
             name?: string | null;
+            /** Locale */
+            locale?: ("en" | "es") | null;
         };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
@@ -3302,6 +3310,12 @@ export interface components {
             /** Timezone */
             timezone: string;
             /**
+             * Locale
+             * @default en
+             * @enum {string}
+             */
+            locale: "en" | "es";
+            /**
              * Created At
              * Format: date-time
              */
@@ -3324,6 +3338,8 @@ export interface components {
             notification_emails?: string[] | null;
             /** Timezone */
             timezone?: string | null;
+            /** Locale */
+            locale?: ("en" | "es") | null;
         };
         /** TokenPairResponse */
         TokenPairResponse: {
@@ -3339,10 +3355,16 @@ export interface components {
             /** Memberships */
             memberships: components["schemas"]["MembershipSummary"][];
         };
-        /** UpdateProfileRequest */
+        /**
+         * UpdateProfileRequest
+         * @description Only the fields sent change: `{"locale": null}` goes back to following
+         *     the browser, and leaves the name alone.
+         */
         UpdateProfileRequest: {
             /** Name */
             name?: string | null;
+            /** Locale */
+            locale?: ("en" | "es") | null;
         };
         /** UserResponse */
         UserResponse: {
@@ -3360,6 +3382,8 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Locale */
+            locale?: ("en" | "es") | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -3793,7 +3817,9 @@ export interface operations {
     forgot_password_auth_forgot_password_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "accept-language"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

@@ -39,6 +39,7 @@ import { conditionText } from "@/lib/rule-text";
 import { ActionFields, AddActionMenu, ContactFields, NumberSafetyField, WhenFields, actionLabel } from "./fields";
 import { useRuleCatalog, type RuleCatalog } from "./useRuleCatalog";
 import { useInterfaceMode } from "@/hooks/useInterfaceMode";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type Update = (next: RuleDraft) => void;
 
@@ -55,10 +56,10 @@ export function lastDevice(draft: RuleDraft): string {
 /** A condition on its line: "temperature > 27", then device · hysteresis. */
 function contactLine(c: ContactDraft, catalog: RuleCatalog): { title: string; sub: string } {
   const text = conditionText(conditionFromNode(c));
-  const device = catalog.deviceNameById[c.deviceId] ?? "Pick a device";
+  const device = catalog.deviceNameById[c.deviceId] ?? tr("editor.form.pickDevice");
   return {
-    title: c.metric ? text : "New condition",
-    sub: [device, c.hysteresis > 0 ? `hysteresis ${c.hysteresis}` : null].filter(Boolean).join(" · "),
+    title: c.metric ? text : tr("editor.form.newCondition"),
+    sub: [device, c.hysteresis > 0 ? tr("editor.form.hysteresisN", { n: String(c.hysteresis) }) : null].filter(Boolean).join(" · "),
   };
 }
 
@@ -111,23 +112,23 @@ function GroupRows({
   return (
     <div
       role="group"
-      aria-label={`${group.op === "AND" ? "All" : "Any"} of these`}
+      aria-label={tr(group.op === "AND" ? "editor.form.allOf" : "editor.form.anyOf")}
       className={cn("flex flex-col gap-2", depth > 0 && "rounded-xl border border-dashed border-border px-3 py-3")}
     >
       <div className="flex flex-wrap items-center gap-2">
         <SegmentedControl
-          ariaLabel="Combine with"
+          ariaLabel={tr("editor.form.combineWith")}
           value={group.op}
           onChange={(op) => setCondition(setGroupOp(draft.condition, group.id, op))}
           options={[
-            { value: "AND", label: "All" },
-            { value: "OR", label: "Any" },
+            { value: "AND", label: tr("editor.form.all") },
+            { value: "OR", label: tr("editor.form.any") },
           ]}
         />
         <span className="text-meta text-ink-muted">of these{depth === 0 ? " must be true" : ""}</span>
         {depth > 0 && (
           <Button type="button" variant="link-danger" className="ml-auto text-meta" onClick={() => setCondition(removeNode(draft.condition, group.id))}>
-            Remove group
+            {tr("editor.form.removeGroup")}
           </Button>
         )}
       </div>
@@ -152,7 +153,7 @@ function GroupRows({
           <Plus size={14} aria-hidden /> Condition
         </Button>
         <Button type="button" variant="ghost" size="sm" onClick={addGroup}>
-          <Plus size={14} aria-hidden /> {other === "OR" ? "Any-of" : "All-of"} group
+          <Plus size={14} aria-hidden /> {tr(other === "OR" ? "editor.form.anyGroup" : "editor.form.allGroup")}
         </Button>
       </div>
     </div>
@@ -183,14 +184,14 @@ export function ConditionSection({ draft, catalog, update }: { draft: RuleDraft;
   if (root === null) {
     body = (
       <EmptyCard
-        title={reading ? "No conditions yet" : "No conditions (optional)"}
+        title={reading ? tr("editor.form.noConditions") : tr("editor.form.noConditionsOptional")}
         action={
           <Button type="button" onClick={addFirst}>
             <Plus size={15} aria-hidden /> Add condition
           </Button>
         }
       >
-        {reading ? "Say what has to be true for it to fire." : "It fires on its trigger. Add one to fire only when it's also true."}
+        {reading ? tr("editor.form.sayTrue") : tr("editor.form.firesOnTrigger")}
       </EmptyCard>
     );
   } else if (root.kind === "contact") {
@@ -212,7 +213,7 @@ export function ConditionSection({ draft, catalog, update }: { draft: RuleDraft;
                 setOpenId(c.id);
               }}
             >
-              <Plus size={14} aria-hidden /> {op === "AND" ? "And" : "Or"} condition
+              <Plus size={14} aria-hidden /> {tr(op === "AND" ? "editor.form.andCondition" : "editor.form.orCondition")}
             </Button>
           ))}
         </div>
@@ -223,14 +224,14 @@ export function ConditionSection({ draft, catalog, update }: { draft: RuleDraft;
   }
 
   return (
-    <section aria-label="If" className="flex flex-col gap-3">
+    <section aria-label={tr("editor.form.if")} className="flex flex-col gap-3">
       {body}
       {open && open.kind === "contact" && (
         <ItemSheet
           open
           onClose={() => setOpenId(null)}
-          title="Condition"
-          sub="One thing that has to be true"
+          title={tr("editor.form.condition")}
+          sub={tr("editor.form.conditionSub")}
           footer={
             <>
               <Button
@@ -242,10 +243,10 @@ export function ConditionSection({ draft, catalog, update }: { draft: RuleDraft;
                   setOpenId(null);
                 }}
               >
-                Remove condition
+                {tr("editor.form.removeCondition")}
               </Button>
               <Button type="button" onClick={() => setOpenId(null)}>
-                Done
+                {tr("editor.form.done")}
               </Button>
             </>
           }
@@ -289,9 +290,9 @@ export function ThenSection({
   ];
 
   return (
-    <section aria-label="Then" className="flex flex-col gap-3">
+    <section aria-label={tr("editor.form.then")} className="flex flex-col gap-3">
       {draft.actions.length > 0 ? (
-        <Lines label="Actions">
+        <Lines label={tr("editor.form.actions")}>
           {draft.actions.map((action) => {
             const label = actionLabel(action, catalog);
             const Icon = ACTION_ICON[action.kind];
@@ -310,9 +311,9 @@ export function ThenSection({
           })}
         </Lines>
       ) : (
-        <EmptyCard title="No actions yet">Say what happens when it fires.</EmptyCard>
+        <EmptyCard title={tr("editor.form.noActions")}>{tr("editor.form.noActionsBody")}</EmptyCard>
       )}
-      {draft.actions.length > 1 && <p className="text-meta text-ink-muted">All of them run together.</p>}
+      {draft.actions.length > 1 && <p className="text-meta text-ink-muted">{tr("editor.form.allTogether")}</p>}
       {draft.preserved.actions.length > 0 && (
         <p className="text-sm text-ink-muted">
           Also keeps {draft.preserved.actions.length} action
@@ -330,10 +331,12 @@ export function ThenSection({
       </div>
       {onClear.length > 0 && (
         <p className="text-meta text-ink-muted">
-          When it clears{draft.clearDelay ? ` (after ${draft.clearDelay} s)` : ""}: {onClear.join(", ")}.{" "}
+          {draft.clearDelay
+            ? tr("editor.form.whenClearsAfter", { n: String(draft.clearDelay), list: onClear.join(", ") })
+            : tr("editor.form.whenClears", { list: onClear.join(", ") })}{" "}
           {onGoBehaviour && (
             <Button type="button" variant="link" className="text-meta" onClick={onGoBehaviour}>
-              Change in Behaviour
+              {tr("editor.form.changeInBehaviour")}
             </Button>
           )}
         </p>
@@ -342,8 +345,8 @@ export function ThenSection({
         <ItemSheet
           open
           onClose={() => setOpenId(null)}
-          title={{ actuator: "Switch an actuator", email: "Send an email", webhook: "Call a webhook", notification: "Post a notification" }[open.kind]}
-          sub="Action"
+          title={{ actuator: tr("editor.switchActuator"), email: tr("editor.sendEmail"), webhook: tr("editor.callWebhook"), notification: tr("editor.postNotification") }[open.kind]}
+          sub={tr("editor.form.action")}
           footer={
             <>
               {removable && (
@@ -356,11 +359,11 @@ export function ThenSection({
                     setOpenId(null);
                   }}
                 >
-                  Remove action
+                  {tr("editor.form.removeAction")}
                 </Button>
               )}
               <Button type="button" onClick={() => setOpenId(null)}>
-                Done
+                {tr("editor.form.done")}
               </Button>
             </>
           }
@@ -380,7 +383,7 @@ export function ThenSection({
 /** When (demo H): four cards, then what that start needs. */
 export function WhenSection({ draft, catalog, update }: { draft: RuleDraft; catalog: RuleCatalog; update: Update }) {
   return (
-    <section aria-label="When" className="flex flex-col gap-3">
+    <section aria-label={tr("editor.form.when")} className="flex flex-col gap-3">
       <WhenFields when={draft.when} catalog={catalog} onChange={(when) => update({ ...draft, when })} />
     </section>
   );
@@ -388,7 +391,7 @@ export function WhenSection({ draft, catalog, update }: { draft: RuleDraft; cata
 
 export function BehaviourSection({ draft, update }: { draft: RuleDraft; update: Update }) {
   return (
-    <section aria-label="Behaviour" className="flex flex-col gap-3">
+    <section aria-label={tr("editor.form.behaviour")} className="flex flex-col gap-3">
       <BehaviourFields draft={draft} update={update} />
     </section>
   );
@@ -429,7 +432,7 @@ export function BehaviourFields({ draft, update }: { draft: RuleDraft; update: U
       <p className="text-sm text-ink">{behaviourSentence(draft, (c) => catalog.metricFor(c.deviceId, c.metric)?.unit)}</p>
       {simple ? (
         <details className="overflow-hidden rounded-lg border border-border">
-          <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">Change the timings</summary>
+          <summary className="cursor-pointer bg-surface-raised px-3 py-2 text-meta text-ink">{tr("editor.form.changeTimings")}</summary>
           <div className="flex flex-col gap-6 p-4">{fields}</div>
         </details>
       ) : (
@@ -444,14 +447,14 @@ function BehaviourFieldsBody({ draft, update, reading, clearing, hardware }: { d
     <>
       {reading && (
         <div className="flex flex-col gap-2">
-          <span className="text-meta font-medium text-ink">After it fires</span>
+          <span className="text-meta font-medium text-ink">{tr("editor.form.afterFires")}</span>
           <ChoiceCards
-            ariaLabel="After it fires"
+            ariaLabel={tr("editor.form.afterFires")}
             value={draft.behaviour === "latch" ? "latch" : "rearm"}
             onChange={(b) => update({ ...draft, behaviour: b })}
             options={[
-              { value: "rearm", title: "Re-arm", description: "Fires again the next time the condition becomes true.", illustration: REARM },
-              { value: "latch", title: "Latch until reset", description: "Fires once, then stays latched until someone resets it.", illustration: LATCH },
+              { value: "rearm", title: tr("editor.form.rearm"), description: tr("editor.form.rearmHint"), illustration: REARM },
+              { value: "latch", title: tr("editor.form.latch"), description: tr("editor.form.latchHint"), illustration: LATCH },
             ]}
           />
           {draft.behaviour === "other" && (
@@ -463,12 +466,12 @@ function BehaviourFieldsBody({ draft, update, reading, clearing, hardware }: { d
       )}
       <div className="flex flex-col gap-2">
         <span className="text-meta font-medium text-ink">
-          Safety <span className="font-normal text-ink-muted">always applied; {hardware ? "they stop hardware flapping" : "they stop repeat alerts"}</span>
+          {tr("editor.form.safety")} <span className="font-normal text-ink-muted">{tr(hardware ? "editor.form.safetyHardware" : "editor.form.safetyAlerts")}</span>
         </span>
         <div className="grid grid-cols-1 items-start gap-4 @min-[560px]:grid-cols-3">
           <NumberSafetyField
-            label="Hold time"
-            hint={reading ? "True this long before it fires." : "Only for reading rules."}
+            label={tr("editor.form.holdTime")}
+            hint={reading ? tr("editor.form.holdHint") : tr("editor.form.onlyReading")}
             value={draft.forDuration}
             onChange={(forDuration) => update({ ...draft, forDuration })}
             min={5}
@@ -476,23 +479,23 @@ function BehaviourFieldsBody({ draft, update, reading, clearing, hardware }: { d
             hardware={hardware}
           />
           <NumberSafetyField
-            label="Minimum interval"
-            hint="Time between two firings."
+            label={tr("editor.form.minInterval")}
+            hint={tr("editor.form.minIntervalHint")}
             value={draft.cooldown}
             onChange={(cooldown) => update({ ...draft, cooldown })}
             min={reading ? 30 : 0}
             hardware={hardware}
           />
           <NumberSafetyField
-            label="Clear delay"
-            hint={clearing ? "False this long before it clears." : "Only for reading rules that re-arm."}
+            label={tr("editor.form.clearDelay")}
+            hint={clearing ? tr("editor.form.clearDelayHint") : tr("editor.form.clearOnlyRearm")}
             value={draft.clearDelay}
             onChange={(clearDelay) => update({ ...draft, clearDelay })}
             disabled={!clearing}
           />
         </div>
       </div>
-      {clearing ? <ClearFields draft={draft} update={update} /> : reading && <p className="text-meta text-ink-muted">Actions on clear are for reading rules that re-arm.</p>}
+      {clearing ? <ClearFields draft={draft} update={update} /> : reading && <p className="text-meta text-ink-muted">{tr("editor.form.clearActionsNote")}</p>}
     </>
   );
 }
@@ -503,8 +506,8 @@ export function IntervalField({ draft, update, hardware }: { draft: RuleDraft; u
   return (
     <div className="max-w-[260px]">
       <NumberSafetyField
-        label="Minimum interval"
-        hint={hardware ? "Time between two firings, so the hardware isn't switched too often." : "Time between two firings, so alerts don't repeat too often."}
+        label={tr("editor.form.minInterval")}
+        hint={hardware ? tr("editor.form.intervalHardware") : tr("editor.form.intervalAlerts")}
         value={draft.cooldown}
         onChange={(cooldown) => update({ ...draft, cooldown })}
         hardware={hardware}
@@ -519,22 +522,22 @@ function ClearFields({ draft, update }: { draft: RuleDraft; update: Update }) {
   return (
     <div className="flex flex-col gap-3">
       <SwitchField
-        label="Notify when it clears"
+        label={tr("editor.form.notifyClear")}
         checked={draft.clearNotify}
         onChange={(clearNotify) => update({ ...draft, clearNotify })}
-        onLabel="On"
-        offLabel="Off"
-        onHint="Posts a notification once the condition is false again."
-        offHint="Nothing is posted when it clears."
+        onLabel={tr("editor.on")}
+        offLabel={tr("editor.off")}
+        onHint={tr("editor.form.notifyClearOn")}
+        offHint={tr("editor.form.notifyClearOff")}
       />
       {draft.clearNotify && (
-        <Field label="Message">
+        <Field label={tr("editor.message")}>
           <Input value={draft.clearMessage} onChange={(e) => update({ ...draft, clearMessage: e.target.value })} placeholder="e.g. Temperature back to normal" />
         </Field>
       )}
       {switchesHardware(draft) && (
         <p className="text-meta text-ink-muted">
-          Actuators set to turn back (in Then) run once per firing. If a reading goes stale nothing is sent: the last state holds.
+          {tr("editor.form.turnBackNote")}
         </p>
       )}
       {draft.preserved.clearActions.length > 0 && (

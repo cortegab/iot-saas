@@ -14,6 +14,7 @@ import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ApiRequestError } from "@/lib/api-client";
 import { RULE_STATE, actionsText, ruleStateKey, triggerText } from "@/lib/rule-text";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 
@@ -30,19 +31,19 @@ export function RuleList({ deviceId }: { deviceId: string }) {
 
   if (isLoading) return <LoadingSkeleton rows={2} rowClassName="h-14" />;
   if (error) {
-    return <ErrorState message={error instanceof ApiRequestError ? error.message : "Couldn't load rules."} onRetry={() => void mutate()} />;
+    return <ErrorState message={error instanceof ApiRequestError ? error.message : t("rules.deviceList.loadFailed")} onRetry={() => void mutate()} />;
   }
 
   if (!rules || rules.length === 0) {
     return (
       <EmptyState
-        title="No rules use this device"
-        description="A rule checks its readings the moment they arrive and acts on them."
+        title={t("rules.deviceList.emptyTitle")}
+        description={t("rules.deviceList.emptyBody")}
         action={
           can("rules.write") ? (
             <Link href={`/rules/new?device=${deviceId}`} className={buttonClassName({ variant: "secondary" })}>
               <Plus aria-hidden size={15} />
-              New rule
+              {t("rules.new")}
             </Link>
           ) : undefined
         }
@@ -52,7 +53,7 @@ export function RuleList({ deviceId }: { deviceId: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-    <ul aria-label="Rules" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+    <ul aria-label={t("rules.title")} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
       {pager.pageRows.map((r) => {
         const s = STATE[ruleStateKey(r)];
         return (

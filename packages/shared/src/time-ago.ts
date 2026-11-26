@@ -1,6 +1,8 @@
 /** Time wording (DESIGN.md §11): 24-hour; recent times relative ("3 h ago"),
  * older ones absolute ("Fri 2 Oct 22:00"). */
 
+import { activeLocale, formatDate as formatDateIntl, formatDateTime, tActive } from "./i18n";
+
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const pad2 = (n: number) => String(n).padStart(2, "0");
@@ -8,21 +10,23 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 /** "just now" · "12 min ago" · "3 h ago" · "2 d ago" · beyond a week the
  * absolute date. `null` → "never". */
 export function timeAgo(iso: string | null | undefined, now: number = Date.now()): string {
-  if (!iso) return "never";
+  if (!iso) return tActive("time.never");
   const t = new Date(iso).getTime();
   const minutes = Math.floor((now - t) / 60_000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1) return tActive("time.justNow");
+  if (minutes < 60) return tActive("time.minAgo", { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
+  if (hours < 24) return tActive("time.hAgo", { n: hours });
   const days = Math.floor(hours / 24);
-  if (days < 7) return `${days} d ago`;
+  if (days < 7) return tActive("time.dAgo", { n: days });
   return formatWhen(iso);
 }
 
 /** "Fri 2 Oct 22:00" in the viewer's zone (or `timeZone`). */
 export function formatWhen(iso: string, timeZone?: string): string {
   const d = new Date(iso);
+  // Spanish: "lun 2 oct 22:00" through Intl, in the reader's country style.
+  if (activeLocale() !== "en") return formatDateTime(activeLocale(), d, timeZone).replace(",", "").replace(/\./g, "");
   if (timeZone) {
     const parts = new Intl.DateTimeFormat("en-GB", {
       timeZone,
@@ -48,5 +52,6 @@ export function ageMinutes(iso: string | null | undefined, now: number = Date.no
  * joined). */
 export function formatDate(iso: string): string {
   const d = new Date(iso);
+  if (activeLocale() !== "en") return formatDateIntl(activeLocale(), d).replace(/\./g, "");
   return `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 }

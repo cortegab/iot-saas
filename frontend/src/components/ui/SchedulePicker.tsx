@@ -9,10 +9,12 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { TimezoneSelect } from "@/components/ui/TimezoneSelect";
 import { buttonClassName } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { richT } from "@/lib/i18n";
+import { activeLocale, tActive as tr } from "@iodriven/shared/i18n";
 import {
   DEFAULT_SCHEDULE,
-  DOW,
   DOW_ORDER,
+  dowName,
   clampRepeat,
   cronFromSchedule,
   cronParts,
@@ -26,11 +28,11 @@ import {
 } from "@/lib/schedule";
 
 const MODES: { value: ScheduleMode; label: string }[] = [
-  { value: "daily", label: "Every day" },
-  { value: "days", label: "Certain days" },
-  { value: "every", label: "Repeatedly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "custom", label: "Custom" },
+  { value: "daily", get label() { return tr("spick.daily"); } },
+  { value: "days", get label() { return tr("spick.days"); } },
+  { value: "every", get label() { return tr("spick.every"); } },
+  { value: "monthly", get label() { return tr("spick.monthly"); } },
+  { value: "custom", get label() { return tr("spick.custom"); } },
 ];
 
 export interface SchedulePickerProps {
@@ -79,7 +81,7 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
   }
 
   const tzField = (
-    <Field label="Time zone">
+    <Field label={tr("spick.timezone")}>
       <TimezoneSelect value={timezone} disabled={disabled} onChange={(tz) => onChange({ cron, timezone: tz })} />
     </Field>
   );
@@ -90,9 +92,9 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
   return (
     <div className="flex flex-col gap-3.5">
       <SegmentedControl
-        ariaLabel="Repeat"
+        ariaLabel={tr("spick.repeat")}
         size="md"
-        options={MODES.map((m) => ({ ...m, disabled }))}
+        options={MODES.map((m) => ({ value: m.value, label: m.label, disabled }))}
         value={s.mode}
         onChange={setMode}
         className="self-start"
@@ -109,8 +111,8 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
 
         {s.mode === "every" && (
           <Field
-            label="Every"
-            hint={s.unit === "min" ? "5 to 30 minutes suits most checks." : `On the hour${s.at ? `, at :${pad2(s.at)}` : ""}.`}
+            label={tr("spick.everyLabel")}
+            hint={s.unit === "min" ? tr("spick.minHint") : s.at ? tr("spick.onHourAt", { mm: pad2(s.at) }) : tr("spick.onHour")}
           >
             <div className="flex gap-2">
               <Input
@@ -119,12 +121,12 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
                 max={s.unit === "min" ? 59 : 23}
                 value={s.n}
                 disabled={disabled}
-                aria-label="Interval"
+                aria-label={tr("spick.interval")}
                 className="w-[84px] font-mono"
                 onChange={(e) => apply({ n: clampRepeat(Number(e.target.value), s.unit) })}
               />
               <Select
-                aria-label="Unit"
+                aria-label={tr("spick.unit")}
                 value={s.unit}
                 disabled={disabled}
                 onChange={(e) => {
@@ -132,8 +134,8 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
                   apply({ unit, n: clampRepeat(unit === "h" ? Math.min(s.n, 12) : s.n, unit) });
                 }}
               >
-                <option value="min">minutes</option>
-                <option value="h">hours</option>
+                <option value="min">{tr("spick.minutes")}</option>
+                <option value="h">{tr("spick.hours")}</option>
               </Select>
             </div>
           </Field>
@@ -141,11 +143,11 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
 
         {s.mode === "monthly" && (
           <>
-            <Field label="On day" hint="Days 29–31 are skipped in short months, so they aren't offered.">
+            <Field label={tr("spick.onDay")} hint={tr("spick.onDayHint")}>
               <Select value={s.dom} disabled={disabled} onChange={(e) => apply({ dom: Number(e.target.value) })}>
                 {Array.from({ length: 28 }, (_, i) => (
                   <option key={i + 1} value={i + 1}>
-                    {ordinal(i + 1)}
+                    {activeLocale() === "en" ? ordinal(i + 1) : i + 1}
                   </option>
                 ))}
               </Select>
@@ -156,9 +158,9 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
 
         {s.mode === "custom" && (
           <Field
-            label="Cron expression"
+            label={tr("spick.cron")}
             error={customError}
-            hint="minute · hour · day · month · weekday, e.g. 0 22 * * 1-5"
+            hint={tr("spick.cronHint")}
           >
             <Input mono value={cron} disabled={disabled} onChange={(e) => onChange({ cron: e.target.value, timezone })} />
           </Field>
@@ -175,8 +177,10 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
           <>
             <Clock aria-hidden size={14} className="mt-1 shrink-0 text-accent" />
             <span>
-              Runs <b className="font-semibold">{summary.human}</b>{" "}
-              <span className="text-ink-muted">({summary.zone})</span>. Next:
+              {richT(tr, "spick.runs", {
+                human: <b className="font-semibold">{summary.human}</b>,
+                zone: <span className="text-ink-muted">({summary.zone})</span>,
+              })}
               {summary.runs.map((r) => (
                 <span
                   key={r}
@@ -190,7 +194,7 @@ export function SchedulePicker({ cron, timezone, onChange, disabled }: ScheduleP
         ) : (
           <>
             <AlertCircle aria-hidden size={14} className="mt-1 shrink-0 text-status-error" />
-            <span className="text-status-error">Not a valid schedule yet.</span>
+            <span className="text-status-error">{tr("spick.invalid")}</span>
           </>
         )}
       </div>
@@ -207,11 +211,11 @@ function TimeSelect({ value, onChange, disabled }: { value: string; onChange: (t
   return (
     <div className="flex flex-col gap-[5px]">
       <span id={labelId} className="text-xs font-medium text-ink-muted">
-        At
+        {tr("spick.at")}
       </span>
       <div role="group" aria-labelledby={labelId} className="flex items-center gap-2">
         <Select
-          aria-label="Hour"
+          aria-label={tr("spick.hour")}
           className="w-[84px] font-mono"
           value={h}
           disabled={disabled}
@@ -227,7 +231,7 @@ function TimeSelect({ value, onChange, disabled }: { value: string; onChange: (t
           :
         </span>
         <Select
-          aria-label="Minute"
+          aria-label={tr("spick.minute")}
           className="w-[84px] font-mono"
           value={m}
           disabled={disabled}
@@ -257,7 +261,7 @@ function DayToggles({
   return (
     <div className="flex flex-col gap-[5px]">
       <span id={labelId} className="text-xs font-medium text-ink-muted">
-        On
+        {tr("spick.on")}
       </span>
       <div role="group" aria-labelledby={labelId} className="flex flex-wrap items-center gap-1.5">
         {DOW_ORDER.map((d) => {
@@ -267,7 +271,7 @@ function DayToggles({
               key={d}
               type="button"
               aria-pressed={on}
-              aria-label={DOW[d]}
+              aria-label={dowName(d)}
               disabled={disabled}
               onClick={() => {
                 const next = on ? days.filter((x) => x !== d) : [...days, d];
@@ -280,7 +284,7 @@ function DayToggles({
                   : "border-border bg-surface text-ink-muted hover:text-ink",
               )}
             >
-              {DOW[d].slice(0, 2)}
+              {dowName(d).slice(0, 2)}
             </button>
           );
         })}
@@ -291,7 +295,7 @@ function DayToggles({
             onClick={() => onChange([1, 2, 3, 4, 5])}
             className={buttonClassName({ variant: "ghost", size: "sm" })}
           >
-            Weekdays
+            {tr("spick.weekdays")}
           </button>
           <button
             type="button"
@@ -299,11 +303,11 @@ function DayToggles({
             onClick={() => onChange([0, 6])}
             className={buttonClassName({ variant: "ghost", size: "sm" })}
           >
-            Weekends
+            {tr("spick.weekends")}
           </button>
         </span>
       </div>
-      {days.length === 1 && <span className="text-xs text-ink-muted">At least one day stays selected.</span>}
+      {days.length === 1 && <span className="text-xs text-ink-muted">{tr("spick.oneDay")}</span>}
     </div>
   );
 }

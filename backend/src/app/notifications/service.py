@@ -15,6 +15,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import ARRAY, ColumnElement, Uuid, func, or_, select, update
@@ -51,6 +52,7 @@ async def create_notification(
     severity: Severity = "warning",
     kind: NotificationKind = "rule_fired",
     detail: str | None = None,
+    i18n: dict[str, Any] | None = None,
 ) -> None:
     notification_id = uuid.uuid4()
     async with factory() as session, session.begin():
@@ -65,6 +67,7 @@ async def create_notification(
                 detail=detail,
                 severity=severity,
                 kind=kind,
+                i18n=i18n,
             )
         )
     await realtime_service.publish_event(
@@ -83,6 +86,7 @@ async def add_notification(
     device_id: uuid.UUID | None = None,
     rule_id: uuid.UUID | None = None,
     catalog_entry_id: uuid.UUID | None = None,
+    i18n: dict[str, Any] | None = None,
 ) -> None:
     """In-request variant: joins the caller's transaction (tenant context
     already set), publishes the realtime event after commit."""
@@ -98,6 +102,7 @@ async def add_notification(
             detail=detail,
             severity=severity,
             kind=kind,
+            i18n=i18n,
         )
     )
 

@@ -21,6 +21,7 @@ import { getDeviceActuators, rulesDrivingActuator } from "@/lib/device-actuators
 import { timeAgo } from "@/lib/time-ago";
 import { wireId } from "@/lib/wire-id";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type CommandResponse = components["schemas"]["CommandResponse"];
@@ -30,7 +31,7 @@ type HardwareConfig = components["schemas"]["HardwareConfig"];
 type MemberResponse = components["schemas"]["MemberResponse"];
 
 function formatValue(value: unknown, unit?: string): string {
-  if (typeof value === "boolean") return value ? "On" : "Off";
+  if (typeof value === "boolean") return value ? t("actuator.on") : t("actuator.off");
   return typeof value === "number" && unit ? `${value}${unit === "°" ? "" : " "}${unit}` : String(value);
 }
 
@@ -93,7 +94,7 @@ function ValueField({
       <div className="flex items-center gap-2">
         {range?.unit ? <Affix suffix={range.unit}>{input}</Affix> : input}
         <Button type="submit" variant="secondary" disabled={disabled || same || "error" in parsed}>
-          Set
+          {t("actuator.set")}
         </Button>
       </div>
       <span id={hintId} className={error ? "text-xs text-status-error" : "text-xs text-ink-muted tabular-nums"}>
@@ -171,22 +172,22 @@ function ActuatorRow({
     // The value already requested isn't sent again; Retry is the only resend.
     if (!retry && isRequested(next, requested)) return;
     const words = formatValue(next, range?.unit);
-    const verb = typeof next === "boolean" ? `Turn ${words}` : `Set to ${words}`;
-    const what = typeof next === "boolean" ? `turn ${actuatorLabel} ${words}` : `set ${actuatorLabel} to ${words}`;
+    const verb = typeof next === "boolean" ? t(next ? "actuator.verbOn" : "actuator.verbOff") : t("actuator.setTo", { value: words });
     // DESIGN.md §8: a command to an offline device says so before it's sent.
-    const ask = `${what.charAt(0).toUpperCase()}${what.slice(1)}?`;
+    const ask =
+      typeof next === "boolean" ? t(next ? "actuator.askOn" : "actuator.askOff", { name: actuatorLabel }) : t("actuator.askSet", { name: actuatorLabel, value: words });
     // A rule that also switches it may switch it straight back: say which.
     const rulesNote =
       drivingRules.length > 0
-        ? ` ${drivingRules.length === 1 ? `The rule ${drivingRules[0]} also switches` : `The rules ${drivingRules.join(", ")} also switch`} it and may switch it back.`
+        ? ` ${t(drivingRules.length === 1 ? "actuator.alsoOne" : "actuator.alsoMany", { rules: drivingRules.join(", ") })}`
         : "";
     const body = deviceOnline
-      ? `${retry ? "Send it again: " : ""}${ask}${rulesNote}`
-      : `The device is offline. The command waits as its desired state and applies when it reconnects, if that's within the command's time limit.${rulesNote} ${ask}`;
+      ? `${retry ? t("actuator.sendAgain", { ask }) : ask}${rulesNote}`
+      : `${t("actuator.offlineBody")}${rulesNote} ${ask}`;
     const ok = await confirm(body, {
-      title: deviceOnline ? undefined : "Send to an offline device?",
+      title: deviceOnline ? undefined : t("actuator.offlineTitle"),
       danger: false,
-      confirmLabel: retry ? "Retry" : verb,
+      confirmLabel: retry ? t("actuator.retry") : verb,
     });
     if (!ok) return;
     setBusy(true);
@@ -203,7 +204,7 @@ function ActuatorRow({
         await new Promise((r) => setTimeout(r, 800));
       }
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't send this command.");
+      setError(err instanceof ApiRequestError ? err.message : t("actuator.sendFailed"));
     } finally {
       setSending(null);
       setBusy(false);
@@ -217,15 +218,15 @@ function ActuatorRow({
       <div className="flex min-w-0 flex-1 basis-[240px] flex-col gap-0.5">
         <b className="font-medium text-ink">{actuatorLabel}</b>
         <span className="text-xs text-ink-muted">
-          Requested{" "}
-          {requested == null ? <span>unknown</span> : <b className="font-medium text-ink">{formatValue(requested, range?.unit)}</b>}
+          {t("actuator.requested")}{" "}
+          {requested == null ? <span>{t("actuator.unknown")}</span> : <b className="font-medium text-ink">{formatValue(requested, range?.unit)}</b>}
           {/* The control shows what was asked; until the device confirms it,
               say what it last confirmed, so a switch reading Off over a pump
               that never got the command doesn't pass for the truth. */}
           {unconfirmed && (
             <span className="text-status-pending">
-              {" · not confirmed"}
-              {confirmed !== undefined && !isRequested(confirmed as CommandValue, requested) && <>, last confirmed {formatValue(confirmed, range?.unit)}</>}
+              {t("actuator.notConfirmed")}
+              {confirmed !== undefined && !isRequested(confirmed as CommandValue, requested) && t("actuator.lastConfirmed", { value: formatValue(confirmed, range?.unit) })}
             </span>
           )}
         </span>
@@ -233,19 +234,19 @@ function ActuatorRow({
             waits for reported state (§13, deferred). */}
         <span aria-live="polite" className="flex flex-wrap items-center gap-x-1.5 text-xs text-ink-muted">
           {sending != null ? (
-            <span className="text-status-pending">Sending…</span>
+            <span className="text-status-pending">{t("actuator.sending")}</span>
           ) : latest && status ? (
             <>
               {status === "pending" ? (
                 <span className="text-status-pending">
-                  Waiting for the device… <span className="tabular-nums">{Math.ceil((waitingMs ?? 0) / 1000)}</span> s
+                  <span className="tabular-nums">{t("actuator.waiting", { n: String(Math.ceil((waitingMs ?? 0) / 1000)) })}</span>
                 </span>
               ) : status === "no-response" ? (
                 <>
-                  <span className="text-status-offline">No response within {latest.ttl_seconds} s.</span>
+                  <span className="text-status-offline">{t("actuator.noResponse", { n: String(latest.ttl_seconds) })}</span>
                   {isAdmin && !deviceDisabled && (
                     <Button variant="link" className="text-xs" disabled={busy} onClick={() => void send(latest.value as CommandValue, true)}>
-                      Retry
+                      {t("actuator.retry")}
                     </Button>
                   )}
                 </>
@@ -253,28 +254,27 @@ function ActuatorRow({
                 <Badge tone={commandStatusTone(status)} variant="text" label={commandStatusLabel(status)} />
               )}
               <span>
-                {" · sent "}
                 {latest.rule_id ? (
                   <>
-                    by rule{" "}
+                    {t("actuator.sentByRule")}{" "}
                     <Link href={`/rules/${latest.rule_id}`} className="link-inline">
-                      {rule ?? "a rule"}
+                      {rule ?? t("actuator.aRule")}
                     </Link>
                   </>
                 ) : (
-                  sender(latest)
+                  t("actuator.sentBy", { who: sender(latest) })
                 )}
                 , {timeAgo(latest.issued_at)}
               </span>
             </>
           ) : (
-            <span>Nothing sent yet</span>
+            <span>{t("actuator.nothingSent")}</span>
           )}
         </span>
         {error && <span className="text-xs text-status-error">{error}</span>}
         {automateHref && kind === "switch" && (
-          <Link href={automateHref} className="link-inline w-fit text-xs" aria-label={`Automate ${actuatorLabel}`}>
-            Automate…
+          <Link href={automateHref} className="link-inline w-fit text-xs" aria-label={t("actuator.automateLabel", { name: actuatorLabel })}>
+            {t("actuator.automate")}
           </Link>
         )}
       </div>
@@ -356,15 +356,15 @@ export function ActuatorControl({
   if (actuators.length === 0) {
     return (
       <EmptyState
-        title="No actuators configured"
-        description="This device's template doesn't declare any actuators, and no rule commands one yet."
+        title={t("actuator.noneTitle")}
+        description={t("actuator.noneBody")}
       />
     );
   }
 
   return (
     // In a tile (`only`) the tile is already the card: no second border.
-    <div role="group" aria-label="Actuators" className={only ? "-mx-3.5 -mb-3.5 flex flex-col border-t border-border-soft" : "flex flex-col overflow-hidden rounded-xl border border-border bg-surface"}>
+    <div role="group" aria-label={t("actuator.group")} className={only ? "-mx-3.5 -mb-3.5 flex flex-col border-t border-border-soft" : "flex flex-col overflow-hidden rounded-xl border border-border bg-surface"}>
       {(only ? actuators.filter((a) => a.id === only) : actuators).map(({ id, label }) => (
         <ActuatorRow
           key={id}

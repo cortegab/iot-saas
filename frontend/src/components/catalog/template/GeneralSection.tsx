@@ -10,6 +10,7 @@ import type { SectionProps } from "@/components/catalog/template/section-props";
 import { blankHardware } from "@/lib/hardware/hardware-draft";
 import { blankMetric, type RunsOn } from "@/lib/template-draft";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type ZoneResponse = components["schemas"]["ZoneResponse"];
 
@@ -32,16 +33,16 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
   }
 
   return (
-    <EditorSection id="general" title="General">
+    <EditorSection id="general" title={tr("tpls.general")}>
       <div className="grid gap-3.5 @[640px]:grid-cols-2">
         {device && (
           <>
-            <Field label="Device name" hint="Shown in lists and alerts. Its MQTT id is made from it and never changes." {...f("general.device")}>
+            <Field label={tr("tpls.deviceName")} hint={tr("tpls.deviceNameHint")} {...f("general.device")}>
               <Input
                 autoFocus
                 value={device.name}
                 disabled={readOnly}
-                placeholder="e.g. bay1-climate"
+                placeholder={tr("tpls.deviceNamePlaceholder")}
                 onChange={(e) => {
                   const next = { ...device, name: e.target.value };
                   set({ ...d, device: next, name: next.templateNameAuto ? e.target.value : d.name });
@@ -50,9 +51,9 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
               />
             </Field>
             {zones && zones.length > 0 && (
-              <Field label="Zone" optional>
+              <Field label={tr("tpls.zone")} optional>
                 <Select value={device.zoneId} disabled={readOnly} onChange={(e) => set({ ...d, device: { ...device, zoneId: e.target.value } })}>
-                  <option value="">No zone</option>
+                  <option value="">{tr("tpls.noZone")}</option>
                   {zones.map((z) => (
                     <option key={z.id} value={z.id}>
                       {z.name}
@@ -67,14 +68,14 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
             view (DESIGN.md §8), unless that name needs fixing. */}
         {(!device || f("general.name").error) && (
           <Field
-            label="Template name"
-            hint={device ? "Saved as a template too, so the next board like this one is Add device → From a template." : undefined}
+            label={tr("tpls.templateName")}
+            hint={device ? tr("tpls.templateNameHint") : undefined}
             {...f("general.name")}
           >
             <Input
               value={d.name}
               disabled={readOnly}
-              placeholder="e.g. Climate sensor v2"
+              placeholder={tr("tpls.templateNamePlaceholder")}
               onChange={(e) => set({ ...d, name: e.target.value, ...(device ? { device: { ...device, templateNameAuto: false } } : {}) })}
               onBlur={blur("general.name")}
             />
@@ -82,31 +83,31 @@ export function GeneralSection({ zones, ...props }: SectionProps & { zones?: Zon
         )}
         {!device && (
           <SwitchField
-            label="Status"
+            label={tr("tpls.status")}
             checked={d.enabled}
             disabled={readOnly}
             onChange={(enabled) => set({ ...d, enabled })}
-            onLabel="Enabled"
-            offLabel="Disabled"
-            onHint="Offered in Add device."
-            offHint="Hidden from Add device. Devices that already use it keep working."
+            onLabel={tr("tpls.enabled")}
+            offLabel={tr("tpls.disabled")}
+            onHint={tr("tpls.onHint")}
+            offHint={tr("tpls.offHint")}
           />
         )}
       </div>
       {/* Not a Field: its <label> would name the first card "Runs on". */}
       <div className="flex flex-col gap-1.5">
-        <span className="text-xs font-medium text-ink-muted">Runs on</span>
+        <span className="text-xs font-medium text-ink-muted">{tr("tpls.runsOn")}</span>
         <ChoiceCards<RunsOn>
-          ariaLabel="Runs on"
+          ariaLabel={tr("tpls.runsOn")}
           value={d.runsOn}
           onChange={setRunsOn}
           options={[
-            { value: "generic_firmware", title: "Our firmware", description: "Pick the board and parts; installs from the browser.", disabled: readOnly },
-            { value: "own_code", title: "Custom firmware", description: "List the data it sends; you write the firmware.", disabled: readOnly },
+            { value: "generic_firmware", title: tr("tpls.ourFirmware"), description: tr("tpls.ourFirmwareHint"), disabled: readOnly },
+            { value: "own_code", title: tr("tpls.customFirmware"), description: tr("tpls.customFirmwareHint"), disabled: readOnly },
           ]}
         />
         {d.runsOn === "own_code" && d.hardware && (
-          <p className="text-xs text-status-pending">Saving drops the wiring: these devices run code of their own.</p>
+          <p className="text-xs text-status-pending">{tr("tpls.dropsWiring")}</p>
         )}
       </div>
     </EditorSection>

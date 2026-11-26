@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import localFont from "next/font/local";
 import "./globals.css";
+import { serverLocale } from "@/lib/i18n-server";
 import { AuthProvider } from "@/lib/auth-context";
+import { I18nProvider } from "@/lib/i18n";
 import { ToastProvider } from "@/components/ui/Toast";
 
 /* Type system (docs/design/DESIGN.md §3): Geist for display, UI and readouts;
@@ -39,18 +41,24 @@ export const metadata = {
   description: "IoT telemetry, rules, and actuator control",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // DESIGN.md §11a: the saved language (cookie), else the browser's, so the
+  // first paint is already in the reader's language. Reading the request
+  // makes pages render per request rather than at build time.
+  const locale = await serverLocale();
   return (
-    <html lang="en" className={`${Geist.variable} ${GeistMono.variable}`} suppressHydrationWarning>
+    <html lang={locale} className={`${Geist.variable} ${GeistMono.variable}`} suppressHydrationWarning>
       <body className="m-0 min-h-screen">
         {/* First child of <body>: runs synchronously during parse, before any
             body content paints, so the theme is right on first frame. React 19
             won't hoist an inline script, and a <script> child of <html> is
             invalid — <body> is the correct spot in the App Router. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
-        <AuthProvider>
-          <ToastProvider>{children}</ToastProvider>
-        </AuthProvider>
+        <I18nProvider initialLocale={locale}>
+          <AuthProvider>
+            <ToastProvider>{children}</ToastProvider>
+          </AuthProvider>
+        </I18nProvider>
       </body>
     </html>
   );

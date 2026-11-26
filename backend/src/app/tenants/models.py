@@ -47,6 +47,8 @@ class Tenant(Base):
     )
     # IANA zone name: the default for new schedules and for showing times.
     timezone: Mapped[str] = mapped_column(nullable=False, server_default="UTC")
+    # Language of emails to the listed alert addresses (no account to ask).
+    locale: Mapped[str] = mapped_column(nullable=False, server_default="en")
     # Get started was dismissed for the whole workspace.
     setup_dismissed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

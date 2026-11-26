@@ -29,6 +29,7 @@ import { useServerPager } from "@/components/list/useServerPager";
 import { ApiRequestError } from "@/lib/api-client";
 import { RULE_STATE, actionsText, ruleStateKey, sharedActuators, triggerKindText, triggerText, type RuleStateKey } from "@/lib/rule-text";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
@@ -36,10 +37,10 @@ type FailedActionResponse = components["schemas"]["FailedActionResponse"];
 
 /** The Trigger filter (DESIGN.md §6 rules list). */
 const TRIGGERS = [
-  { value: "metric", label: "On each reading" },
-  { value: "schedule", label: "On a schedule" },
-  { value: "manual", label: "Manually" },
-  { value: "device_status", label: "Device online / offline" },
+  { value: "metric", get label() { return t("rules.triggers.metric"); } },
+  { value: "schedule", get label() { return t("rules.triggers.schedule"); } },
+  { value: "manual", get label() { return t("rules.triggers.manual"); } },
+  { value: "device_status", get label() { return t("rules.triggers.device_status"); } },
 ];
 
 const triggerType = (r: RuleResponse) => ((r.trigger as Record<string, unknown>).type as string | undefined) ?? "metric";
@@ -47,7 +48,7 @@ const triggerType = (r: RuleResponse) => ((r.trigger as Record<string, unknown>)
 /** Unique devices a rule touches, in a stable order. */
 function ruleDevices(rule: RuleResponse): { id: string; name: string }[] {
   const seen = new Map<string, string>();
-  for (const d of rule.devices) if (!seen.has(d.device_id)) seen.set(d.device_id, d.device_name ?? "Unnamed device");
+  for (const d of rule.devices) if (!seen.has(d.device_id)) seen.set(d.device_id, d.device_name ?? t("rules.unnamedDevice"));
   return Array.from(seen, ([id, name]) => ({ id, name }));
 }
 
@@ -127,8 +128,8 @@ export default function RulesPage() {
     if (r.enabled && !r.health.evaluatable && cells.length > 0 && cells[cells.length - 1] === "idle") cells[cells.length - 1] = "unknown";
     return (
       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        {!schedule && a && <MiniStrip cells={cells} label={`Fired ${a.fired} time${a.fired === 1 ? "" : "s"} in 24 h`} />}
-        <span>{schedule ? triggerText(r) : a ? (a.fired ? `fired ${a.fired}× in 24 h` : "quiet in 24 h") : devicesLine(r)}</span>
+        {!schedule && a && <MiniStrip cells={cells} label={t("editor.peek.firedTimes", { count: a.fired })} />}
+        <span>{schedule ? triggerText(r) : a ? (a.fired ? t("editor.peek.firedLower", { count: a.fired }) : t("editor.peek.quietLower")) : devicesLine(r)}</span>
         {shared.get(r.id)?.map((x) => (
           <Tag key={x} tone="warn" size="sm">
             <AlertTriangle aria-hidden size={11} />
@@ -143,7 +144,7 @@ export default function RulesPage() {
   const columns: DataColumn<RuleResponse>[] = [
     {
       id: "name",
-      header: "Rule",
+      header: t("rules.rule"),
       sortable: true,
       cell: (r) => (
         <NameCell
@@ -158,17 +159,17 @@ export default function RulesPage() {
     },
     {
       id: "trigger",
-      header: "Trigger",
+      header: t("rules.trigger"),
       sortable: true,
       hideOnPhone: true,
       priority: 3,
       fold: (r) => triggerKindText(r),
       cell: (r) => <span className="text-ink">{triggerKindText(r)}</span>,
     },
-    { id: "action", header: "Action", hideOnPhone: true, priority: 2, fold: (r) => actionsText(r.actions), cell: (r) => <span className="text-ink">{actionsText(r.actions)}</span> },
+    { id: "action", header: t("rules.action"), hideOnPhone: true, priority: 2, fold: (r) => actionsText(r.actions), cell: (r) => <span className="text-ink">{actionsText(r.actions)}</span> },
     {
       id: "state",
-      header: "State",
+      header: t("rules.state"),
       sortable: true,
       cell: (r) => {
         const s = RULE_STATE[ruleStateKey(r)];
@@ -180,25 +181,25 @@ export default function RulesPage() {
   const rowMenu = (r: RuleResponse) => actions.menu(r);
 
   const chips: FilterChip[] = [];
-  if (list.q) chips.push({ id: "q", label: `Search: “${list.q}”`, onRemove: () => list.setQuery("") });
+  if (list.q) chips.push({ id: "q", label: t("devices.chipSearch", { q: list.q }), onRemove: () => list.setQuery("") });
   if (list.filters.state !== "all" && !showFailed) {
-    const label = list.filters.state === "fired" ? "Fired in 24 h" : RULE_STATE[list.filters.state as RuleStateKey]?.label;
-    chips.push({ id: "state", label: `State: ${label}`, onRemove: () => list.setFilter("state", "all") });
+    const label = list.filters.state === "fired" ? t("rules.firedDay") : RULE_STATE[list.filters.state as RuleStateKey]?.label;
+    chips.push({ id: "state", label: t("rules.chipState", { state: label ?? "" }), onRemove: () => list.setFilter("state", "all") });
   }
   if (list.filters.device !== "all") {
-    const name = deviceOptions.find((d) => d.value === list.filters.device)?.label ?? "unknown";
-    chips.push({ id: "device", label: `Device: ${name}`, onRemove: () => list.setFilter("device", "all") });
+    const name = deviceOptions.find((d) => d.value === list.filters.device)?.label ?? t("devices.unknown");
+    chips.push({ id: "device", label: t("rules.chipDevice", { name }), onRemove: () => list.setFilter("device", "all") });
   }
   if (list.filters.trigger !== "all") {
-    const label = TRIGGERS.find((t) => t.value === list.filters.trigger)?.label ?? list.filters.trigger;
-    chips.push({ id: "trigger", label: `Trigger: ${label}`, onRemove: () => list.setFilter("trigger", "all") });
+    const label = TRIGGERS.find((x) => x.value === list.filters.trigger)?.label ?? list.filters.trigger;
+    chips.push({ id: "trigger", label: t("rules.chipTrigger", { name: label }), onRemove: () => list.setFilter("trigger", "all") });
   }
 
   const total = rules?.length ?? 0;
   const newAction = canWrite ? (
     <Link href="/rules/new" className={buttonClassName()}>
       <Plus aria-hidden size={15} />
-      New rule
+      {t("rules.new")}
     </Link>
   ) : null;
 
@@ -208,15 +209,15 @@ export default function RulesPage() {
           holds it only while there's no toolbar (loading, error, first use). */}
       <PageHeader
         inline
-        title={simple ? "Automations" : "Rules"}
-        description="Every reading is checked against these the moment it arrives."
+        title={t(simple ? "nav.automations" : "rules.title")}
+        description={t("rules.description")}
         actions={!error && rules && total > 0 ? undefined : newAction}
       />
 
       {error ? (
         <ErrorState
-          title="Couldn't load rules"
-          message={`${error instanceof ApiRequestError ? error.message : "The API didn't respond."} Rules keep running; only this page is affected.`}
+          title={t("rules.loadFailed")}
+          message={t("rules.keepRunning", { message: error instanceof ApiRequestError ? error.message : t("devices.apiDown") })}
           onRetry={() => void mutate()}
         />
       ) : isLoading || !rules ? (
@@ -224,44 +225,44 @@ export default function RulesPage() {
       ) : total === 0 ? (
         <FirstUse
           icon={<ListChecks aria-hidden size={26} />}
-          title="No rules yet"
-          description="Rules watch live readings and switch actuators or notify people within two seconds."
+          title={t("rules.emptyTitle")}
+          description={t("rules.emptyBody")}
           action={newAction ?? undefined}
-          readOnlyNote="Ask an admin to create the first rule."
+          readOnlyNote={t("rules.askAdmin")}
         />
       ) : (
         <>
           <ListToolbar
             query={list.q}
             onQuery={list.setQuery}
-            placeholder="Search rules"
+            placeholder={t("rules.search")}
             searchable={!showFailed}
             activeFilters={[list.filters.device, list.filters.trigger].filter((v) => v !== "all").length}
             actions={newAction}
             quick={{
-              label: "Filter by state",
+              label: t("rules.filterState"),
               value: list.filters.state,
               onChange: (v) => list.setFilter("state", v),
               options: [
-                { value: "all", label: "All", count: total },
-                { value: "armed", label: "Armed", count: counts.armed, tone: "online", hint: "Waiting for their condition" },
-                { value: "fired", label: "Fired", count: counts.fired, tone: "accent", hint: "Fired in the last 24 h" },
-                { value: "latched", label: "Latched", count: counts.latched, tone: "pending", shape: "square", hint: "Need a reset", alert: true },
-                { value: "stale", label: "Can't evaluate", count: counts.stale, tone: "unknown", shape: "hollow", hint: "An input has no data", alert: true },
-                { value: "disabled", label: "Disabled", count: counts.disabled, tone: "unknown", shape: "square", hint: "Not evaluated" },
+                { value: "all", label: t("devices.all"), count: total },
+                { value: "armed", label: RULE_STATE.armed.label, count: counts.armed, tone: "online", hint: t("rules.hints.armed") },
+                { value: "fired", label: t("rules.fired"), count: counts.fired, tone: "accent", hint: t("rules.hints.fired") },
+                { value: "latched", label: RULE_STATE.latched.label, count: counts.latched, tone: "pending", shape: "square", hint: t("rules.hints.latched"), alert: true },
+                { value: "stale", label: RULE_STATE.stale.label, count: counts.stale, tone: "unknown", shape: "hollow", hint: t("rules.hints.stale"), alert: true },
+                { value: "disabled", label: RULE_STATE.disabled.label, count: counts.disabled, tone: "unknown", shape: "square", hint: t("rules.hints.disabled") },
                 // Deliveries, not rules: the feed replaces the table.
-                { value: "failed", label: "Failed deliveries", count: failedTotal, tone: "offline", hint: "Webhooks, emails and commands that didn't arrive", alert: true },
+                { value: "failed", label: t("rules.failed"), count: failedTotal, tone: "offline", hint: t("rules.hints.failed"), alert: true },
               ],
             }}
             view={
               // Simple view (DESIGN.md §15a) has no ladder.
               showFailed || simple ? undefined : <SegmentedControl
-                ariaLabel="Rules view"
+                ariaLabel={t("rules.view")}
                 value={list.filters.view === "ladder" ? "ladder" : "list"}
                 onChange={(v) => list.setFilter("view", v)}
                 options={[
-                  { value: "list", label: "List" },
-                  { value: "ladder", label: "Ladder" },
+                  { value: "list", label: t("rules.list") },
+                  { value: "ladder", label: t("rules.ladder") },
                 ]}
               />
             }
@@ -269,12 +270,12 @@ export default function RulesPage() {
             {!showFailed && (
             <>
             <Select
-              aria-label="Filter by device"
+              aria-label={t("rules.filterDevice")}
               value={list.filters.device}
               onChange={(e) => list.setFilter("device", e.target.value)}
               className="w-auto min-w-[170px]"
             >
-              <option value="all">All devices</option>
+              <option value="all">{t("rules.allDevices")}</option>
               {deviceOptions.map((d) => (
                 <option key={d.value} value={d.value}>
                   {d.label}
@@ -282,12 +283,12 @@ export default function RulesPage() {
               ))}
             </Select>
             <Select
-              aria-label="Filter by trigger"
+              aria-label={t("rules.filterTrigger")}
               value={list.filters.trigger}
               onChange={(e) => list.setFilter("trigger", e.target.value)}
               className="w-auto min-w-[170px]"
             >
-              <option value="all">All triggers</option>
+              <option value="all">{t("rules.allTriggers")}</option>
               {TRIGGERS.map((t) => (
                 <option key={t.value} value={t.value}>
                   {t.label}
@@ -303,14 +304,14 @@ export default function RulesPage() {
           {showFailed ? (
             <FailedActionsList />
           ) : filtered.length === 0 ? (
-            <NoResults noun="rules" hidden={total} onClear={list.clearAll} />
+            <NoResults noun={t("rules.nounMany")} hidden={total} onClear={list.clearAll} />
           ) : list.filters.view === "ladder" && !simple ? (
             <div className="flex flex-col gap-2">
               <LadderOverview rules={pageRows} />
               <TableFooter
                 shown={filtered.length}
                 total={total}
-                noun={["rule", "rules"]}
+                noun={[t("rules.nounOne"), t("rules.nounMany")]}
                 page={page}
                 pageCount={pageCount}
                 pageSize={list.pageSize}
@@ -320,7 +321,7 @@ export default function RulesPage() {
             </div>
           ) : (
             <ListWithPeek
-              label="Rule"
+              label={t("rules.rule")}
               onClose={peek.close}
               nav={peek.nav}
               peek={
@@ -339,7 +340,7 @@ export default function RulesPage() {
             >
             <div className="flex flex-col gap-2">
               <DataTable
-                label="Rules"
+                label={t("rules.title")}
                 columns={columns}
                 rows={pageRows}
                 rowKey={(r) => r.id}
@@ -355,7 +356,7 @@ export default function RulesPage() {
               <TableFooter
                 shown={filtered.length}
                 total={total}
-                noun={["rule", "rules"]}
+                noun={[t("rules.nounOne"), t("rules.nounMany")]}
                 page={page}
                 pageCount={pageCount}
                 pageSize={list.pageSize}

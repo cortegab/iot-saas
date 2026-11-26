@@ -8,6 +8,7 @@ import { useApiSWR } from "@/hooks/useApiSWR";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useStarterDashboard } from "@/components/dashboards/useStarterDashboard";
 import { usePermissions } from "@/hooks/usePermissions";
+import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { Button, buttonClassName } from "@/components/ui/Button";
 import { Callout } from "@/components/ui/Callout";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,8 +20,10 @@ import { ApiRequestError } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { formatReading } from "@/lib/format-reading";
 import { HOME } from "@/lib/landing";
+import { words } from "@/lib/simple-words";
 import { timeAgo } from "@/lib/time-ago";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type SetupStatusResponse = components["schemas"]["SetupStatusResponse"];
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
@@ -46,17 +49,21 @@ export default function GetStartedPage() {
   const toast = useToast();
   const { can } = usePermissions();
   const manages = can("workspace.setup");
+  // Simple view (DESIGN.md §15a) hides templates: Add device makes the
+  // device's own, so the list starts at the device and says "automation".
+  const { simple } = useInterfaceMode();
+  const w = words(simple);
   const build = useStarterDashboard();
   const { data: ws } = useWorkspace();
 
   // The dashboard step's shortcut (DESIGN.md §10.2): one made from the devices.
   async function buildFromDevices() {
     try {
-      const id = await build(`${ws?.name ?? "My"} overview`);
-      toast({ title: "Dashboard built", detail: "A chart for each device, set as where you land." });
+      const id = await build(t("start.overview", { name: ws?.name ?? t("start.my") }));
+      toast({ title: t("start.built"), detail: t("start.builtDetail") });
       router.push(`/dashboards/${id}`);
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't build the dashboard", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("start.buildFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
   // Polled while the device step waits: it turns done when a first reading arrives.
@@ -65,21 +72,21 @@ export default function GetStartedPage() {
   async function dismiss() {
     try {
       await api.post("/tenants/current/setup/dismiss");
-      toast({ title: "Get started dismissed", detail: "It's in Workspace settings if you want it back." });
+      toast({ title: t("start.dismissed"), detail: t("start.dismissedDetail") });
       router.replace(HOME);
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't dismiss it", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("start.dismissFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
   const header = (
     <PageHeader
-      title="Get started"
-      description="Four steps to a working loop: a device's readings, checked by a rule, on your dashboard."
+      title={t("start.title")}
+      description={t("start.description", { count: t(simple ? "start.three" : "start.four"), article: simple ? "an" : "a", rule: w.rule })}
       actions={
         manages && setup && !setup.complete ? (
           <Button variant="ghost" onClick={() => void dismiss()}>
-            I&apos;ll set it up myself
+            {t("start.dismiss")}
           </Button>
         ) : undefined
       }
@@ -90,7 +97,7 @@ export default function GetStartedPage() {
     return (
       <div className="flex flex-col gap-4">
         {header}
-        <ErrorState message={error instanceof ApiRequestError ? error.message : "The API didn't respond."} onRetry={() => void mutate()} />
+        <ErrorState message={error instanceof ApiRequestError ? error.message : t("devices.apiDown")} onRetry={() => void mutate()} />
       </div>
     );
   }
@@ -108,11 +115,11 @@ export default function GetStartedPage() {
         {header}
         <EmptyState
           icon={<Construction aria-hidden size={26} />}
-          title="Your workspace is being set up"
-          description="An owner or admin is adding its devices and rules. What's there already is yours to look at."
+          title={t("start.beingSetUp")}
+          description={t("start.beingSetUpBody", { rules: w.rules })}
           action={
             <Link href="/devices" className={buttonClassName({ variant: "secondary" })}>
-              Look at devices
+              {t("start.lookAtDevices")}
             </Link>
           }
         />
@@ -121,56 +128,57 @@ export default function GetStartedPage() {
   }
 
   const device = setup.first_device_id;
-  const steps: Step[] = [
-    { key: "template", title: "Create a device template", why: "What a kind of device sends and what it can switch.", href: "/templates/new", action: "New template" },
+  const allSteps: Step[] = [
+    { key: "template", title: t("start.template"), why: t("start.templateWhy"), href: "/templates/new", action: t("start.newTemplate") },
     {
       key: "device",
-      title: "Connect a device",
-      why: "Done when it sends its first reading. Installing its firmware takes a computer with Chrome or Edge and a USB cable. No board yet? Add device offers a simulated one.",
+      title: t("start.device"),
+      why: t("start.deviceWhy"),
       href: "/devices/new",
-      action: "Add device",
+      action: t("devices.add"),
     },
     {
       key: "rule",
-      title: "Create a rule",
-      why: "Checks every reading the moment it arrives and acts in under two seconds.",
+      title: t("start.rule", { article: simple ? "an" : "a", rule: w.rule }),
+      why: t("start.ruleWhy"),
       href: device ? `/rules/new?device=${device}` : "/rules/new",
-      action: "New rule",
-      needs: setup.device ? undefined : "Needs a connected device",
+      action: t("start.newRule", { rule: w.rule }),
+      needs: setup.device ? undefined : t("start.needsDevice"),
     },
-    { key: "dashboard", title: "Make a dashboard", why: "Your own view of the readings, live.", href: "/dashboards/new", action: "New dashboard" },
+    { key: "dashboard", title: t("start.dashboard"), why: t("start.dashboardWhy"), href: "/dashboards/new", action: t("start.newDashboard") },
   ];
+  const steps = simple ? allSteps.filter((s) => s.key !== "template") : allSteps;
   const current = steps.find((s) => !setup[s.key])?.key;
 
   return (
     <div className="flex max-w-[760px] flex-col gap-4">
       {header}
       {setup.complete && (
-        <Callout tone="info" title="Setup complete">
+        <Callout tone="info" title={t("start.complete")}>
           <span className="flex flex-wrap items-center justify-between gap-3">
-            <span>From now on you&apos;ll land on your dashboard after signing in.</span>
+            <span>{t("start.completeBody")}</span>
             <Link href={HOME} className={buttonClassName({ size: "sm" })}>
-              Open your dashboard
+              {t("start.openDashboard")}
             </Link>
           </span>
         </Callout>
       )}
-      <ol aria-label="Setup steps" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+      <ol aria-label={t("start.steps")} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
         {steps.map((s, i) => (
           <StepRow key={s.key} n={i + 1} step={s} done={setup[s.key]} current={s.key === current}>
-            {s.key === "device" && device && <FirstReading deviceId={device} deviceName={setup.first_device_name ?? "Your device"} />}
+            {s.key === "device" && device && <FirstReading deviceId={device} deviceName={setup.first_device_name ?? t("start.yourDevice")} />}
             {s.key === "dashboard" && !setup.dashboard && device && (
               <Button variant="link" className="w-fit text-meta" onClick={() => void buildFromDevices()}>
-                Or build one from my devices
+                {t("start.buildFromDevices")}
               </Button>
             )}
           </StepRow>
         ))}
       </ol>
-      <h2 className="pt-2 text-meta font-medium text-ink-muted">Optional</h2>
-      <ol aria-label="Optional steps" className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
+      <h2 className="pt-2 text-meta font-medium text-ink-muted">{t("start.optional")}</h2>
+      <ol aria-label={t("start.optionalSteps")} className="flex flex-col overflow-hidden rounded-xl border border-border bg-surface">
         <StepRow
-          step={{ key: "invite", title: "Invite your team", why: "They see the same devices, dashboards and alerts, with their own role.", href: "/members/invite", action: "Invite" }}
+          step={{ key: "invite", title: t("start.invite"), why: t("start.inviteWhy"), href: "/members/invite", action: t("start.inviteAction") }}
           done={setup.invite}
           current={false}
         />
@@ -193,14 +201,14 @@ function StepRow({ n, step, done, current, children }: { n?: number; step: Step;
       </span>
       <div className="flex min-w-0 flex-1 basis-[260px] flex-col gap-0.5">
         <span className="text-sm font-medium text-ink">
-          <span className="sr-only">{done ? "Done: " : current ? "Next: " : ""}</span>
+          <span className="sr-only">{done ? t("start.donePrefix") : current ? t("start.nextPrefix") : ""}</span>
           {step.title}
         </span>
         <span className="text-meta text-ink-muted">{done ? step.why : (step.needs ?? step.why)}</span>
         {children}
       </div>
       <Link href={step.href} className={cn(buttonClassName({ variant: current ? "primary" : "secondary", size: "sm" }), "ml-auto shrink-0")}>
-        {done ? "Open" : step.action}
+        {done ? t("start.open") : step.action}
       </Link>
     </li>
   );

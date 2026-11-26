@@ -28,6 +28,8 @@ import { Sheet } from "@/ui/Sheet";
 import { useCan } from "@/hooks/useCan";
 import { Text } from "@/ui/Text";
 import { UndoBar } from "@/ui/UndoBar";
+import { tActive as t } from "@iodriven/shared/i18n";
+import { notificationText } from "@iodriven/shared/notification-text";
 
 type UserResponse = components["schemas"]["UserResponse"];
 type MemberResponse = components["schemas"]["MemberResponse"];
@@ -38,9 +40,9 @@ type NotificationResponse = components["schemas"]["NotificationResponse"];
 type Severity = components["schemas"]["NotificationResponse"]["severity"];
 
 const SEVERITY: Record<Severity, { icon: typeof Bell; label: string; color: keyof Palette }> = {
-  critical: { icon: AlertTriangle, label: "Critical", color: "statusError" },
-  warning: { icon: Zap, label: "Warning", color: "statusPending" },
-  info: { icon: Info, label: "Info", color: "inkMuted" },
+  critical: { icon: AlertTriangle, get label() { return t("alerts.severity.critical"); }, color: "statusError" },
+  warning: { icon: Zap, get label() { return t("alerts.severity.warning"); }, color: "statusPending" },
+  info: { icon: Info, get label() { return t("alerts.severity.info"); }, color: "inkMuted" },
 };
 
 /** Alerts (the web's Notifications on a phone, DESIGN.md §8 / §15): one row
@@ -60,15 +62,15 @@ export default function Alerts() {
   const { data: me } = useApiSWR<UserResponse>("/auth/me");
   const { data: members } = useApiSWR<MemberResponse[]>("/tenants/members");
   const who = (id: string | null | undefined) => {
-    if (!id) return "someone";
-    if (id === me?.id) return "you";
+    if (!id) return t("app.alerts.someone");
+    if (id === me?.id) return t("app.alerts.you");
     const m = members?.find((x) => x.user_id === id);
-    return m ? m.name || m.email : "someone";
+    return m ? m.name || m.email : t("app.alerts.someone");
   };
   const alarmState = (n: AlertGroup["latest"]): string | null => {
-    if (n.cleared_at) return `Cleared ${timeAgo(n.cleared_at)}`;
+    if (n.cleared_at) return t("alerts.cleared", { ago: timeAgo(n.cleared_at) });
     if (n.acknowledged_at)
-      return `Acknowledged by ${who(n.acknowledged_by)}, ${timeAgo(n.acknowledged_at)}${n.acknowledged_note ? `: “${n.acknowledged_note}”` : ""}`;
+      return `${t("alerts.acknowledgedBy", { who: who(n.acknowledged_by), ago: timeAgo(n.acknowledged_at) })}${n.acknowledged_note ? `: “${n.acknowledged_note}”` : ""}`;
     return null;
   };
   const canAcknowledge = (g: AlertGroup) => canManage && g.latest.severity !== "info" && !g.latest.acknowledged_at && !g.latest.cleared_at;
@@ -110,8 +112,8 @@ export default function Alerts() {
   const [refreshing, setRefreshing] = useState(false);
 
   const options = [
-    { value: "all" as AlertFilter, label: `All ${summary?.alerts ?? ""}`.trim() },
-    { value: "unread" as AlertFilter, label: `Unread ${unread}` },
+    { value: "all" as AlertFilter, label: `${t("devices.all")} ${summary?.alerts ?? ""}`.trim() },
+    { value: "unread" as AlertFilter, label: `${t("alerts.unread")} ${unread}` },
     ...TYPES.filter((t) => (summary?.unread_by_type[t.value] ?? 0) > 0 || filter === t.value).map((t) => ({
       value: t.value as AlertFilter,
       label: `${t.label} ${summary?.unread_by_type[t.value] ?? 0}`,
@@ -142,7 +144,7 @@ export default function Alerts() {
     setMenu(null);
     await run(async () => {
       const ids = await actions.dismiss(g.key);
-      setUndo({ message: ids.length > 1 ? `${ids.length} notifications dismissed` : "Notification dismissed", ids });
+      setUndo({ message: ids.length > 1 ? t("alerts.dismissedMany", { count: ids.length }) : t("alerts.dismissedOne"), ids });
     }, "dismiss it");
   }
 
@@ -161,23 +163,23 @@ export default function Alerts() {
   const loadError = (summaryError ?? error) && !data;
 
   const empty = isLoading ? (
-    <Text color="inkMuted">Loading alerts…</Text>
+    <Text color="inkMuted">{t("app.alerts.loading")}</Text>
   ) : loadError ? (
-    <Text color="statusError">Couldn&apos;t load alerts. Pull down to try again.</Text>
+    <Text color="statusError">{t("app.alerts.loadFailed")}</Text>
   ) : summary?.alerts === 0 ? (
     <View style={styles.emptyBlock}>
-      <Text weight="semibold">Nothing needs attention</Text>
-      <Text color="inkMuted">No alerts. New ones appear here, with a count on the Alerts tab.</Text>
+      <Text weight="semibold">{t("alerts.emptyTitle")}</Text>
+      <Text color="inkMuted">{t("app.alerts.emptyBody")}</Text>
     </View>
   ) : (
-    <Text color="inkMuted">{filter === "unread" ? "Every notification has been read." : "Nothing of this type is waiting to be read."}</Text>
+    <Text color="inkMuted">{filter === "unread" ? t("alerts.allRead") : t("alerts.noneOfType")}</Text>
   );
 
   return (
     <View style={styles.flex}>
       <Stack.Screen
         options={{
-          title: "Alerts",
+          title: t("nav.alerts"),
           headerRight: () =>
             unread > 0 ? (
               <Pressable
@@ -187,7 +189,7 @@ export default function Alerts() {
                 style={styles.headerButton}
               >
                 <Text weight="medium" color="accent">
-                  Mark all read
+                  {t("app.alerts.markAllRead")}
                 </Text>
               </Pressable>
             ) : null,
@@ -204,7 +206,7 @@ export default function Alerts() {
         }}
         ListHeaderComponent={
           <View style={styles.head}>
-            <Segmented accessibilityLabel="Filter by state" options={options} value={filter} onChange={setFilter} />
+            <Segmented accessibilityLabel={t("alerts.filterState")} options={options} value={filter} onChange={setFilter} />
             {failed && <Text color="statusError">{failed}</Text>}
           </View>
         }
@@ -229,10 +231,10 @@ export default function Alerts() {
           return (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`${sev.label}${isUnread ? ", unread" : ""}: ${n.message}${g.count > 1 ? `, ${g.count} times` : ""}`}
+              accessibilityLabel={`${sev.label}${isUnread ? t("app.alerts.unreadLower") : ""}: ${notificationText(n).message}${g.count > 1 ? t("app.alerts.timesSuffix", { count: g.count }) : ""}`}
               onPress={() => openAlert(g)}
               onLongPress={() => setMenu(g)}
-              accessibilityHint="Long press for actions"
+              accessibilityHint={t("app.alerts.longPress")}
               style={({ pressed }) => [
                 styles.row,
                 { backgroundColor: pressed ? theme.surfaceRaised : theme.surface, borderColor: theme.border },
@@ -244,16 +246,16 @@ export default function Alerts() {
               <Icon size={17} color={theme[sev.color]} style={styles.icon} />
               <View style={styles.text}>
                 <Text weight={isUnread ? "semibold" : "regular"}>
-                  {n.message}
+                  {notificationText(n).message}
                   {g.count > 1 ? (
                     <Text size="meta" color="inkMuted">
                       {`  ×${g.count}`}
                     </Text>
                   ) : null}
                 </Text>
-                {n.detail ? (
+                {notificationText(n).detail ? (
                   <Text size="meta" color="inkMuted">
-                    {n.detail}
+                    {notificationText(n).detail}
                   </Text>
                 ) : null}
                 <Text size="micro" color="inkMuted">
@@ -262,7 +264,7 @@ export default function Alerts() {
               </View>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={`Actions for ${n.message}`}
+                accessibilityLabel={t("devices.actionsFor", { name: notificationText(n).message })}
                 onPress={() => setMenu(g)}
                 hitSlop={8}
                 style={styles.more}
@@ -277,14 +279,14 @@ export default function Alerts() {
       <Sheet
         open={open != null}
         onClose={() => setOpen(null)}
-        title={open?.latest.message ?? "Notification"}
+        title={open ? notificationText(open.latest).message : t("alerts.notification")}
         sub={open ? `${SEVERITY[open.latest.severity].label}${open.count > 1 ? ` · ${open.count} times` : ""}` : undefined}
         footer={
           open ? (
             <>
               {canAcknowledge(open) ? (
                 <Button
-                  label="Acknowledge"
+                  label={t("alerts.acknowledge")}
                   onPress={() => {
                     const key = open.key;
                     setOpen(null);
@@ -292,10 +294,10 @@ export default function Alerts() {
                   }}
                 />
               ) : (
-                <Button label="Done" onPress={() => setOpen(null)} />
+                <Button label={t("ui.done")} onPress={() => setOpen(null)} />
               )}
               <Button
-                label="Mark as unread"
+                label={t("alerts.markUnread")}
                 variant="secondary"
                 onPress={() => {
                   const key = open.key;
@@ -303,14 +305,14 @@ export default function Alerts() {
                   void run(() => actions.markUnread(key), "mark it as unread");
                 }}
               />
-              {canManage && <Button label="Dismiss" variant="danger" onPress={() => void dismiss(open)} />}
+              {canManage && <Button label={t("alerts.dismiss")} variant="danger" onPress={() => void dismiss(open)} />}
             </>
           ) : null
         }
       >
         {open && (
           <>
-            {open.latest.detail ? <Text>{open.latest.detail}</Text> : null}
+            {notificationText(open.latest).detail ? <Text>{notificationText(open.latest).detail}</Text> : null}
             {alarmState(open.latest) ? (
               <Text size="meta" color={open.latest.cleared_at ? "statusOnline" : "inkMuted"}>
                 {alarmState(open.latest)}
@@ -320,16 +322,16 @@ export default function Alerts() {
               facts={[
                 open.latest.device_id
                   ? deviceName.has(open.latest.device_id)
-                    ? { k: "Device", v: deviceName.get(open.latest.device_id)!, onPress: () => go({ pathname: "/devices/[deviceId]", params: { deviceId: open.latest.device_id! } }) }
-                    : { k: "Device", v: "Deleted device" }
+                    ? { k: t("alerts.device"), v: deviceName.get(open.latest.device_id)!, onPress: () => go({ pathname: "/devices/[deviceId]", params: { deviceId: open.latest.device_id! } }) }
+                    : { k: t("alerts.device"), v: t("alerts.deletedDevice") }
                   : null,
                 open.latest.rule_id
                   ? ruleName.has(open.latest.rule_id)
-                    ? { k: "Rule", v: ruleName.get(open.latest.rule_id)!, onPress: () => go({ pathname: "/rules", params: { rule: open.latest.rule_id! } }) }
-                    : { k: "Rule", v: "Deleted rule" }
+                    ? { k: t("alerts.rule"), v: ruleName.get(open.latest.rule_id)!, onPress: () => go({ pathname: "/rules", params: { rule: open.latest.rule_id! } }) }
+                    : { k: t("alerts.rule"), v: t("alerts.deletedRule") }
                   : null,
-                { k: open.count > 1 ? "First" : "When", v: formatWhen(open.first_at) },
-                open.count > 1 ? { k: "Last", v: `${formatWhen(open.last_at)} · ${open.count} times` } : null,
+                { k: open.count > 1 ? t("alerts.first") : t("alerts.when"), v: formatWhen(open.first_at) },
+                open.count > 1 ? { k: t("alerts.last"), v: `${formatWhen(open.last_at)} · ${t("alerts.times", { count: open.count })}` } : null,
               ]}
             />
             {open.count > 1 && <EachTime groupKey={open.key} />}
@@ -346,13 +348,13 @@ export default function Alerts() {
       <Sheet
         open={menu != null}
         onClose={() => setMenu(null)}
-        title={menu?.latest.message ?? "Notification"}
+        title={menu ? notificationText(menu.latest).message : t("alerts.notification")}
         footer={
           menu ? (
             <>
               {menu.unread_count > 0 ? (
                 <Button
-                  label="Mark as read"
+                  label={t("alerts.markRead")}
                   variant="secondary"
                   onPress={() => {
                     const key = menu.key;
@@ -362,7 +364,7 @@ export default function Alerts() {
                 />
               ) : (
                 <Button
-                  label="Mark as unread"
+                  label={t("alerts.markUnread")}
                   variant="secondary"
                   onPress={() => {
                     const key = menu.key;
@@ -373,7 +375,7 @@ export default function Alerts() {
               )}
               {canAcknowledge(menu) && (
                 <Button
-                  label="Acknowledge"
+                  label={t("alerts.acknowledge")}
                   variant="secondary"
                   onPress={() => {
                     const key = menu.key;
@@ -382,7 +384,7 @@ export default function Alerts() {
                   }}
                 />
               )}
-              {canManage && <Button label="Dismiss" variant="danger" onPress={() => void dismiss(menu)} />}
+              {canManage && <Button label={t("alerts.dismiss")} variant="danger" onPress={() => void dismiss(menu)} />}
             </>
           ) : null
         }

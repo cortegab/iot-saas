@@ -834,6 +834,51 @@ path (CLAUDE.md §9.1).
 - No jargon without explanation. For example, the Ladder view keeps its PLC terms but is marked
   "expert".
 
+### 11a. Español (second language)
+
+The platform speaks English and Spanish (user decisions 2026-11-25). **Who sees what:** a person's saved
+**Language** (account menu, Settings → You, the app's More) wins; otherwise the browser's or phone's
+language (any `es-*` → Spanish); otherwise English. The saved choice also sets their emails. One
+catalog for both apps (`@iodriven/shared/i18n`); a string missing in Spanish shows in English.
+
+- **Variant:** neutral Latin American Spanish, *tú*, no regionalisms. Sentence case and verbs on
+  buttons, as in English ("Guardar regla", "Agregar dispositivo").
+- **Use the trade's words, not literal translations.** Terms the field says in English stay in English:
+  MQTT, broker, topic, payload, firmware, OTA, Wi-Fi, Bluetooth, BLE, QR, token, API key, webhook,
+  ESP32, Last Will, dashboard, widget.
+- **Numbers and dates** follow the reader's country (Mexico 27.4, Argentina 27,4), with 24-hour time and
+  "25 nov 2026". Units stay as in English (°C, %, kPa).
+- **Glossary** (Full view / Simple view where they differ). The catalog follows this table; each PR
+  lists the terms it adds.
+
+  | English | Español |
+  |---|---|
+  | Workspace | Espacio de trabajo |
+  | Device | Dispositivo |
+  | Device template / device type | Plantilla / tipo de equipo |
+  | Metric / reading | Variable / lectura |
+  | Actuator / output | Actuador / salida |
+  | Relay | Relé |
+  | Rule / automation | Regla / automatización |
+  | Trigger · condition · action | Disparador · condición · acción |
+  | Threshold · hysteresis | Umbral · histéresis |
+  | Hold time (`for_duration`) | Tiempo de permanencia |
+  | Minimum interval (cooldown) | Intervalo mínimo |
+  | Latch until reset · reset latch | Enclavar hasta restablecer · restablecer |
+  | Dashboard · widget | Dashboard · widget |
+  | Zone / area | Zona / área |
+  | Scene | Escena |
+  | Alarm · alert · notification | Alarma · alerta · notificación |
+  | Acknowledge (an alarm) | Reconocer |
+  | Credential · provisioning | Credencial · aprovisionamiento |
+  | Simple view / Full view | Vista simple / Vista completa |
+  | Owner · Admin · Viewer | Propietario · Administrador · Lector |
+  | Monitor · Automate · Configure · Admin (nav groups) | Monitoreo · Automatización · Configuración · Administración |
+
+- **Status words** (§3): Online *En línea* · Offline *Sin conexión* · Never connected *Nunca conectado* ·
+  Armed *Armada* · Latched *Enclavada* · Disabled *Desactivada* · Can't evaluate *No se puede evaluar*.
+- **Never translated:** what people typed (device, rule and workspace names, custom alert messages).
+
 ---
 
 ## 12. Accessibility and responsive
@@ -1040,8 +1085,14 @@ not a permission (the API still enforces roles).
 - **Devices in Simple:** tiles grouped by zone (§8 *Device tiles*): each tile has the name, its state
   in words, the main reading and a Switch for its first on/off output. The table is one toggle away
   in Full.
-- **A device page in Simple:** Overview and Rules only. Controls lead, readings follow, Health shows
-  its one word; Details, Commands, Settings, wiring and MQTT ids are hidden.
+- **A device page in Simple:** Overview and Rules, plus Settings for whoever can edit devices (it is
+  the one place a device and its alerts are changed; a view never takes that away). Controls lead,
+  readings follow, Health shows its one word; Details, Commands, wiring and MQTT ids are hidden.
+- **Get started in Simple:** three steps, starting at *Connect a device* (Add device makes the
+  device's own type, and *No board yet* needs none); no template step, and *Create an automation*.
+- **Before the server answers:** the view last seen in this browser for that workspace, else the
+  role's default, so nothing shows and then vanishes. A switch that can't be saved goes back with an
+  error toast.
 - **Rules in Simple ("Automations"):** the list and each rule's sentence; the editor opens on Basics
   and the sentence. Hidden: the Ladder view and the Behaviour tab's numbers, which read as one line
   ("Waits 10 s, then acts at most once a minute.").
@@ -1189,3 +1240,15 @@ not a permission (the API still enforces roles).
 | 2026-11-25 | §8 device **Alerts** (ease-of-use plan C6): the device's Settings tab opens with an *Alerts* section, applied at once (no save bar): **Offline and health alerts** On / Mute for 1 hour / 1 day / until I turn them back on (hint says until when, and that rules still run), and **Back online** (*Tell me when it's back online*: an info notification, which never pushes). A muted device shows an *Alerts muted* tag beside its status. |
 | 2026-11-25 | §8 **widget titles** (ease-of-use plan C8; §13's "widget titles" backend need): the widget sheet has an optional **Title** (≤ 60 characters, placeholder = the generated *Reading · Device*); a set title replaces the generated one in the widget's header, on the web (the app with its next release). |
 | 2026-11-25 | §15 app **0.8.0** (ease-of-use plan C9): More → **View → Simple view** (the same per-workspace choice as the web); in Simple the Rules tab reads *Automations*, Devices groups by area and rows drop the area, a device's Health keeps only its one word. Everywhere: the device screen opens with Controls, Health leads with its one word (*Overall*), Details say *Device type / Area* in Simple and *Simulated* when it is; admins get **Alerts** (offline and health alerts on/off, where off mutes until turned back on; *Tell me when it's back online*); dashboards show the **Scenes** row and widgets' own titles. Google sign-in in the app waits for the Android OAuth client. |
+| 2026-11-25 | §15a Simple view gaps: a device page keeps **Settings** in Simple for whoever can edit devices (Alerts stay there); **Get started** in Simple has three steps (no template step; *Create an automation*); until the server answers, the view last seen in this browser (else the role's default) is used, so a Viewer no longer sees Full flash first; a switch that fails to save goes back with an error toast. |
+| 2026-11-25 | §11a **Español** (Spanish plan L1): Spanish as a second language, chosen by the browser (any `es-*`) unless the person saved a **Language** (account menu: a radio group under Simple view with *Browser default · English · Español*; Settings → You, applied at once; phone More). Neutral Latin American *tú*, the trade's terms (English ones kept), numbers by the reader's country. L1 translates the shell: nav, account menu, workspace switcher, command palette, phone bars and More. |
+| 2026-11-25 | §10, §11a Spanish plan L2: sign in, register, password reset, invitations and the public site (landing, product tour, onboarding, deployment, Talk to us, FAQ, page title) in Spanish, rendered on the server in the visitor's language. Longer Spanish nav labels ("Protecciones", "Arranque") keep the landing nav on one line. The privacy policy stays English with a Spanish notice until a reviewed legal translation exists. Copy for the public site lives in `frontend/src/lib/marketing-copy.ts` (web only). |
+| 2026-11-25 | §3, §11a Spanish plan L3: the shared wording (device, rule, health, command and signal states; roles; rule sentences and action summaries; schedules; relative times and dates; the Simple glossary) follows the language on screen, so every list, badge and sentence built from `@iodriven/shared` reads in Spanish. Spanish action summaries put the verb first ("Encender fan1"); schedules read "todos los días a las 22:00", "mar, jue a las 07:30". |
+| 2026-11-25 | §6, §7, §8, §11a Spanish plan L4: devices list (columns, filters, tiles, bulk actions, empty state), device page (tabs, waiting and offline notes, controls, readings, health facts, restart reasons), actuator control (confirmations name the action: "¿Encender fan1?"), alert settings, simulated device note, device actions and command history in Spanish; with them the shared list pieces (pager, filter chips, bulk bar, no-results), the save bar and unsaved-changes guard, confirm and secret dialogs. Spanish lists say "Todos" for an All filter rather than gendering the noun. |
+| 2026-11-25 | §9, §11a Spanish plan L5: rules list (filters, states with hints, triggers, chips), New rule and its recipes (titles, descriptions, tags, and the suggested names and messages, which a rule keeps in the language it was made in), the quick recipe, the rule page (consequence line, health toasts, Scene), rule actions and confirmations, reset-latch verdicts, and the safety sentence ("La regla espera 10 s antes de actuar, se rearma solo cuando…") in Spanish. Still English: the full editor's form and ladder steps and the sentence chips. |
+| 2026-11-25 | §8, §10, §11a Spanish plan L6: notifications (filters, types with hints, severities, alarm states, acknowledge with a note, detail sheet), dashboards (toolbar, edit layout, widgets and their names, scenes, the attention strip, rename / duplicate / delete), Get started and Welcome in Spanish. The notification messages themselves come from the backend (plan L8). Still English: Workspace settings, Members, API keys, the dashboards list and the widget sheet. |
+| 2026-11-25 | §11a Spanish plan L7 (backend): API error messages follow the client's language (Accept-Language; the fixed messages have a Spanish version, anything built with values stays English); the password-reset email follows the person's saved language, else the page they asked from; invitations follow the inviter's saved language, else the workspace's; rule alert emails' subject label (*alerta / liberada*) follows the workspace's email language (`tenants.locale`); push titles follow each phone owner's saved language. Alert message bodies are still written in English until plan L8. |
+| 2026-11-25 | §8, §11a Spanish plan L8: the platform's own notifications (offline, back online, a command not confirmed, a rule's default fired / cleared message) also store a message key and values (`notifications.i18n`), and the clients word them in the reader's language (`@iodriven/shared/notification-text`). A person's own message, older rows and anything not keyed show the stored English. Rule health, device health and template-change notifications are still English. |
+| 2026-11-26 | §15, §11a Spanish plan L9: app 0.9.0 speaks Spanish. It starts in the phone's language (any es-* → Spanish, read through Hermes' Intl, no native module) and switches to the account's saved choice once known; **More → Language** (*Según el teléfono · English · Español*) saves it for the web and emails too. Tabs, More, Alerts (notifications worded from their keys), Devices, the device screen, Rules, Dashboards and Sign in are translated; the Wi-Fi setup and QR scan screens are still English. |
+| 2026-11-26 | §8, §11a Spanish follow-up (L10): Workspace settings (with a new **Email language** field under Alerts, applied at once: the language of rule emails to the listed addresses), Members, API keys and the dashboards list in Spanish. API keys stay *API keys* (field term). |
+| 2026-11-26 | §9, §11a Spanish follow-up (L11): the rule editor in Spanish: steps and questions, When / If / Then / Behaviour forms, operators, validation messages and safety checks, the preview (replay, dry run, other rules), the rule sentence everywhere ("Cuando Temperatura de bay1 > 30 °C durante 10 s, encender Fan; cuando deje de cumplirse, volver a apagar Fan."), the peek, firing history, failed deliveries and versions. On/off actions say the verb (*encender / apagar / volver a apagar*). The Ladder view (expert) stays English. |

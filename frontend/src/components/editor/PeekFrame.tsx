@@ -8,6 +8,9 @@ import { DropdownMenu, type DropdownMenuItem } from "@/components/ui/DropdownMen
 import { FactList } from "@/components/ui/FactList";
 import { LoadingSkeleton } from "@/components/ui/LoadingSkeleton";
 import { PeekNavContext } from "@/components/list/peek-nav";
+import { nounWord, tActive as t } from "@iodriven/shared/i18n";
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /**
  * A record's read-only peek (DESIGN.md §7), shown in a drawer over its list
@@ -57,19 +60,19 @@ export function PeekFrame({
         <div className="-mx-1.5 flex shrink-0 items-center justify-end gap-0.5 @[30rem]:mx-0">
           {nav && nav.index >= 0 && nav.total > 1 && (
             <div className="mr-auto flex items-center @[30rem]:mr-1">
-              <IconButton aria-label={`Previous ${noun}`} disabled={!nav.prev} onClick={() => nav.prev?.()}>
+              <IconButton aria-label={t("frame.previous", { noun: nounWord(noun), Noun: cap(nounWord(noun)) })} disabled={!nav.prev} onClick={() => nav.prev?.()}>
                 <ChevronLeft size={17} />
               </IconButton>
               <span aria-live="polite" className="min-w-[44px] text-center text-xs tabular-nums text-ink-muted">
                 {nav.index + 1} of {nav.total}
               </span>
-              <IconButton aria-label={`Next ${noun}`} disabled={!nav.next} onClick={() => nav.next?.()}>
+              <IconButton aria-label={t("frame.next", { noun: nounWord(noun), Noun: cap(nounWord(noun)) })} disabled={!nav.next} onClick={() => nav.next?.()}>
                 <ChevronRight size={17} />
               </IconButton>
             </div>
           )}
-          {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
-          <IconButton aria-label={`Close ${noun}`} onClick={onClose}>
+          {menu && menu.length > 0 && <DropdownMenu groups={menu} label={t("ui.moreActions")} />}
+          <IconButton aria-label={t("frame.close", { noun: nounWord(noun) })} onClick={onClose}>
             <X size={18} />
           </IconButton>
         </div>
@@ -86,7 +89,7 @@ export function PeekFrame({
 export function PeekOpen({ href, noun }: { href: string; noun: string }) {
   return (
     <Link href={href} className={buttonClassName({ size: "sm" })}>
-      <SquareArrowOutUpRight aria-hidden size={14} /> Open {noun}
+      <SquareArrowOutUpRight aria-hidden size={14} /> {t("frame.open", { noun: nounWord(noun) })}
     </Link>
   );
 }
@@ -104,7 +107,7 @@ export function PeekSection({ title, children }: { title: string; children: Reac
 /** While the record loads, or when it no longer exists. */
 export function PeekPlaceholder({ noun, missing, onClose }: { noun: string; missing?: boolean; onClose: () => void }) {
   return (
-    <PeekFrame noun={noun} title={missing ? `This ${noun} doesn't exist` : "Loading…"} onClose={onClose} description={missing ? "It may have been deleted." : undefined}>
+    <PeekFrame noun={noun} title={missing ? t("ui.editor.missing", { noun }) : t("common.loading")} onClose={onClose} description={missing ? t("ui.editor.maybeDeleted") : undefined}>
       {!missing && <LoadingSkeleton rows={3} rowClassName="h-6" />}
     </PeekFrame>
   );

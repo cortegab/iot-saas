@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { ApiRequestError, apiClient } from "@/lib/api-client";
+import { useLocale, useT } from "@/lib/i18n";
 import type { components } from "@/types/api";
 
 type TokenPairResponse = components["schemas"]["TokenPairResponse"];
@@ -52,7 +53,7 @@ export function GoogleSignIn({
   onError,
 }: {
   text?: "continue_with" | "signup_with" | "signin_with";
-  extra?: { tenant_name?: string; invitation_token?: string };
+  extra?: { tenant_name?: string; invitation_token?: string; locale?: string };
   onSession: (data: TokenPairResponse) => void;
   onError: (message: string) => void;
 }) {
@@ -61,8 +62,10 @@ export function GoogleSignIn({
   const box = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
   // The latest props, for the callback Google keeps from the first render.
-  const latest = useRef({ extra, onSession, onError });
-  latest.current = { extra, onSession, onError };
+  const t = useT();
+  const locale = useLocale();
+  const latest = useRef({ extra, onSession, onError, t });
+  latest.current = { extra, onSession, onError, t };
 
   useEffect(() => {
     if (!clientId || !box.current) return;
@@ -75,28 +78,28 @@ export function GoogleSignIn({
           ux_mode: "popup",
           callback: ({ credential }) => {
             if (!credential) return;
-            const { extra: more, onSession: ok, onError: bad } = latest.current;
+            const { extra: more, onSession: ok, onError: bad, t: tr } = latest.current;
             apiClient
               .post<TokenPairResponse>("/auth/google", {}, { id_token: credential, ...more })
               .then(ok)
-              .catch((err: unknown) => bad(err instanceof ApiRequestError && err.message ? err.message : "Couldn't sign in with Google. Try again."));
+              .catch((err: unknown) => bad(err instanceof ApiRequestError && err.message ? err.message : tr("auth.google.failed")));
           },
         });
-        gis.renderButton(box.current, { type: "standard", theme: "outline", size: "large", shape: "rectangular", text, logo_alignment: "center", locale: "en", width: box.current.offsetWidth || 320 });
+        gis.renderButton(box.current, { type: "standard", theme: "outline", size: "large", shape: "rectangular", text, logo_alignment: "center", locale, width: box.current.offsetWidth || 320 });
       })
       .catch(() => setFailed(true));
     return () => {
       cancelled = true;
     };
-  }, [clientId, text]);
+  }, [clientId, text, locale]);
 
   if (!clientId || failed) return null;
   return (
     <div className="flex flex-col gap-3.5">
-      <div ref={box} aria-label="Continue with Google" className="flex min-h-10 w-full justify-center" />
+      <div ref={box} aria-label={t("auth.google.label")} className="flex min-h-10 w-full justify-center" />
       <div className="flex items-center gap-3 text-xs text-ink-muted" aria-hidden>
         <span className="h-px flex-1 bg-border" />
-        or with your email
+        {t("auth.google.orEmail")}
         <span className="h-px flex-1 bg-border" />
       </div>
     </div>

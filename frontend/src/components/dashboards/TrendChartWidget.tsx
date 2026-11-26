@@ -4,6 +4,8 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { TrendChart } from "@/components/chart/TrendChart";
 import { WidgetCard } from "@/components/dashboards/WidgetCard";
 import { useDashboardRange, useWidgetDevice } from "@/components/dashboards/widget-common";
+import { tActive as t } from "@iodriven/shared/i18n";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 /** A trend on the dashboard's one range (demo H): no range buttons of its own.
  * In the grid it fills its cell; stacked on a phone (`fill={false}`) it takes
@@ -12,8 +14,8 @@ export function TrendChartWidget({ deviceId, metric, fill = true }: { deviceId: 
   const { device, meta } = useWidgetDevice(deviceId, metric);
   const range = useDashboardRange();
   return (
-    <WidgetCard title={meta?.name ?? metric ?? "Trend"} device={device}>
-      {metric ? <TrendChart deviceId={deviceId} metric={metric} meta={meta} rangeMs={range} fillHeight={fill} /> : <EmptyState title="No metric configured" />}
+    <WidgetCard title={meta?.name ?? metric ?? t("devices.trend")} device={device}>
+      {metric ? <TrendChart deviceId={deviceId} metric={metric} meta={meta} rangeMs={range} fillHeight={fill} /> : <EmptyState title={tr("wsheet.noMetricConfigured")} />}
     </WidgetCard>
   );
 }

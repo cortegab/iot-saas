@@ -9,6 +9,7 @@
  * strapping, flash, USB or the provisioning-reset button's pin. */
 import { BOARDS, type SketchBoard } from "@/lib/firmware-sketch";
 import type { BoardModel, PinNeed } from "@/lib/hardware/driver-catalog";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 export const CHIP_PINS: Record<SketchBoard, { usable: number[]; adc1: number[]; inputOnly: number[]; bootToggles: number[] }> = {
   esp32: {
@@ -72,11 +73,11 @@ export function preferredPins(model: BoardModel, needs: PinNeed): number[] {
 /** Why a pin can't take this role on this board, or null if it can. */
 export function pinProblem(model: BoardModel, needs: PinNeed, pin: number): string | null {
   const chip = CHIP_PINS[model.chip];
-  if (!model.pins.includes(pin) || !chip.usable.includes(pin)) return `GPIO ${pin} isn't free on the ${model.label}. Pick another pin.`;
-  if (needs === "adc1" && !chip.adc1.includes(pin)) return `GPIO ${pin} can't read analog while Wi-Fi is on. Pick an ADC1 pin.`;
-  if ((needs === "output" || needs === "bus") && chip.inputOnly.includes(pin)) return `GPIO ${pin} is input-only. Pick another pin.`;
+  if (!model.pins.includes(pin) || !chip.usable.includes(pin)) return tr("hwv.pinNotFree", { pin, board: model.label });
+  if (needs === "adc1" && !chip.adc1.includes(pin)) return tr("hwv.pinAdc", { pin });
+  if ((needs === "output" || needs === "bus") && chip.inputOnly.includes(pin)) return tr("hwv.pinInputOnly", { pin });
   if (needs === "output" && chip.bootToggles.includes(pin))
-    return `GPIO ${pin} switches on and off while the board starts, so an output there twitches at every restart. Pick another pin.`;
+    return tr("hwv.pinBoot", { pin });
   return null;
 }
 

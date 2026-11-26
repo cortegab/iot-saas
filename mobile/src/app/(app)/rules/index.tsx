@@ -1,7 +1,7 @@
 import type { components } from "@iodriven/shared/api";
 import { ApiRequestError } from "@iodriven/shared/api-client";
 import { RULE_STATE, ruleStateKey } from "@iodriven/shared/rule-text";
-import { DISABLE_GUARDED_RULE, guardsHardware, resetLatchReadings, resetLatchVerdict } from "@iodriven/shared/rule-safety";
+import { RULE_SAFETY, guardsHardware, resetLatchReadings, resetLatchVerdict } from "@iodriven/shared/rule-safety";
 import { timeAgo } from "@iodriven/shared/time-ago";
 import * as Linking from "expo-linking";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
@@ -21,22 +21,23 @@ import { StatusDot } from "@/ui/StatusDot";
 import { Switch } from "@/ui/Switch";
 import { Text } from "@/ui/Text";
 import { UndoBar } from "@/ui/UndoBar";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type SimulateResponse = components["schemas"]["SimulateResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
 type RuleActivityResponse = components["schemas"]["RuleActivityResponse"];
 
 const FILTERS: { value: RuleFilter; label: string }[] = [
-  { value: "armed", label: "Armed" },
-  { value: "latched", label: "Latched" },
-  { value: "stale", label: "Can't evaluate" },
-  { value: "disabled", label: "Disabled" },
+  { value: "armed", get label() { return RULE_STATE.armed.label; } },
+  { value: "latched", get label() { return RULE_STATE.latched.label; } },
+  { value: "stale", get label() { return RULE_STATE.stale.label; } },
+  { value: "disabled", get label() { return RULE_STATE.disabled.label; } },
 ];
 
 function confirm(title: string, body: string, action: string): Promise<boolean> {
   return new Promise((resolve) =>
     Alert.alert(title, body, [
-      { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
+      { text: t("common.cancel"), style: "cancel", onPress: () => resolve(false) },
       { text: action, onPress: () => resolve(true) },
     ], { cancelable: true, onDismiss: () => resolve(false) }),
   );
@@ -83,7 +84,7 @@ export default function Rules() {
       // The same check as the web: turning off a rule that switches hardware
       // or latches removes a protection, so it asks first.
       if (!enabled && undoable && guardsHardware(rule)) {
-        const ok = await confirm(`Disable ${rule.name}?`, DISABLE_GUARDED_RULE, "Disable rule");
+        const ok = await confirm(t("rules.actions.disableTitle", { name: rule.name }), RULE_SAFETY.disableGuarded, t("rules.actions.disableConfirm"));
         if (!ok) return;
       }
       setBusy(rule.id);
@@ -112,9 +113,9 @@ export default function Rules() {
     }
     const readings = resetLatchReadings(rule);
     const ok = await confirm(
-      `Reset ${rule.name}?`,
+      t("rules.actions.resetTitle", { name: rule.name }),
       [resetLatchVerdict(sim), ...(readings.length ? ["", ...readings] : [])].join("\n"),
-      "Reset latch",
+      t("rules.actions.resetConfirm"),
     );
     if (!ok) return;
     setBusy(rule.id);
@@ -151,7 +152,7 @@ export default function Rules() {
 
   return (
     <View style={styles.flex}>
-      <Stack.Screen options={{ title: "Rules" }} />
+      <Stack.Screen options={{ title: t("rules.title") }} />
       <FlatList
         data={rows}
         keyExtractor={(r) => r.id}
@@ -168,7 +169,7 @@ export default function Rules() {
         }
         ListHeaderComponent={
           <View style={styles.head}>
-            <Segmented accessibilityLabel="Filter by state" options={options} value={filter} onChange={(value) => setPicked({ link: state, value })} />
+            <Segmented accessibilityLabel={t("rules.filterState")} options={options} value={filter} onChange={(value) => setPicked({ link: state, value })} />
             {failed && <Text color="statusError">{failed}</Text>}
           </View>
         }
@@ -227,16 +228,16 @@ export default function Rules() {
       <Sheet
         open={openRule != null}
         onClose={() => setOpen(null)}
-        title={openRule?.name ?? "Rule"}
+        title={openRule?.name ?? t("app.screens.rule")}
         sub={openRule ? RULE_STATE[ruleStateKey(openRule)].label : undefined}
         footer={
           openRule ? (
             <>
               {canWrite && openRule.latched && openRule.enabled && (
-                <Button label="Reset latch" busy={busy === openRule.id} onPress={() => void resetLatch(openRule)} />
+                <Button label={t("rules.actions.resetConfirm")} busy={busy === openRule.id} onPress={() => void resetLatch(openRule)} />
               )}
-              <Button label="Edit on the web" variant="secondary" onPress={() => void Linking.openURL(`${webUrl()}/rules/${openRule.id}`)} />
-              <Button label="Done" variant="secondary" onPress={() => setOpen(null)} />
+              <Button label={t("app.screens.editOnWeb")} variant="secondary" onPress={() => void Linking.openURL(`${webUrl()}/rules/${openRule.id}`)} />
+              <Button label={t("ui.done")} variant="secondary" onPress={() => setOpen(null)} />
             </>
           ) : null
         }
@@ -248,9 +249,9 @@ export default function Rules() {
             {canWrite && (
               <View style={styles.toggle}>
                 <View style={styles.flex}>
-                  <Text weight="medium">{openRule.enabled ? "Enabled" : "Disabled"}</Text>
+                  <Text weight="medium">{openRule.enabled ? t("app.screens.enabled") : t("app.screens.disabled")}</Text>
                   <Text size="meta" color="inkMuted">
-                    {openRule.enabled ? "Fires when its trigger and conditions are met." : "Keeps its settings and history, but won't fire."}
+                    {openRule.enabled ? t("rules.actions.enabledDetail") : t("rules.actions.disabledDetail")}
                   </Text>
                 </View>
                 <Switch
@@ -267,7 +268,7 @@ export default function Rules() {
             {openRule.health.signals.length > 0 && (
               <View style={styles.signals}>
                 <Text size="meta" weight="medium" color="inkMuted">
-                  Inputs
+                  {t("app.screens.inputs")}
                 </Text>
                 {openRule.health.signals.map((s) => (
                   <View key={`${s.device_id}/${s.metric}`} style={styles.signal}>

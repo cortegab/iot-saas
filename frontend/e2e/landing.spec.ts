@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { API_URL, landed, login } from "./fixtures";
+import { API_URL, chooseWorkspaceIfAsked, landed, login } from "./fixtures";
 
 // DESIGN.md §4 Landing: every entry point goes through /home, which sends
 // each person where they belong; a ?next= link skips it.
@@ -9,6 +9,7 @@ async function signIn(page: import("@playwright/test").Page, next?: string) {
   await page.getByLabel("Email").fill(process.env.E2E_EMAIL!);
   await page.getByLabel("Password", { exact: true }).fill(process.env.E2E_PASSWORD!);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  if (!next) await chooseWorkspaceIfAsked(page);
 }
 
 test("sign-in lands on the default dashboard, and a ?next= link still wins", async ({ page, request }) => {

@@ -13,9 +13,10 @@ import { AuthCard } from "@/components/auth/AuthCard";
 import { GoogleSignIn } from "@/components/auth/GoogleSignIn";
 import { PasswordInput } from "@/components/ui/PasswordInput";
 import { ApiRequestError, apiClient } from "@/lib/api-client";
-import { ROLE_LABEL, toRole } from "@/lib/permissions";
+import { toRole } from "@/lib/permissions";
 import { safeNext } from "@/lib/safe-next";
 import type { components } from "@/types/api";
+import { useT } from "@/lib/i18n";
 
 type TokenPairResponse = components["schemas"]["TokenPairResponse"];
 
@@ -26,6 +27,7 @@ type TokenPairResponse = components["schemas"]["TokenPairResponse"];
 export default function LoginPage() {
   const { adoptSession } = useAuth();
   const router = useRouter();
+  const t = useT();
   const params = useSearchParams();
   const next = safeNext(params.get("next"));
   const [email, setEmail] = useState("");
@@ -56,8 +58,8 @@ export default function LoginPage() {
       setFailures((n) => n + 1);
       setError(
         err instanceof ApiRequestError && err.status === 401
-          ? "That email and password don't match. Check both and try again."
-          : "Couldn't sign in right now. Try again in a moment.",
+          ? t("auth.login.mismatch")
+          : t("auth.login.failed"),
       );
     } finally {
       setSubmitting(false);
@@ -66,8 +68,8 @@ export default function LoginPage() {
 
   if (choosing) {
     return (
-      <AuthCard title="Choose a workspace" description={`${email} belongs to ${choosing.memberships.length} workspaces.`}>
-        <ul aria-label="Workspaces" className="flex flex-col gap-2">
+      <AuthCard title={t("auth.login.chooseTitle")} description={t("auth.login.chooseDescription", { email, count: choosing.memberships.length })}>
+        <ul aria-label={t("common.workspaces")} className="flex flex-col gap-2">
           {choosing.memberships.map((m) => {
             const role = toRole(m.role);
             return (
@@ -82,7 +84,7 @@ export default function LoginPage() {
                   </span>
                   <span className="flex min-w-0 flex-1 flex-col">
                     <strong className="truncate text-sm font-semibold text-ink">{m.tenant_name}</strong>
-                    <span className="text-xs text-ink-muted">{role ? ROLE_LABEL[role] : m.role}</span>
+                    <span className="text-xs text-ink-muted">{role ? t(`roles.${role}`) : m.role}</span>
                   </span>
                   <ChevronRight aria-hidden size={16} className="text-ink-muted" />
                 </button>
@@ -90,20 +92,20 @@ export default function LoginPage() {
             );
           })}
         </ul>
-        <p className="text-xs text-ink-muted">Switch any time from the workspace menu at the top of the sidebar.</p>
+        <p className="text-xs text-ink-muted">{t("auth.login.chooseHint")}</p>
       </AuthCard>
     );
   }
 
   return (
     <AuthCard
-      title="Sign in"
-      description="to your workspace"
+      title={t("auth.login.title")}
+      description={t("auth.login.description")}
       footer={
         <>
-          No account?{" "}
+          {t("auth.login.noAccount")}{" "}
           <Link href="/register" className="font-medium text-accent hover:underline">
-            Create a workspace
+            {t("auth.login.createWorkspace")}
           </Link>
         </>
       }
@@ -113,24 +115,24 @@ export default function LoginPage() {
         onError={setError}
       />
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3.5">
-        {params.get("reset") === "1" && <Callout>Password changed. Sign in with the new one.</Callout>}
+        {params.get("reset") === "1" && <Callout>{t("auth.login.passwordChanged")}</Callout>}
         {error && (
           <Callout tone="error">
             <span role="alert">
               <strong className="font-semibold">{error}</strong>
-              {failures >= 2 && <span className="block">Check Caps Lock, or reset your password.</span>}
+              {failures >= 2 && <span className="block">{t("auth.login.capsHint")}</span>}
             </span>
           </Callout>
         )}
-        <Field label="Email">
+        <Field label={t("auth.email")}>
           <Input type="email" required autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         <Field
-          label="Password"
-          warning={failures >= 2 && capsOn ? "Caps Lock is on." : undefined}
+          label={t("auth.password")}
+          warning={failures >= 2 && capsOn ? t("auth.login.capsOn") : undefined}
           action={
             <Link href="/forgot-password" className="text-xs font-medium text-accent hover:underline">
-              Forgot password?
+              {t("auth.login.forgot")}
             </Link>
           }
         >
@@ -138,10 +140,10 @@ export default function LoginPage() {
         </Field>
         <label className="flex cursor-pointer items-start gap-2 text-sm text-ink">
           <input type="checkbox" checked={keep} onChange={(e) => setKeep(e.target.checked)} className="mt-[3px] accent-[var(--color-accent)]" />
-          Keep me signed in on this device
+          {t("auth.login.keep")}
         </label>
         <Button type="submit" disabled={submitting} className="w-full">
-          {submitting ? "Signing in…" : "Sign in"}
+          {submitting ? t("auth.login.signingIn") : t("auth.signIn")}
         </Button>
       </form>
     </AuthCard>

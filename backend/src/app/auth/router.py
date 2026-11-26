@@ -28,6 +28,7 @@ from app.auth.schemas import (
 )
 from app.config import settings
 from app.db import get_session, set_user_context
+from app.i18n import locale_from_header, t
 from app.notifications.email import EmailMessage, send_after_commit
 from app.redis import redis_client
 from app.shared.client_ip import client_ip
@@ -60,7 +61,7 @@ async def register(
 ) -> TokenPairResponse:
     try:
         user, _tenant = await service.register_user(
-            session, body.email, body.password, body.tenant_name, body.name
+            session, body.email, body.password, body.tenant_name, body.name, body.locale or "en"
         )
     except service.EmailAlreadyRegisteredError as exc:
         raise HTTPException(
@@ -127,7 +128,9 @@ async def google_sign_in(
     first = (identity.name or identity.email.split("@")[0]).split()[0]
     tenant_name = None if preview else (body.tenant_name or "").strip() or f"{first}'s workspace"
     try:
-        user, _created = await service.user_for_google(session, identity, tenant_name)
+        user, _created = await service.user_for_google(
+            session, identity, tenant_name, body.locale or "en"
+        )
     except service.GoogleAccountMismatchError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -166,12 +169,7 @@ async def logout(
 
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)) -> UserResponse:
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        name=current_user.name,
-        created_at=current_user.created_at,
-    )
+    return _user_response(current_user)
 
 
 @router.get("/invitations/{token}", response_model=InvitationPreviewResponse)
@@ -259,7 +257,9 @@ _RESET_WINDOW_S = 15 * 60
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
 async def forgot_password(
-    body: ForgotPasswordRequest, session: AsyncSession = Depends(get_session, scope="function")
+    body: ForgotPasswordRequest,
+    session: AsyncSession = Depends(get_session, scope="function"),
+    accept_language: str | None = Header(default=None),
 ) -> dict[str, str]:
     """Always 202 with the same message — whether the email has an account is
     never revealed. At most a few emails per address per 15 minutes."""
@@ -272,15 +272,17 @@ async def forgot_password(
     result = await service.request_password_reset(session, body.email)
     if result is not None:
         user, token = result
+        # Their saved language, else the page they asked from (DESIGN.md §11a).
+        lang = user.locale or locale_from_header(accept_language)
         send_after_commit(
             session,
             EmailMessage(
                 to=[user.email],
-                subject="Reset your password",
-                body=(
-                    "Someone (hopefully you) asked to reset your password.\n\n"
-                    f"Choose a new one:\n{settings.app_base_url}/reset-password?token={token}\n\n"
-                    "The link works once and expires in 30 minutes. If you didn't ask, ignore this email."
+                subject=t(lang, "email.reset.subject"),
+                body=t(
+                    lang,
+                    "email.reset.body",
+                    link=f"{settings.app_base_url}/reset-password?token={token}",
                 ),
             ),
         )
@@ -306,5 +308,16 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> UserResponse:
-    user = await service.update_profile(session, current_user, body.name)
-    return UserResponse(id=user.id, email=user.email, name=user.name, created_at=user.created_at)
+    changes = {field: getattr(body, field) for field in body.model_fields_set}
+    user = await service.update_profile(session, current_user, changes)
+    return _user_response(user)
+
+
+def _user_response(user: User) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        created_at=user.created_at,
+        locale=user.locale,  # type: ignore[arg-type]
+    )

@@ -17,6 +17,7 @@ import {
 import { slugify } from "@/lib/slug";
 import { UNIT_CATEGORIES } from "@/lib/units";
 import type { components } from "@/types/api";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
 type CatalogMetric = components["schemas"]["CatalogMetric"];
@@ -253,9 +254,9 @@ export interface KeyUsage {
 export function usageText(u: KeyUsage | undefined): string {
   if (!u || (u.rules === 0 && u.widgets === 0)) return "";
   const parts: string[] = [];
-  if (u.rules) parts.push(`${u.rules} rule${u.rules === 1 ? "" : "s"}`);
-  if (u.widgets) parts.push(`${u.widgets} dashboard widget${u.widgets === 1 ? "" : "s"}`);
-  return parts.join(" and ");
+  if (u.rules) parts.push(tr("tplv.rules", { count: u.rules }));
+  if (u.widgets) parts.push(tr("tplv.widgets", { count: u.widgets }));
+  return parts.length === 2 ? tr("tplv.and", { a: parts[0], b: parts[1] }) : (parts[0] ?? "");
 }
 
 /** Errors (block save) and warnings (explain a risk), keyed by field path. */
@@ -272,29 +273,29 @@ export function validateTemplate(
   const errors: Record<string, string> = { ...hardware.errors };
   const warnings: Record<string, string> = { ...hardware.warnings };
   const name = d.name.trim();
-  if (!name) errors["general.name"] = "Give the template a name.";
+  if (!name) errors["general.name"] = tr("tplv.nameTemplate");
   else if (ctx.otherNames.some((n) => n.trim().toLowerCase() === name.toLowerCase()))
-    errors["general.name"] = "Another template already has this name.";
+    errors["general.name"] = tr("tplv.nameTaken");
 
   const checkKeys = (kind: "metrics" | "actuators") => {
     const seen = new Map<string, number>();
     d[kind].forEach((row, i) => {
       const p = `${kind}.${i}.`;
-      if (!row.name.trim()) errors[p + "name"] = "Enter a name.";
+      if (!row.name.trim()) errors[p + "name"] = tr("tplv.enterName");
       const key = row.key.trim();
-      if (!key) errors[p + "key"] = "Enter a key. It's filled from the name until you edit it.";
+      if (!key) errors[p + "key"] = tr("tplv.enterKey");
       else if (key !== row.origKey && !KEY_PATTERN.test(key))
-        errors[p + "key"] = "Use letters, digits, - and _ only (no spaces, / + # or a leading $). The key becomes an MQTT topic segment.";
+        errors[p + "key"] = tr("tplv.keyPattern");
       else if (kind === "metrics" && RESERVED_METRIC_KEYS.includes(key.toLowerCase()))
-        errors[p + "key"] = `“${key}” is reserved by the device contract (…/${key.toLowerCase()} topic).`;
+        errors[p + "key"] = tr("tplv.keyReserved", { key, topic: key.toLowerCase() });
       else if (seen.has(key.toLowerCase())) {
         const other = d[kind][seen.get(key.toLowerCase())!];
-        errors[p + "key"] = `Already used by ${kind === "metrics" ? "metric" : "actuator"} “${other.name || other.key}”.`;
+        errors[p + "key"] = tr(kind === "metrics" ? "tplv.usedByMetric" : "tplv.usedByActuator", { name: other.name || other.key });
       }
       if (key && !seen.has(key.toLowerCase())) seen.set(key.toLowerCase(), i);
       if (row.origKey && key !== row.origKey && !errors[p + "key"]) {
         const u = usageText(ctx.usage?.[kind][row.origKey]);
-        if (u) warnings[p + "key"] = `Renaming from “${row.origKey}” disconnects ${u}. History stays under the old key.`;
+        if (u) warnings[p + "key"] = tr("tplv.renameWarn", { key: row.origKey, used: u });
       }
     });
   };
@@ -304,35 +305,35 @@ export function validateTemplate(
   d.metrics.forEach((m, i) => {
     const p = `metrics.${i}.`;
     if (m.data_type === "float") {
-      if (m.decimals !== "" && !/^(10|[0-9])$/.test(m.decimals.trim())) errors[p + "decimals"] = "Enter a whole number from 0 to 10.";
+      if (m.decimals !== "" && !/^(10|[0-9])$/.test(m.decimals.trim())) errors[p + "decimals"] = tr("tplv.decimals");
       const lo = num(m.min);
       const hi = num(m.max);
-      if (m.min.trim() !== "" && Number.isNaN(lo)) errors[p + "min"] = "Enter a number.";
-      if (m.max.trim() !== "" && Number.isNaN(hi)) errors[p + "max"] = "Enter a number.";
-      else if (lo != null && hi != null && !Number.isNaN(lo) && hi <= lo) errors[p + "max"] = `Must be greater than min (${m.min}).`;
+      if (m.min.trim() !== "" && Number.isNaN(lo)) errors[p + "min"] = tr("tplv.number");
+      if (m.max.trim() !== "" && Number.isNaN(hi)) errors[p + "max"] = tr("tplv.number");
+      else if (lo != null && hi != null && !Number.isNaN(lo) && hi <= lo) errors[p + "max"] = tr("tplv.greaterThanMin", { min: m.min });
     }
     if (m.publish !== "on_change" && m.interval.trim() !== "" && !(Number(m.interval) >= 1))
-      errors[p + "interval"] = "At least 1 second.";
+      errors[p + "interval"] = tr("tplv.atLeastSecond");
     if (m.publish === "on_change" && m.deadband.trim() !== "" && !(Number(m.deadband) >= 0))
-      errors[p + "deadband"] = "Enter 0 or more.";
+      errors[p + "deadband"] = tr("tplv.zeroOrMore");
   });
 
   d.actuators.forEach((a, i) => {
     const p = `actuators.${i}.`;
     if (a.value_type === "bool") {
-      if (!a.on.trim()) errors[p + "on"] = "Enter the value sent for On.";
-      if (!a.off.trim()) errors[p + "off"] = "Enter the value sent for Off.";
-      else if (a.on.trim() === a.off.trim()) errors[p + "off"] = "On and Off must send different values.";
+      if (!a.on.trim()) errors[p + "on"] = tr("tplv.onValue");
+      if (!a.off.trim()) errors[p + "off"] = tr("tplv.offValue");
+      else if (a.on.trim() === a.off.trim()) errors[p + "off"] = tr("tplv.onOffDiffer");
     }
-    if (a.value_type === "string" && !a.allowed.trim()) errors[p + "allowed"] = "List the values it accepts, separated by commas.";
+    if (a.value_type === "string" && !a.allowed.trim()) errors[p + "allowed"] = tr("tplv.allowed");
   });
 
   // Allowed (a template can be filled in later), but a device on it shows nothing and has nothing to switch.
   if (d.metrics.length === 0 && d.actuators.length === 0)
     warnings[EMPTY_TEMPLATE_WARNING] =
       d.runsOn === "own_code"
-        ? "It won't send readings or switch anything yet. Add a metric or an actuator on Data."
-        : "It won't send readings or switch anything yet. Add the parts wired to the board on Hardware.";
+        ? tr("tplv.emptyOwn")
+        : tr("tplv.emptyParts");
 
   return { errors, warnings };
 }
@@ -351,8 +352,8 @@ export function brokenUsages(
       const u = usageText(usage[kind][row.origKey]);
       if (!u) continue;
       const now = d[kind].find((r) => r.uid === row.uid);
-      if (!now) out.push(`Removing ${kind === "metrics" ? "metric" : "actuator"} “${row.origKey}” disconnects ${u}.`);
-      else if (now.key.trim() !== row.origKey) out.push(`Renaming “${row.origKey}” → “${now.key.trim()}” disconnects ${u}.`);
+      if (!now) out.push(tr(kind === "metrics" ? "tplv.removeMetric" : "tplv.removeActuator", { key: row.origKey, used: u }));
+      else if (now.key.trim() !== row.origKey) out.push(tr("tplv.renameBreak", { from: row.origKey, to: now.key.trim(), used: u }));
     }
   }
   return out;

@@ -5,6 +5,7 @@ import { HardwareSection } from "@/components/catalog/HardwareSection";
 import { EditorSection } from "@/components/editor/EditorFrame";
 import { useDriverCatalog } from "@/lib/hardware/driver-catalog";
 import type { HardwareDraft, KeyedRow } from "@/lib/hardware/hardware-draft";
+import { tActive as tr } from "@iodriven/shared/i18n";
 
 /** The one Wiring section (DESIGN.md §8), for a template and for a device's
  * own wiring alike: the board and its parts, from the published firmware's
@@ -46,7 +47,7 @@ export function WiringSection({
 }) {
   const { data, error, isLoading } = useDriverCatalog();
   return (
-    <EditorSection id="hardware" title="Wiring" lead={lead}>
+    <EditorSection id="hardware" title={tr("tpls.wiring")} lead={lead}>
       {header}
       {hardware !== undefined && (
         <HardwareSection
