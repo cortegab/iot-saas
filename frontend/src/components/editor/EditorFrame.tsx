@@ -10,6 +10,7 @@ import { Tabs } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
 import { cn } from "@/lib/cn";
 import { PAGE_WITH_BAR, SAVE_BAR } from "@/components/editor/save-bar";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 export type EditorMode = "dock" | "drawer" | "page";
 
@@ -336,8 +337,8 @@ export function EditorFrame({
         if (n > 0) {
           toast({
             tone: "error",
-            title: `${n} field${n === 1 ? " needs" : "s need"} attention`,
-            detail: "Moved you to the first one. The red count in the save bar takes you to the next.",
+            title: t("ui.editor.needAttention", { count: n }),
+            detail: t("ui.editor.movedToFirst"),
           });
         }
       });
@@ -356,7 +357,7 @@ export function EditorFrame({
           first.scrollIntoView({ block: "center", behavior: "smooth" });
           first.focus({ preventScroll: true });
         } else {
-          toast({ tone: "error", title: "Fix the marked items first" });
+          toast({ tone: "error", title: t("ui.editor.fixFirst") });
         }
       });
       return;
@@ -406,18 +407,18 @@ export function EditorFrame({
   // Creating says one thing whatever has been typed (DESIGN.md §7); "Unsaved
   // changes" is for editing a record that exists.
   const stateText = status.saving ? (
-    "Saving…"
+    t("ui.saving")
   ) : readOnly ? null : status.isNew ? (
-    "Not created yet"
+    t("ui.editor.notCreated")
   ) : status.dirty ? (
     <>
       <span aria-hidden className="mr-1.5 inline-block h-2 w-2 rounded-full bg-status-pending" />
-      Unsaved changes
+      {t("ui.editor.unsaved")}
     </>
   ) : (
     <>
       <Check aria-hidden size={14} className="mr-1 inline text-status-online" />
-      All changes saved
+      {t("ui.editor.allSaved")}
     </>
   );
 
@@ -472,7 +473,7 @@ export function EditorFrame({
             </>
           )
         }
-        menu={menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
+        menu={menu && menu.length > 0 && <DropdownMenu groups={menu} label={t("ui.moreActions")} />}
       >
         {consequence && <p className="mt-1 max-w-[70ch] text-sm text-ink-muted">{consequence}</p>}
       </HeaderBlock>
@@ -489,7 +490,7 @@ export function EditorFrame({
       </div>
       <div className="flex shrink-0 items-center gap-1 max-md:order-first max-md:justify-end">
         {headerActions}
-        {menu && menu.length > 0 && <DropdownMenu groups={menu} label="More actions" />}
+        {menu && menu.length > 0 && <DropdownMenu groups={menu} label={t("ui.moreActions")} />}
         {closeButton}
       </div>
     </div>
@@ -497,7 +498,7 @@ export function EditorFrame({
 
   const jump = showJump && (
     <nav
-      aria-label="Sections"
+      aria-label={t("ui.sections")}
       className={cn(
         "flex shrink-0 gap-1 overflow-x-auto [scrollbar-width:none]",
         mode === "page"
@@ -611,7 +612,7 @@ export function EditorFrame({
       {readOnly && readOnlyNote !== false && (
         <p className="flex items-center gap-2 rounded-md bg-accent-muted px-3.5 py-2.5 text-meta text-accent-strong">
           <Eye aria-hidden size={15} />
-          {readOnlyNote ?? "View only. Ask an admin to make changes."}
+          {readOnlyNote ?? t("ui.editor.viewOnly")}
         </p>
       )}
       {children}
@@ -642,7 +643,7 @@ export function EditorFrame({
             className="inline-flex h-7 items-center gap-[5px] rounded-full bg-status-error-surface px-2.5 text-xs font-semibold text-status-error"
           >
             <AlertCircle aria-hidden size={13} />
-            {issues} to fix
+            {t("ui.editor.toFix", { count: issues })}
           </button>
         )}
       </div>
@@ -653,21 +654,21 @@ export function EditorFrame({
           {stepIndex > 0 ? (
             <Button variant="ghost" onClick={() => goTo(groupList[stepIndex - 1].id)}>
               <ChevronLeft aria-hidden size={15} />
-              Back
+              {t("ui.back")}
             </Button>
           ) : (
             <Button variant="ghost" onClick={cancel}>
-              Cancel
+              {t("ui.cancel")}
             </Button>
           )}
           {stepIndex < groupList.length - 1 ? (
             <Button onClick={nextStep}>
-              Next: {groupList[stepIndex + 1].label}
+              {t("ui.editor.nextStep", { step: groupList[stepIndex + 1].label })}
               <ChevronRight aria-hidden size={15} />
             </Button>
           ) : (
             <Button disabled={!status.dirty || status.saving} onClick={() => void save()}>
-              {status.saving ? "Saving…" : (saveLabel ?? `Create ${noun}`)}
+              {status.saving ? t("ui.saving") : (saveLabel ?? t("ui.editor.create", { noun }))}
             </Button>
           )}
         </div>
@@ -677,15 +678,15 @@ export function EditorFrame({
               editing offers Discard. */}
           {status.isNew ? (
             <Button variant="ghost" disabled={status.saving} onClick={cancel}>
-              Cancel
+              {t("ui.cancel")}
             </Button>
           ) : (
             <Button variant="ghost" disabled={!status.dirty || status.saving} onClick={onDiscard}>
-              Discard
+              {t("ui.discard")}
             </Button>
           )}
           <Button disabled={!status.dirty || status.saving} onClick={() => void save()}>
-            {status.saving ? "Saving…" : (saveLabel ?? (status.isNew ? `Create ${noun}` : "Save"))}
+            {status.saving ? t("ui.saving") : (saveLabel ?? (status.isNew ? t("ui.editor.create", { noun }) : t("ui.save")))}
           </Button>
         </div>
       )}

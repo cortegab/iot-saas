@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 /**
  * The unsaved-changes guard (DESIGN.md §7): warns on reload/close
@@ -29,10 +30,10 @@ export function useUnsavedGuard(dirty: boolean, what = "this record", copy?: Gua
     if (!dirtyRef.current) return true;
     return copy
       ? confirm(copy.body, { title: copy.title, confirmLabel: copy.confirmLabel, cancelLabel: copy.cancelLabel })
-      : confirm(`Your edits to ${what} haven't been saved.`, {
-          title: "Discard unsaved changes?",
-          confirmLabel: "Discard changes",
-          cancelLabel: "Keep editing",
+      : confirm(t("ui.editor.discardBody", { what }), {
+          title: t("ui.editor.discardTitle"),
+          confirmLabel: t("ui.editor.discardConfirm"),
+          cancelLabel: t("ui.editor.keepEditing"),
         });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [confirm, what, copy?.title, copy?.body]);

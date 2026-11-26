@@ -11,11 +11,10 @@ import { SecretReveal } from "@/components/ui/SecretReveal";
 import { useToast } from "@/components/ui/Toast";
 import { ApiRequestError } from "@/lib/api-client";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DeviceResponse = components["schemas"]["DeviceResponse"];
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
-
-const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 /** A device's record actions (rotate, enable/disable, delete) and its ⋯ menu,
  * shared by the devices list, its peek and the device page so each offers
@@ -44,15 +43,13 @@ export function useDeviceActions({
       toast({
         title:
           targets.length === 1
-            ? `${targets[0].name} ${enabled ? "enabled" : "disabled"}`
-            : `${plural(targets.length, "device")} ${enabled ? "enabled" : "disabled"}`,
-        detail: enabled
-          ? "Rules evaluate them again from the next reading."
-          : "Rules stop evaluating them and they can't connect. Telemetry history is kept.",
-        action: undoable ? { label: "Undo", onClick: () => void setEnabled(targets, !enabled, false) } : undefined,
+            ? t(enabled ? "devices.toast.enabledOne" : "devices.toast.disabledOne", { name: targets[0].name })
+            : t(enabled ? "devices.toast.enabledMany" : "devices.toast.disabledMany", { count: targets.length }),
+        detail: enabled ? t("devices.toast.enabledDetail") : t("devices.toast.disabledDetail"),
+        action: undoable ? { label: t("devices.toast.undo"), onClick: () => void setEnabled(targets, !enabled, false) } : undefined,
       });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't update the device", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("devices.toast.updateFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -63,18 +60,12 @@ export function useDeviceActions({
     const one = targets.length === 1;
     const ok = await confirm(
       <p>
-        {one ? "Its credential stops" : "Their credentials stop"} working immediately
-        {rules > 0 && (
-          <>
-            , <strong>{plural(rules, "rule")}</strong> stop evaluating {one ? "it" : "them"}
-          </>
-        )}
-        , and {one ? "its" : "their"} telemetry history is removed. This can&apos;t be undone. To pause{" "}
-        {one ? "it" : "them"} instead, disable {one ? "it" : "them"}.
+        {t(one ? "devices.remove.bodyOne" : "devices.remove.bodyMany")}
+        {rules > 0 && <strong className="mt-2 block">{t("devices.remove.rules", { count: rules })}</strong>}
       </p>,
       {
-        title: one ? `Delete ${targets[0].name}?` : `Delete ${plural(targets.length, "device")}?`,
-        confirmLabel: one ? "Delete device" : `Delete ${plural(targets.length, "device")}`,
+        title: one ? t("devices.remove.titleOne", { name: targets[0].name }) : t("devices.remove.titleMany", { count: targets.length }),
+        confirmLabel: one ? t("devices.remove.confirmOne") : t("devices.remove.confirmMany", { count: targets.length }),
         details: one ? undefined : (
           <ul>
             {targets.map((d) => (
@@ -89,12 +80,12 @@ export function useDeviceActions({
     if (!ok) return false;
     try {
       for (const d of targets) await api.delete(`/devices/${d.id}`);
-      toast({ title: one ? `${targets[0].name} deleted` : `${plural(targets.length, "device")} deleted` });
+      toast({ title: one ? t("devices.toast.deletedOne", { name: targets[0].name }) : t("devices.toast.deletedMany", { count: targets.length }) });
       gone?.();
       await onChanged();
       return true;
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't delete", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("devices.toast.deleteFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
       await onChanged();
       return false;
     }
@@ -103,9 +94,9 @@ export function useDeviceActions({
   async function rotate(d: DeviceResponse) {
     const ok = await confirm(
       d.connection_state === "never_connected"
-        ? "A new credential is issued and the old one stops working."
-        : "The firmware running now disconnects until you flash it with the new credential.",
-      { title: `Rotate the credential for ${d.name}?`, confirmLabel: "Rotate credential" },
+        ? t("devices.rotate.bodyNever")
+        : t("devices.rotate.bodyConnected"),
+      { title: t("devices.rotate.title", { name: d.name }), confirmLabel: t("devices.rotate.confirm") },
     );
     if (!ok) return;
     try {
@@ -113,7 +104,7 @@ export function useDeviceActions({
       setRevealed({ name: d.name, credential: result.credential });
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
-      toast({ tone: "error", title: "Couldn't rotate the credential", detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("devices.toast.rotateFailed"), detail: err instanceof ApiRequestError ? err.message : undefined });
     }
   }
 
@@ -124,17 +115,17 @@ export function useDeviceActions({
   function menu(d: DeviceResponse, opts: { where?: "list" | "peek" | "page"; onDeleted?: () => void } = {}): DropdownMenuItem[][] {
     const where = opts.where ?? "list";
     const open: DropdownMenuItem[] =
-      where === "list" ? [{ label: "Open", icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/devices/${d.id}`) }] : [];
+      where === "list" ? [{ label: t("devices.menu.open"), icon: <SquareArrowOutUpRight size={15} />, onClick: () => router.push(`/devices/${d.id}`) }] : [];
     if (!canWrite) return open.length ? [open] : [];
     const never = d.connection_state === "never_connected";
     return [
       [
         ...open,
-        { label: never ? "Connect…" : "Install or reconnect…", icon: <Wrench size={15} />, onClick: () => router.push(`/devices/${d.id}/connect`) },
-        { label: "Rotate credential…", icon: <KeyRound size={15} />, onClick: () => void rotate(d) },
-        { label: d.status === "active" ? "Disable" : "Enable", icon: <Power size={15} />, onClick: () => void setEnabled([d], d.status !== "active") },
+        { label: never ? t("devices.menu.connect") : t("devices.menu.reinstall"), icon: <Wrench size={15} />, onClick: () => router.push(`/devices/${d.id}/connect`) },
+        { label: t("devices.menu.rotate"), icon: <KeyRound size={15} />, onClick: () => void rotate(d) },
+        { label: d.status === "active" ? t("devices.disable") : t("devices.enable"), icon: <Power size={15} />, onClick: () => void setEnabled([d], d.status !== "active") },
       ],
-      [{ label: "Delete…", icon: <Trash2 size={15} />, danger: true, onClick: () => void remove([d], opts.onDeleted) }],
+      [{ label: t("devices.deleteDots"), icon: <Trash2 size={15} />, danger: true, onClick: () => void remove([d], opts.onDeleted) }],
     ];
   }
 
@@ -146,7 +137,7 @@ export function useDeviceActions({
         { label: "username", value: revealed.credential.username },
         { label: "password", value: revealed.credential.password, secret: true },
       ]}
-      copyLabel="Copy credential"
+      copyLabel={t("devices.rotate.copy")}
       onDismiss={() => setRevealed(null)}
     />
   ) : null;

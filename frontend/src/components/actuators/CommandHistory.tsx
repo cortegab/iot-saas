@@ -13,12 +13,13 @@ import { Select } from "@/components/ui/Select";
 import { ApiRequestError } from "@/lib/api-client";
 import { commandStatus, commandStatusLabel, commandStatusTone, type CommandStatus } from "@/lib/command-status";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type CommandResponse = components["schemas"]["CommandResponse"];
 type RuleResponse = components["schemas"]["RuleResponse"];
 
 function formatValue(value: unknown): string {
-  if (typeof value === "boolean") return value ? "On" : "Off";
+  if (typeof value === "boolean") return value ? t("actuator.on") : t("actuator.off");
   return String(value);
 }
 
@@ -91,7 +92,7 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
   if (isLoading && rows.length === 0) return <LoadingSkeleton rows={3} rowClassName="h-10" />;
   if (error) {
     return (
-      <ErrorState message={error instanceof ApiRequestError ? error.message : "Couldn't load command history."} onRetry={() => void mutate()} />
+      <ErrorState message={error instanceof ApiRequestError ? error.message : t("actuator.history.loadFailed")} onRetry={() => void mutate()} />
     );
   }
   if (total === 0 && !filtered) {
@@ -110,19 +111,19 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
         {heading}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           <SegmentedControl
-            ariaLabel="Result"
+            ariaLabel={t("actuator.history.result")}
             value={result}
             onChange={(v) => setResult(v as "" | CommandStatus)}
             options={[
-              { value: "", label: "All" },
-              { value: "pending", label: "Pending" },
-              { value: "confirmed", label: "Acknowledged" },
-              { value: "no-response", label: "No response" },
+              { value: "", label: t("devices.all") },
+              { value: "pending", label: t("status.command.pending") },
+              { value: "confirmed", label: t("status.command.confirmed") },
+              { value: "no-response", label: t("status.command.noResponse") },
             ]}
           />
           {actuators.length > 1 && (
-            <Select aria-label="Actuator" value={actuator} onChange={(e) => setActuator(e.target.value)} className="w-auto">
-              <option value="">All actuators</option>
+            <Select aria-label={t("actuator.history.actuator")} value={actuator} onChange={(e) => setActuator(e.target.value)} className="w-auto">
+              <option value="">{t("actuator.history.allActuators")}</option>
               {actuators.map((a) => (
                 <option key={a} value={a}>
                   {name(a)}
@@ -133,9 +134,9 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
         </div>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-ink-muted">No commands match.</p>
+        <p className="text-sm text-ink-muted">{t("actuator.history.none")}</p>
       ) : (
-        <ol aria-label="Commands" className="flex flex-col border-l-2 border-border pl-4">
+        <ol aria-label={t("actuator.history.list")} className="flex flex-col border-l-2 border-border pl-4">
           {shown.map(({ items, status, collapsed, runId }) => {
             const c = items[0];
             const last = items[items.length - 1];
@@ -161,17 +162,17 @@ export function CommandHistory({ deviceId, labels }: { deviceId: string; /** Act
                       onClick={() => toggle(runId)}
                       className="hit ml-1.5 rounded bg-surface-raised px-[5px] align-[1px] text-xs font-medium text-ink hover:text-accent"
                     >
-                      {collapsed ? `×${count}` : "Collapse"}
+                      {collapsed ? `×${count}` : t("actuator.history.collapse")}
                     </button>
                   )}
                   <span className="text-ink-muted">
                     {" · "}
                     {c.rule_id ? (
                       <Link href={`/rules/${c.rule_id}`} className="link-inline">
-                        {rule ?? "a rule"}
+                        {rule ?? t("actuator.aRule")}
                       </Link>
                     ) : (
-                      "Manual"
+                      t("actuator.history.manual")
                     )}
                   </span>
                 </span>

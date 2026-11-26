@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Sheet } from "@/components/ui/Sheet";
 import { cn } from "@/lib/cn";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 export interface QuickFilterOption {
   value: string;
@@ -102,10 +103,10 @@ export function ListToolbar({
             <>
               <Button variant="secondary" onClick={() => setSheetOpen(true)} aria-haspopup="dialog">
                 <ListFilter aria-hidden size={14} />
-                Filters
+                {t("ui.list.filters")}
                 {activeFilters > 0 && <span className="text-xs tabular-nums text-accent-strong">{activeFilters}</span>}
               </Button>
-              <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} label="Filters" side="bottom">
+              <Sheet open={sheetOpen} onClose={() => setSheetOpen(false)} label={t("ui.list.filters")} side="bottom">
                 <div className="flex flex-col gap-4 overflow-y-auto px-4 pb-4 pt-3">
                   <h2 className="text-section font-semibold text-ink">Filters</h2>
                   <div className="flex flex-col gap-3 [&>*]:w-full">{children}</div>
@@ -179,7 +180,7 @@ export function FilterChips({ chips, onClearAll }: { chips: FilterChip[]; onClea
           <button
             type="button"
             onClick={c.onRemove}
-            aria-label={`Remove filter ${c.label}`}
+            aria-label={t("ui.list.removeFilter", { label: c.label })}
             className="grid h-5 w-5 place-items-center rounded-full text-ink-muted hover:bg-border hover:text-ink"
           >
             <X aria-hidden size={12} />
@@ -187,7 +188,7 @@ export function FilterChips({ chips, onClearAll }: { chips: FilterChip[]; onClea
         </span>
       ))}
       <button type="button" onClick={onClearAll} className="ml-1 text-sm text-accent hover:underline">
-        Clear all
+        {t("ui.list.clearAll")}
       </button>
     </div>
   );
@@ -207,13 +208,13 @@ export function BulkBar({
   return (
     <div
       role="region"
-      aria-label="Bulk actions"
+      aria-label={t("ui.list.bulk")}
       className="flex flex-wrap items-center gap-2 rounded-xl border border-accent/35 bg-accent-muted px-3 py-2 text-sm"
     >
-      <strong className="mr-1.5 font-semibold text-ink">{count} selected</strong>
+      <strong className="mr-1.5 font-semibold text-ink">{t("ui.list.selected", { count })}</strong>
       {children}
       <button type="button" onClick={onClear} className="text-sm text-accent hover:underline">
-        Clear selection
+        {t("ui.list.clearSelection")}
       </button>
     </div>
   );

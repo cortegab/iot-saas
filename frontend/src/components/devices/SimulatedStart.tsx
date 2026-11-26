@@ -19,6 +19,7 @@ import { applyKit, kitsFor } from "@/lib/starter-kits";
 import { blankTemplate, draftToRequest } from "@/lib/template-draft";
 import { blankHardware } from "@/lib/hardware/hardware-draft";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type DeviceCreateResponse = components["schemas"]["DeviceCreateResponse"];
 type CatalogEntryResponse = components["schemas"]["CatalogEntryResponse"];
@@ -173,18 +174,18 @@ export function SimulatedNote({
   }
   return (
     <Callout>
-      <b className="font-medium">Simulated.</b> The platform makes up its readings every 5 seconds and answers its commands
-      {actuators.length > 0 ? "; switching a fan on cools it." : "."}{" "}
+      <b className="font-medium">{t("devices.simulated")}.</b> {t("devices.sim.note")}
+      {actuators.length > 0 ? t("devices.sim.noteFan") : "."}{" "}
       {href && (
         <Link href={href} className="text-accent underline-offset-[3px] hover:underline">
-          Try a rule on it
+          {t("devices.sim.tryRule")}
         </Link>
       )}
       {canWrite && (
         <>
           {href && " · "}
           <Button variant="link" className="text-sm" disabled={busy} onClick={() => void stop()}>
-            Stop simulating
+            {t("devices.sim.stop")}
           </Button>
         </>
       )}

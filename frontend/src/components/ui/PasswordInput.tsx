@@ -3,6 +3,7 @@
 import { forwardRef, useState, type InputHTMLAttributes, type KeyboardEvent } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/Input";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 /** A password field with Show / Hide (DESIGN.md §10 sign-in; also the Wi-Fi
  * password in Connect). Reports Caps Lock through `onCapsLock` so a page can
@@ -11,7 +12,7 @@ import { Input } from "@/components/ui/Input";
 export const PasswordInput = forwardRef<
   HTMLInputElement,
   Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & { onCapsLock?: (on: boolean) => void }
->(function PasswordInput({ onCapsLock, onKeyUp, onKeyDown, "aria-label": ariaLabel = "Password", ...props }, ref) {
+>(function PasswordInput({ onCapsLock, onKeyUp, onKeyDown, "aria-label": ariaLabel = t("ui.password"), ...props }, ref) {
   const [shown, setShown] = useState(false);
   const caps = (e: KeyboardEvent<HTMLInputElement>) => onCapsLock?.(e.getModifierState?.("CapsLock") ?? false);
   return (
@@ -34,7 +35,7 @@ export const PasswordInput = forwardRef<
       <button
         type="button"
         onClick={() => setShown((s) => !s)}
-        aria-label={shown ? "Hide password" : "Show password"}
+        aria-label={shown ? t("ui.hidePassword") : t("ui.showPassword")}
         aria-pressed={shown}
         className="absolute right-1.5 top-1/2 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink"
       >
