@@ -2689,6 +2689,10 @@ export interface components {
             message: string;
             /** Detail */
             detail: string | null;
+            /** I18N */
+            i18n?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Severity
              * @enum {string}
@@ -3813,7 +3817,9 @@ export interface operations {
     forgot_password_auth_forgot_password_post: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                "accept-language"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };

@@ -1012,6 +1012,43 @@ export const en = {
     build: "Build my dashboard",
     lookAround: "Look around first",
   },
+  notif: {
+    device: {
+      online: "{device} is back online",
+      onlineDetail: "It reconnected and sent its status.",
+      offline: "{device} went offline",
+      offlineDetail: "Its last will arrived: the connection dropped without a goodbye.",
+    },
+    command: {
+      unconfirmed: "{device}: {actuator} didn't confirm the command",
+      unconfirmedKept: "The device didn't answer in time, so it keeps the last state it confirmed. Check that it's online, then send the command again.",
+      unconfirmedNothing: "The device didn't answer in time, so nothing will be applied when it reconnects. Check that it's online, then send the command again.",
+    },
+    rule: {
+      fired: "{condition}.",
+      cleared: "Cleared: {condition}.",
+      deviceConnected: "Device connected.",
+      deviceDisconnected: "Device disconnected.",
+      named: "{rule}.",
+    },
+    ops: {
+      gt: "goes above",
+      gte: "reaches or exceeds",
+      lt: "drops below",
+      lte: "falls to or below",
+      eq: "equals",
+      ne: "is different from",
+      between: "goes between",
+      not_between: "goes outside",
+      in: "is one of",
+      not_in: "is none of",
+      changed: "changes",
+      increased: "increases",
+      decreased: "decreases",
+    },
+    range: "{low} and {high}",
+    current: " (currently {value})",
+  },
 };
 
 export type Messages = typeof en;

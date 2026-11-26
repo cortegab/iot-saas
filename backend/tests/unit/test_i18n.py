@@ -51,3 +51,32 @@ def test_push_titles_follow_the_owner_language() -> None:
     }
     assert compose(**common)["notification"]["title"] == "Pump house went offline"
     assert compose(**common, locale="es")["notification"]["title"] == "Pump house se desconectó"
+
+
+def test_rule_default_notification_carries_keys_and_values() -> None:
+    import uuid
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from app.rules.evaluators import MetricValue, SignalKey
+    from app.rules.service import _default_message_i18n
+
+    dev = str(uuid.uuid4())
+    leaf = {
+        "kind": "leaf",
+        "device_id": dev,
+        "metric": "temp",
+        "operator": ">",
+        "rhs": {"source": "static", "value": 30},
+    }
+    rule = SimpleNamespace(condition=leaf, trigger={"type": "metric"}, name="Hot")
+    snap = {SignalKey(dev, "temp"): MetricValue(31.5, datetime.now(UTC))}
+    out = _default_message_i18n(rule, snap, "fire")  # type: ignore[arg-type]
+    assert out["message"]["key"] == "rule.fired"
+    assert out["message"]["params"]["condition"]["current"] == 31.5
+    cleared = _default_message_i18n(rule, snap, "clear")  # type: ignore[arg-type]
+    assert cleared["message"]["key"] == "rule.cleared"
+    status = SimpleNamespace(
+        condition=None, trigger={"type": "device_status", "transition": "connected"}, name="X"
+    )
+    assert _default_message_i18n(status, {}, "fire")["message"]["key"] == "rule.deviceConnected"  # type: ignore[arg-type]
