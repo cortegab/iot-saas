@@ -21,6 +21,7 @@ from croniter import CroniterError, croniter
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app import i18n
 from app.auth import service as auth_service
 from app.commands import service as commands_service
 from app.config import settings
@@ -1271,6 +1272,12 @@ def _spawn_deferred(coro: Coroutine[Any, Any, None]) -> None:
     task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 
+async def _tenant_locale(factory: async_sessionmaker[AsyncSession], tenant_id: uuid.UUID) -> str:
+    async with factory() as session:
+        await set_tenant_context(session, tenant_id)
+        return (await tenants_service.get_tenant(session, tenant_id)).locale
+
+
 async def _resolve_email_recipients(
     factory: async_sessionmaker[AsyncSession], tenant_id: uuid.UUID
 ) -> list[str]:
@@ -1398,7 +1405,15 @@ async def _run_deferred_action(
                         "body": descriptor.config["body"],
                     }
                 else:
-                    label = "cleared" if descriptor.config.get("edge") == "clear" else "alert"
+                    # The workspace's email language (DESIGN.md §11a): the
+                    # alert list holds addresses with no account to ask.
+                    lang = await _tenant_locale(factory, tenant_id)
+                    label = i18n.t(
+                        lang,
+                        "email.rule.cleared"
+                        if descriptor.config.get("edge") == "clear"
+                        else "email.rule.alert",
+                    )
                     config = {
                         "to": recipients,
                         "subject": f"[{rule_name}] {label}",

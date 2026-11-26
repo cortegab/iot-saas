@@ -28,6 +28,7 @@ from app.auth.schemas import (
 )
 from app.config import settings
 from app.db import get_session, set_user_context
+from app.i18n import locale_from_header, t
 from app.notifications.email import EmailMessage, send_after_commit
 from app.redis import redis_client
 from app.shared.client_ip import client_ip
@@ -256,7 +257,9 @@ _RESET_WINDOW_S = 15 * 60
 
 @router.post("/forgot-password", status_code=status.HTTP_202_ACCEPTED)
 async def forgot_password(
-    body: ForgotPasswordRequest, session: AsyncSession = Depends(get_session, scope="function")
+    body: ForgotPasswordRequest,
+    session: AsyncSession = Depends(get_session, scope="function"),
+    accept_language: str | None = Header(default=None),
 ) -> dict[str, str]:
     """Always 202 with the same message — whether the email has an account is
     never revealed. At most a few emails per address per 15 minutes."""
@@ -269,15 +272,17 @@ async def forgot_password(
     result = await service.request_password_reset(session, body.email)
     if result is not None:
         user, token = result
+        # Their saved language, else the page they asked from (DESIGN.md §11a).
+        lang = user.locale or locale_from_header(accept_language)
         send_after_commit(
             session,
             EmailMessage(
                 to=[user.email],
-                subject="Reset your password",
-                body=(
-                    "Someone (hopefully you) asked to reset your password.\n\n"
-                    f"Choose a new one:\n{settings.app_base_url}/reset-password?token={token}\n\n"
-                    "The link works once and expires in 30 minutes. If you didn't ask, ignore this email."
+                subject=t(lang, "email.reset.subject"),
+                body=t(
+                    lang,
+                    "email.reset.body",
+                    link=f"{settings.app_base_url}/reset-password?token={token}",
                 ),
             ),
         )

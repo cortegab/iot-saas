@@ -204,6 +204,17 @@ async def update_profile(session: AsyncSession, user: User, changes: dict[str, s
     return user
 
 
+async def get_locales_by_user_ids(
+    session: AsyncSession, user_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, str | None]:
+    """Each user's saved language (None = follow their device), for messages
+    sent to them (push; DESIGN.md §11a)."""
+    if not user_ids:
+        return {}
+    result = await session.execute(select(User.id, User.locale).where(User.id.in_(user_ids)))
+    return {uid: loc for uid, loc in result.all()}
+
+
 async def get_emails_by_user_ids(
     session: AsyncSession, user_ids: list[uuid.UUID]
 ) -> dict[uuid.UUID, str]:
