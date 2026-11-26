@@ -60,7 +60,7 @@ async def register(
 ) -> TokenPairResponse:
     try:
         user, _tenant = await service.register_user(
-            session, body.email, body.password, body.tenant_name, body.name
+            session, body.email, body.password, body.tenant_name, body.name, body.locale or "en"
         )
     except service.EmailAlreadyRegisteredError as exc:
         raise HTTPException(
@@ -127,7 +127,9 @@ async def google_sign_in(
     first = (identity.name or identity.email.split("@")[0]).split()[0]
     tenant_name = None if preview else (body.tenant_name or "").strip() or f"{first}'s workspace"
     try:
-        user, _created = await service.user_for_google(session, identity, tenant_name)
+        user, _created = await service.user_for_google(
+            session, identity, tenant_name, body.locale or "en"
+        )
     except service.GoogleAccountMismatchError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -166,12 +168,7 @@ async def logout(
 
 @router.get("/me", response_model=UserResponse)
 async def me(current_user: User = Depends(get_current_user)) -> UserResponse:
-    return UserResponse(
-        id=current_user.id,
-        email=current_user.email,
-        name=current_user.name,
-        created_at=current_user.created_at,
-    )
+    return _user_response(current_user)
 
 
 @router.get("/invitations/{token}", response_model=InvitationPreviewResponse)
@@ -306,5 +303,16 @@ async def update_me(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session, scope="function"),
 ) -> UserResponse:
-    user = await service.update_profile(session, current_user, body.name)
-    return UserResponse(id=user.id, email=user.email, name=user.name, created_at=user.created_at)
+    changes = {field: getattr(body, field) for field in body.model_fields_set}
+    user = await service.update_profile(session, current_user, changes)
+    return _user_response(user)
+
+
+def _user_response(user: User) -> UserResponse:
+    return UserResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        created_at=user.created_at,
+        locale=user.locale,  # type: ignore[arg-type]
+    )

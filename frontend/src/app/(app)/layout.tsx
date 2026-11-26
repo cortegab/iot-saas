@@ -10,6 +10,8 @@ import { CommandPalette } from "@/components/shell/CommandPalette";
 import { NoWorkspace } from "@/components/shell/NoWorkspace";
 import { PhoneTabBar, PhoneTopBar, ReconnectingBanner } from "@/components/shell/PhoneNav";
 import { ShellContext } from "@/components/shell/shell-context";
+import { LocaleSync } from "@/hooks/useLanguage";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/cn";
 
 /** The app shell (DESIGN.md §4): the full 256px sidebar, with labels, from
@@ -23,6 +25,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const { status, currentTenantId } = useAuth();
   const realtime = useRealtime();
   const router = useRouter();
+  const t = useT();
   const isFull = useMediaQuery("(min-width: 1280px)");
   const [pinned, setPinned] = useState(false);
   // Wide screens show labels unless this person collapsed them (a per-browser
@@ -79,7 +82,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
   const shell = useMemo(() => ({ openPalette }), [openPalette]);
 
   if (status === "loading") {
-    return <div className="flex min-h-screen items-center justify-center text-ink-muted">Loading…</div>;
+    return <div className="flex min-h-screen items-center justify-center text-ink-muted">{t("common.loading")}</div>;
   }
 
   // Unauthenticated: the effect above is already redirecting; render nothing to
@@ -91,6 +94,7 @@ export default function AppLayout({ children }: { children: ReactNode }) {
 
   return (
     <ShellContext.Provider value={shell}>
+      <LocaleSync />
       {/* Keyed by tenant: switching workspace remounts every hook so nothing
           from the previous workspace survives (see setCurrentTenantId). */}
       <div

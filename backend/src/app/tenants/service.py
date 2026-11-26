@@ -38,7 +38,9 @@ async def _unique_slug(session: AsyncSession, name: str) -> str:
     return slug
 
 
-async def create_tenant_with_owner(session: AsyncSession, user_id: uuid.UUID, name: str) -> Tenant:
+async def create_tenant_with_owner(
+    session: AsyncSession, user_id: uuid.UUID, name: str, locale: str = "en"
+) -> Tenant:
     """Create a tenant and insert its owner membership in one step.
 
     Sets tenant context itself, immediately after creating the tenant, so the
@@ -54,7 +56,7 @@ async def create_tenant_with_owner(session: AsyncSession, user_id: uuid.UUID, na
     `from app.catalog.models import ...` here (CLAUDE.md §6).
     """
     slug = await _unique_slug(session, name)
-    tenant = Tenant(name=name, slug=slug)
+    tenant = Tenant(name=name, slug=slug, locale=locale)
     session.add(tenant)
     await session.flush()  # populate tenant.id for the membership insert
 
@@ -79,6 +81,7 @@ async def update_tenant(
     name: str | None = None,
     notification_emails: list[str] | None = None,
     timezone: str | None = None,
+    locale: str | None = None,
 ) -> Tenant:
     """Update workspace settings. Callers gate this by role (tenants/router.py:
     admins for recipients and time zone, owners for the name) — `tenants`
@@ -93,6 +96,8 @@ async def update_tenant(
         tenant.notification_emails = [e.strip() for e in notification_emails if e.strip()]
     if timezone is not None:
         tenant.timezone = timezone
+    if locale is not None:
+        tenant.locale = locale
     await session.flush()
     return tenant
 

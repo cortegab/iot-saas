@@ -9,6 +9,7 @@ import {
   ChevronsUpDown,
   Eye,
   Globe,
+  Languages,
   LogOut,
   Moon,
   PanelLeftClose,
@@ -28,7 +29,10 @@ import { useInterfaceMode } from "@/hooks/useInterfaceMode";
 import { useShell } from "@/components/shell/shell-context";
 import { useNavCounts } from "@/components/shell/useShellData";
 import { CreateWorkspaceDialog } from "@/components/shell/CreateWorkspaceDialog";
-import { ROLE_LABEL, toRole } from "@/lib/permissions";
+import { toRole } from "@/lib/permissions";
+import { useT, type MessageKey } from "@/lib/i18n";
+import { useLanguage } from "@/hooks/useLanguage";
+import { LOCALES, LOCALE_NAMES } from "@iodriven/shared/i18n";
 import type { RealtimeStatus } from "@/lib/realtime";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "@/components/brand/BrandMark";
@@ -59,29 +63,31 @@ export function WorkspaceLogo({ name, className }: { name: string; className?: s
   );
 }
 
-export const LIVE_LABEL: Record<RealtimeStatus, { label: string; dot: string }> = {
-  open: { label: "Live updates on", dot: "bg-status-online" },
-  connecting: { label: "Connecting…", dot: "bg-status-unknown" },
-  reconnecting: { label: "Reconnecting…", dot: "bg-status-pending" },
-  closed: { label: "Live updates off", dot: "bg-status-offline" },
+export const LIVE_LABEL: Record<RealtimeStatus, { label: MessageKey; dot: string }> = {
+  open: { label: "shell.live.open", dot: "bg-status-online" },
+  connecting: { label: "shell.live.connecting", dot: "bg-status-unknown" },
+  reconnecting: { label: "shell.live.reconnecting", dot: "bg-status-pending" },
+  closed: { label: "shell.live.closed", dot: "bg-status-offline" },
 };
 
 /** The live-connection indicator: a dot and its words. */
 export function LiveIndicator({ realtime, className }: { realtime: RealtimeStatus; className?: string }) {
+  const t = useT();
   const live = LIVE_LABEL[realtime];
   return (
     <span
       className={cn("inline-flex items-center gap-[5px] text-xs text-ink-muted", className)}
-      title="This browser's connection to the platform"
+      title={t("shell.live.title")}
     >
       <span aria-hidden className={cn("h-1.5 w-1.5 rounded-full", live.dot)} />
-      {live.label}
+      {t(live.label)}
     </span>
   );
 }
 
 /** The red unread badge on Notifications. */
 export function AlertCount({ count, className }: { count: number; className?: string }) {
+  const t = useT();
   return (
     <span
       className={cn(
@@ -91,7 +97,7 @@ export function AlertCount({ count, className }: { count: number; className?: st
     >
       <span className="sr-only">, </span>
       {count > 99 ? "99+" : count}
-      <span className="sr-only"> unread</span>
+      <span className="sr-only"> {t("shell.unread")}</span>
     </span>
   );
 }
@@ -202,14 +208,15 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
   const { counts, unreadCount } = useNavCounts();
   const tips = useRailTips(compact);
   const scroll = useScrollFade();
+  const t = useT();
 
   const pin = onTogglePin && (
     <button
       type="button"
       onClick={onTogglePin}
-      aria-label={compact ? "Expand navigation" : "Collapse navigation"}
+      aria-label={compact ? t("shell.expandNav") : t("shell.collapseNav")}
       aria-expanded={!compact}
-      data-tip={compact ? "Expand navigation" : undefined}
+      data-tip={compact ? t("shell.expandNav") : undefined}
       {...tips.handlers}
       className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-ink-muted hover:bg-surface-raised hover:text-ink"
     >
@@ -241,8 +248,8 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
       <button
         type="button"
         onClick={openPalette}
-        aria-label={compact ? "Search or run, Ctrl K" : undefined}
-        data-tip={compact ? "Search or run… ⌘K" : undefined}
+        aria-label={compact ? t("shell.searchOrRunShortcut") : undefined}
+        data-tip={compact ? `${t("shell.searchOrRun")} ⌘K` : undefined}
         {...tips.handlers}
         className={cn(
           "flex shrink-0 items-center rounded-md text-ink-muted transition-colors",
@@ -254,7 +261,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
         <Search aria-hidden size={15} />
         {!compact && (
           <>
-            <span className="flex-1 truncate text-left">Search or run…</span>
+            <span className="flex-1 truncate text-left">{t("shell.searchOrRun")}</span>
             <kbd className="rounded border border-b-2 border-border bg-surface-raised px-[5px] font-mono text-xs text-ink-muted">
               ⌘K
             </kbd>
@@ -265,7 +272,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
       <nav
         ref={scroll.ref}
         style={scroll.style}
-        aria-label="Main"
+        aria-label={t("nav.main")}
         className={cn(
           "flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",
           compact ? "w-full items-center" : "-mx-1 gap-3.5 px-1",
@@ -283,7 +290,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
                 compact && gi > 0 && "border-t border-border-soft",
               )}
             >
-              {!compact && <span className="px-2.5 py-1 text-xs font-medium text-ink-muted">{group.label}</span>}
+              {!compact && <span className="px-2.5 py-1 text-xs font-medium text-ink-muted">{t(group.label)}</span>}
               {items.map((item) => {
                 const isActive = item.href === active;
                 const Icon = item.icon;
@@ -293,8 +300,8 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
                     key={item.href}
                     href={item.href}
                     aria-current={isActive ? "page" : undefined}
-                    aria-label={compact ? navLabel(item, simple) : undefined}
-                    data-tip={compact ? navLabel(item, simple) : undefined}
+                    aria-label={compact ? navLabel(item, simple, t) : undefined}
+                    data-tip={compact ? navLabel(item, simple, t) : undefined}
                     {...tips.handlers}
                     className={cn(
                       "relative flex items-center rounded-md text-sm transition-colors duration-150",
@@ -303,7 +310,7 @@ export function AppSidebar({ realtime, compact = false, onTogglePin }: AppSideba
                     )}
                   >
                     <Icon aria-hidden size={17} className={cn("shrink-0", isActive ? "text-accent" : "text-ink-muted")} />
-                    {!compact && <span className="min-w-0 flex-1 truncate">{navLabel(item, simple)}</span>}
+                    {!compact && <span className="min-w-0 flex-1 truncate">{navLabel(item, simple, t)}</span>}
                     {item.alertCount
                       ? unreadCount > 0 && (
                           <AlertCount
@@ -347,20 +354,21 @@ function WorkspaceSwitcher({
   tipHandlers?: TipHandlers;
 }) {
   const router = useRouter();
+  const t = useT();
   const { memberships, currentTenantId } = useAuth();
   const [creating, setCreating] = useState(false);
   const current = memberships.find((m) => m.tenant_id === currentTenantId);
   const role = toRole(current?.role);
-  const sub = [role ? ROLE_LABEL[role] : null, deviceCount != null ? `${deviceCount} device${deviceCount === 1 ? "" : "s"}` : null]
+  const sub = [role ? t(`roles.${role}`) : null, deviceCount != null ? t("common.deviceCount", { count: deviceCount }) : null]
     .filter(Boolean)
     .join(" · ");
-  const name = current?.tenant_name ?? "Workspace";
+  const name = current?.tenant_name ?? t("common.workspace");
 
   return (
     <>
       <span data-tip={compact ? `${name}${sub ? ` · ${sub}` : ""}` : undefined} {...tipHandlers} className={cn(!compact && "min-w-0 flex-1")}>
         <DropdownMenu
-          label={`Workspace: ${name}. Switch workspace`}
+          label={t("shell.switchWorkspaceLabel", { name })}
           align="start"
           panelClassName="w-[232px] p-1"
           triggerClassName={cn(
@@ -399,10 +407,11 @@ function WorkspaceSwitcher({
 export function WorkspaceMenu({ onCreate, onSwitched }: { onCreate: () => void; onSwitched: () => void }) {
   const { memberships, currentTenantId, setCurrentTenantId } = useAuth();
   const router = useRouter();
+  const t = useT();
   return (
-    <div role="menu" aria-label="Workspaces" className="flex flex-col">
+    <div role="menu" aria-label={t("common.workspaces")} className="flex flex-col">
       <p className="px-2.5 pb-1 pt-1.5 text-xs font-semibold uppercase tracking-[0.06em] text-ink-muted">
-        Workspaces
+        {t("common.workspaces")}
       </p>
       {memberships.map((m) => {
         const r = toRole(m.role);
@@ -425,7 +434,7 @@ export function WorkspaceMenu({ onCreate, onSwitched }: { onCreate: () => void; 
             <WorkspaceLogo name={m.tenant_name} className="h-6 w-6 rounded-md text-xs" />
             <span className="flex min-w-0 flex-1 flex-col leading-tight">
               <span className="truncate text-ink">{m.tenant_name}</span>
-              <span className="text-xs text-ink-muted">{r ? ROLE_LABEL[r] : m.role}</span>
+              <span className="text-xs text-ink-muted">{r ? t(`roles.${r}`) : m.role}</span>
             </span>
             {isCurrent && <Check aria-hidden size={15} className="text-accent" />}
           </button>
@@ -439,7 +448,7 @@ export function WorkspaceMenu({ onCreate, onSwitched }: { onCreate: () => void; 
         className="flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-sm text-ink hover:bg-surface-raised focus-visible:bg-surface-raised focus-visible:outline-none"
       >
         <Plus aria-hidden size={15} className="text-ink-muted" />
-        Create workspace
+        {t("shell.createWorkspace")}
       </button>
     </div>
   );
@@ -455,9 +464,10 @@ function UserMenu({
   tipHandlers?: TipHandlers;
 }) {
   const router = useRouter();
+  const t = useT();
   const { data: user } = useCurrentUser();
   const { logout } = useAuth();
-  const live = LIVE_LABEL[realtime];
+  const live = { ...LIVE_LABEL[realtime], label: t(LIVE_LABEL[realtime].label) };
   const displayName = user?.name?.trim() || user?.email || "…";
   const avatar = (
     <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-full bg-accent-muted text-xs font-semibold text-accent-strong">
@@ -471,7 +481,7 @@ function UserMenu({
   return (
     <span data-tip={compact ? `${displayName} · ${live.label}` : undefined} {...tipHandlers} className={cn(!compact && "min-w-0 flex-1")}>
       <DropdownMenu
-        label={compact ? `Account menu. ${live.label}` : "Account menu"}
+        label={compact ? t("shell.accountMenuLive", { live: live.label }) : t("shell.accountMenu")}
         align="start"
         panelClassName="w-[220px] p-1"
         triggerClassName={cn(
@@ -492,7 +502,7 @@ function UserMenu({
           )
         }
       >
-        <div role="menu" aria-label="Account" className="flex flex-col">
+        <div role="menu" aria-label={t("shell.account")} className="flex flex-col">
           {user && (
             <div className="border-b border-border px-2.5 pb-2 pt-1.5">
               <p className="truncate text-sm font-medium text-ink">{displayName}</p>
@@ -500,10 +510,11 @@ function UserMenu({
             </div>
           )}
           <div className="flex flex-col pt-1">
-            <MenuLink href="/settings#ps-account" icon={<UserRound size={15} />} label="Profile" />
-            <MenuLink href="/" icon={<Globe size={15} />} label="Website" />
+            <MenuLink href="/settings#ps-account" icon={<UserRound size={15} />} label={t("shell.profile")} />
+            <MenuLink href="/" icon={<Globe size={15} />} label={t("shell.website")} />
             <div className="my-1 h-px bg-border" role="separator" />
             <SimpleViewItem />
+            <LanguageItems />
             <div className="my-1 h-px bg-border" role="separator" />
             <button
               type="button"
@@ -512,7 +523,7 @@ function UserMenu({
               className="flex items-center gap-[9px] rounded-md px-2.5 py-[7px] text-left text-sm text-ink hover:bg-surface-raised focus-visible:bg-surface-raised focus-visible:outline-none"
             >
               <LogOut aria-hidden size={15} className="text-ink-muted" />
-              Sign out
+              {t("common.signOut")}
             </button>
           </div>
         </div>
@@ -540,9 +551,10 @@ function MenuLink({ href, icon, label }: { href: string; icon: ReactNode; label:
  * followed until the user picks). `withLabel` adds the words, for the phone
  * More sheet. */
 export function ThemeButton({ withLabel = false }: { withLabel?: boolean }) {
+  const t = useT();
   const { theme, setPreference, mounted } = useTheme();
   const isDark = mounted && theme === "dark";
-  const label = isDark ? "Switch to light theme" : "Switch to dark theme";
+  const label = isDark ? t("shell.theme.toLight") : t("shell.theme.toDark");
   return (
     <button
       type="button"
@@ -557,7 +569,7 @@ export function ThemeButton({ withLabel = false }: { withLabel?: boolean }) {
       )}
     >
       {isDark ? <Sun aria-hidden size={16} /> : <Moon aria-hidden size={16} />}
-      {withLabel && (isDark ? "Light theme" : "Dark theme")}
+      {withLabel && (isDark ? t("shell.theme.light") : t("shell.theme.dark"))}
     </button>
   );
 }
@@ -565,6 +577,7 @@ export function ThemeButton({ withLabel = false }: { withLabel?: boolean }) {
 /** The account menu's Simple view switch (DESIGN.md §15a): yours alone, for
  * this workspace; it hides set-up pages and rewords, it changes no rights. */
 function SimpleViewItem() {
+  const t = useT();
   const { simple, setMode } = useInterfaceMode();
   return (
     <button
@@ -575,8 +588,45 @@ function SimpleViewItem() {
       className="flex items-center gap-[9px] rounded-md px-2.5 py-[7px] text-left text-sm text-ink hover:bg-surface-raised focus-visible:bg-surface-raised focus-visible:outline-none"
     >
       <Eye aria-hidden size={15} className="text-ink-muted" />
-      <span className="flex-1">Simple view</span>
+      <span className="flex-1">{t("shell.simpleView")}</span>
       {simple && <Check aria-hidden size={15} className="text-accent" />}
     </button>
+  );
+}
+
+/** The account menu's Language choice (DESIGN.md §11a): saved on the account,
+ * so it follows the person to other browsers, the app and their emails.
+ * "Browser default" follows the browser's own language. */
+function LanguageItems() {
+  const t = useT();
+  const { choice, setChoice } = useLanguage();
+  const options: { value: (typeof LOCALES)[number] | null; label: string }[] = [
+    { value: null, label: t("language.browser") },
+    ...LOCALES.map((l) => ({ value: l, label: LOCALE_NAMES[l] })),
+  ];
+  return (
+    <div role="group" aria-label={t("language.label")} className="flex flex-col">
+      <p className="flex items-center gap-[9px] px-2.5 pb-0.5 pt-1.5 text-xs text-ink-muted">
+        <Languages aria-hidden size={15} />
+        {t("language.label")}
+      </p>
+      {options.map((o) => {
+        const checked = choice === o.value;
+        return (
+          <button
+            key={o.value ?? "browser"}
+            type="button"
+            role="menuitemradio"
+            aria-checked={checked}
+            lang={o.value ?? undefined}
+            onClick={() => void setChoice(o.value)}
+            className="flex items-center gap-[9px] rounded-md py-[6px] pl-[34px] pr-2.5 text-left text-sm text-ink hover:bg-surface-raised focus-visible:bg-surface-raised focus-visible:outline-none"
+          >
+            <span className="flex-1">{o.label}</span>
+            {checked && <Check aria-hidden size={15} className="text-accent" />}
+          </button>
+        );
+      })}
+    </div>
   );
 }

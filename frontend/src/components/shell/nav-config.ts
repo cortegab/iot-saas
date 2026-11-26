@@ -11,15 +11,17 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Action } from "@/lib/permissions";
+import type { MessageKey, T } from "@/lib/i18n";
 
 /** Which list drives an item's right-aligned count. */
 export type NavCountSource = "dashboards" | "devices" | "rules" | "templates" | "zones" | "members" | "keys";
 
 export interface NavItem {
   href: string;
-  label: string;
+  /** Message keys (DESIGN.md §11a): shown through `t`. */
+  label: MessageKey;
   /** The phone tab bar's label, where it differs ("Alerts"). */
-  tabLabel?: string;
+  tabLabel?: MessageKey;
   icon: LucideIcon;
   count?: NavCountSource;
   /** Notifications: red unread badge instead of a count. */
@@ -29,41 +31,41 @@ export interface NavItem {
   /** Hidden in Simple view (DESIGN.md §15a): set-up pages a client doesn't need. */
   fullOnly?: boolean;
   /** Its name in Simple view ("Automations"). */
-  simpleLabel?: string;
+  simpleLabel?: MessageKey;
 }
 
 export interface NavGroup {
-  label: string;
+  label: MessageKey;
   items: NavItem[];
 }
 
 /** DESIGN.md §4 grouped nav. */
 export const NAV_GROUPS: NavGroup[] = [
   {
-    label: "Monitor",
+    label: "nav.groups.monitor",
     items: [
-      { href: "/dashboards", label: "Dashboards", icon: LayoutDashboard, count: "dashboards" },
-      { href: "/devices", label: "Devices", icon: Cpu, count: "devices" },
-      { href: "/notifications", label: "Notifications", tabLabel: "Alerts", icon: Bell, alertCount: true },
+      { href: "/dashboards", label: "nav.dashboards", icon: LayoutDashboard, count: "dashboards" },
+      { href: "/devices", label: "nav.devices", icon: Cpu, count: "devices" },
+      { href: "/notifications", label: "nav.notifications", tabLabel: "nav.alerts", icon: Bell, alertCount: true },
     ],
   },
   {
-    label: "Automate",
-    items: [{ href: "/rules", label: "Rules", simpleLabel: "Automations", icon: ListChecks, count: "rules" }],
+    label: "nav.groups.automate",
+    items: [{ href: "/rules", label: "nav.rules", simpleLabel: "nav.automations", icon: ListChecks, count: "rules" }],
   },
   {
-    label: "Configure",
+    label: "nav.groups.configure",
     items: [
-      { href: "/templates", label: "Device templates", icon: Boxes, count: "templates", fullOnly: true },
-      { href: "/zones", label: "Zones", icon: MapPin, count: "zones", fullOnly: true },
+      { href: "/templates", label: "nav.templates", icon: Boxes, count: "templates", fullOnly: true },
+      { href: "/zones", label: "nav.zones", icon: MapPin, count: "zones", fullOnly: true },
     ],
   },
   {
-    label: "Admin",
+    label: "nav.groups.admin",
     items: [
-      { href: "/members", label: "Members", icon: Users, count: "members", requires: "members.manage", fullOnly: true },
-      { href: "/keys", label: "API keys", icon: KeyRound, count: "keys", requires: "keys.manage", fullOnly: true },
-      { href: "/settings", label: "Workspace settings", icon: Settings },
+      { href: "/members", label: "nav.members", icon: Users, count: "members", requires: "members.manage", fullOnly: true },
+      { href: "/keys", label: "nav.keys", icon: KeyRound, count: "keys", requires: "keys.manage", fullOnly: true },
+      { href: "/settings", label: "nav.settings", icon: Settings },
     ],
   },
 ];
@@ -73,9 +75,9 @@ export function navVisible(item: NavItem, can: (action: Action) => boolean, simp
   return (!item.requires || can(item.requires)) && !(simple && item.fullOnly);
 }
 
-/** Its name in this view. */
-export function navLabel(item: NavItem, simple: boolean): string {
-  return (simple && item.simpleLabel) || item.label;
+/** Its name in this view and language. */
+export function navLabel(item: NavItem, simple: boolean, t: T): string {
+  return t((simple && item.simpleLabel) || item.label);
 }
 
 const ALL_ITEMS = NAV_GROUPS.flatMap((g) => g.items);

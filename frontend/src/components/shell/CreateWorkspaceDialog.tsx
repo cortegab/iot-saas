@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { HOME } from "@/lib/landing";
 import { useApi } from "@/hooks/useApi";
+import { useT } from "@/lib/i18n";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Field } from "@/components/ui/Field";
@@ -26,6 +27,7 @@ export function CreateWorkspaceDialog({ open, onClose }: { open: boolean; onClos
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const t = useT();
 
   function close() {
     setName("");
@@ -36,7 +38,7 @@ export function CreateWorkspaceDialog({ open, onClose }: { open: boolean; onClos
   async function create() {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Enter a name for the workspace.");
+      setError(t("workspaceDialog.nameRequired"));
       return;
     }
     setBusy(true);
@@ -48,9 +50,9 @@ export function CreateWorkspaceDialog({ open, onClose }: { open: boolean; onClos
       close();
       // A new workspace lands like a sign-in: on Get started.
       router.push(HOME);
-      toast({ title: "Workspace created", detail: `You're the owner of ${tenant.name}.` });
+      toast({ title: t("workspaceDialog.created"), detail: t("workspaceDialog.createdDetail", { name: tenant.name }) });
     } catch (err) {
-      setError(err instanceof ApiRequestError ? err.message : "Couldn't create the workspace.");
+      setError(err instanceof ApiRequestError ? err.message : t("workspaceDialog.failed"));
     } finally {
       setBusy(false);
     }
@@ -60,22 +62,22 @@ export function CreateWorkspaceDialog({ open, onClose }: { open: boolean; onClos
     <Dialog
       open={open}
       onClose={close}
-      title="Create workspace"
-      description="A separate set of devices, rules and members. You'll be its owner."
+      title={t("workspaceDialog.title")}
+      description={t("workspaceDialog.description")}
       onSubmit={() => void create()}
       footer={
         <>
           <Button variant="secondary" onClick={close}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button type="submit" disabled={busy}>
-            {busy ? "Creating…" : "Create workspace"}
+            {busy ? t("workspaceDialog.creating") : t("workspaceDialog.title")}
           </Button>
         </>
       }
     >
-      <Field label="Name" error={error}>
-        <Input data-autofocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Hillside Vineyard" />
+      <Field label={t("workspaceDialog.name")} error={error}>
+        <Input data-autofocus value={name} onChange={(e) => setName(e.target.value)} placeholder={t("workspaceDialog.placeholder")} />
       </Field>
     </Dialog>
   );

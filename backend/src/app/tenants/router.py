@@ -54,6 +54,7 @@ def _tenant_response(tenant: Tenant) -> TenantResponse:
         slug=tenant.slug,
         notification_emails=list(tenant.notification_emails),
         timezone=tenant.timezone,
+        locale=tenant.locale,  # type: ignore[arg-type]
         created_at=tenant.created_at,
     )
 
@@ -231,6 +232,7 @@ async def update_current_tenant(
         name=body.name,
         notification_emails=body.notification_emails,
         timezone=body.timezone,
+        locale=body.locale,
     )
     return _tenant_response(tenant)
 
