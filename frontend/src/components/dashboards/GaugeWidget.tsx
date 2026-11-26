@@ -6,6 +6,7 @@ import { WidgetCard } from "@/components/dashboards/WidgetCard";
 import { useWidgetDevice, WidgetFoot } from "@/components/dashboards/widget-common";
 import { cn } from "@/lib/cn";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type TelemetryLatestResponse = components["schemas"]["TelemetryLatestResponse"];
 
@@ -36,7 +37,7 @@ export function GaugeWidget({
   const shown = reading ? (meta?.decimals != null ? reading.value.toFixed(meta.decimals) : reading.value.toLocaleString()) : "—";
 
   return (
-    <WidgetCard title={meta?.name ?? metric ?? "Gauge"} device={device}>
+    <WidgetCard title={meta?.name ?? metric ?? t("dashboards.widgets.gauge")} device={device}>
       <div className="flex h-full flex-col items-center justify-between gap-1">
         {isLoading ? (
           <LoadingSkeleton rows={1} rowClassName="h-16" />

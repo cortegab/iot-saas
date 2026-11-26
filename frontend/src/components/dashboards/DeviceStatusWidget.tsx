@@ -6,6 +6,7 @@ import { WidgetCard } from "@/components/dashboards/WidgetCard";
 import { useWidgetDevice } from "@/components/dashboards/widget-common";
 import { DEVICE_STATUS, deviceStatusKey } from "@/lib/device-status";
 import { timeAgo } from "@/lib/time-ago";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 export function DeviceStatusWidget({ deviceId }: { deviceId: string }) {
   const { device, isLoading } = useWidgetDevice(deviceId);
@@ -19,7 +20,7 @@ export function DeviceStatusWidget({ deviceId }: { deviceId: string }) {
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone={st.tone} shape={st.shape} variant="dot" label={st.label} />
             <span className="text-meta text-ink-muted">
-              {device.connection_state === "never_connected" ? "Waiting for its first message" : `Last message ${timeAgo(device.last_seen_at)}`}
+              {device.connection_state === "never_connected" ? t("dashboards.waitingFirst") : t("dashboards.lastMessage", { ago: timeAgo(device.last_seen_at) })}
             </span>
           </div>
           {(device.rssi != null || device.battery_pct != null || device.fw_version != null) && (

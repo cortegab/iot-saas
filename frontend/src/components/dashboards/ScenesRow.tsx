@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/Toast";
 import { ApiRequestError } from "@/lib/api-client";
 import { actionsText } from "@/lib/rule-text";
 import type { components } from "@/types/api";
+import { tActive as t } from "@iodriven/shared/i18n";
 
 type RuleResponse = components["schemas"]["RuleResponse"];
 
@@ -30,22 +31,22 @@ export function ScenesRow() {
 
   async function run(rule: RuleResponse) {
     const what = actionsText(rule.actions);
-    const ok = await confirm(`${what}.`, { title: `Run ${rule.name}?`, confirmLabel: "Run it", danger: false });
+    const ok = await confirm(`${what}.`, { title: t("dashboards.runTitle", { name: rule.name }), confirmLabel: t("dashboards.runConfirm"), danger: false });
     if (!ok) return;
     setRunning(rule.id);
     try {
       await api.post(`/rules/${rule.id}/run`);
-      toast({ title: `${rule.name} is running`, detail: what });
+      toast({ title: t("dashboards.running", { name: rule.name }), detail: what });
     } catch (err) {
-      toast({ tone: "error", title: `Couldn't run ${rule.name}`, detail: err instanceof ApiRequestError ? err.message : undefined });
+      toast({ tone: "error", title: t("dashboards.runFailed", { name: rule.name }), detail: err instanceof ApiRequestError ? err.message : undefined });
     } finally {
       setRunning(null);
     }
   }
 
   return (
-    <section aria-label="Scenes" className="flex flex-wrap items-center gap-2">
-      <span className="text-meta font-medium text-ink-muted">Scenes</span>
+    <section aria-label={t("dashboards.scenes")} className="flex flex-wrap items-center gap-2">
+      <span className="text-meta font-medium text-ink-muted">{t("dashboards.scenes")}</span>
       {scenes.map((r) => (
         <Button key={r.id} variant="secondary" size="sm" disabled={running === r.id} onClick={() => void run(r)}>
           <Play aria-hidden size={13} />
