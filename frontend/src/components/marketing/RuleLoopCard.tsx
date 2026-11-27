@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { AnimatePresence, MotionConfig, motion } from "framer-motion";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { AnimatePresence, MotionConfig, animate, motion, useMotionValue, useMotionValueEvent } from "framer-motion";
 import { formatNumber } from "@iodriven/shared/i18n";
 import { cn } from "@/lib/cn";
 import { useLocale, useT } from "@/lib/i18n";
@@ -54,6 +54,27 @@ function bold(text: string): ReactNode[] {
 
 const spring = { type: "spring", stiffness: 500, damping: 32 } as const;
 
+/** The temperature, counting smoothly to each new reading instead of
+ * popping in, so the big number never blinks. */
+function Reading({ value, format }: { value: number; format: (v: number) => string }) {
+  const shown = useMotionValue(value);
+  const [text, setText] = useState(() => format(value));
+  // The parent makes a new `format` each render; only a new value restarts the count.
+  const formatRef = useRef(format);
+  formatRef.current = format;
+  useMotionValueEvent(shown, "change", (v) => setText(formatRef.current(Math.round(v * 10) / 10)));
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      shown.jump(value);
+      setText(formatRef.current(value));
+      return;
+    }
+    const run = animate(shown, value, { duration: 0.6, ease: "easeOut" });
+    return () => run.stop();
+  }, [value, shown]);
+  return <span className="inline-block font-mono text-[30px] leading-tight text-white tabular-nums">{text}</span>;
+}
+
 export function RuleLoopCard({ withLog = false, className }: { withLog?: boolean; className?: string }) {
   const t = useT();
   const locale = useLocale();
@@ -105,20 +126,7 @@ export function RuleLoopCard({ withLog = false, className }: { withLog?: boolean
         <div className="grid grid-cols-[1.25fr_1fr] gap-2.5">
           <div className="rounded-xl border border-[rgba(148,163,184,0.14)] bg-[rgba(148,163,184,0.07)] px-3 py-2.5">
             <span className="block text-xs text-night-dim">{t("ruleLoop.temperature")}</span>
-            <span className="inline-block overflow-hidden align-bottom">
-              <AnimatePresence initial={false}>
-                <motion.span
-                  key={value}
-                  className="inline-block font-mono text-[30px] leading-tight text-white tabular-nums"
-                  initial={{ y: 10, opacity: 0 }}
-                  animate={{ y: 0, opacity: 1 }}
-                  exit={{ opacity: 0, transition: { duration: 0 } }}
-                  transition={{ duration: 0.25 }}
-                >
-                  {num(value)}
-                </motion.span>
-              </AnimatePresence>
-            </span>
+            <Reading value={value} format={num} />
             <span className="ml-1 text-sm text-night-dim">°C</span>
             <svg aria-hidden viewBox="0 0 300 46" preserveAspectRatio="none" className="mt-1 block h-10 w-full">
               <line x1="0" x2="300" y1={yOn} y2={yOn} stroke="var(--color-night-breach)" strokeOpacity="0.6" strokeDasharray="3 3" />
