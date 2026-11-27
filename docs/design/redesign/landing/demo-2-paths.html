@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IO Driven · Landing demo 2: Choose your path</title>
+<link rel="icon" href="../../io-driven-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<script type="importmap">
+{ "imports": {
+  "react": "https://esm.sh/react@19.0.0",
+  "react/": "https://esm.sh/react@19.0.0/",
+  "react-dom": "https://esm.sh/react-dom@19.0.0?external=react",
+  "react-dom/client": "https://esm.sh/react-dom@19.0.0/client?external=react",
+  "framer-motion": "https://esm.sh/framer-motion@14.14.0?external=react,react-dom",
+  "htm": "https://esm.sh/htm@3.1.1"
+} }
+</script>
+<style>
+.hero { padding: 64px 0 56px; text-align: center; }
+.hero .eyebrow { color: var(--night-sky); }
+.hero h1 { margin: 0 auto; max-width: 18ch; font-size: clamp(36px, 5.4vw, 60px); line-height: 1.04; letter-spacing: -.04em; font-weight: 600; color: #fff; text-wrap: balance; }
+.hero .sub { margin: 16px auto 0; max-width: 58ch; color: var(--night-muted); font-size: 17px; line-height: 1.6; }
+
+/* Audience switcher (Framer Motion island). */
+.paths { margin: 36px auto 0; max-width: 920px; }
+.seg { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: rgba(148, 163, 184, .1); border: 1px solid rgba(148, 163, 184, .22); flex-wrap: wrap; justify-content: center; }
+.seg button { position: relative; height: 36px; padding: 0 14px; border: 0; background: none; color: var(--night-muted); font: 500 14px/1 inherit; font-family: inherit; cursor: pointer; border-radius: 8px; }
+.seg button[aria-selected="true"] { color: #fff; }
+.seg .bg { position: absolute; inset: 0; border-radius: 8px; background: linear-gradient(135deg, #6366f1, #4f46e5); z-index: 0; }
+.seg button span { position: relative; z-index: 1; }
+.path-panel { margin-top: 22px; text-align: left; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; padding: 24px; border-radius: 16px; background: rgba(10, 16, 32, .6); border: 1px solid rgba(148, 163, 184, .18); min-height: 250px; }
+@media (max-width: 800px) { .path-panel { grid-template-columns: minmax(0, 1fr); } }
+.path-panel h2 { margin: 0 0 8px; font-size: 24px; letter-spacing: -.02em; color: #fff; font-weight: 600; }
+.path-panel p { margin: 0; color: var(--night-muted); }
+.path-panel ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 10px; }
+.path-panel li { display: flex; gap: 10px; color: var(--night-ink); font-size: 14.5px; }
+.path-panel li::before { content: "✓"; color: var(--night-ok); font-weight: 600; }
+.path-panel .go { margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; }
+.path-fallback { color: var(--night-muted); }
+
+/* Trust strip */
+.strip { border-bottom: 1px solid var(--border); background: var(--surface); }
+.strip .inner { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; padding-block: 22px; }
+@media (max-width: 860px) { .strip .inner { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.strip b { display: block; font: 500 20px/1.3 "Geist Mono", monospace; letter-spacing: -.02em; }
+.strip span { font-size: 13px; color: var(--muted); }
+
+/* Common ground: sentence-style rule */
+.sentence { font-size: 18px; line-height: 1.7; padding: 20px 22px; border-radius: 12px; background: var(--accent-muted); color: var(--ink); }
+.sentence mark { background: var(--surface); color: var(--accent-strong); padding: 2px 8px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border)); font-weight: 500; }
+
+/* Integrators */
+.int-grid { display: grid; gap: 32px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: start; }
+@media (max-width: 960px) { .int-grid { grid-template-columns: minmax(0, 1fr); } }
+.feat { display: grid; gap: 18px; }
+.feat > div { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; }
+.feat h3 { margin: 0 0 2px; font-size: 16px; font-weight: 600; }
+.feat p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.viewer { border-radius: 16px; border: 1px solid var(--border); background: var(--canvas); padding: 16px; box-shadow: var(--shadow-card); }
+.viewer-top { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.viewer-top small { color: var(--muted); font-size: 13px; }
+.mini-seg { display: inline-flex; padding: 3px; border-radius: 8px; background: var(--raised); border: 1px solid var(--border); }
+.mini-seg button { position: relative; height: 30px; padding: 0 12px; border: 0; background: none; font: 500 13px/1 inherit; font-family: inherit; color: var(--muted); cursor: pointer; border-radius: 6px; }
+.mini-seg button[aria-pressed="true"] { color: var(--ink); }
+.mini-seg .bg { position: absolute; inset: 0; border-radius: 6px; background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.mini-seg button span { position: relative; }
+.dev { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; margin-bottom: 10px; overflow: hidden; }
+.dev-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.dev-head b { font-weight: 600; }
+.dev-meta { font-size: 13px; color: var(--muted); }
+.dev-row { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; gap: 10px; }
+.dev-val { font: 500 26px/1 "Geist Mono", monospace; color: var(--chart); }
+.dev-val small { font-size: 13px; color: var(--muted); margin-left: 4px; }
+.kv { margin-top: 10px; display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font: 12.5px/1.5 "Geist Mono", monospace; color: var(--muted); }
+.kv span:nth-child(odd) { color: var(--ink); }
+.sw { width: 44px; height: 26px; border-radius: 13px; border: 0; padding: 3px; display: flex; background: var(--border); cursor: pointer; }
+.sw.on { background: var(--online); justify-content: flex-end; }
+.sw span { width: 20px; height: 20px; border-radius: 50%; background: #fff; }
+.scene { width: 100%; height: 44px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); font: 500 15px/1 inherit; font-family: inherit; color: var(--ink); cursor: pointer; }
+.scene:hover { border-color: var(--accent); }
+.words { margin-top: 12px; font-size: 13px; color: var(--muted); }
+
+/* Project timeline */
+.tl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; position: relative; }
+@media (max-width: 860px) { .tl { grid-template-columns: minmax(0, 1fr); gap: 18px; } }
+.tl > div { padding: 18px 18px 0 0; border-top: 2px solid var(--border); position: relative; }
+.tl > div::before { content: ""; position: absolute; top: -7px; left: 0; width: 12px; height: 12px; border-radius: 50%; background: var(--accent); }
+.tl h3 { margin: 0 0 4px; font-size: 16px; } .tl p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.tl small { display: block; font: 500 12px/1.4 "Geist Mono", monospace; color: var(--accent); margin-bottom: 6px; }
+
+/* Developers */
+.dev-grid { display: grid; gap: 24px; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); align-items: start; }
+@media (max-width: 960px) { .dev-grid { grid-template-columns: minmax(0, 1fr); } }
+.dev-grid ul { margin: 0; padding-left: 18px; color: var(--muted); }
+.dev-grid li { margin: 6px 0; } .dev-grid li b { color: var(--ink); font-weight: 600; }
+
+/* Deployment table */
+.tbl { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; min-width: 640px; }
+th, td { padding: 12px; text-align: left; border-bottom: 1px solid var(--soft); font-size: 14px; vertical-align: top; }
+th { font-size: 13px; color: var(--muted); font-weight: 500; }
+td:first-child { color: var(--muted); }
+tr:last-child td { border-bottom: 0; }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="inner">
+    <a class="brand" href="#top"><img src="../../io-driven-mark.png" alt="">IO Driven</a>
+    <nav class="nav-links" aria-label="Page sections">
+      <a href="#how">How it works</a><a href="#integrators">For integrators</a><a href="#developers">For developers</a>
+      <a href="#deploy">Deployment</a><a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-end"><a class="btn btn-ghost" href="#">Sign in</a><a class="btn btn-cta" href="#close">Talk to us</a></div>
+  </div>
+</header>
+
+<main>
+  <section id="top" class="hero night-bg">
+    <div class="inner">
+      <p class="eyebrow">Sensors · rules · control</p>
+      <h1>Automation you can explain in one sentence.</h1>
+      <p class="sub">IO Driven watches your sensors and acts when something needs doing, in under two seconds. Tell us who you are, and we'll show you the part that matters to you.</p>
+      <div class="paths" id="paths-root">
+        <p class="path-fallback">For site teams: dashboards, alerts and rules in plain sentences. For integrators: a workspace per client and a simple view to hand over. For developers: an MQTT device contract, a REST API and webhooks.</p>
+      </div>
+    </div>
+  </section>
+
+  <div class="strip">
+    <div class="inner">
+      <div><b class="num">&lt; 2 s</b><span>from a reading to the response</span></div>
+      <div><b class="num">500–1,000</b><span>devices on one server</span></div>
+      <div><b>ESP32</b><span>ready-made firmware, flashed from the browser</span></div>
+      <div><b>3 ways</b><span>to run it: cloud, dedicated, on-premise</span></div>
+    </div>
+  </div>
+
+  <section id="how" class="block">
+    <div class="inner">
+      <p class="eyebrow">How it works</p>
+      <h2 class="h2">Every rule is a sentence you can read out loud.</h2>
+      <p class="lead">Whoever you are, the core is the same: devices send readings, rules decide, outputs move, and you get told. The words in a rule are the settings.</p>
+      <div class="body">
+        <p class="sentence">When <mark>temperature</mark> on <mark>Greenhouse bay 1</mark> is above <mark>30 °C</mark> for <mark>10 s</mark>, turn <mark>Fan 1</mark> on and notify <mark>Night shift</mark>. Turn it back off below <mark>28 °C</mark>, and act at most <mark>once a minute</mark>.</p>
+        <div class="grid-3" style="margin-top:16px">
+          <div class="card"><h3>Readings arrive</h3><p>Any sensor that reports a number or a yes/no: temperature, level, pressure, a door, a motor's current.</p></div>
+          <div class="card"><h3>Rules decide right away</h3><p>Checked the moment a reading lands, not every few minutes. Across one device or a whole site.</p></div>
+          <div class="card"><h3>Safely, every time</h3><p>Hold time, a reset margin and a minimum interval are part of every rule, so noisy sensors don't wear out relays.</p></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="integrators" class="block alt">
+    <div class="inner">
+      <p class="eyebrow">For integrators</p>
+      <h2 class="h2">Build it once. Hand over something simple.</h2>
+      <p class="lead">You install the sensors, write the rules and design the dashboards. Your client wants to see that everything is fine and press a button now and then. IO Driven gives each of you the right screen, in one platform.</p>
+      <div class="body int-grid">
+        <div class="feat">
+          <div><svg class="icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><div><h3>One login, every client</h3><p>Each client is a separate workspace with its own devices, rules and people. Switch between them in a click.</p></div></div>
+          <div><svg class="icon" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><div><h3>Simple view for clients</h3><p>Same data, fewer words: areas, readings and on/off switches. Technical pages and credentials stay out of sight. Try it on the right.</p></div></div>
+          <div><svg class="icon" viewBox="0 0 24 24"><path d="M5 3l14 9-14 9V3z"/></svg><div><h3>Scene buttons</h3><p>Mark a rule as something clients can run, like "Start irrigation", and it becomes a button on their dashboard and phone.</p></div></div>
+          <div><svg class="icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><div><h3>Support without a site visit</h3><p>Device health, restart reasons, missing parts and failed deliveries tell you what happened before you get in the van.</p></div></div>
+          <div><svg class="icon" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg><div><h3>Existing equipment welcome</h3><p>PLCs, Modbus and OPC UA join through a small edge connector on site. Nothing on their network is opened to the internet.</p></div></div>
+        </div>
+        <div id="viewer-root">
+          <div class="viewer"><p class="dev-meta">Interactive example: the same device as an integrator sees it (full detail) and as their client sees it (Simple view).</p></div>
+        </div>
+      </div>
+
+      <h3 style="margin:56px 0 18px;font-size:16px">How a typical project goes</h3>
+      <div class="tl">
+        <div><small>Week 1</small><h3>Survey</h3><p>List what to measure and what to control. Pick boards, or connect the PLC that's already there.</p></div>
+        <div><small>Week 1–2</small><h3>Build</h3><p>Create the client's workspace, device types, rules from recipes, and their dashboard.</p></div>
+        <div><small>Handover</small><h3>Invite the client</h3><p>They join as viewers and land in Simple view, on the dashboard you built.</p></div>
+        <div><small>After</small><h3>Support remotely</h3><p>Alerts reach you and them. Change a rule or a threshold without a site visit.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="developers" class="block">
+    <div class="inner">
+      <p class="eyebrow">For developers</p>
+      <h2 class="h2">A small contract, kept stable.</h2>
+      <p class="lead">Build your own hardware or connect your own software. Everything a device needs fits in a few MQTT topics and two small JSON messages.</p>
+      <div class="body dev-grid">
+        <ul>
+          <li><b>MQTT over TLS</b>, one credential per device, which can only touch its own topics.</li>
+          <li><b>Commands that expire.</b> Each carries a time to live, and the intended state is retained, so a device that reconnects catches up instead of replaying old orders.</li>
+          <li><b>REST API</b> with API keys and role limits, described by an OpenAPI schema.</li>
+          <li><b>Webhooks</b> as a rule action, to hand events to your own systems.</li>
+          <li><b>Ready-made ESP32 firmware</b> with health reporting and signed over-the-air updates, if you'd rather not write your own.</li>
+        </ul>
+        <pre class="code">{tenant}/{device}/{metric}           reading     device → platform
+{tenant}/{device}/cmd/{actuator}     command     platform → device
+{tenant}/{device}/state/{actuator}   desired     retained
+{tenant}/{device}/ack/{actuator}     confirm     device → platform
+{tenant}/{device}/status             health      retained · last will
+
+# a reading
+{ "value": 27.4, "timestamp": 1770001111 }
+
+# a command
+{ "value": true, "ttl": 30, "command_id": "…" }</pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="deploy" class="block alt">
+    <div class="inner">
+      <p class="eyebrow">Deployment</p>
+      <h2 class="h2">Pick where it runs. Change your mind later.</h2>
+      <p class="lead">The device contract is identical everywhere, so moving a client from the cloud to their own server is a data migration, not a re-flash.</p>
+      <div class="body tbl">
+        <table>
+          <thead><tr><th></th><th>Cloud</th><th>Dedicated cloud</th><th>On-premise</th></tr></thead>
+          <tbody>
+            <tr><td>Run by</td><td>IO Driven</td><td>IO Driven</td><td>Your team</td></tr>
+            <tr><td>Data lives</td><td>IO Driven's cloud</td><td>Your own instance</td><td>Your server, your network</td></tr>
+            <tr><td>Kept apart by</td><td>Database row-level security</td><td>Separate database and broker</td><td>Separate everything</td></tr>
+            <tr><td>Updates</td><td>Continuous</td><td>Scheduled with you</td><td>You apply them</td></tr>
+            <tr><td>Good for</td><td>Getting started, many small sites</td><td>Security reviews, compliance</td><td>Sites that keep data on site</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="block">
+    <div class="inner faq">
+      <div><p class="eyebrow">FAQ</p><h2 class="h2">Short answers.</h2></div>
+      <div class="faq-list">
+        <details open><summary>Can my clients break something?</summary><div>Viewers can't change devices, rules or settings, whatever view they use. Simple view hides and rewords things; the permissions behind it are enforced by the server.</div></details>
+        <details><summary>Do I pay per client?</summary><div>Pricing depends on how many devices you run and where. Tell us about your projects and we'll suggest a setup.</div></details>
+        <details><summary>What hardware do I need?</summary><div>Supported ESP32 boards run ready-made firmware flashed from the browser. Anything else can speak MQTT directly or join through an edge connector.</div></details>
+        <details><summary>What if a site loses its internet connection?</summary><div>Devices that are offline can't take commands. When they reconnect they get the latest intended state, and stale commands expire instead of running late.</div></details>
+        <details><summary>Is there a phone app?</summary><div>Yes, for Android first: dashboards, controls, alerts with push notifications, and Bluetooth Wi-Fi setup for new boards.</div></details>
+      </div>
+    </div>
+  </section>
+
+  <section id="close" class="close night-close">
+    <div class="inner">
+      <h2>Installing systems for clients? Let's talk.</h2>
+      <p>Tell us about a project you have in mind. We reply within one working day.</p>
+      <div class="row"><a class="btn btn-cta btn-lg" href="#">Talk to us →</a><a class="btn btn-ghost btn-lg" href="#">Sign in</a></div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot"><div class="inner"><span style="color:var(--night-ink);font-weight:600">iodriven.tech</span><span>For site teams, integrators and developers</span><span><a href="#">Privacy</a> · © 2026 IO Driven</span></div></footer>
+
+<div class="demo-chip"><a href="index.html">All demos</a><button type="button" id="theme">Dark</button></div>
+<script>
+  (function () {
+    const b = document.getElementById("theme"), r = document.documentElement;
+    const dark = () => r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const label = () => { b.textContent = dark() ? "Light" : "Dark"; };
+    b.onclick = () => { r.dataset.theme = dark() ? "light" : "dark"; label(); };
+    label();
+  })();
+</script>
+
+<script type="module">
+import React, { useState } from "react";
+import { createRoot } from "react-dom/client";
+import { motion, AnimatePresence, MotionConfig, LayoutGroup } from "framer-motion";
+import htm from "htm";
+const html = htm.bind(React.createElement);
+const spring = { type: "spring", stiffness: 420, damping: 34 };
+
+/* Hero: who are you? A shared layoutId slides the pill; AnimatePresence
+   swaps the panel. */
+const PATHS = [
+  { id: "site", label: "I run a site", title: "See what's happening. Get told when it matters.",
+    body: "For people who look after a greenhouse, a plant room, a cold store or a building.",
+    points: ["Live dashboards on your laptop and phone", "Alerts by email and push notification, acknowledged with a note", "Rules from ready-made recipes: pick one, change the numbers", "A simple view with just your areas, readings and switches"],
+    cta: ["See how it works", "#how"] },
+  { id: "int", label: "I install systems for clients", title: "Set it up once, hand over something simple.",
+    body: "For integrators, installers and automation contractors who build systems other people use.",
+    points: ["One login for every client, each in its own workspace", "Clients get Simple view and scene buttons", "Remote health and failed deliveries, before a site visit", "Cloud, dedicated or on the client's own server"],
+    cta: ["What integrators get", "#integrators"] },
+  { id: "dev", label: "I build devices or software", title: "A small, stable contract and an open API.",
+    body: "For firmware and software developers connecting their own hardware or systems.",
+    points: ["MQTT over TLS with per-device credentials", "Commands that expire, plus retained desired state", "REST API with API keys and webhooks", "Ready-made ESP32 firmware with signed updates"],
+    cta: ["See the contract", "#developers"] },
+];
+
+function Paths() {
+  const [sel, setSel] = useState("int");
+  const p = PATHS.find((x) => x.id === sel);
+  return html`
+    <div>
+      <${LayoutGroup} id="paths">
+        <div class="seg" role="tablist" aria-label="Who are you?">
+          ${PATHS.map((x) => html`
+            <button key=${x.id} role="tab" aria-selected=${sel === x.id} aria-controls="path-panel" onClick=${() => setSel(x.id)}>
+              ${sel === x.id && html`<${motion.span} class="bg" layoutId="path-bg" transition=${spring} />`}
+              <span>${x.label}</span>
+            </button>`)}
+        </div>
+      </${LayoutGroup}>
+      <${AnimatePresence} mode="wait" initial=${false}>
+        <${motion.div} key=${sel} id="path-panel" role="tabpanel" class="path-panel"
+          initial=${{ opacity: 0, y: 12 }} animate=${{ opacity: 1, y: 0 }} exit=${{ opacity: 0, y: -8 }} transition=${{ duration: 0.25 }}>
+          <div>
+            <h2>${p.title}</h2><p>${p.body}</p>
+            <div class="go"><a class="btn btn-cta" href=${p.cta[1]}>${p.cta[0]} →</a><a class="btn btn-ghost" href="#close">Talk to us</a></div>
+          </div>
+          <ul>${p.points.map((t, k) => html`
+            <${motion.li} key=${t} initial=${{ opacity: 0, x: 10 }} animate=${{ opacity: 1, x: 0 }} transition=${{ delay: 0.05 * k + 0.08 }}>${t}</${motion.li}>`)}
+          </ul>
+        </${motion.div}>
+      </${AnimatePresence}>
+    </div>`;
+}
+
+/* Integrators: the same device in full detail and in Simple view. Layout
+   animations morph the card; words change per DESIGN.md §15a. */
+function Viewer() {
+  const [simple, setSimple] = useState(false);
+  const [fan, setFan] = useState(true);
+  const [ran, setRan] = useState(false);
+  return html`
+    <div class="viewer">
+      <div class="viewer-top">
+        <small>${simple ? "What your client sees" : "What you see"}</small>
+        <${LayoutGroup} id="view">
+          <div class="mini-seg" role="group" aria-label="View">
+            ${[["Full", false], ["Simple", true]].map(([l, v]) => html`
+              <button key=${l} aria-pressed=${simple === v} onClick=${() => setSimple(v)}>
+                ${simple === v && html`<${motion.span} class="bg" layoutId="view-bg" transition=${spring} />`}<span>${l}</span>
+              </button>`)}
+          </div>
+        </${LayoutGroup}>
+      </div>
+      <${LayoutGroup}>
+        <${motion.div} layout class="dev" transition=${spring}>
+          <${motion.div} layout="position" class="dev-head">
+            <b>${simple ? "Greenhouse · Bay 1" : "bay1-climate"}</b>
+            <span class="st-online" style=${{ fontSize: 13 }}><span class="dot"></span>Online</span>
+          </${motion.div}>
+          <${motion.div} layout="position" class="dev-meta">${simple ? "Area: North greenhouse" : "Template: Bay climate · Zone: North · fw 1.0.2"}</${motion.div}>
+          <${motion.div} layout="position" class="dev-row">
+            <div>
+              <div class="dev-meta">${simple ? "Temperature" : "Metric · temperature"}</div>
+              <div class="dev-val num">26.4<small>°C</small></div>
+            </div>
+            <div style=${{ textAlign: "right" }}>
+              <div class="dev-meta">${simple ? "Fan" : "Actuator · fan1"}</div>
+              <button class="sw ${fan ? "on" : ""}" role="switch" aria-checked=${fan} aria-label="Fan" onClick=${() => setFan(!fan)}>
+                <${motion.span} layout transition=${spring} />
+              </button>
+            </div>
+          </${motion.div}>
+          <${AnimatePresence} initial=${false}>
+            ${!simple && html`
+              <${motion.div} key="kv" class="kv" initial=${{ opacity: 0, height: 0 }} animate=${{ opacity: 1, height: "auto" }} exit=${{ opacity: 0, height: 0 }}>
+                <span>topic</span><span>northfield/bay1-climate/temperature</span>
+                <span>health</span><span>RSSI −63 dBm · heap 118 kB · boots 7</span>
+                <span>last cmd</span><span>fan1 → on · confirmed 0.4 s</span>
+                <span>rule</span><span>Too hot → fan on · Armed</span>
+              </${motion.div}>`}
+          </${AnimatePresence}>
+        </${motion.div}>
+        <${AnimatePresence} initial=${false}>
+          ${simple && html`
+            <${motion.div} key="scene" layout initial=${{ opacity: 0, y: 10 }} animate=${{ opacity: 1, y: 0 }} exit=${{ opacity: 0, y: 10 }}>
+              <button class="scene" onClick=${() => { setRan(true); setTimeout(() => setRan(false), 1600); }}>
+                ${ran ? "✓ Irrigation started" : "▶ Start irrigation"}
+              </button>
+            </${motion.div}>`}
+        </${AnimatePresence}>
+      </${LayoutGroup}>
+      <p class="words">${simple
+        ? "Simple view: device → area, metric → sensor reading, actuator → output. No topics, templates or credentials."
+        : "Full view: templates, zones, MQTT topics, health and the rules acting on this device."}</p>
+    </div>`;
+}
+
+const mount = (id, C) => createRoot(document.getElementById(id)).render(html`<${MotionConfig} reducedMotion="user"><${C} /></${MotionConfig}>`);
+mount("paths-root", Paths);
+mount("viewer-root", Viewer);
+</script>
+</body>
+</html>

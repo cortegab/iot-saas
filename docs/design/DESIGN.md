@@ -750,27 +750,56 @@ path (CLAUDE.md §9.1).
 
 ## 10. Public pages
 
+Reference: landing demo 1 (`docs/design/redesign/landing/demo-1-story.html` and
+`demo-1-signin.html`). The wording sits halfway between a non-technical reader and a technical
+one: a plain sentence first, the technical detail one step away (a "Technical note", the FAQ).
+
 - **Night surfaces:** the landing nav, hero, closing band and footer, and the sign-in brand panel,
-  are dark in both themes (the static `night` tokens in `globals.css`). Over them sits the shared
-  network canvas: devices in zones around the broker ("RULES · IN MEMORY"), readings in, commands out.
-- **Login:** G's split screen. On the left, a night brand panel: the network, a line about the
-  product, example reading chips, and the design figures (no live-looking statistics). On the
-  right, the card. Below `lg` the panel becomes a band above the card. The card has "Forgot
-  password?" on the password label row, **Keep me signed in on this device** (unchecked, the
-  session ends with the browser), clear error and loading states.
-- **Landing** (`(marketing)`, same tokens and fonts as the app):
-  - A text-only night hero over the network canvas, KPIs on a hairline row.
-  - The **control-loop card** (G's log of one rule's life: in · rule · cmd · ack · clear) lives in
-    **How it works**, under the hot/storage diagram, as the hot path in action.
-  - **Onboarding** shows the **journey figure** beside its four steps: one example device's
-    workspace, template, generated sketch (filled in, password masked) and the device going
-    Waiting → Online with its first reading. The stage it shows is highlighted in the step list;
-    it plays when scrolled into view, and reduced motion shows the finished journey.
-  - A **Deployment** section: Cloud (shared) · Dedicated cloud · On-premise, plus an edge-connector
-    note (CLAUDE.md §3).
-  - An **in-page contact form**.
-  - Contract terms and data retention are answered in the **FAQ**.
-  - **No plan tiers.**
+  are dark in both themes (the static `night` tokens in `globals.css`). Colours on them come from
+  those tokens only; the rule card's status, chart and breach tones are `night-accent`,
+  `night-ok`, `night-unknown`, `night-chart` and `night-breach`.
+- **The rule card** (`RuleLoopCard`) is the public pages' signature: one example rule's life,
+  replayed (Greenhouse · bay 1: the temperature climbs past 30 °C, the rule holds for the hold
+  time, fires, the fan switches on and confirms, and switches off again below 28 °C). It shows the
+  rule as a sentence, the reading with a sparkline and the on line, the fan's state and switch,
+  the hold-time bar, and on the landing a log of the last four events. Status words come from §3
+  (Armed · Fired); the rest is one labelled image to assistive tech. Under reduced motion it is a
+  still frame with the fan on. Motion here uses **Framer Motion**, the only place in the web app
+  that does.
+- **Login and the other account pages** (sign in, create account, forgot and reset password, the
+  invitation page, "no workspace"): a split screen. On the left, the night brand panel: the mark,
+  the landing's three lines ("Your sensors report. / Your rules decide. / Your equipment
+  responds."), one sentence, the rule card (without the log) and the design figures (< 2 s,
+  < 500 ms, 500–1,000 devices; no live-looking statistics). On the right, the card. Below `lg` the
+  panel becomes a band above the card with the lines and sentence only; the rule card also steps
+  aside when the window is shorter than 720 px. The sign-in card has "Forgot password?" on the
+  password label row, **Keep me signed in on this device** (unchecked, the session ends with the
+  browser), clear error and loading states, and the workspace list when the account has more
+  than one.
+- **Landing** (`(marketing)`, same tokens and fonts as the app), in this order:
+  - **Hero** (night): the three lines, one sentence, **Talk to us** and **See how it works**, the
+    rule card with its log beside them, and four figures on a hairline row.
+  - **How it works:** four numbered steps (Sense · Decide · Act · Confirm and record), each with a
+    folded **Technical note** (MQTT/TLS and credentials · in-memory rules before any write · QoS 1,
+    expiry and retained state · batched history, rollups and retention).
+  - **Safety:** hold time, hysteresis and minimum interval as three cards, then a chart of one
+    noisy reading against the on and re-arm lines with the single "fan on" span, and "missing data
+    is unknown, never all clear".
+  - **Use cases:** greenhouses, tanks and pumps, cold rooms, machines and lines; each with what it
+    measures and one example rule in quotes.
+  - **Who it's for:** site teams, integrators and installers (highlighted, linking to the next
+    section), developers.
+  - **For integrators:** six cards: a workspace per client, Simple view (§15a), scene buttons,
+    remote support, existing equipment through an edge connector, where their data lives.
+  - **Getting started:** four numbered steps, from sign-up to a live reading in about ten minutes.
+  - **Deployment:** Cloud · Dedicated cloud · On-premise as three cards (no comparison table, no
+    plan tiers).
+  - **FAQ:** six questions, including retention, offline devices and tenant isolation.
+  - A night **close** ("Tell us what you want to watch and what should happen.") and footer.
+  - **Talk to us** (header, hero, close) opens the contact form dialog; there is no in-page form.
+    Signed-in visitors see **Open console** instead of **Sign in**.
+  - Cards fade up as they scroll into view (staggered per row); cards already on screen and
+    reduced motion are left as they are, and the page reads complete without JavaScript.
 - **Privacy** (`/privacy`): a plain document page on the canvas, a night header bar with the mark
   linking home, one column of about 70 characters, section headings, last-updated date. Linked
   from the landing footer and the sign-in footer, and used as the app's privacy policy on the
@@ -1111,9 +1140,12 @@ not a permission (the API still enforces roles).
   - The bar at the top sets the frame width (1440 · 1366 · 1280 · 1150 · 820 · 390), switches light
     and dark, and simulates a lost live connection.
   - Generated from `docs/design/redesign/src/` by `build.sh`; edit the sources.
-- `docs/design/redesign/demo-g-full-site.html`: the reference for what H doesn't show.
+- `docs/design/redesign/demo-g-full-site.html`: the reference for what H doesn't show (apart from the public pages).
   - Use the **Demo controls** button (top right) to switch role and theme and to open any route.
   - Hash routes deep-link to pages and editors.
+
+- `docs/design/redesign/landing/`: the public pages' reference. Demo 1 (`demo-1-story.html`,
+  `demo-1-signin.html`) is what §10 builds; demos 2 and 3 are alternatives kept for later.
 
 **Changelog**
 
@@ -1252,3 +1284,4 @@ not a permission (the API still enforces roles).
 | 2026-11-26 | §15, §11a Spanish plan L9: app 0.9.0 speaks Spanish. It starts in the phone's language (any es-* → Spanish, read through Hermes' Intl, no native module) and switches to the account's saved choice once known; **More → Language** (*Según el teléfono · English · Español*) saves it for the web and emails too. Tabs, More, Alerts (notifications worded from their keys), Devices, the device screen, Rules, Dashboards and Sign in are translated; the Wi-Fi setup and QR scan screens are still English. |
 | 2026-11-26 | §8, §11a Spanish follow-up (L10): Workspace settings (with a new **Email language** field under Alerts, applied at once: the language of rule emails to the listed addresses), Members, API keys and the dashboards list in Spanish. API keys stay *API keys* (field term). |
 | 2026-11-26 | §9, §11a Spanish follow-up (L11): the rule editor in Spanish: steps and questions, When / If / Then / Behaviour forms, operators, validation messages and safety checks, the preview (replay, dry run, other rules), the rule sentence everywhere ("Cuando Temperatura de bay1 > 30 °C durante 10 s, encender Fan; cuando deje de cumplirse, volver a apagar Fan."), the peek, firing history, failed deliveries and versions. On/off actions say the verb (*encender / apagar / volver a apagar*). The Ladder view (expert) stays English. |
+| 2026-11-27 | §10 public pages follow landing demo 1 ("The story"): plainer wording with technical notes one click away; new sections Use cases, Who it's for and **For integrators**; the product tour, onboarding journey figure, network canvas, security cards, deployment comparison and in-page contact form are gone (Talk to us opens the dialog). The **rule card** replaces the network on the landing hero and on every account page's brand panel. Framer Motion is added for these public pages only; night tokens gain the rule card's accent, chart, breach and unknown tones. |
