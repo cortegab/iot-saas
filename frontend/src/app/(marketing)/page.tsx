@@ -1,95 +1,88 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { Activity, Building2, ChevronDown, ChevronRight, Cpu, KeyRound, Lock, RefreshCw, Send, ShieldAlert, SlidersHorizontal, Users, Zap } from "lucide-react";
-import { ControlLoopLog } from "@/components/marketing/ControlLoopLog";
-import { Deployment } from "@/components/marketing/Deployment";
+import { ChevronDown, ChevronRight, Code2, House, Wrench } from "lucide-react";
 import { EnterButton } from "@/components/marketing/EnterButton";
-import { NetworkCanvas } from "@/components/marketing/NetworkCanvas";
-import { OnboardingSection } from "@/components/marketing/OnboardingSection";
-import { ProductTour } from "@/components/marketing/ProductTour";
-import { Steps } from "@/components/marketing/Steps";
+import { RevealOnScroll } from "@/components/marketing/RevealOnScroll";
+import { RuleLoopCard } from "@/components/marketing/RuleLoopCard";
+import { TalkToUsButton } from "@/components/marketing/TalkToUsButton";
 import { nightButtonClassName } from "@/components/marketing/night";
 import { cn } from "@/lib/cn";
 import { BrandMark } from "@/components/brand/BrandMark";
-import { marketingCopy } from "@/lib/marketing-copy";
+import { marketingCopy, type MarketingCopy } from "@/lib/marketing-copy";
 import { serverLocale } from "@/lib/i18n-server";
 
-/* iodriven.tech landing (DESIGN.md §10, demo G): a night nav and hero over
- * the network · product tour · how it works (with the control-loop log) ·
- * safety · onboarding (the journey figure) · security and operations · deployment (Talk to us) ·
- * FAQ · a night close and footer. There is no public demo workspace, so G's
- * "Open the demo" becomes "Sign in" / "Talk to us". */
+/* iodriven.tech landing (DESIGN.md §10, landing demo 1 "The story"): a night
+ * nav and hero with the live rule card · how it works (each step with a
+ * technical note) · safety · use cases · who it's for · for integrators ·
+ * getting started · deployment · FAQ · a night close and footer. "Talk to
+ * us" opens the contact form wherever it appears. */
 
 const EYEBROW = "mb-3 font-mono text-[12px] uppercase tracking-[0.14em]";
-
-
 const INNER = "mx-auto w-full max-w-[1180px] px-4 md:px-6";
-
-function Heading({ eyebrow, title }: { eyebrow: string; title: string }) {
-  return (
-    <>
-      <p className={cn(EYEBROW, "text-accent")}>{eyebrow}</p>
-      <h2 className="max-w-[22ch] text-balance text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-ink md:text-[40px]">{title}</h2>
-    </>
-  );
-}
 
 function Section({ id, eyebrow, title, note, alt, children }: { id: string; eyebrow: string; title: string; note?: ReactNode; alt?: boolean; children: ReactNode }) {
   return (
     <section id={id} className={cn("scroll-mt-16 py-16 md:py-[88px]", alt && "border-y border-border bg-surface")}>
       <div className={INNER}>
-        <Heading eyebrow={eyebrow} title={title} />
-        {note && <p className="mt-3.5 max-w-[68ch] text-[16px] leading-[1.65] text-ink-muted">{note}</p>}
-        <div className="mt-8">{children}</div>
+        <p className={cn(EYEBROW, "text-accent")}>{eyebrow}</p>
+        <h2 className="max-w-[22ch] text-balance text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-ink md:text-[40px]">{title}</h2>
+        {note && <p className="mt-3.5 max-w-[64ch] text-[16px] leading-[1.65] text-ink-muted">{note}</p>}
+        <div className="mt-9">{children}</div>
       </div>
     </section>
   );
 }
 
-function Card({ icon, title, children }: { icon?: ReactNode; title: string; children: ReactNode }) {
+/** A card that fades up when scrolled to (RevealOnScroll). */
+function Card({ className, children }: { className?: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-5 shadow-card">
-      {icon && <span className="text-accent">{icon}</span>}
-      <h3 className="text-base font-semibold text-ink">{title}</h3>
-      <div className="text-[14.5px] leading-relaxed text-ink-muted">{children}</div>
+    <div data-reveal className={cn("flex flex-col gap-1.5 rounded-2xl border border-border bg-surface p-5 shadow-card", className)}>
+      {children}
     </div>
   );
 }
 
-function FlowNode({ icon, name, sub }: { icon: ReactNode; name: string; sub: string }) {
+function CardTitle({ children }: { children: ReactNode }) {
+  return <h3 className="text-base font-semibold text-ink">{children}</h3>;
+}
+
+function CardBody({ children }: { children: ReactNode }) {
+  return <p className="text-[14.5px] leading-relaxed text-ink-muted">{children}</p>;
+}
+
+function StepNumber({ n }: { n: number }) {
+  return <span className="mb-3 grid h-7 w-7 place-items-center rounded-full bg-accent-muted font-mono text-[13px] font-semibold text-accent-strong">{n}</span>;
+}
+
+/** Safety: one noisy reading against the on and re-arm lines, with the
+ * single "fan on" span the brakes allow. */
+function SafetyChart({ s }: { s: MarketingCopy["safety"] }) {
   return (
-    <div className="flex min-w-[140px] flex-1 flex-col gap-0.5 rounded-xl border border-border bg-surface px-3.5 py-3">
-      <span className="flex items-center gap-2 text-sm font-semibold text-ink">
-        <span className="text-accent">{icon}</span>
-        {name}
-      </span>
-      <span className="text-[12.5px] text-ink-muted">{sub}</span>
-    </div>
+    <svg viewBox="0 0 520 150" role="img" aria-label={s.chart} className="h-auto w-full">
+      <line x1="0" x2="520" y1="44" y2="44" stroke="var(--color-status-offline)" strokeDasharray="4 4" />
+      <text x="514" y="38" textAnchor="end" fontSize="11" fill="var(--color-ink-muted)" className="font-mono">
+        {s.onLine}
+      </text>
+      <line x1="0" x2="520" y1="84" y2="84" stroke="var(--color-status-online)" strokeDasharray="4 4" />
+      <text x="514" y="100" textAnchor="end" fontSize="11" fill="var(--color-ink-muted)" className="font-mono">
+        {s.resetLine}
+      </text>
+      <rect x="196" y="122" width="210" height="14" rx="4" fill="color-mix(in srgb, var(--color-accent) 22%, transparent)" />
+      <text x="301" y="132.5" textAnchor="middle" fontSize="10.5" fill="var(--color-accent-strong)" className="font-mono">
+        {s.fanOn}
+      </text>
+      <path
+        d="M0 110 L30 104 L55 98 L80 90 L100 70 L112 46 L122 58 L134 40 L146 50 L158 36 L176 30 L196 26 L220 30 L250 24 L280 34 L300 40 L318 54 L334 46 L350 64 L370 76 L390 80 L406 90 L430 96 L470 102 L520 106"
+        fill="none"
+        stroke="var(--color-chart)"
+        strokeWidth="2.2"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
-const SAFETY_ICONS = [<ShieldAlert key="a" size={18} />, <Lock key="b" size={18} />, <RefreshCw key="c" size={18} />];
-
-const SECURITY_ICONS = [
-  <Building2 key="a" size={20} />,
-  <KeyRound key="b" size={20} />,
-  <Users key="c" size={20} />,
-  <RefreshCw key="d" size={20} />,
-  <SlidersHorizontal key="e" size={20} />,
-  <Zap key="f" size={20} />,
-];
-
-const Arrow = () => <span aria-hidden className="hidden h-px w-6 shrink-0 bg-border md:block" />;
-
-/** The device-contract answer's topic table (FAQ): identical in every language. */
-const TOPICS = `{tenant}/{device}/{metric}          telemetry      device → platform
-{tenant}/{device}/cmd/{actuator}    command        QoS 1
-{tenant}/{device}/state/{actuator}  desired state  retained
-{tenant}/{device}/ack/{actuator}    ack            device → platform
-{tenant}/{device}/config            profile        retained
-{tenant}/{device}/status            health         last will
-
-mosquitto_pub -t "northfield/bay1-climate/temperature" -m '{"value": 31.5}'`;
+const WHO_ICONS = [<House key="a" size={20} />, <Wrench key="b" size={20} />, <Code2 key="c" size={20} />];
 
 export default async function LandingPage() {
   const c = marketingCopy(await serverLocale());
@@ -111,40 +104,37 @@ export default async function LandingPage() {
           <div className="ml-auto flex items-center gap-2">
             <EnterButton />
             {/* Below sm the header can't fit both; the hero's Talk to us is right below. */}
-            <a href="#deployment" className={cn(nightButtonClassName(), "max-sm:hidden")}>
-              {c.nav.talk}
-            </a>
+            <TalkToUsButton className={cn(nightButtonClassName(), "max-sm:hidden")}>{c.nav.talk}</TalkToUsButton>
           </div>
         </div>
       </header>
 
       <main>
-        <section id="top" className="night-bg relative isolate overflow-hidden pb-10 pt-[72px] text-night-ink">
-          <NetworkCanvas className="absolute inset-0 -z-20 h-full w-full" />
-          <div aria-hidden className="night-scrim-hero pointer-events-none absolute inset-0 -z-10" />
+        <section id="top" className="night-bg relative overflow-hidden pb-10 pt-[72px] text-night-ink">
           <div className={INNER}>
-            <div className="max-w-[760px]">
-              <p className={cn(EYEBROW, "mkt-fade mkt-fade-1 text-night-sky")}>{c.hero.eyebrow}</p>
-              <h1 className="mkt-fade mkt-fade-2 text-balance text-[38px] font-semibold leading-[1.02] tracking-[-0.04em] text-white md:text-[64px]">
-                {c.hero.line1}
-                <br />
-                <span className="text-[#93a4bd]">{c.hero.line2}</span>
-                <br />
-                <span className="text-[#93a4bd]">{c.hero.line3}</span>
-              </h1>
-              <p className="mkt-fade mkt-fade-3 mt-5 max-w-[52ch] text-[17px] leading-[1.6] text-night-muted">
-                {c.hero.leadBefore}
-                <b className="font-semibold text-white">{c.hero.leadBold}</b>
-                {c.hero.leadAfter}
-              </p>
-              <div className="mkt-fade mkt-fade-3 mt-7 flex flex-wrap gap-2.5">
-                <a href="#deployment" className={nightButtonClassName({ size: "lg" })}>
-                  {c.nav.talk} <ChevronRight aria-hidden size={16} />
-                </a>
-                <a href="#how" className={nightButtonClassName({ kind: "ghost", size: "lg" })}>
-                  {c.hero.howLink}
-                </a>
+            <div className="grid items-center gap-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)]">
+              <div>
+                <p className={cn(EYEBROW, "mkt-fade mkt-fade-1 text-night-sky")}>{c.hero.eyebrow}</p>
+                <h1 className="mkt-fade mkt-fade-2 text-balance text-[38px] font-semibold leading-[1.03] tracking-[-0.04em] text-white md:text-[62px]">
+                  {c.hero.line1}
+                  <span className="block text-[#93a4bd]">{c.hero.line2}</span>
+                  <span className="block text-[#93a4bd]">{c.hero.line3}</span>
+                </h1>
+                <p className="mkt-fade mkt-fade-3 mt-5 max-w-[52ch] text-[17px] leading-[1.6] text-night-muted">
+                  {c.hero.leadBefore}
+                  <b className="font-semibold text-white">{c.hero.leadBold}</b>
+                  {c.hero.leadAfter}
+                </p>
+                <div className="mkt-fade mkt-fade-3 mt-7 flex flex-wrap gap-2.5">
+                  <TalkToUsButton className={nightButtonClassName({ size: "lg" })}>
+                    {c.nav.talk} <ChevronRight aria-hidden size={16} />
+                  </TalkToUsButton>
+                  <a href="#how" className={nightButtonClassName({ kind: "ghost", size: "lg" })}>
+                    {c.hero.howLink}
+                  </a>
+                </div>
               </div>
+              <RuleLoopCard withLog className="mkt-fade mkt-fade-4" />
             </div>
             <dl className="mt-14 grid grid-cols-2 gap-4 border-t border-night-line pt-[22px] lg:grid-cols-4">
               {c.hero.stats.map(([dt, dd, note]) => (
@@ -158,114 +148,137 @@ export default async function LandingPage() {
           </div>
         </section>
 
-        <Section id="tour" eyebrow={c.tour.eyebrow} title={c.tour.title}>
-          <ProductTour />
-        </Section>
-
-        <Section
-          id="how"
-          alt
-          eyebrow={c.how.eyebrow}
-          title={c.how.title}
-          note={c.how.note}
-        >
-          <div role="img" aria-label={c.how.diagram} className="flex flex-col gap-4">
-            <div className="flex flex-col items-stretch gap-3 md:flex-row md:items-center">
-              <FlowNode icon={<Cpu size={16} />} name={c.how.devices[0]} sub={c.how.devices[1]} />
-              <Arrow />
-              <FlowNode icon={<Send size={16} />} name={c.how.emqx[0]} sub={c.how.emqx[1]} />
-              <Arrow />
-              <FlowNode icon={<Activity size={16} />} name={c.how.ingestion[0]} sub={c.how.ingestion[1]} />
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-accent/40 bg-accent-muted/50 p-4">
-                <p className="mb-3 text-[12.5px] font-semibold uppercase tracking-[0.06em] text-accent">{c.how.hot}</p>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <FlowNode icon={<SlidersHorizontal size={16} />} name={c.how.evaluator[0]} sub={c.how.evaluator[1]} />
-                  <FlowNode icon={<Zap size={16} />} name={c.how.command[0]} sub={c.how.command[1]} />
-                </div>
-              </div>
-              <div className="rounded-2xl border border-border bg-canvas p-4">
-                <p className="mb-3 text-[12.5px] font-semibold uppercase tracking-[0.06em] text-ink-muted">{c.how.storage}</p>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <FlowNode icon={<RefreshCw size={16} />} name={c.how.redis[0]} sub={c.how.redis[1]} />
-                  <FlowNode icon={<Building2 size={16} />} name={c.how.timescale[0]} sub={c.how.timescale[1]} />
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="mt-8 grid items-center gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-            <ControlLoopLog />
-            <p className="max-w-[52ch] text-[15px] leading-relaxed text-ink-muted">
-              <b className="font-semibold text-ink">{c.how.lifeBold}</b> {c.how.life}
-            </p>
-          </div>
-          <div className="mt-8">
-            <Steps steps={c.how.steps} />
+        <Section id="how" eyebrow={c.how.eyebrow} title={c.how.title} note={c.how.note}>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {c.how.steps.map(([title, body, tech], i) => (
+              <Card key={title}>
+                <StepNumber n={i + 1} />
+                <CardTitle>{title}</CardTitle>
+                <CardBody>{body}</CardBody>
+                <details className="group mt-2 border-t border-dashed border-border pt-2.5">
+                  <summary className="cursor-pointer list-none font-mono text-[12.5px] font-medium text-accent [&::-webkit-details-marker]:hidden">
+                    <span aria-hidden className="group-open:hidden">{"+ "}</span>
+                    <span aria-hidden className="hidden group-open:inline">{"– "}</span>
+                    {c.how.techLabel}
+                  </summary>
+                  <p className="mt-2 text-[13.5px] leading-relaxed text-ink-muted">{tech}</p>
+                </details>
+              </Card>
+            ))}
           </div>
         </Section>
 
-        <Section
-          id="safety"
-          eyebrow={c.safety.eyebrow}
-          title={c.safety.title}
-          note={
-            <>
-              {c.safety.note} <b className="text-ink">{c.safety.noteBold}</b>
-            </>
-          }
-        >
+        <Section id="safety" alt eyebrow={c.safety.eyebrow} title={c.safety.title} note={c.safety.note}>
           <div className="grid gap-4 md:grid-cols-3">
             {c.safety.cards.map(([title, body]) => (
-              <Card key={title} title={title}>
-                {body}
+              <Card key={title}>
+                <CardTitle>{title}</CardTitle>
+                <CardBody>{body}</CardBody>
               </Card>
             ))}
           </div>
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            {c.safety.facts.map(([b, rest], i) => (
-              <p key={b} className="flex gap-3 text-[14.5px] text-ink">
-                <span className="mt-0.5 shrink-0 text-accent">{SAFETY_ICONS[i]}</span>
-                <span>
-                  <b>{b}</b> {rest}
-                </span>
+          <Card className="mt-6 grid items-center gap-4 md:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+            <SafetyChart s={c.safety} />
+            <div className="flex flex-col gap-2.5 text-[14.5px] text-ink">
+              <p>
+                <b className="font-semibold">{c.safety.withoutBold}</b> {c.safety.without}
               </p>
-            ))}
-          </div>
+              <p>
+                <b className="font-semibold">{c.safety.withBold}</b> {c.safety.with}
+              </p>
+              <p className="flex gap-2 text-[13.5px] text-status-unknown">
+                <span aria-hidden className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-current" />
+                {c.safety.unknown}
+              </p>
+            </div>
+          </Card>
         </Section>
 
-        {/* G .s-split: steps on the left, the journey figure beside them. */}
-        <section id="onboarding" className="scroll-mt-16 border-y border-border bg-surface py-16 md:py-[88px]">
-          <div className={INNER}>
-            <OnboardingSection heading={<Heading eyebrow={c.onboarding.eyebrow} title={c.onboarding.title} />} />
-          </div>
-        </section>
-
-        <Section id="security" eyebrow={c.security.eyebrow} title={c.security.title}>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {c.security.cards.map(([title, body], i) => (
-              <Card key={title} icon={SECURITY_ICONS[i]} title={title}>
-                {body}
+        <Section id="uses" eyebrow={c.uses.eyebrow} title={c.uses.title} note={c.uses.note}>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {c.uses.items.map(([tag, title, body, rule]) => (
+              <Card key={title}>
+                <span className="mb-1 self-start rounded-md bg-[color-mix(in_srgb,var(--color-chart)_10%,transparent)] px-2 py-1 font-mono text-[12px] text-chart">{tag}</span>
+                <CardTitle>{title}</CardTitle>
+                <CardBody>{body}</CardBody>
+                <p className="mt-auto border-t border-border-soft pt-2.5 text-[13.5px] text-ink">{rule}</p>
               </Card>
             ))}
           </div>
         </Section>
 
-        <Section
-          id="deployment"
-          alt
-          eyebrow={c.deployment.eyebrow}
-          title={c.deployment.title}
-          note={c.deployment.note}
-        >
-          <Deployment />
+        <Section id="who" alt eyebrow={c.who.eyebrow} title={c.who.title} note={c.who.note}>
+          <div className="grid gap-4 md:grid-cols-3">
+            {c.who.items.map(([title, body, points], i) => (
+              <Card key={title} className={cn("gap-2.5", i === 1 && "border-accent/45 bg-[linear-gradient(180deg,var(--color-accent-muted),var(--color-surface)_60%)]")}>
+                <span className="text-accent">{WHO_ICONS[i]}</span>
+                <CardTitle>{title}</CardTitle>
+                <CardBody>{body}</CardBody>
+                <ul className="mt-1 list-disc pl-[18px] text-[14.5px] text-ink-muted">
+                  {points.map((p) => (
+                    <li key={p} className="my-[3px]">
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+                {i === 1 && (
+                  <a href="#integrators" className="mt-auto pt-1.5 font-medium text-accent hover:underline">
+                    {c.who.integratorsLink} →
+                  </a>
+                )}
+              </Card>
+            ))}
+          </div>
         </Section>
 
-        {/* G .s-faq: the heading beside the questions. */}
-        <section id="faq" className="scroll-mt-16 py-16 md:py-[88px]">
+        <Section id="integrators" eyebrow={c.integrators.eyebrow} title={c.integrators.title} note={c.integrators.note}>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {c.integrators.cards.map(([title, body]) => (
+              <Card key={title}>
+                <CardTitle>{title}</CardTitle>
+                <CardBody>{body}</CardBody>
+              </Card>
+            ))}
+          </div>
+        </Section>
+
+        <Section id="start" alt eyebrow={c.start.eyebrow} title={c.start.title} note={c.start.note}>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {c.start.steps.map(([title, body], i) => (
+              <Card key={title}>
+                <StepNumber n={i + 1} />
+                <CardTitle>{title}</CardTitle>
+                <CardBody>{body}</CardBody>
+              </Card>
+            ))}
+          </div>
+        </Section>
+
+        <Section id="deployment" eyebrow={c.deployment.eyebrow} title={c.deployment.title} note={c.deployment.note}>
+          <div className="grid gap-4 md:grid-cols-3">
+            {c.deployment.options.map(([name, big, sub, points]) => (
+              <Card key={name}>
+                <CardTitle>{name}</CardTitle>
+                <p className="mt-0.5 text-[22px] font-semibold tracking-[-0.02em] text-ink">{big}</p>
+                <p className="text-[13px] text-ink-muted">{sub}</p>
+                <ul className="mt-3 list-disc pl-[18px] text-[14px] text-ink-muted">
+                  {points.map((p) => (
+                    <li key={p} className="my-[3px]">
+                      {p}
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ))}
+          </div>
+        </Section>
+
+        {/* The heading beside the questions. */}
+        <section id="faq" className="scroll-mt-16 border-y border-border bg-surface py-16 md:py-[88px]">
           <div className={cn(INNER, "grid gap-12 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]")}>
             <div>
-              <Heading eyebrow={c.faq.eyebrow} title={c.faq.title} />
+              <p className={cn(EYEBROW, "text-accent")}>{c.faq.eyebrow}</p>
+              <h2 className="max-w-[22ch] text-balance text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] text-ink md:text-[40px]">{c.faq.title}</h2>
             </div>
             <div className="flex flex-col border-t border-border">
               {c.faq.items.map(([q, text], i) => (
@@ -274,13 +287,7 @@ export default async function LandingPage() {
                     {q}
                     <ChevronDown aria-hidden size={16} className="mt-[3px] shrink-0 text-ink-muted transition-transform group-open:rotate-180" />
                   </summary>
-                  <div className="max-w-[64ch] pb-[18px] leading-[1.65] text-ink-muted">
-                    {/* The device-contract answer shows the topics first. */}
-                    {i === 5 && (
-                      <pre className="mb-3 overflow-x-auto rounded-lg border border-border bg-canvas p-3 font-mono text-[12.5px] leading-[1.7] text-ink">{TOPICS}</pre>
-                    )}
-                    {text}
-                  </div>
+                  <div className="max-w-[64ch] pb-[18px] leading-[1.65] text-ink-muted">{text}</div>
                 </details>
               ))}
             </div>
@@ -292,9 +299,9 @@ export default async function LandingPage() {
             <h2 className="mx-auto max-w-[22ch] text-balance text-[28px] font-semibold leading-[1.1] tracking-[-0.03em] md:text-[40px]">{c.close.title}</h2>
             <p className="mt-3 text-[16px] text-night-muted">{c.close.body}</p>
             <div className="mt-7 flex flex-wrap justify-center gap-2.5">
-              <a href="#deployment" className={nightButtonClassName({ size: "lg" })}>
+              <TalkToUsButton className={nightButtonClassName({ size: "lg" })}>
                 {c.nav.talk} <ChevronRight aria-hidden size={16} />
-              </a>
+              </TalkToUsButton>
               <EnterButton size="lg" />
             </div>
           </div>
@@ -307,7 +314,7 @@ export default async function LandingPage() {
             <BrandMark size={18} />
             iodriven.tech
           </span>
-          <span>MQTT/TLS · FastAPI · TimescaleDB · EMQX · Docker Compose</span>
+          <span>{c.footer.tagline}</span>
           <span className="flex items-center gap-4">
             <Link href="/privacy" className="hover:text-night-ink hover:underline">
               {c.footer.privacy}
@@ -316,6 +323,7 @@ export default async function LandingPage() {
           </span>
         </div>
       </footer>
+      <RevealOnScroll />
     </>
   );
 }

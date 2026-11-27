@@ -1,0 +1,129 @@
+/* Shared by the three landing demos. Values copied from DESIGN.md §3 and the
+   night surfaces in frontend/src/app/globals.css (§10). Demos only: the real
+   page uses the app's tokens through Tailwind. */
+:root {
+  --canvas: #f7f7f8; --surface: #fff; --raised: #f2f2f5; --border: #e3e3e8; --soft: #eeeef2;
+  --ink: #15161a; --muted: #62646f; --accent: #4f46e5; --accent-strong: #4338ca; --accent-muted: #eef0ff;
+  --on-accent: #fff; --chart: #0e7490; --online: #15803d; --offline: #dc2626; --pending: #b45309;
+  --unknown: #6b7280; --pending-surface: #fffbeb; --shadow-card: 0 1px 2px rgba(30, 30, 60, .05);
+  --night: #0a0f1f; --night-deep: #070b16; --night-ink: #e6edf7; --night-muted: #a9b6c9;
+  --night-dim: #8ea0b8; --night-faint: #7f8ea3; --night-line: rgba(148, 163, 184, .18);
+  --night-sky: #7dd3fc; --night-amber: #fbbf24; --night-ok: #4ade80;
+  --inner: 1180px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #0f1014; --surface: #16171c; --raised: #1e2027; --border: #2a2c34; --soft: #222329;
+    --ink: #ececf1; --muted: #9a9ca8; --accent: #818cf8; --accent-strong: #a5b4fc; --accent-muted: #1f2040;
+    --on-accent: #0f1014; --chart: #22d3ee; --online: #4ade80; --offline: #f87171; --pending: #fbbf24;
+    --unknown: #9ca3af; --pending-surface: #2a2211; --shadow-card: none; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: #0f1014; --surface: #16171c; --raised: #1e2027; --border: #2a2c34; --soft: #222329;
+  --ink: #ececf1; --muted: #9a9ca8; --accent: #818cf8; --accent-strong: #a5b4fc; --accent-muted: #1f2040;
+  --on-accent: #0f1014; --chart: #22d3ee; --online: #4ade80; --offline: #f87171; --pending: #fbbf24;
+  --unknown: #9ca3af; --pending-surface: #2a2211; --shadow-card: none; color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; font: 15px/1.6 "Geist", system-ui, sans-serif; color: var(--ink); background: var(--canvas); -webkit-font-smoothing: antialiased; }
+a { color: var(--accent); }
+img { display: block; }
+code, .mono { font-family: "Geist Mono", ui-monospace, monospace; }
+.inner { max-width: var(--inner); margin: 0 auto; padding: 0 24px; }
+@media (max-width: 640px) { .inner { padding: 0 16px; } }
+.num { font-variant-numeric: tabular-nums; }
+
+/* Night surfaces (DESIGN.md §10): dark in both themes. */
+.night-bg {
+  background:
+    radial-gradient(90% 80% at 0% 0%, #1c2b5c 0%, transparent 55%),
+    radial-gradient(80% 90% at 100% 100%, #0e3b48 0%, transparent 60%),
+    linear-gradient(160deg, #0a0f1f, #0b1a2a 60%, #08131c);
+  color: var(--night-ink);
+}
+.night-close { background: radial-gradient(60% 120% at 50% 0%, #26336b 0%, transparent 70%), linear-gradient(160deg, #0a0f1f, #0b1a2a); color: #fff; }
+
+/* Header */
+.nav { position: sticky; top: 0; z-index: 40; border-bottom: 1px solid rgba(148, 163, 184, .14); background: rgba(9, 13, 27, .82); backdrop-filter: blur(12px); }
+.nav .inner { display: flex; align-items: center; gap: 20px; height: 62px; }
+.brand { display: flex; align-items: center; gap: 10px; color: #fff; font-weight: 700; font-size: 18px; letter-spacing: -.01em; text-decoration: none; white-space: nowrap; }
+.brand img { width: 28px; height: 28px; border-radius: 7px; }
+.nav-links { display: flex; gap: 2px; margin-left: 12px; }
+.nav-links a { color: #b8c4d6; text-decoration: none; font-size: 14px; padding: 8px 10px; border-radius: 8px; white-space: nowrap; }
+.nav-links a:hover { color: #fff; background: rgba(148, 163, 184, .12); }
+.nav-end { margin-left: auto; display: flex; gap: 8px; }
+@media (max-width: 1020px) { .nav-links { display: none; } }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 8px; font: 500 14px/1 inherit; font-family: inherit; text-decoration: none; cursor: pointer; border: 1px solid transparent; white-space: nowrap; }
+.btn-lg { height: 44px; padding: 0 20px; font-size: 15px; }
+.btn-cta { background: linear-gradient(135deg, #6366f1, #4f46e5); color: #fff; box-shadow: 0 8px 22px -8px rgba(99, 102, 241, .7), inset 0 1px 0 rgba(255, 255, 255, .18); }
+.btn-cta:hover { filter: brightness(1.08); }
+.btn-ghost { background: rgba(148, 163, 184, .1); border-color: rgba(148, 163, 184, .28); color: var(--night-ink); }
+.btn-ghost:hover { background: rgba(148, 163, 184, .18); }
+.btn-primary { background: var(--accent); color: var(--on-accent); }
+.btn-primary:hover { background: var(--accent-strong); }
+.btn-secondary { background: var(--raised); color: var(--ink); border-color: var(--border); }
+.btn-secondary:hover { border-color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Sections */
+section.block { padding: 88px 0; scroll-margin-top: 62px; }
+section.alt { background: var(--surface); border-block: 1px solid var(--border); }
+@media (max-width: 760px) { section.block { padding: 60px 0; } }
+.eyebrow { margin: 0 0 12px; font: 500 12px/1.4 "Geist Mono", monospace; text-transform: uppercase; letter-spacing: .14em; color: var(--accent); }
+.h2 { margin: 0; max-width: 22ch; font-size: clamp(28px, 4vw, 40px); line-height: 1.1; font-weight: 600; letter-spacing: -.03em; text-wrap: balance; }
+.lead { margin: 14px 0 0; max-width: 64ch; font-size: 16px; line-height: 1.65; color: var(--muted); }
+.body { margin-top: 36px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 20px; box-shadow: var(--shadow-card); }
+.card h3 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.card p { margin: 0; color: var(--muted); font-size: 14.5px; line-height: 1.6; }
+.grid-3 { display: grid; gap: 16px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid-2 { display: grid; gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.grid-4 { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 980px) { .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 860px) { .grid-3, .grid-2 { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 520px) { .grid-4 { grid-template-columns: minmax(0, 1fr); } }
+.icon { width: 20px; height: 20px; color: var(--accent); stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Status: dot + word, never colour alone (DESIGN.md §3). */
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: currentColor; margin-right: 6px; vertical-align: 1px; }
+.st-online { color: var(--online); } .st-offline { color: var(--offline); } .st-pending { color: var(--pending); } .st-unknown { color: var(--unknown); } .st-fired { color: var(--accent); }
+
+/* "For the technical reader" disclosure: the second layer of every section. */
+details.tech { margin-top: 14px; border-top: 1px dashed var(--border); padding-top: 10px; }
+details.tech summary { cursor: pointer; list-style: none; font: 500 12.5px/1.4 "Geist Mono", monospace; color: var(--accent); }
+details.tech summary::-webkit-details-marker { display: none; }
+details.tech summary::before { content: "+ "; }
+details.tech[open] summary::before { content: "– "; }
+details.tech p, details.tech pre { margin: 8px 0 0; font-size: 13.5px; color: var(--muted); }
+pre.code { overflow-x: auto; background: var(--canvas); border: 1px solid var(--border); border-radius: 10px; padding: 12px; font: 12.5px/1.7 "Geist Mono", monospace; color: var(--ink); }
+
+/* FAQ */
+.faq { display: grid; gap: 48px; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
+@media (max-width: 900px) { .faq { grid-template-columns: minmax(0, 1fr); } }
+.faq-list { border-top: 1px solid var(--border); }
+.faq-list details { border-bottom: 1px solid var(--border); }
+.faq-list summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 12px; padding: 18px 0; font-weight: 600; font-size: 16px; }
+.faq-list summary::-webkit-details-marker { display: none; }
+.faq-list summary::after { content: "⌄"; color: var(--muted); transition: transform .2s; }
+.faq-list details[open] summary::after { transform: rotate(180deg); }
+.faq-list details > div { padding: 0 0 18px; max-width: 64ch; color: var(--muted); line-height: 1.65; }
+
+/* Close + footer */
+.close { padding: 88px 0; text-align: center; }
+.close h2 { margin: 0 auto; max-width: 22ch; font-size: clamp(28px, 4vw, 40px); line-height: 1.1; font-weight: 600; letter-spacing: -.03em; text-wrap: balance; }
+.close p { color: var(--night-muted); font-size: 16px; margin: 12px 0 28px; }
+.close .row { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+footer.foot { background: var(--night-deep); color: var(--night-faint); font-size: 13px; }
+footer.foot .inner { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 16px; padding-block: 28px; }
+footer.foot a { color: var(--night-faint); }
+
+/* Demo-only chrome: back link + theme switch. */
+.demo-chip { position: fixed; right: 14px; bottom: 14px; z-index: 60; display: flex; gap: 6px; padding: 6px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 10px 30px rgba(0, 0, 0, .18); font-size: 12.5px; }
+.demo-chip a, .demo-chip button { height: 30px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--raised); color: var(--ink); font: inherit; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }

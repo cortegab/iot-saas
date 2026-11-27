@@ -29,7 +29,7 @@ can operate and debug at 3am.
 
 | Layer | Choice |
 |---|---|
-| Frontend | Next.js + React + Tailwind CSS (+ uPlot for high-frequency charts) |
+| Frontend | Next.js + React + Tailwind CSS (+ uPlot for high-frequency charts, Framer Motion on the public pages) |
 | Mobile app | Expo + React Native + TypeScript, `expo-router` (Android first, iOS-ready); built locally with Gradle (`mobile/README.md`) |
 | Backend | Python 3.12 + FastAPI (async), Pydantic v2 |
 | Hot path / worker | asyncio + `aiomqtt`, separate process |

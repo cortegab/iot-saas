@@ -2,7 +2,8 @@
  * Landing page (iodriven.tech). The page itself is Tailwind on the app's
  * tokens (docs/design/DESIGN.md §3, §10), with the static "night" tokens and
  * classes from globals.css for the dark hero, close and footer. This file
- * keeps only the entrance motion and the control-loop log's line animation.
+ * keeps only the hero's entrance motion; the rule card and the scroll
+ * reveals use Framer Motion.
  */
 
 .mkt {
@@ -23,11 +24,6 @@
   .mkt-fade-2 { animation-delay: 0.15s; }
   .mkt-fade-3 { animation-delay: 0.25s; }
   .mkt-fade-4 { animation-delay: 0.4s; }
-
-  /* A control-loop log line arriving (G .ll). */
-  .mkt-logline {
-    animation: mkt-logline 0.35s ease-out;
-  }
 }
 
 @keyframes mkt-fade-up {
@@ -37,9 +33,3 @@
   }
 }
 
-@keyframes mkt-logline {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-}

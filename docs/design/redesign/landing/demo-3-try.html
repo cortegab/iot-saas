@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IO Driven · Landing demo 3: Try a rule</title>
+<link rel="icon" href="../../io-driven-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<script type="importmap">
+{ "imports": {
+  "react": "https://esm.sh/react@19.0.0",
+  "react/": "https://esm.sh/react@19.0.0/",
+  "react-dom": "https://esm.sh/react-dom@19.0.0?external=react",
+  "react-dom/client": "https://esm.sh/react-dom@19.0.0/client?external=react",
+  "framer-motion": "https://esm.sh/framer-motion@14.14.0?external=react,react-dom",
+  "htm": "https://esm.sh/htm@3.1.1"
+} }
+</script>
+<style>
+.hero { padding: 56px 0 64px; }
+.hero-grid { display: grid; gap: 40px; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); align-items: center; }
+@media (max-width: 1000px) { .hero-grid { grid-template-columns: minmax(0, 1fr); } }
+.hero .eyebrow { color: var(--night-sky); }
+.hero h1 { margin: 0; font-size: clamp(36px, 5vw, 56px); line-height: 1.04; letter-spacing: -.04em; font-weight: 600; color: #fff; text-wrap: balance; }
+.hero .lead { color: var(--night-muted); font-size: 17px; }
+.hero .ctas { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 26px; }
+.hero .hint { margin-top: 18px; font-size: 13.5px; color: var(--night-faint); }
+
+/* Sandbox: a light "app" card floating on the night hero, like the product itself. */
+.sandbox { background: var(--surface); color: var(--ink); border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 40px 80px -30px rgba(0, 0, 0, .7); overflow: hidden; }
+.sb-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--raised); font-size: 13px; color: var(--muted); }
+.sb-bar b { color: var(--ink); font-weight: 600; }
+.sb-body { padding: 16px; display: grid; gap: 14px; }
+.sb-rule { font-size: 14.5px; line-height: 1.6; padding: 10px 12px; border-radius: 10px; background: var(--accent-muted); }
+.sb-rule b { color: var(--accent-strong); font-weight: 600; }
+.sb-cols { display: grid; gap: 12px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); }
+@media (max-width: 560px) { .sb-cols { grid-template-columns: minmax(0, 1fr); } }
+.panel { border: 1px solid var(--border); border-radius: 12px; padding: 12px; }
+.panel small { display: block; font-size: 12.5px; color: var(--muted); }
+.val { font: 500 32px/1.1 "Geist Mono", monospace; color: var(--chart); }
+.val span { font-size: 14px; color: var(--muted); margin-left: 4px; }
+.chart { display: block; width: 100%; height: 90px; margin-top: 6px; }
+.controls { display: grid; gap: 10px; }
+.controls label { font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; }
+.controls input[type=range] { width: 100%; accent-color: var(--accent); }
+.controls label.chk { display: flex; justify-content: flex-start; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink); cursor: pointer; }
+.chk input { accent-color: var(--accent); width: 16px; height: 16px; }
+.fan { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.fan-ico { width: 44px; height: 44px; color: var(--unknown); }
+.fan-ico.on { color: var(--online); }
+.bar { height: 6px; border-radius: 3px; background: var(--raised); overflow: hidden; margin-top: 6px; }
+.bar span { display: block; height: 100%; background: var(--pending); }
+.count { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.count div { border-radius: 10px; padding: 10px 12px; background: var(--raised); }
+.count b { display: block; font: 500 22px/1.2 "Geist Mono", monospace; }
+.count .bad b { color: var(--offline); } .count .good b { color: var(--online); }
+.count small { font-size: 12.5px; color: var(--muted); }
+.sb-log { list-style: none; margin: 0; padding: 0; font: 12.5px/1.5 "Geist Mono", monospace; min-height: 96px; }
+.sb-log li { display: flex; gap: 10px; padding: 5px 0; border-top: 1px solid var(--soft); }
+.sb-log time { color: var(--muted); }
+.sb-fallback { padding: 20px; color: var(--muted); }
+
+/* Use-case tabs */
+.tabs { display: inline-flex; gap: 4px; padding: 4px; border-radius: 12px; background: var(--raised); border: 1px solid var(--border); flex-wrap: wrap; }
+.tabs button { position: relative; height: 36px; padding: 0 14px; border: 0; background: none; font: 500 14px/1 inherit; font-family: inherit; color: var(--muted); cursor: pointer; border-radius: 8px; }
+.tabs button[aria-selected="true"] { color: var(--ink); }
+.tabs .bg { position: absolute; inset: 0; border-radius: 8px; background: var(--surface); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
+.tabs button span { position: relative; }
+.uc { margin-top: 20px; display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+@media (max-width: 860px) { .uc { grid-template-columns: minmax(0, 1fr); } }
+.uc h3 { margin: 0 0 8px; font-size: 22px; letter-spacing: -.02em; }
+.uc p { margin: 0 0 12px; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips span { font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); }
+.chips span.out { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); color: var(--accent-strong); }
+.uc-rules { display: grid; gap: 10px; }
+.uc-rules div { padding: 12px 14px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); font-size: 14.5px; }
+.uc-rules small { display: block; color: var(--muted); font-size: 12.5px; margin-bottom: 2px; }
+
+/* Under the hood */
+.flow { display: grid; gap: 12px; }
+.flow-top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.node { flex: 1 1 150px; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 12px 14px; }
+.node b { display: block; font-size: 14px; } .node span { font-size: 12.5px; color: var(--muted); }
+.arrow { color: var(--muted); }
+.fork { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 760px) { .fork { grid-template-columns: minmax(0, 1fr); } .arrow { display: none; } }
+.lane { border-radius: 16px; padding: 14px; display: flex; gap: 10px; flex-wrap: wrap; }
+.lane p { width: 100%; margin: 0; font: 600 12.5px/1.4 "Geist Mono", monospace; text-transform: uppercase; letter-spacing: .06em; }
+.lane.hot { background: color-mix(in srgb, var(--accent-muted) 70%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+.lane.hot p { color: var(--accent); }
+.lane.cold { background: var(--canvas); border: 1px solid var(--border); }
+.lane.cold p { color: var(--muted); }
+.plain { margin-top: 20px; display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+@media (max-width: 760px) { .plain { grid-template-columns: minmax(0, 1fr); } }
+.plain p { margin: 0; color: var(--muted); } .plain b { color: var(--ink); }
+
+/* Integrator band */
+.band { border-radius: 20px; padding: 32px; display: grid; gap: 28px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; }
+@media (max-width: 860px) { .band { grid-template-columns: minmax(0, 1fr); padding: 24px; } }
+.band h2 { margin: 0; font-size: clamp(26px, 3.4vw, 34px); line-height: 1.12; letter-spacing: -.03em; color: #fff; font-weight: 600; }
+.band p { color: var(--night-muted); margin: 12px 0 20px; }
+.band ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.band li { padding: 12px 14px; border-radius: 12px; background: rgba(148, 163, 184, .08); border: 1px solid rgba(148, 163, 184, .16); font-size: 14.5px; color: var(--night-ink); }
+.band li b { color: #fff; font-weight: 600; display: block; }
+
+.start { display: grid; gap: 12px; grid-template-columns: repeat(4, minmax(0, 1fr)); counter-reset: s; }
+@media (max-width: 900px) { .start { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .start { grid-template-columns: minmax(0, 1fr); } }
+.start .card { counter-increment: s; }
+.start .card::before { content: counter(s); display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-muted); color: var(--accent-strong); font: 600 13px/1 "Geist Mono", monospace; margin-bottom: 10px; }
+.start small { display: block; margin-top: 10px; font: 500 12px/1.4 "Geist Mono", monospace; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="inner">
+    <a class="brand" href="#top"><img src="../../io-driven-mark.png" alt="">IO Driven</a>
+    <nav class="nav-links" aria-label="Page sections">
+      <a href="#try">Try it</a><a href="#uses">Use cases</a><a href="#hood">Under the hood</a>
+      <a href="#integrators">Integrators</a><a href="#start">Start</a><a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-end"><a class="btn btn-ghost" href="#">Sign in</a><a class="btn btn-cta" href="#close">Talk to us</a></div>
+  </div>
+</header>
+
+<main>
+  <section id="top" class="hero night-bg">
+    <div class="inner hero-grid">
+      <div>
+        <p class="eyebrow">Try it · no sign-up</p>
+        <h1>Don't take our word for it. Drive a rule yourself.</h1>
+        <p class="lead">This is a real IO Driven rule running in your browser. Drag the temperature past 30 °C and watch the fan. Then make the sensor noisy and see why every rule has safety settings.</p>
+        <div class="ctas"><a class="btn btn-cta btn-lg" href="#close">Talk to us →</a><a class="btn btn-ghost btn-lg" href="#uses">See use cases</a></div>
+        <p class="hint">Simulated in this page. In the product, a reading travels from the sensor to this decision in well under two seconds.</p>
+      </div>
+      <div id="try" style="scroll-margin-top:80px">
+        <div id="sandbox-root"><div class="sandbox"><p class="sb-fallback">Interactive example: a temperature rule that turns a fan on above 30 °C after a 3-second hold time, and off again below 28 °C. It needs JavaScript to run.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="uses" class="block">
+    <div class="inner">
+      <p class="eyebrow">Use cases</p>
+      <h2 class="h2">Same building blocks, very different jobs.</h2>
+      <p class="lead">Sensors in, outputs out, rules in between. Pick a setting to see what it usually looks like.</p>
+      <div class="body" id="uses-root">
+        <div class="uc"><div><h3>Greenhouse</h3><p>Temperature, humidity and soil moisture drive fans, vents and irrigation.</p></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="hood" class="block alt">
+    <div class="inner">
+      <p class="eyebrow">Under the hood</p>
+      <h2 class="h2">Why it reacts so fast.</h2>
+      <p class="lead">Every reading is split in two the moment it arrives. One copy goes straight to the decision. The other is saved for history, in bulk, without slowing the decision down.</p>
+      <div class="body flow" role="img" aria-label="Devices send readings to the broker and ingestion, which split into a fast decision path and a history path">
+        <div class="flow-top">
+          <div class="node"><b>Your devices</b><span>ESP32 boards, PLCs via edge connector</span></div><span class="arrow">→</span>
+          <div class="node"><b>Secure broker</b><span>MQTT over TLS, one key per device</span></div><span class="arrow">→</span>
+          <div class="node"><b>Ingestion</b><span>checks every message, drops bad ones</span></div>
+        </div>
+        <div class="fork">
+          <div class="lane hot"><p>Decision · milliseconds</p><div class="node"><b>Rules in memory</b><span>no database on the way</span></div><div class="node"><b>Commands</b><span>confirmed, with an expiry</span></div></div>
+          <div class="lane cold"><p>History · in bulk</p><div class="node"><b>Buffer</b><span>Redis stream</span></div><div class="node"><b>Time-series database</b><span>TimescaleDB, rollups, retention</span></div></div>
+        </div>
+      </div>
+      <div class="plain">
+        <p><b>In plain words:</b> deciding never waits for saving. A busy moment for the database can't delay a fan, a pump or an alarm.</p>
+        <p><b>For your IT team:</b> one Linux server with Docker Compose runs 500–1,000 devices. Postgres row-level security keeps workspaces apart, credentials are hashed with argon2id, and the restore procedure is tested.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="integrators" class="block">
+    <div class="inner">
+      <div class="band night-bg">
+        <div>
+          <p class="eyebrow" style="color:var(--night-sky)">For integrators</p>
+          <h2>Install for clients? Give them the simple version.</h2>
+          <p>You build the system with every detail. Your clients get Simple view: their areas, readings and on/off switches in everyday words, and the buttons you decide they can press.</p>
+          <a class="btn btn-cta" href="#close">Talk to us about your projects →</a>
+        </div>
+        <ul>
+          <li><b>A workspace per client</b>Separate devices, rules and people, one login for you.</li>
+          <li><b>Scene buttons</b>"Start irrigation", "Night mode": rules clients can run from a dashboard or the app.</li>
+          <li><b>Remote health</b>Restart reasons, missing parts and failed deliveries before a site visit.</li>
+          <li><b>Their choice of hosting</b>Cloud, dedicated or on their own server. Devices move without a re-flash.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="start" class="block alt">
+    <div class="inner">
+      <p class="eyebrow">Start</p>
+      <h2 class="h2">Your first live reading in about ten minutes.</h2>
+      <div class="body start">
+        <div class="card"><h3>Make a workspace</h3><p>Invite your team.</p><small>~1 min</small></div>
+        <div class="card"><h3>Add a device</h3><p>What it measures and controls. No board yet? Use a simulated one.</p><small>~2 min</small></div>
+        <div class="card"><h3>Flash it</h3><p>From the browser over USB, then Wi-Fi from your phone with a QR code.</p><small>~5 min</small></div>
+        <div class="card"><h3>Pick a recipe</h3><p>"Too hot → fan on", "Tank low → stop pump". Adjust the numbers.</p><small>~2 min</small></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="block">
+    <div class="inner faq">
+      <div><p class="eyebrow">FAQ</p><h2 class="h2">Before you ask.</h2></div>
+      <div class="faq-list">
+        <details open><summary>Can I turn the safety settings off?</summary><div>No. You choose the numbers (a hold time of 0 seconds is allowed for sensors that don't bounce), but they're always part of the rule, and the editor warns you when a rule that switches hardware has none.</div></details>
+        <details><summary>What if a sensor stops sending?</summary><div>Its readings are marked stale and the rule treats them as unknown: it neither fires nor switches anything back off. You can get an alert when a device goes offline.</div></details>
+        <details><summary>And if the site's internet drops?</summary><div>Offline devices can't take commands. When they reconnect they get the latest intended state, and commands that are too old expire instead of running late.</div></details>
+        <details><summary>Does it work with equipment I already have?</summary><div>Yes. Anything that speaks MQTT connects directly; Modbus, OPC UA and vendor clouds come in through a small edge connector on your network.</div></details>
+        <details><summary>Where is my data stored?</summary><div>In IO Driven's cloud, in a dedicated instance, or on your own server. The device side is identical in all three.</div></details>
+      </div>
+    </div>
+  </section>
+
+  <section id="close" class="close night-close">
+    <div class="inner">
+      <h2>Liked the fan? Let's wire up the real thing.</h2>
+      <p>Tell us what you want to watch and what should happen. We reply within one working day.</p>
+      <div class="row"><a class="btn btn-cta btn-lg" href="#">Talk to us →</a><a class="btn btn-ghost btn-lg" href="#">Sign in</a></div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot"><div class="inner"><span style="color:var(--night-ink);font-weight:600">iodriven.tech</span><span>Sensors in, decisions in milliseconds, equipment out</span><span><a href="#">Privacy</a> · © 2026 IO Driven</span></div></footer>
+
+<div class="demo-chip"><a href="index.html">All demos</a><button type="button" id="theme">Dark</button></div>
+<script>
+  (function () {
+    const b = document.getElementById("theme"), r = document.documentElement;
+    const dark = () => r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const label = () => { b.textContent = dark() ? "Light" : "Dark"; };
+    b.onclick = () => { r.dataset.theme = dark() ? "light" : "dark"; label(); };
+    label();
+  })();
+</script>
+
+<script type="module">
+import React, { useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { motion, AnimatePresence, MotionConfig, LayoutGroup } from "framer-motion";
+import htm from "htm";
+const html = htm.bind(React.createElement);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const spring = { type: "spring", stiffness: 420, damping: 34 };
+
+/* ---------- Sandbox: the rule runs here, once per simulated second ---------- */
+const ON = 30, OFF = 28, HOLD = 3, MIN_INTERVAL = 8, N = 48;
+const clock = (s) => { const d = new Date(Date.UTC(2026, 0, 1, 14, 0, s)); return d.toISOString().slice(11, 19); };
+
+function Sandbox() {
+  const [target, setTarget] = useState(26);
+  const [noisy, setNoisy] = useState(false);
+  const [s, setS] = useState({ t: 0, v: 26, series: Array(N).fill(26), held: 0, fan: false, last: -99, naive: false, naiveN: 0, safeN: 0, log: [] });
+  const ref = useRef({ target, noisy }); ref.current = { target, noisy };
+
+  useEffect(() => {
+    const id = setInterval(() => setS((p) => {
+      const { target, noisy } = ref.current;
+      // Drift toward the slider, plus sensor noise when asked.
+      const v = +(p.v + (target - p.v) * 0.35 + (noisy ? (Math.random() - 0.5) * 2.6 : (Math.random() - 0.5) * 0.15)).toFixed(1);
+      const t = p.t + 1; let { held, fan, last, naiveN, safeN } = p; const log = [...p.log];
+      const naive = v > ON; if (naive !== p.naive) naiveN++;
+      if (!fan) {
+        held = v > ON ? held + 1 : 0;
+        if (held === 1) log.push({ id: t + "h", t, k: "st-pending", text: `${v.toFixed(1)} °C above 30 · holding` });
+        if (held >= HOLD && t - last >= MIN_INTERVAL) { fan = true; last = t; safeN++; log.push({ id: t + "f", t, k: "st-fired", text: "Fired · fan1 → on, confirmed" }); }
+        else if (held >= HOLD && held === HOLD) log.push({ id: t + "w", t, k: "st-unknown", text: "Waiting for minimum interval" });
+      } else if (v < OFF) { fan = false; held = 0; safeN++; log.push({ id: t + "o", t, k: "st-online", text: `${v.toFixed(1)} °C below 28 · fan1 → off` }); }
+      return { t, v, series: [...p.series.slice(1), v], held, fan, last, naive, naiveN, safeN, log: log.slice(-6) };
+    }), reduced ? 1000 : 600);
+    return () => clearInterval(id);
+  }, []);
+
+  const W = 300, H = 90, y = (v) => H - ((Math.max(20, Math.min(40, v)) - 20) / 20) * H;
+  const pts = s.series.map((v, i) => `${(i / (N - 1)) * W},${y(v)}`).join(" ");
+  const status = s.fan ? ["Fired", "st-fired"] : s.held > 0 ? ["Holding", "st-pending"] : ["Armed", "st-online"];
+  const reset = () => setS((p) => ({ ...p, naiveN: 0, safeN: 0, log: [] }));
+
+  return html`
+    <div class="sandbox">
+      <div class="sb-bar"><span><b>Too hot → fan on</b> · Greenhouse bay 1</span>
+        <${AnimatePresence} mode="popLayout" initial=${false}>
+          <${motion.span} key=${status[0]} class=${status[1]} initial=${{ opacity: 0, y: -6 }} animate=${{ opacity: 1, y: 0 }} exit=${{ opacity: 0, y: 6 }}><span class="dot"></span>${status[0]}</${motion.span}>
+        </${AnimatePresence}>
+      </div>
+      <div class="sb-body">
+        <div class="sb-rule">When temperature is above <b>30 °C</b> for <b>${HOLD} s</b>, turn <b>Fan 1</b> on. Turn it back off below <b>28 °C</b>. Act at most once every <b>${MIN_INTERVAL} s</b>.</div>
+        <div class="sb-cols">
+          <div class="panel">
+            <small>Temperature · live</small>
+            <div class="val num">${s.v.toFixed(1)}<span>°C</span></div>
+            <svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true">
+              <line x1="0" x2=${W} y1=${y(ON)} y2=${y(ON)} stroke="var(--offline)" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" opacity=".7"/>
+              <line x1="0" x2=${W} y1=${y(OFF)} y2=${y(OFF)} stroke="var(--online)" stroke-dasharray="4 4" vector-effect="non-scaling-stroke" opacity=".7"/>
+              <polyline points=${pts} fill="none" stroke="var(--chart)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+            </svg>
+            <div class="controls">
+              <label for="tgt"><span>Make it warmer or cooler</span><span class="num">${target} °C</span></label>
+              <input id="tgt" type="range" min="20" max="38" step="1" value=${target} onInput=${(e) => setTarget(+e.target.value)} />
+              <label class="chk"><input type="checkbox" checked=${noisy} onChange=${(e) => setNoisy(e.target.checked)} /> Noisy sensor</label>
+            </div>
+          </div>
+          <div class="panel">
+            <small>Fan 1</small>
+            <div class="fan">
+              <${motion.svg} class="fan-ico ${s.fan ? "on" : ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                animate=${s.fan && !reduced ? { rotate: 360 } : { rotate: 0 }} transition=${s.fan ? { repeat: Infinity, duration: 0.9, ease: "linear" } : { duration: 0.4 }}>
+                <circle cx="12" cy="12" r="1.8"/><path d="M12 10.2C11 6 12.5 3 15 3.5c2 .4 1.6 3.6-3 6.7M13.8 12c4.2-1 7.2.5 6.7 3-.4 2-3.6 1.6-6.7-3M12 13.8c1 4.2-.5 7.2-3 6.7-2-.4-1.6-3.6 3-6.7M10.2 12C6 13 3 11.5 3.5 9c.4-2 3.6-1.6 6.7 3"/>
+              </${motion.svg}>
+              <span class=${s.fan ? "st-online" : "st-unknown"}><span class="dot"></span>${s.fan ? "On" : "Off"}</span>
+            </div>
+            <small style=${{ marginTop: 12 }}>Hold time ${Math.min(s.held, HOLD)} / ${HOLD} s</small>
+            <div class="bar"><${motion.span} animate=${{ width: `${(Math.min(s.held, HOLD) / HOLD) * 100}%` }} transition=${{ duration: 0.25 }} /></div>
+            <div class="count" style=${{ marginTop: 12 }}>
+              <div class="bad"><b class="num">${s.naiveN}</b><small>switches with no safety</small></div>
+              <div class="good"><b class="num">${s.safeN}</b><small>switches with IO Driven</small></div>
+            </div>
+            <button class="btn btn-secondary" style=${{ marginTop: 10, height: 30, fontSize: 13 }} onClick=${reset}>Reset counts</button>
+          </div>
+        </div>
+        <ul class="sb-log" aria-live="polite" aria-label="Rule activity">
+          <${AnimatePresence} initial=${false}>
+            ${s.log.slice().reverse().slice(0, 4).map((e) => html`
+              <${motion.li} key=${e.id} layout initial=${{ opacity: 0, x: -10 }} animate=${{ opacity: 1, x: 0 }} exit=${{ opacity: 0 }} transition=${{ duration: 0.25 }}>
+                <time>${clock(e.t)}</time><span class=${e.k}><span class="dot"></span>${e.text}</span>
+              </${motion.li}>`)}
+          </${AnimatePresence}>
+          ${s.log.length === 0 && html`<li><time>—</time><span style=${{ color: "var(--muted)" }}>Nothing yet. Drag the temperature above 30 °C.</span></li>`}
+        </ul>
+      </div>
+    </div>`;
+}
+
+/* ---------- Use-case tabs ---------- */
+const USES = [
+  { id: "gh", label: "Greenhouse", title: "Greenhouse", body: "Keep plants in range day and night, and know when something needs a person.",
+    ins: ["Temperature", "Humidity", "Soil moisture", "Light"], outs: ["Fans", "Vents", "Irrigation valve"],
+    rules: [["Climate", "Above 30 °C for 10 s → fan on; off again below 28 °C."], ["Water", "At 06:00, if soil is below 35 % → open the irrigation valve; close it above 45 %."], ["Alert", "Humidity above 90 % for 15 min → notify the grower."]] },
+  { id: "water", label: "Tanks and pumps", title: "Tanks and pumps", body: "Protect pumps from running dry and keep tanks between their limits.",
+    ins: ["Tank level", "Pressure", "Flow"], outs: ["Pump", "Inlet valve"],
+    rules: [["Protection", "Tank below 20 % → stop the pump and keep it stopped until someone resets it."], ["Refill", "Below 40 % → open the inlet; close above 90 %."], ["Alert", "No flow while the pump runs for 30 s → email maintenance."]] },
+  { id: "cold", label: "Cold rooms", title: "Cold rooms", body: "Catch a warm freezer or an open door before stock is lost.",
+    ins: ["Temperature", "Door contact", "Compressor current"], outs: ["Alarm light"],
+    rules: [["Door", "Door open for 5 min → alert the shift on their phones."], ["Temperature", "Freezer above −15 °C for 10 min → alarm light on and email the manager."], ["Equipment", "Compressor drawing no current while cooling is needed → alert."]] },
+  { id: "ind", label: "Machines", title: "Machines and lines", body: "Bring readings from existing PLCs and drives without opening them to the internet.",
+    ins: ["Vibration", "Motor current", "Run hours"], outs: ["Stop relay", "Stack light"],
+    rules: [["Condition", "Vibration high on any motor for 1 min → email maintenance."], ["Safety", "Current above limit for 5 s → stop relay, latched until reset."], ["Service", "Run hours past 500 → create a reminder notification."]] },
+];
+
+function Uses() {
+  const [sel, setSel] = useState("gh");
+  const u = USES.find((x) => x.id === sel);
+  return html`
+    <div>
+      <${LayoutGroup} id="uses">
+        <div class="tabs" role="tablist" aria-label="Use cases">
+          ${USES.map((x) => html`<button key=${x.id} role="tab" aria-selected=${sel === x.id} onClick=${() => setSel(x.id)}>
+            ${sel === x.id && html`<${motion.span} class="bg" layoutId="uses-bg" transition=${spring} />`}<span>${x.label}</span></button>`)}
+        </div>
+      </${LayoutGroup}>
+      <${AnimatePresence} mode="wait" initial=${false}>
+        <${motion.div} key=${sel} class="uc" role="tabpanel" initial=${{ opacity: 0, y: 10 }} animate=${{ opacity: 1, y: 0 }} exit=${{ opacity: 0, y: -6 }} transition=${{ duration: 0.22 }}>
+          <div>
+            <h3>${u.title}</h3><p>${u.body}</p>
+            <p style=${{ marginBottom: 6, fontSize: 13, color: "var(--muted)" }}>Sensor readings</p>
+            <div class="chips">${u.ins.map((t) => html`<span key=${t}>${t}</span>`)}</div>
+            <p style=${{ margin: "14px 0 6px", fontSize: 13, color: "var(--muted)" }}>Outputs</p>
+            <div class="chips">${u.outs.map((t) => html`<span key=${t} class="out">${t}</span>`)}</div>
+          </div>
+          <div class="uc-rules">
+            ${u.rules.map(([k, r], i) => html`<${motion.div} key=${r} initial=${{ opacity: 0, x: 12 }} animate=${{ opacity: 1, x: 0 }} transition=${{ delay: 0.06 * i + 0.05 }}><small>${k}</small>${r}</${motion.div}>`)}
+          </div>
+        </${motion.div}>
+      </${AnimatePresence}>
+    </div>`;
+}
+
+const mount = (id, C) => createRoot(document.getElementById(id)).render(html`<${MotionConfig} reducedMotion="user"><${C} /></${MotionConfig}>`);
+mount("sandbox-root", Sandbox);
+mount("uses-root", Uses);
+</script>
+</body>
+</html>

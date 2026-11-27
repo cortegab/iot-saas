@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Landing demos</title>
+<link rel="icon" href="../../io-driven-mark.png">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<style>
+main { max-width: 1000px; margin: 0 auto; padding: 48px 20px 80px; }
+h1 { font-size: 30px; font-weight: 600; letter-spacing: -.015em; margin: 0 0 8px; }
+h2 { font-size: 18px; font-weight: 600; margin: 40px 0 12px; }
+.lead { margin: 0; }
+.card a.btn { margin-top: 14px; }
+.card ul { margin: 10px 0 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+.card li { margin: 4px 0; }
+.note { background: var(--accent-muted); border-radius: 12px; padding: 16px 18px; }
+.note p { margin: 6px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Landing page demos</h1>
+  <p class="lead">Three takes on the iodriven.tech landing page, written for readers halfway between non-technical and technical: plain sentences first, with technical detail one step away. They use DESIGN.md's tokens, fonts and status words. Each one uses Framer Motion (framer-motion 14.14.0, loaded from esm.sh) and still reads fine without it. Use the chip at the bottom right to switch between light and dark.</p>
+
+  <h2>The demos</h2>
+  <div class="grid-3">
+    <div class="card"><h3>1 · The story</h3><p>A linear walk-through: what it does, how it works, why it's safe, who it's for.</p>
+      <ul><li>Hero: a rule's whole life replayed on a loop</li><li>A "Technical note" under each step</li><li>Who it's for: site teams, integrators, developers</li><li>Animated scroll reveals</li></ul>
+      <a class="btn btn-primary" href="demo-1-story.html">Open demo 1</a> <a class="btn btn-secondary" href="demo-1-signin.html">Sign-in page</a></div>
+    <div class="card"><h3>2 · Choose your path</h3><p>The hero asks who you are and changes the pitch to match. Integrators get the most space.</p>
+      <ul><li>Audience switcher with a sliding pill</li><li>Full view vs Simple view of the same device</li><li>A typical project timeline and the device contract</li><li>A deployment comparison table</li></ul>
+      <a class="btn btn-primary" href="demo-2-paths.html">Open demo 2</a></div>
+    <div class="card"><h3>3 · Try a rule</h3><p>Shows the product instead of describing it: the hero is a rule you can drive yourself.</p>
+      <ul><li>Drag the temperature; turn on a noisy sensor</li><li>Counts switches with and without the safety settings</li><li>Use-case tabs: greenhouse, tanks, cold rooms, machines</li><li>"Under the hood", in plain and technical words</li></ul>
+      <a class="btn btn-primary" href="demo-3-try.html">Open demo 3</a></div>
+  </div>
+
+  <h2>Recommendation: a section for integrators</h2>
+  <div class="note">
+    <p><b>Yes, add one.</b> The product already has what integrators need (a workspace per client, Simple view, scene buttons, remote device health, three ways to host), but the current landing page never says who it's for. The audience is also different: the integrator chooses the platform and the client lives with it. Each demo shows a different size of section:</p>
+    <p>Demo 1: one section of six cards · Demo 2: a full section with an interactive Full/Simple preview and a project timeline · Demo 3: one compact night band.</p>
+    <p>If integrators become the main sales channel, give them their own page (<code>/integrators</code>) and keep a band on the landing page that links to it.</p>
+  </div>
+
+  <h2>Other new sections</h2>
+  <ul class="plain" style="color:var(--muted)">
+    <li><b style="color:var(--ink)">Use cases</b> (demos 1 and 3): concrete settings help non-technical readers see themselves.</li>
+    <li><b style="color:var(--ink)">Who it's for</b> (demo 1), <b style="color:var(--ink)">For developers</b> (demo 2): moves the MQTT contract out of the FAQ.</li>
+    <li><b style="color:var(--ink)">Interactive safety</b> (demo 3): shows why hold time and hysteresis matter instead of explaining it.</li>
+  </ul>
+  <p style="color:var(--muted);font-size:13.5px;margin-top:24px">Prototype notes: copy is English only, the forms are not wired up, and "Recommended section" in demo 1 is a review annotation, not page copy. <b style="color:var(--ink)">Demo 1 and its sign-in page are built</b> (DESIGN.md §10, 2026-11-27): the landing page and every account page follow them. Demos 2 and 3 are kept as alternatives.</p>
+</main>
+</body>
+</html>

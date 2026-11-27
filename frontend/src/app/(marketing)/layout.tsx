@@ -9,14 +9,14 @@ import "./marketing.css";
 
 const META = {
   en: {
-    title: "IO Driven — sensors in, decisions in memory, actuators out",
+    title: "IO Driven — your sensors report, your rules decide, your equipment responds",
     description:
-      "An IoT platform for MQTT devices: every rule is checked in memory the moment a reading arrives, and drives actuators, email, notifications or webhooks well inside two seconds. Cloud, dedicated or on-premise.",
+      "Monitoring and automation for real equipment: IO Driven checks every sensor reading the moment it arrives and reacts in under two seconds, switching fans, pumps and valves or sending alerts. Cloud, dedicated or on-premise.",
   },
   es: {
-    title: "IO Driven — sensores que reportan, decisiones en memoria, actuadores que responden",
+    title: "IO Driven — sensores que reportan, reglas que deciden, equipos que responden",
     description:
-      "Una plataforma IoT para dispositivos MQTT: cada regla se evalúa en memoria en cuanto llega una lectura y mueve actuadores, envía correos, notificaciones o webhooks muy por debajo de dos segundos. En la nube, dedicada o en sitio.",
+      "Monitoreo y automatización para equipos reales: IO Driven revisa cada lectura en cuanto llega y reacciona en menos de dos segundos, accionando ventiladores, bombas y válvulas o enviando alertas. En la nube, dedicada o en sitio.",
   },
 };
 
