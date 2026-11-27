@@ -78,6 +78,13 @@ function closing(text: string, open: number): number {
   return -1;
 }
 
+/** CLDR plural category. Hermes (the mobile app's engine on Android) has no
+ * `Intl.PluralRules`, so English and Spanish fall back to their one/other rule. */
+export function pluralCategory(locale: Locale, count: number): string {
+  if (typeof Intl.PluralRules === "function") return new Intl.PluralRules(locale).select(count);
+  return count === 1 ? "one" : "other";
+}
+
 function plural(locale: Locale, spec: string, count: number): string {
   // spec: "one {…} other {…}" (also "=0 {…}")
   const branches = new Map<string, string>();
@@ -91,7 +98,7 @@ function plural(locale: Locale, spec: string, count: number): string {
     i = end + 1;
   }
   const exact = branches.get(`=${count}`);
-  const chosen = exact ?? branches.get(new Intl.PluralRules(locale).select(count)) ?? branches.get("other") ?? "";
+  const chosen = exact ?? branches.get(pluralCategory(locale, count)) ?? branches.get("other") ?? "";
   return chosen.replace(/#/g, formatNumber(locale, count));
 }
 

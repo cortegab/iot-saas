@@ -64,6 +64,16 @@ adding a native library.
 The first build takes about half an hour (downloads and native compiles); later ones reuse the
 caches.
 
+**Running Gradle by hand** (`cd android && ./gradlew assembleRelease`, skipping the prebuild to save
+time): Gradle only watches `mobile/` when deciding whether to re-bundle the JavaScript, so a change
+in `packages/shared` alone ships the old bundle. Delete `android/app/build/generated/assets/react`
+first. `pnpm build:apk` is safe: its `--clean` prebuild starts over.
+
+**Hermes** (the JavaScript engine in Android builds) has no `Intl.PluralRules`,
+`Intl.RelativeTimeFormat` or `Intl.ListFormat`, while Jest runs on Node, which has them all. Code in
+`packages/shared` that the app runs checks for them first (see `pluralCategory` in `i18n.ts`); 0.9.0
+crashed on launch before that check.
+
 ### Signing
 
 Release builds sign with the **Play upload key** when `mobile/credentials/` holds it, and with the

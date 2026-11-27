@@ -59,6 +59,17 @@ describe("t", () => {
     expect(tEs("common.deviceCount", { count: 2 })).toBe("2 dispositivos");
   });
   it("keeps an unknown placeholder visible", () => expect(format("en", "Hi {name}", {})).toBe("Hi {name}"));
+  it("pluralizes without Intl.PluralRules (Hermes on Android)", () => {
+    const real = Intl.PluralRules;
+    try {
+      (Intl as { PluralRules?: unknown }).PluralRules = undefined;
+      expect(tEs("common.deviceCount", { count: 1 })).toBe("1 dispositivo");
+      expect(tEs("common.deviceCount", { count: 3 })).toBe("3 dispositivos");
+      expect(tEn("common.deviceCount", { count: 0 })).toBe("0 devices");
+    } finally {
+      Intl.PluralRules = real;
+    }
+  });
   it("supports exact plural branches", () => expect(format("en", "{n, plural, =0 {none} one {one} other {#}}", { n: 0 })).toBe("none"));
 });
 
