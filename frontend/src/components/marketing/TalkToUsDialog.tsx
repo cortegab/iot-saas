@@ -16,7 +16,7 @@ export type Deployment = "cloud" | "dedicated" | "on_prem" | "not_sure";
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** "Talk to us" (demo G deployment section): emails the team through
+/** "Talk to us" (landing header, hero and close): emails the team through
  * POST /public/contact. Nothing is stored. A hidden `website` field is the
  * honeypot — people never see it, bots fill it in. */
 export function TalkToUsDialog({ open, onClose, deployment }: { open: boolean; onClose: () => void; deployment: Deployment }) {
@@ -111,9 +111,9 @@ export function TalkToUsDialog({ open, onClose, deployment }: { open: boolean; o
         </Field>
         <Field label={k.interested}>
           <Select value={deploy} onChange={(e) => setDeploy(e.target.value as Deployment)}>
-            <option value="cloud">{c.deployment.options.cloud.name}</option>
-            <option value="dedicated">{c.deployment.options.dedicated.name}</option>
-            <option value="on_prem">{c.deployment.options.on_prem.name}</option>
+            <option value="cloud">{c.deployment.options[0][0]}</option>
+            <option value="dedicated">{c.deployment.options[1][0]}</option>
+            <option value="on_prem">{c.deployment.options[2][0]}</option>
             <option value="not_sure">{k.notSure}</option>
           </Select>
         </Field>

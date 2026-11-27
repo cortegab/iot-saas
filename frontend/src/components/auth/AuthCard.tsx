@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { NetworkCanvas } from "@/components/marketing/NetworkCanvas";
-import { cn } from "@/lib/cn";
+import { RuleLoopCard } from "@/components/marketing/RuleLoopCard";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { useT } from "@/lib/i18n";
 
@@ -30,62 +29,32 @@ export function AuthCard({
   );
 }
 
-/* Example readings floating over the network (decorative; wide screens only). */
-const CHIPS: { at: string; cmd?: boolean; body: ReactNode }[] = [
-  { at: "left-[64%] top-[38%]", body: <><b>bay1-climate</b> temperature <b>25.3 °C</b></> },
-  { at: "left-[50%] top-[74%]", cmd: true, body: <>pump1 → on · ack <b>212 ms</b></> },
-  { at: "left-[9%] top-[60%]", body: <><b>pumphouse-main</b> tank <b>72 %</b></> },
-];
-
-/** The account pages' screen (DESIGN.md §10, demo G): a night brand panel —
- * the landing's network, a line about the product and its design figures —
- * beside the card. Below `lg` the panel becomes a band above the card, with
- * the network drawn in its own strip under the text, never behind it. */
+/** The account pages' screen (DESIGN.md §10): a night brand panel (the
+ * landing's three lines, the live rule card and the design figures) beside
+ * the card. Below `lg` the panel becomes a band above the card with the
+ * lines only; the rule card also steps aside on short screens. */
 export function AuthScreen({ children }: { children: ReactNode }) {
   const t = useT();
   return (
     <div className="grid min-h-screen lg:grid-cols-[minmax(0,1.15fr)_minmax(440px,1fr)]">
       <section
         aria-label={t("auth.side.about")}
-        className="night-bg relative isolate flex flex-col justify-between gap-6 overflow-hidden px-5 pt-6 text-night-ink lg:min-h-screen lg:px-11 lg:py-9"
+        className="night-bg relative flex flex-col gap-[18px] overflow-hidden px-5 pb-6 pt-6 text-night-ink lg:min-h-screen lg:gap-[22px] lg:px-11 lg:pb-7 lg:pt-8"
       >
-        <NetworkCanvas className="relative -z-20 -mx-5 h-[140px] w-[calc(100%+40px)] max-lg:order-last lg:absolute lg:inset-0 lg:m-0 lg:h-full lg:w-full" />
-        <div aria-hidden className="night-scrim-panel pointer-events-none absolute inset-0 -z-10" />
-        <Link href="/" className="relative z-[2] flex w-fit items-center gap-2.5 text-[18px] font-bold tracking-[-0.01em] text-white">
+        <Link href="/" className="flex w-fit items-center gap-2.5 text-[18px] font-bold tracking-[-0.01em] text-white">
           <BrandMark />
           IO Driven
         </Link>
-        <div className="relative z-[2] mb-auto mt-6 max-w-[31rem] lg:mt-[8vh]">
+        <div className="max-w-[31rem] lg:mt-[3vh]">
           <p className="mb-3.5 font-mono text-xs uppercase tracking-[0.14em] text-night-sky">{t("auth.side.eyebrow")}</p>
-          <h2 className="text-[27px] font-semibold leading-[1.06] tracking-[-0.035em] text-white lg:text-[clamp(30px,3.3vw,46px)]">
-            {t("auth.side.headline")}
+          <h2 className="text-balance text-[26px] font-semibold leading-[1.06] tracking-[-0.035em] text-white lg:text-[clamp(28px,3vw,40px)]">
+            {t("auth.side.line1")} <span className="text-[#93a4bd] lg:block">{t("auth.side.line2")}</span>{" "}
+            <span className="text-[#93a4bd] lg:block">{t("auth.side.line3")}</span>
           </h2>
-          <p className="mt-4 max-w-[44ch] text-section leading-[1.6] text-night-muted">
-            {t("auth.side.body")}
-          </p>
+          <p className="mt-2 max-w-[44ch] text-sm leading-[1.6] text-night-muted lg:mt-4 lg:text-section">{t("auth.side.body")}</p>
         </div>
-        <div aria-hidden className="pointer-events-none absolute inset-0 z-[1] max-lg:hidden">
-          {CHIPS.map((c, i) => (
-            <span
-              key={i}
-              style={{ animationDelay: `${-2.3 * i}s` }}
-              className={cn(
-                "night-chip absolute inline-flex items-center gap-[7px] whitespace-nowrap rounded-full px-3 py-[7px] font-mono text-[12px] text-[#c3cedc] [&_b]:font-medium [&_b]:text-white",
-                c.at,
-                c.cmd && "night-chip--cmd",
-              )}
-            >
-              <i
-                className={cn(
-                  "inline-block h-[7px] w-[7px] rounded-full",
-                  c.cmd ? "bg-night-amber shadow-[0_0_8px_var(--color-night-amber)]" : "bg-night-ok shadow-[0_0_8px_var(--color-night-ok)]",
-                )}
-              />
-              {c.body}
-            </span>
-          ))}
-        </div>
-        <dl className="relative z-[2] m-0 hidden max-w-[38rem] grid-cols-3 gap-4 border-t border-night-line pt-[18px] lg:grid">
+        <RuleLoopCard className="max-w-[470px] max-lg:hidden [@media(max-height:720px)]:hidden" />
+        <dl className="m-0 mt-auto hidden max-w-[38rem] grid-cols-3 gap-4 border-t border-night-line pt-[18px] lg:grid">
           {[
             [t("auth.side.breach"), "< 2 s"],
             [t("auth.side.typical"), "< 500 ms"],

@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IO Driven · Sign in (demo 1 style)</title>
+<link rel="icon" href="../../io-driven-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<script type="importmap">
+{ "imports": {
+  "react": "https://esm.sh/react@19.0.0",
+  "react/": "https://esm.sh/react@19.0.0/",
+  "react-dom": "https://esm.sh/react-dom@19.0.0?external=react",
+  "react-dom/client": "https://esm.sh/react-dom@19.0.0/client?external=react",
+  "framer-motion": "https://esm.sh/framer-motion@14.14.0?external=react,react-dom",
+  "htm": "https://esm.sh/htm@3.1.1"
+} }
+</script>
+<style>
+/* DESIGN.md §10 Login: a night brand panel on the left, the card on the right.
+   Below 1024px the panel becomes a band above the card. */
+.screen { display: grid; min-height: 100vh; grid-template-columns: minmax(0, 1.15fr) minmax(440px, 1fr); }
+@media (max-width: 1023px) { .screen { grid-template-columns: minmax(0, 1fr); } }
+
+.side { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 22px; padding: 32px 44px 28px; }
+@media (max-width: 1023px) { .side { padding: 22px 20px 26px; gap: 18px; } }
+.side .brand { width: fit-content; }
+.side-copy { max-width: 31rem; margin-top: 3vh; }
+@media (max-width: 1023px) { .side-copy { margin-top: 0; } }
+.side .eyebrow { color: var(--night-sky); }
+.side h2 { margin: 0; font-size: clamp(28px, 3vw, 40px); line-height: 1.05; letter-spacing: -.035em; font-weight: 600; color: #fff; text-wrap: balance; }
+.side h2 span { display: block; color: #93a4bd; }
+.side .lead { color: var(--night-muted); max-width: 44ch; font-size: 16px; }
+@media (max-width: 1023px) { .side h2 { font-size: 26px; } .side h2 span { display: inline; } .side .lead { font-size: 14.5px; margin-top: 8px; } }
+.side-loop { max-width: 470px; }
+@media (max-width: 1023px), (max-height: 720px) { .side-loop { display: none; } }
+.figs { margin: auto 0 0; padding-top: 18px; border-top: 1px solid var(--night-line); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; max-width: 38rem; }
+@media (max-width: 1023px) { .figs { display: none; } }
+.figs dt { font-size: 12px; color: var(--night-dim); }
+.figs dd { margin: 3px 0 0; font: 500 21px/1.2 "Geist Mono", monospace; color: #fff; }
+
+/* The loop card, same as demo 1's hero, a little smaller. */
+.loop { border-radius: 16px; border: 1px solid rgba(148, 163, 184, .22); background: rgba(10, 16, 32, .72); backdrop-filter: blur(8px); box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .6); padding: 16px; }
+.loop-head { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--night-dim); }
+.loop-rule { margin: 10px 0 12px; padding: 9px 12px; border-radius: 10px; background: rgba(129, 140, 248, .1); border: 1px solid rgba(129, 140, 248, .25); font-size: 13px; color: var(--night-ink); line-height: 1.5; }
+.loop-rule b { color: #fff; font-weight: 600; }
+.loop-row { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; }
+.tile { border-radius: 12px; background: rgba(148, 163, 184, .07); border: 1px solid rgba(148, 163, 184, .14); padding: 10px 12px; }
+.tile small { display: block; font-size: 12px; color: var(--night-dim); }
+.reading { font: 500 28px/1.1 "Geist Mono", monospace; color: #fff; display: inline-block; }
+.reading-unit { color: var(--night-dim); font-size: 14px; margin-left: 4px; }
+.spark { display: block; width: 100%; height: 36px; margin-top: 4px; }
+.switch { width: 44px; height: 24px; border-radius: 12px; background: rgba(148, 163, 184, .3); display: flex; padding: 3px; margin-top: 8px; }
+.switch.on { background: #4ade80; justify-content: flex-end; }
+.switch span { width: 18px; height: 18px; border-radius: 50%; background: #fff; }
+.pill { display: inline-flex; align-items: center; font-size: 12.5px; }
+/* Night surface: status tones use their dark-theme values in both themes. */
+.loop { --online: #4ade80; --pending: #fbbf24; --accent: #818cf8; --accent-strong: #a5b4fc; --unknown: #9ca3af; }
+.loop-fallback { color: var(--night-muted); font-size: 14px; margin: 0; }
+
+/* The card side. */
+.main { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; padding: 40px 24px; background:
+  radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 42%),
+  radial-gradient(circle at 0% 100%, color-mix(in srgb, var(--chart) 9%, transparent), transparent 40%), var(--canvas); }
+@media (max-width: 1023px) { .main { justify-content: flex-start; padding: 28px 16px; } }
+.card-wrap { width: 100%; max-width: 410px; }
+.auth { display: flex; flex-direction: column; gap: 14px; padding: 32px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface);
+  box-shadow: 0 24px 48px -16px rgba(30, 30, 60, .22), 0 2px 6px rgba(30, 30, 60, .08); }
+@media (max-width: 640px) { .auth { padding: 24px 20px; } }
+.auth h1 { margin: 0; font-size: 28px; line-height: 1.2; font-weight: 600; letter-spacing: -.015em; }
+.auth .desc { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field-top { display: flex; justify-content: space-between; align-items: baseline; }
+.field label { font-size: 14px; font-weight: 500; }
+.field-top a, .linkish { font-size: 12px; font-weight: 500; color: var(--accent); text-decoration: none; background: none; border: 0; padding: 0; cursor: pointer; font-family: inherit; }
+.field-top a:hover, .linkish:hover { text-decoration: underline; }
+.input { position: relative; }
+.input input { width: 100%; height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); font: 14px/1 inherit; font-family: inherit; }
+.input input:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: var(--accent); }
+.input .eye { position: absolute; right: 4px; top: 4px; height: 28px; padding: 0 8px; border: 0; border-radius: 6px; background: none; color: var(--muted); font: 500 12px/1 inherit; font-family: inherit; cursor: pointer; }
+.input .eye:hover { background: var(--raised); color: var(--ink); }
+.warn { font-size: 12.5px; color: var(--pending); }
+.check { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; cursor: pointer; }
+.check input { margin-top: 3px; accent-color: var(--accent); }
+.submit { width: 100%; justify-content: center; }
+.submit[disabled] { opacity: .7; cursor: progress; }
+.spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; }
+.or { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+.google { width: 100%; justify-content: center; gap: 10px; }
+.callout { border-radius: 10px; padding: 10px 12px; font-size: 14px; line-height: 1.5; }
+.callout b { font-weight: 600; display: block; }
+.callout.error { background: color-mix(in srgb, var(--offline) 9%, var(--surface)); color: var(--ink); border: 1px solid color-mix(in srgb, var(--offline) 30%, transparent); }
+.callout.info { background: var(--accent-muted); color: var(--ink); }
+.foot-row { border-top: 1px solid var(--border); padding-top: 12px; text-align: center; font-size: 13px; color: var(--muted); }
+.foot-row a { font-weight: 500; text-decoration: none; }
+.ws { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ws button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--canvas); color: var(--ink); text-align: left; cursor: pointer; font: inherit; }
+.ws button:hover { border-color: var(--accent); }
+.ws .tile-i { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; background: var(--accent-muted); color: var(--accent); font-weight: 600; flex-shrink: 0; }
+.ws strong { display: block; font-size: 14px; font-weight: 600; }
+.ws small { font-size: 12px; color: var(--muted); }
+.ws .chev { margin-left: auto; color: var(--muted); }
+.hint { font-size: 12px; color: var(--muted); margin: 0; }
+.done { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: color-mix(in srgb, var(--online) 14%, transparent); color: var(--online); font-size: 22px; }
+.legal { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; font-size: 12px; color: var(--muted); }
+.legal a { color: var(--muted); text-decoration: none; } .legal a:hover { color: var(--ink); }
+
+/* Demo-only: how to reach each state. */
+.demo-note { max-width: 410px; width: 100%; border: 1px dashed var(--border); border-radius: 12px; padding: 10px 12px; font-size: 12.5px; color: var(--muted); }
+.demo-note code { background: var(--raised); padding: 1px 5px; border-radius: 5px; }
+</style>
+</head>
+<body>
+<div class="screen">
+  <section class="side night-bg" aria-label="About IO Driven">
+    <a class="brand" href="demo-1-story.html"><img src="../../io-driven-mark.png" alt="">IO Driven</a>
+    <div class="side-copy">
+      <p class="eyebrow">Monitoring and automation for real equipment</p>
+      <h2>Your sensors report. <span>Your rules decide.</span> <span>Your equipment responds.</span></h2>
+      <p class="lead">Every reading is checked against your rules the moment it arrives, and your equipment gets its command in under two seconds.</p>
+    </div>
+    <div class="side-loop" id="loop-root">
+      <div class="loop"><p class="loop-fallback">Example: a greenhouse sensor reads 31.5 °C, the rule waits to be sure, then turns the fan on. Below 28 °C the fan goes back off.</p></div>
+    </div>
+    <dl class="figs">
+      <div><dt>Reading to response</dt><dd class="num">&lt; 2 s</dd></div>
+      <div><dt>Usually</dt><dd class="num">&lt; 500 ms</dd></div>
+      <div><dt>Devices on one server</dt><dd class="num">500–1,000</dd></div>
+    </dl>
+  </section>
+
+  <main class="main">
+    <div class="card-wrap" id="auth-root">
+      <!-- Without JavaScript: the plain form. -->
+      <form class="auth" onsubmit="return false">
+        <div><h1>Sign in</h1><p class="desc">to your workspace</p></div>
+        <div class="field"><label for="e0">Email</label><div class="input"><input id="e0" type="email" autocomplete="username"></div></div>
+        <div class="field"><div class="field-top"><label for="p0">Password</label><a href="#">Forgot password?</a></div><div class="input"><input id="p0" type="password" autocomplete="current-password"></div></div>
+        <label class="check"><input type="checkbox"> Keep me signed in on this device</label>
+        <button class="btn btn-primary submit">Sign in</button>
+        <div class="foot-row">No account? <a href="#">Create a workspace</a></div>
+      </form>
+    </div>
+    <p class="demo-note"><b style="color:var(--ink)">Demo:</b> any email and password sign in and show the workspace list (an integrator with three clients). Use the password <code>wrong</code> to see the error, twice for the Caps Lock hint. "Forgot password?" shows the reset flow.</p>
+    <p class="legal"><a href="demo-1-story.html">iodriven.tech</a><a href="#">Privacy</a><span>© 2026 IO Driven</span></p>
+  </main>
+</div>
+
+<div class="demo-chip"><a href="index.html">All demos</a><a href="demo-1-story.html">Landing</a><button type="button" id="theme">Dark</button></div>
+<script>
+  (function () {
+    const b = document.getElementById("theme"), r = document.documentElement;
+    const dark = () => r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const label = () => { b.textContent = dark() ? "Light" : "Dark"; };
+    b.onclick = () => { r.dataset.theme = dark() ? "light" : "dark"; label(); };
+    label();
+  })();
+</script>
+
+<script type="module">
+import React, { useEffect, useRef, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { motion, AnimatePresence, MotionConfig, useAnimationControls } from "framer-motion";
+import htm from "htm";
+const html = htm.bind(React.createElement);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- Left panel: demo 1's control loop, compact ---------- */
+const SERIES = [26.1, 26.8, 27.9, 29.2, 30.4, 31.1, 31.5, 31.3, 30.8, 29.9, 29.0, 28.3, 27.7, 27.1, 26.6, 26.3];
+const ON = 30, OFF = 28, HOLD = 3;
+function simulate(upTo) {
+  let held = 0, fan = false;
+  for (let i = 0; i <= upTo; i++) {
+    const v = SERIES[i];
+    if (!fan && v > ON) { held++; if (held >= HOLD) fan = true; } else if (!fan) held = 0;
+    if (fan && v < OFF) { fan = false; held = 0; }
+  }
+  return { held, fan };
+}
+function Loop() {
+  const [i, setI] = useState(reduced ? 8 : 0);
+  useEffect(() => { if (reduced) return; const id = setInterval(() => setI((n) => (n + 1) % (SERIES.length + 3)), 900); return () => clearInterval(id); }, []);
+  const at = Math.min(i, SERIES.length - 1), v = SERIES[at], { held, fan } = simulate(at);
+  const status = fan ? ["Fired", "st-fired"] : held > 0 ? ["Holding", "st-pending"] : ["Armed", "st-online"];
+  const pts = SERIES.slice(0, at + 1).map((s, k) => `${(k / (SERIES.length - 1)) * 300},${36 - ((s - 25) / 7.5) * 34}`).join(" ");
+  const yOn = 36 - ((ON - 25) / 7.5) * 34;
+  const spring = { type: "spring", stiffness: 500, damping: 32 };
+  return html`
+    <div class="loop" aria-hidden="true">
+      <div class="loop-head"><span>Greenhouse · bay 1</span><span class="pill ${status[1]}"><span class="dot"></span>${status[0]}</span></div>
+      <div class="loop-rule">When <b>temperature</b> is above <b>30 °C</b> for <b>${HOLD} s</b>, turn the <b>fan</b> on. Off again below <b>28 °C</b>.</div>
+      <div class="loop-row">
+        <div class="tile">
+          <small>Temperature</small>
+          <${AnimatePresence} mode="popLayout" initial=${false}>
+            <${motion.span} key=${v} class="reading num" initial=${{ y: 8, opacity: 0 }} animate=${{ y: 0, opacity: 1 }} exit=${{ y: -8, opacity: 0 }} transition=${{ duration: 0.25 }}>${v.toFixed(1)}</${motion.span}>
+          </${AnimatePresence}><span class="reading-unit">°C</span>
+          <svg class="spark" viewBox="0 0 300 36" preserveAspectRatio="none">
+            <line x1="0" x2="300" y1=${yOn} y2=${yOn} stroke="rgba(248,113,113,.6)" stroke-dasharray="3 3"/>
+            <polyline points=${pts} fill="none" stroke="#22d3ee" stroke-width="2" vector-effect="non-scaling-stroke"/>
+          </svg>
+        </div>
+        <div class="tile">
+          <small>Fan · fan1</small>
+          <span class="pill ${fan ? "st-online" : "st-unknown"}" style=${{ marginTop: 6 }}><span class="dot"></span>${fan ? "On" : "Off"}</span>
+          <${motion.div} class="switch ${fan ? "on" : ""}" layout transition=${spring}><${motion.span} layout transition=${spring} /></${motion.div}>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ---------- Right: the sign-in card and its states ---------- */
+const WORKSPACES = [["Northfield Farms", "Owner"], ["Riverside Water", "Admin"], ["Polar Cold Storage", "Viewer"]];
+const view = { initial: { opacity: 0, y: 14 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -10 }, transition: { duration: 0.24, ease: [0.22, 1, 0.36, 1] } };
+
+function Field({ id, label, action, warning, children }) {
+  return html`<div class="field">
+    <div class="field-top"><label for=${id}>${label}</label>${action}</div>
+    ${children}
+    ${warning && html`<span class="warn">${warning}</span>`}
+  </div>`;
+}
+
+function Auth() {
+  const [mode, setMode] = useState("signin"); // signin | choose | forgot | sent | entered
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [show, setShow] = useState(false);
+  const [keep, setKeep] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [failures, setFailures] = useState(0);
+  const [caps, setCaps] = useState(false);
+  const [entered, setEntered] = useState(null);
+  const shake = useAnimationControls();
+  const first = useRef(null);
+  useEffect(() => { first.current?.focus(); }, [mode]);
+
+  const submit = (e) => {
+    e.preventDefault(); setError(null); setBusy(true);
+    setTimeout(() => {
+      setBusy(false);
+      if (password === "wrong") {
+        setFailures((n) => n + 1);
+        setError("That email and password don't match. Check both and try again.");
+        if (!reduced) shake.start({ x: [0, -8, 8, -5, 5, 0], transition: { duration: 0.4 } });
+      } else setMode("choose");
+    }, 900);
+  };
+  const sendReset = (e) => { e.preventDefault(); setBusy(true); setTimeout(() => { setBusy(false); setMode("sent"); }, 800); };
+
+  let body;
+  if (mode === "signin") body = html`
+    <form class="auth" onSubmit=${submit} noValidate=${false}>
+      <div><h1>Sign in</h1><p class="desc">to your workspace</p></div>
+      <button type="button" class="btn btn-secondary google">
+        <svg width="16" height="16" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="m6.3 14.7 6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
+        Continue with Google
+      </button>
+      <div class="or">or with email</div>
+      <${AnimatePresence} initial=${false}>
+        ${error && html`<${motion.div} key="err" class="callout error" role="alert" initial=${{ opacity: 0, height: 0 }} animate=${{ opacity: 1, height: "auto" }} exit=${{ opacity: 0, height: 0 }}>
+          <b>${error}</b>${failures >= 2 && html`<span>Check Caps Lock, or reset your password.</span>`}
+        </${motion.div}>`}
+      </${AnimatePresence}>
+      <${Field} id="email" label="Email">
+        <div class="input"><input ref=${first} id="email" type="email" required autocomplete="username" value=${email} onInput=${(e) => setEmail(e.target.value)} /></div>
+      </${Field}>
+      <${Field} id="pw" label="Password" warning=${failures >= 2 && caps ? "Caps Lock is on." : null}
+        action=${html`<button type="button" class="linkish" onClick=${() => { setError(null); setMode("forgot"); }}>Forgot password?</button>`}>
+        <div class="input">
+          <input id="pw" type=${show ? "text" : "password"} required autocomplete="current-password" value=${password}
+            onInput=${(e) => setPassword(e.target.value)} onKeyUp=${(e) => setCaps(e.getModifierState?.("CapsLock"))} style=${{ paddingRight: 56 }} />
+          <button type="button" class="eye" aria-pressed=${show} onClick=${() => setShow(!show)}>${show ? "Hide" : "Show"}</button>
+        </div>
+      </${Field}>
+      <label class="check"><input type="checkbox" checked=${keep} onChange=${(e) => setKeep(e.target.checked)} /> Keep me signed in on this device</label>
+      <button class="btn btn-primary submit" type="submit" disabled=${busy}>
+        ${busy ? html`<${motion.span} class="spinner" animate=${{ rotate: 360 }} transition=${{ repeat: Infinity, duration: 0.8, ease: "linear" }} /> Signing in…` : "Sign in"}
+      </button>
+      <div class="foot-row">No account? <a href="#">Create a workspace</a></div>
+    </form>`;
+  else if (mode === "choose") body = html`
+    <div class="auth">
+      <div><h1>Choose a workspace</h1><p class="desc">${email || "you@example.com"} belongs to ${WORKSPACES.length} workspaces.</p></div>
+      <ul class="ws" aria-label="Workspaces">
+        ${WORKSPACES.map(([name, role], i) => html`
+          <${motion.li} key=${name} initial=${{ opacity: 0, x: 14 }} animate=${{ opacity: 1, x: 0 }} transition=${{ delay: 0.06 * i + 0.05 }}>
+            <button ref=${i === 0 ? first : null} type="button" onClick=${() => { setEntered(name); setMode("entered"); }}>
+              <span class="tile-i">${name[0]}</span><span><strong>${name}</strong><small>${role}</small></span><span class="chev">›</span>
+            </button>
+          </${motion.li}>`)}
+      </ul>
+      <p class="hint">Switch any time from the workspace menu at the top of the sidebar.</p>
+    </div>`;
+  else if (mode === "forgot") body = html`
+    <form class="auth" onSubmit=${sendReset}>
+      <div><h1>Reset your password</h1><p class="desc">We'll email you a link to choose a new one.</p></div>
+      <${Field} id="remail" label="Email">
+        <div class="input"><input ref=${first} id="remail" type="email" required autocomplete="username" value=${email} onInput=${(e) => setEmail(e.target.value)} /></div>
+      </${Field}>
+      <button class="btn btn-primary submit" type="submit" disabled=${busy}>
+        ${busy ? html`<${motion.span} class="spinner" animate=${{ rotate: 360 }} transition=${{ repeat: Infinity, duration: 0.8, ease: "linear" }} /> Sending…` : "Send reset link"}
+      </button>
+      <div class="foot-row"><button type="button" class="linkish" style=${{ fontSize: 13 }} onClick=${() => setMode("signin")}>Back to sign in</button></div>
+    </form>`;
+  else if (mode === "sent") body = html`
+    <div class="auth">
+      <${motion.span} class="done" initial=${{ scale: 0.6, opacity: 0 }} animate=${{ scale: 1, opacity: 1 }} transition=${{ type: "spring", stiffness: 400, damping: 20 }}>✓</${motion.span}>
+      <div><h1>Check your email</h1><p class="desc">If an account uses ${email || "that address"}, a reset link is on its way. It works once and expires in 30 minutes.</p></div>
+      <div class="foot-row"><button ref=${first} type="button" class="linkish" style=${{ fontSize: 13 }} onClick=${() => setMode("signin")}>Back to sign in</button></div>
+    </div>`;
+  else body = html`
+    <div class="auth">
+      <${motion.span} class="done" initial=${{ scale: 0.6, opacity: 0 }} animate=${{ scale: 1, opacity: 1 }} transition=${{ type: "spring", stiffness: 400, damping: 20 }}>✓</${motion.span}>
+      <div><h1>Signed in</h1><p class="desc">In the app this opens <b style=${{ color: "var(--ink)" }}>${entered}</b> on your default dashboard${keep ? ", and keeps you signed in on this device" : ""}.</p></div>
+      <div class="foot-row"><button ref=${first} type="button" class="linkish" style=${{ fontSize: 13 }} onClick=${() => { setPassword(""); setMode("signin"); }}>Start the demo again</button></div>
+    </div>`;
+
+  return html`
+    <${motion.div} animate=${shake}>
+      <${AnimatePresence} mode="wait" initial=${false}>
+        <${motion.div} key=${mode} ...${view}>${body}</${motion.div}>
+      </${AnimatePresence}>
+    </${motion.div}>`;
+}
+
+const mount = (id, C) => createRoot(document.getElementById(id)).render(html`<${MotionConfig} reducedMotion="user"><${C} /></${MotionConfig}>`);
+mount("loop-root", Loop);
+mount("auth-root", Auth);
+</script>
+</body>
+</html>

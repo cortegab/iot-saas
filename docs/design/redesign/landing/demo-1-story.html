@@ -1,0 +1,419 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IO Driven · Landing demo 1: The story</title>
+<link rel="icon" href="../../io-driven-mark.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="tokens.css">
+<script type="importmap">
+{ "imports": {
+  "react": "https://esm.sh/react@19.0.0",
+  "react/": "https://esm.sh/react@19.0.0/",
+  "react-dom": "https://esm.sh/react-dom@19.0.0?external=react",
+  "react-dom/client": "https://esm.sh/react-dom@19.0.0/client?external=react",
+  "framer-motion": "https://esm.sh/framer-motion@14.14.0?external=react,react-dom",
+  "htm": "https://esm.sh/htm@3.1.1"
+} }
+</script>
+<style>
+/* Hero: text on the left, the live loop card on the right. */
+.hero { position: relative; overflow: hidden; padding: 72px 0 40px; }
+.hero-grid { display: grid; gap: 48px; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); align-items: center; }
+@media (max-width: 960px) { .hero-grid { grid-template-columns: minmax(0, 1fr); } }
+.hero .eyebrow { color: var(--night-sky); }
+.hero h1 { margin: 0; font-size: clamp(38px, 5.6vw, 62px); line-height: 1.03; letter-spacing: -.04em; font-weight: 600; color: #fff; text-wrap: balance; }
+.hero h1 span { color: #93a4bd; display: block; }
+.hero .lead { color: var(--night-muted); font-size: 17px; max-width: 52ch; }
+.hero .lead b { color: #fff; font-weight: 600; }
+.hero .ctas { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 28px; }
+.stats { margin: 56px 0 0; padding-top: 22px; border-top: 1px solid var(--night-line); display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 860px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.stats dt { font-size: 12.5px; color: var(--night-dim); }
+.stats dd { margin: 4px 0 0; }
+.stats .big { font: 500 clamp(22px, 2.6vw, 28px)/1.2 "Geist Mono", monospace; color: #fff; letter-spacing: -.02em; }
+.stats .note { font-size: 12.5px; color: var(--night-faint); }
+
+/* The loop card (Framer Motion island). Night surface, so night tokens. */
+.loop { border-radius: 16px; border: 1px solid rgba(148, 163, 184, .22); background: rgba(10, 16, 32, .72); backdrop-filter: blur(8px); box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .6); padding: 18px; min-height: 380px; }
+.loop-head { display: flex; justify-content: space-between; align-items: center; font-size: 12.5px; color: var(--night-dim); }
+.loop-rule { margin: 10px 0 14px; padding: 10px 12px; border-radius: 10px; background: rgba(129, 140, 248, .1); border: 1px solid rgba(129, 140, 248, .25); font-size: 13.5px; color: var(--night-ink); line-height: 1.5; }
+.loop-rule b { color: #fff; font-weight: 600; }
+.loop-row { display: grid; grid-template-columns: 1.2fr 1fr; gap: 12px; }
+.tile { border-radius: 12px; background: rgba(148, 163, 184, .07); border: 1px solid rgba(148, 163, 184, .14); padding: 12px; }
+.tile small { display: block; font-size: 12px; color: var(--night-dim); }
+.reading { font: 500 34px/1.1 "Geist Mono", monospace; color: #fff; display: inline-block; }
+.reading-unit { color: var(--night-dim); font-size: 15px; margin-left: 4px; }
+.spark { display: block; width: 100%; height: 46px; margin-top: 6px; }
+.switch { width: 46px; height: 26px; border-radius: 13px; background: rgba(148, 163, 184, .3); display: flex; padding: 3px; margin-top: 8px; }
+.switch.on { background: #4ade80; justify-content: flex-end; }
+.switch span { width: 20px; height: 20px; border-radius: 50%; background: #fff; }
+.pill { display: inline-flex; align-items: center; font-size: 12.5px; }
+/* Night surface: status tones use their dark-theme values in both themes. */
+.loop { --online: #4ade80; --pending: #fbbf24; --accent: #818cf8; --accent-strong: #a5b4fc; --unknown: #9ca3af; }
+.hold { margin-top: 8px; height: 4px; border-radius: 2px; background: rgba(148, 163, 184, .18); overflow: hidden; }
+.hold span { display: block; height: 100%; background: var(--night-amber); }
+.log { margin: 14px 0 0; padding: 0; list-style: none; font: 12.5px/1.5 "Geist Mono", monospace; color: var(--night-muted); min-height: 120px; }
+.log li { display: flex; gap: 10px; padding: 4px 0; border-top: 1px solid rgba(148, 163, 184, .1); }
+.log time { color: var(--night-faint); }
+.log .k-in { color: var(--night-sky); } .log .k-cmd { color: var(--night-amber); } .log .k-ok { color: var(--night-ok); }
+.loop-fallback { color: var(--night-muted); font-size: 14px; }
+
+/* Steps */
+.steps { display: grid; gap: 16px; grid-template-columns: repeat(4, minmax(0, 1fr)); counter-reset: s; }
+@media (max-width: 980px) { .steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .steps { grid-template-columns: minmax(0, 1fr); } }
+.step .n { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-muted); color: var(--accent-strong); font: 600 13px/1 "Geist Mono", monospace; margin-bottom: 12px; }
+
+/* Safety example strip */
+.example { margin-top: 24px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: center; }
+@media (max-width: 860px) { .example { grid-template-columns: minmax(0, 1fr); } }
+.example svg { width: 100%; height: auto; }
+.example .legend { display: flex; flex-direction: column; gap: 10px; font-size: 14.5px; }
+.example .legend b { font-weight: 600; }
+
+/* Use cases */
+.case { display: flex; flex-direction: column; gap: 8px; }
+.case .tag { align-self: flex-start; font: 500 12px/1 "Geist Mono", monospace; color: var(--chart); background: color-mix(in srgb, var(--chart) 10%, transparent); padding: 5px 8px; border-radius: 6px; }
+.case .rule { margin-top: auto; padding-top: 10px; border-top: 1px solid var(--soft); font-size: 13.5px; color: var(--ink); }
+
+/* Audiences */
+.aud { display: flex; flex-direction: column; gap: 10px; }
+.aud ul { margin: 4px 0 0; padding-left: 18px; color: var(--muted); font-size: 14.5px; }
+.aud li { margin: 3px 0; }
+.aud .more { margin-top: auto; padding-top: 6px; font-weight: 500; text-decoration: none; }
+.aud.featured { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); background: linear-gradient(180deg, var(--accent-muted), var(--surface) 60%); }
+.aud .badge { align-self: flex-start; font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--accent); color: var(--on-accent); }
+
+/* Deployment */
+.dep .big { font-size: 22px; font-weight: 600; letter-spacing: -.02em; margin: 2px 0; }
+.dep .sub { font-size: 13px; color: var(--muted); }
+.dep ul { margin: 12px 0 0; padding-left: 18px; font-size: 14px; color: var(--muted); }
+
+/* Reveal (Framer Motion animate). Only hidden once the module has loaded,
+   so the page reads fine without JavaScript or the CDN. */
+.fm-ready [data-reveal] { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .fm-ready [data-reveal] { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="inner">
+    <a class="brand" href="#top"><img src="../../io-driven-mark.png" alt="">IO Driven</a>
+    <nav class="nav-links" aria-label="Page sections">
+      <a href="#how">How it works</a><a href="#safety">Safety</a><a href="#uses">Use cases</a>
+      <a href="#who">Who it's for</a><a href="#start">Getting started</a><a href="#deploy">Deployment</a><a href="#faq">FAQ</a>
+    </nav>
+    <div class="nav-end">
+      <a class="btn btn-ghost" href="demo-1-signin.html">Sign in</a>
+      <a class="btn btn-cta" href="#close">Talk to us</a>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section id="top" class="hero night-bg">
+    <div class="inner">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Monitoring and automation for real equipment</p>
+          <h1>Your sensors report.<span>Your rules decide.</span><span>Your equipment responds.</span></h1>
+          <p class="lead">IO Driven connects your sensors and machines, checks every reading <b>the moment it arrives</b>, and reacts in under two seconds: it turns on a fan, stops a pump or sends you an alert.</p>
+          <div class="ctas">
+            <a class="btn btn-cta btn-lg" href="#close">Talk to us →</a>
+            <a class="btn btn-ghost btn-lg" href="#how">See how it works</a>
+          </div>
+        </div>
+        <div id="loop-root">
+          <div class="loop"><p class="loop-fallback">Example: a greenhouse sensor reads 31.5 °C, the rule waits 10 seconds to be sure, then turns the fan on. When it cools below 28 °C, the fan goes back off.</p></div>
+        </div>
+      </div>
+      <dl class="stats">
+        <div><dt>Reading to response</dt><dd class="big num">&lt; 2 s</dd><dd class="note">usually under half a second</dd></div>
+        <div><dt>Devices on one server</dt><dd class="big num">500–1,000</dd><dd class="note">no cluster to look after</dd></div>
+        <div><dt>Sign-up to first reading</dt><dd class="big num">10 min</dd><dd class="note">flash a board from the browser</dd></div>
+        <div><dt>Where it runs</dt><dd class="big">Cloud or yours</dd><dd class="note">same devices, same app</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section id="how" class="block">
+    <div class="inner">
+      <p class="eyebrow">How it works</p>
+      <h2 class="h2">Four steps, repeated every time a sensor speaks.</h2>
+      <p class="lead">You describe what should happen in plain sentences. IO Driven does the watching, day and night, and tells you what it did. Each step has a short technical note for whoever runs the system.</p>
+      <div class="body steps">
+        <div class="card step" data-reveal>
+          <span class="n">1</span><h3>Sense</h3>
+          <p>Your devices send readings like temperature, tank level or door open/closed, as often as you choose.</p>
+          <details class="tech"><summary>Technical note</summary><p>MQTT over TLS to an EMQX broker. Each device has its own credential, stored hashed, and can only publish to its own topics. HTTP is available as a fallback.</p></details>
+        </div>
+        <div class="card step" data-reveal>
+          <span class="n">2</span><h3>Decide</h3>
+          <p>Every reading is checked against your rules right away, across one device or many: "if the tank is low <em>and</em> the pump is on…"</p>
+          <details class="tech"><summary>Technical note</summary><p>Rules are held in memory and evaluated before anything is written to the database. No polling and no scheduled jobs sit between a reading and the decision.</p></details>
+        </div>
+        <div class="card step" data-reveal>
+          <span class="n">3</span><h3>Act</h3>
+          <p>A rule can switch an output (fan, pump, valve, light), email the right people, notify phones or call another system.</p>
+          <details class="tech"><summary>Technical note</summary><p>Commands go out with QoS 1 and an expiry time, and the intended state is kept by the broker, so a device that was offline catches up when it reconnects.</p></details>
+        </div>
+        <div class="card step" data-reveal>
+          <span class="n">4</span><h3>Confirm and record</h3>
+          <p>The device confirms it did it. Everything lands in history and on your dashboards, and anything that failed is listed with the reason.</p>
+          <details class="tech"><summary>Technical note</summary><p>History goes to TimescaleDB in batches on a separate path, with 1-minute and 1-hour rollups for charts and retention enforced in the database.</p></details>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="safety" class="block alt">
+    <div class="inner">
+      <p class="eyebrow">Safety</p>
+      <h2 class="h2">Built for equipment that can break.</h2>
+      <p class="lead">Sensors are noisy. A simple "above 30 °C, turn on" rule would switch a relay on and off dozens of times an hour and wear it out. Every rule in IO Driven has three brakes built in, always visible and never optional.</p>
+      <div class="body grid-3">
+        <div class="card" data-reveal><h3>Hold time</h3><p>The condition must stay true for a while (say 10 seconds) before anything happens. A brief spike is ignored.</p></div>
+        <div class="card" data-reveal><h3>Hysteresis</h3><p>A safety margin before turning back. It turns on at 30 °C, but only resets once it's back below 28 °C.</p></div>
+        <div class="card" data-reveal><h3>Minimum interval</h3><p>A floor on how often a rule can act, for example once a minute at most, whatever the data does.</p></div>
+      </div>
+      <div class="example card" data-reveal>
+        <svg viewBox="0 0 520 150" role="img" aria-label="A noisy temperature line crosses 30 °C; the fan turns on once after the hold time and turns off once it drops below 28 °C">
+          <line x1="0" x2="520" y1="44" y2="44" stroke="var(--offline)" stroke-dasharray="4 4" stroke-width="1"/>
+          <text x="514" y="38" text-anchor="end" font-size="11" fill="var(--muted)" font-family="Geist Mono">30 °C on</text>
+          <line x1="0" x2="520" y1="84" y2="84" stroke="var(--online)" stroke-dasharray="4 4" stroke-width="1"/>
+          <text x="514" y="100" text-anchor="end" font-size="11" fill="var(--muted)" font-family="Geist Mono">28 °C reset</text>
+          <rect x="196" y="122" width="210" height="14" rx="4" fill="color-mix(in srgb, var(--accent) 22%, transparent)"/>
+          <text x="301" y="132.5" text-anchor="middle" font-size="10.5" fill="var(--accent-strong)" font-family="Geist Mono">fan on</text>
+          <path d="M0 110 L30 104 L55 98 L80 90 L100 70 L112 46 L122 58 L134 40 L146 50 L158 36 L176 30 L196 26 L220 30 L250 24 L280 34 L300 40 L318 54 L334 46 L350 64 L370 76 L390 80 L406 90 L430 96 L470 102 L520 106" fill="none" stroke="var(--chart)" stroke-width="2.2" stroke-linejoin="round"/>
+        </svg>
+        <div class="legend">
+          <span><b>Without the brakes:</b> the line above crosses 30 °C six times. That's six on/off cycles in a few minutes.</span>
+          <span><b>With them:</b> the fan turns on once, after the reading stays high, and turns off once, after it's clearly cooled down.</span>
+          <span class="st-unknown" style="font-size:13.5px"><span class="dot"></span>If a sensor goes quiet, nothing switches. Missing data is treated as "unknown", never as "all clear".</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="uses" class="block">
+    <div class="inner">
+      <p class="eyebrow">Use cases</p>
+      <h2 class="h2">What people connect to it.</h2>
+      <p class="lead">Anything that can report a number or a yes/no, and anything that can be switched. A few typical setups:</p>
+      <div class="body grid-4">
+        <div class="card case" data-reveal><span class="tag">Agriculture</span><h3>Greenhouses</h3><p>Temperature, humidity and soil moisture. Fans, vents and irrigation valves.</p><p class="rule">"Too hot for 10 s → fan on, until it's back below 28 °C."</p></div>
+        <div class="card case" data-reveal><span class="tag">Water</span><h3>Tanks and pumps</h3><p>Level, pressure and flow. Pumps that must never run dry.</p><p class="rule">"Tank below 20 % → stop the pump and keep it stopped until someone checks."</p></div>
+        <div class="card case" data-reveal><span class="tag">Food</span><h3>Cold rooms</h3><p>Fridge and freezer temperatures, door contacts and compressor state.</p><p class="rule">"Door open for 5 min → alert the shift on their phones."</p></div>
+        <div class="card case" data-reveal><span class="tag">Industry</span><h3>Machines and lines</h3><p>Vibration, current and run hours from existing PLCs through an edge connector.</p><p class="rule">"Vibration high on any motor → email maintenance."</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="who" class="block alt">
+    <div class="inner">
+      <p class="eyebrow">Who it's for</p>
+      <h2 class="h2">One platform, three kinds of people.</h2>
+      <p class="lead">The people who use a system day to day aren't always the people who installed it. IO Driven gives each of them a view that fits.</p>
+      <div class="body grid-3">
+        <div class="card aud" data-reveal>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M3 21h18M5 21V9l7-5 7 5v12M9 21v-6h6v6"/></svg>
+          <h3>Site teams</h3>
+          <p>You look after a greenhouse, a plant or a building and want to know what's happening without becoming an IT expert.</p>
+          <ul><li>Dashboards and phone alerts</li><li>Rules written as sentences</li><li>Simple view: just your devices and buttons</li></ul>
+        </div>
+        <div class="card aud featured" data-reveal>
+          <span class="badge">Recommended section</span>
+          <svg class="icon" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.8-.7-.7-2.8z"/></svg>
+          <h3>Integrators and installers</h3>
+          <p>You design and install systems for clients. Set each one up once, hand over something simple, and support it remotely.</p>
+          <ul><li>One login for every client's workspace</li><li>Clients get Simple view and scene buttons</li><li>Cloud, dedicated or on their own server</li></ul>
+          <a class="more" href="#integrators">What integrators get →</a>
+        </div>
+        <div class="card aud" data-reveal>
+          <svg class="icon" viewBox="0 0 24 24"><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16"/></svg>
+          <h3>Developers</h3>
+          <p>You build your own hardware or connect IO Driven to other software.</p>
+          <ul><li>A small, stable MQTT device contract</li><li>REST API with API keys, plus webhooks</li><li>Ready-made firmware for ESP32 boards</li></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="integrators" class="block">
+    <div class="inner">
+      <p class="eyebrow">For integrators</p>
+      <h2 class="h2">You set it up. Your client just uses it.</h2>
+      <p class="lead">Most automation projects are installed by one person and lived with by another. IO Driven separates those two jobs without running two products.</p>
+      <div class="body grid-3">
+        <div class="card" data-reveal><h3>A workspace per client</h3><p>Each client's devices, rules and people are kept apart. Switch between clients from one account.</p></div>
+        <div class="card" data-reveal><h3>Simple view for clients</h3><p>Clients see their areas, readings and on/off switches in everyday words. No templates, no topics, no credentials.</p></div>
+        <div class="card" data-reveal><h3>Scene buttons</h3><p>Turn a rule into a button, like "Start irrigation" or "Night mode", that clients can press on a dashboard or in the app.</p></div>
+        <div class="card" data-reveal><h3>Remote support</h3><p>Device health, restart reasons and failed deliveries show you what went wrong before you drive out to the site.</p></div>
+        <div class="card" data-reveal><h3>Their equipment, as it is</h3><p>PLCs and Modbus or OPC UA gear join through a small edge connector on site, with no ports opened to the internet.</p></div>
+        <div class="card" data-reveal><h3>Their data where they need it</h3><p>Shared cloud for small sites, a dedicated instance for a security review, or on-premise. Devices move without being re-flashed.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="start" class="block alt">
+    <div class="inner">
+      <p class="eyebrow">Getting started</p>
+      <h2 class="h2">From sign-up to a live reading in about ten minutes.</h2>
+      <p class="lead">No coding needed for supported ESP32 boards. Without a board yet? Start with a simulated device and wire the real one later.</p>
+      <div class="body steps">
+        <div class="card step" data-reveal><span class="n">1</span><h3>Create a workspace</h3><p>Invite your team as admins or viewers.</p></div>
+        <div class="card step" data-reveal><span class="n">2</span><h3>Add a device</h3><p>Say what it measures and what it controls, with units and ranges.</p></div>
+        <div class="card step" data-reveal><span class="n">3</span><h3>Flash and connect</h3><p>Flash the board from your browser and set its Wi-Fi from your phone with a QR code.</p></div>
+        <div class="card step" data-reveal><span class="n">4</span><h3>Pick a recipe</h3><p>Start from a ready-made rule like "too hot → fan on" and adjust the numbers.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="deploy" class="block">
+    <div class="inner">
+      <p class="eyebrow">Deployment</p>
+      <h2 class="h2">Run it where your data needs to live.</h2>
+      <p class="lead">Same app, same firmware, same devices. You only choose who runs it and where the data sits.</p>
+      <div class="body grid-3">
+        <div class="card dep" data-reveal><h3>Cloud</h3><p class="big">Shared</p><p class="sub">hosted by IO Driven</p><ul><li>Connect devices the same day</li><li>Updates and backups handled for you</li><li>Each workspace isolated in the database</li></ul></div>
+        <div class="card dep" data-reveal><h3>Dedicated cloud</h3><p class="big">Just yours</p><p class="sub">run by IO Driven</p><ul><li>Your own database and broker</li><li>Upgrades scheduled with you</li><li>For security and compliance reviews</li></ul></div>
+        <div class="card dep" data-reveal><h3>On-premise</h3><p class="big">Your server</p><p class="sub">run by your team</p><ul><li>One Linux server with Docker</li><li>Data never leaves your network</li><li>Your certificates, backups and retention</li></ul></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="faq" class="block alt">
+    <div class="inner faq">
+      <div><p class="eyebrow">FAQ</p><h2 class="h2">Questions people ask first.</h2></div>
+      <div class="faq-list">
+        <details open><summary>Do I need to know how to program?</summary><div>No. For supported ESP32 boards you flash ready-made firmware from the browser, and rules are built from recipes and plain sentences. Developers can still write their own firmware against the device contract.</div></details>
+        <details><summary>What happens if the internet drops at the site?</summary><div>A device that's offline can't receive commands, and no system can change that. When it reconnects, it immediately gets the latest intended state, and commands that are too old expire instead of running late.</div></details>
+        <details><summary>Can I use the sensors and PLCs I already have?</summary><div>Yes, through an edge connector: a small program on your network that reads Modbus, OPC UA or a vendor's cloud and forwards it. To IO Driven it looks like any other device.</div></details>
+        <details><summary>Is there a phone app?</summary><div>Yes, for Android first. It shows dashboards, controls and alerts, sends push notifications, and sets up a new board's Wi-Fi over Bluetooth.</div></details>
+        <details><summary>How long is data kept?</summary><div>It depends on your agreement. Retention is enforced in the database itself, and long-term charts use minute and hour summaries so history stays fast.</div></details>
+        <details><summary>How is one customer's data kept from another's?</summary><div>Every row is tagged with its workspace and protected by row-level security in Postgres, so even a bug in a query can't show another workspace's data.</div></details>
+      </div>
+    </div>
+  </section>
+
+  <section id="close" class="close night-close">
+    <div class="inner">
+      <h2>Tell us what you want to watch and what should happen.</h2>
+      <p>We reply within one working day.</p>
+      <div class="row"><a class="btn btn-cta btn-lg" href="#">Talk to us →</a><a class="btn btn-ghost btn-lg" href="demo-1-signin.html">Sign in</a></div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot"><div class="inner"><span style="color:var(--night-ink);font-weight:600">iodriven.tech</span><span>Monitoring and automation for real equipment</span><span><a href="#">Privacy</a> · © 2026 IO Driven</span></div></footer>
+
+<div class="demo-chip"><a href="index.html">All demos</a><button type="button" id="theme">Dark</button></div>
+<script>
+  // Demo-only theme switch. Light is the default (DESIGN.md §3).
+  (function () {
+    const b = document.getElementById("theme"), r = document.documentElement;
+    const dark = () => r.dataset.theme ? r.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+    const label = () => { b.textContent = dark() ? "Light" : "Dark"; };
+    b.onclick = () => { r.dataset.theme = dark() ? "light" : "dark"; label(); };
+    label();
+  })();
+</script>
+
+<script type="module">
+import React, { useEffect, useState } from "react";
+import { createRoot } from "react-dom/client";
+import { motion, AnimatePresence, MotionConfig, animate } from "framer-motion";
+import htm from "htm";
+const html = htm.bind(React.createElement);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* Scroll reveal: Framer Motion's animate() on plain DOM, staggered per row. */
+document.documentElement.classList.add("fm-ready");
+if (!reduced) {
+  const io = new IntersectionObserver((entries) => {
+    entries.filter((e) => e.isIntersecting).forEach((e) => {
+      const sibs = [...e.target.parentElement.querySelectorAll(":scope > [data-reveal]")];
+      animate(e.target, { opacity: [0, 1], y: [18, 0] }, { duration: 0.55, delay: Math.max(0, sibs.indexOf(e.target)) * 0.07, ease: [0.22, 1, 0.36, 1] });
+      io.unobserve(e.target);
+    });
+  }, { threshold: 0.15 });
+  document.querySelectorAll("[data-reveal]").forEach((el) => io.observe(el));
+}
+
+/* The hero loop: one rule's life, replayed. 1 tick = 1 s of "site time",
+   shown faster. Hold time 3 ticks here to keep the demo short. */
+const SERIES = [26.1, 26.8, 27.9, 29.2, 30.4, 31.1, 31.5, 31.3, 30.8, 29.9, 29.0, 28.3, 27.7, 27.1, 26.6, 26.3];
+const ON = 30, OFF = 28, HOLD = 3;
+
+function simulate(upTo) {
+  let held = 0, fan = false; const log = [];
+  for (let i = 0; i <= upTo; i++) {
+    const v = SERIES[i], t = `14:02:${String(10 + i).padStart(2, "0")}`;
+    if (!fan && v > ON) {
+      held++;
+      if (held === 1) log.push({ id: i + "h", t, k: "in", text: `${v.toFixed(1)} °C · above 30, holding` });
+      if (held >= HOLD) { fan = true; log.push({ id: i + "c", t, k: "cmd", text: "fan1 → on" }, { id: i + "a", t, k: "ok", text: "fan1 confirmed · 0.4 s" }); }
+    } else if (!fan) held = 0;
+    if (fan && v < OFF) { fan = false; held = 0; log.push({ id: i + "o", t, k: "ok", text: `${v.toFixed(1)} °C · below 28, fan1 → off` }); }
+  }
+  return { held, fan, log };
+}
+
+function Loop() {
+  const [i, setI] = useState(reduced ? 8 : 0);
+  useEffect(() => {
+    if (reduced) return;
+    const id = setInterval(() => setI((n) => (n + 1) % (SERIES.length + 3)), 900);
+    return () => clearInterval(id);
+  }, []);
+  const at = Math.min(i, SERIES.length - 1);
+  const { held, fan, log } = simulate(at);
+  const v = SERIES[at];
+  const status = fan ? ["Fired", "st-fired"] : held > 0 ? ["Holding", "st-pending"] : ["Armed", "st-online"];
+  const pts = SERIES.slice(0, at + 1).map((s, k) => `${(k / (SERIES.length - 1)) * 300},${46 - ((s - 25) / 7.5) * 44}`).join(" ");
+  const yOn = 46 - ((ON - 25) / 7.5) * 44;
+  return html`
+    <div class="loop" aria-label="Example: a rule turning a fan on and off">
+      <div class="loop-head"><span>Greenhouse · bay 1</span><span class="pill ${status[1]}"><span class="dot"></span>${status[0]}</span></div>
+      <div class="loop-rule">When <b>temperature</b> is above <b>30 °C</b> for <b>${HOLD} s</b>, turn the <b>fan</b> on. Turn it off below <b>28 °C</b>.</div>
+      <div class="loop-row">
+        <div class="tile">
+          <small>Temperature</small>
+          <${AnimatePresence} mode="popLayout" initial=${false}>
+            <${motion.span} key=${v} class="reading num" initial=${{ y: 10, opacity: 0 }} animate=${{ y: 0, opacity: 1 }} exit=${{ y: -10, opacity: 0 }} transition=${{ duration: 0.25 }}>${v.toFixed(1)}</${motion.span}>
+          </${AnimatePresence}><span class="reading-unit">°C</span>
+          <svg class="spark" viewBox="0 0 300 46" preserveAspectRatio="none" aria-hidden="true">
+            <line x1="0" x2="300" y1=${yOn} y2=${yOn} stroke="rgba(248,113,113,.6)" stroke-dasharray="3 3"/>
+            <polyline points=${pts} fill="none" stroke="#22d3ee" stroke-width="2" vector-effect="non-scaling-stroke"/>
+          </svg>
+        </div>
+        <div class="tile">
+          <small>Fan · fan1</small>
+          <span class="pill ${fan ? "st-online" : "st-unknown"}" style=${{ marginTop: 6 }}><span class="dot"></span>${fan ? "On" : "Off"}</span>
+          <${motion.div} class="switch ${fan ? "on" : ""}" layout transition=${{ type: "spring", stiffness: 500, damping: 32 }}>
+            <${motion.span} layout transition=${{ type: "spring", stiffness: 500, damping: 32 }} />
+          </${motion.div}>
+          <small style=${{ marginTop: 10 }}>Hold time</small>
+          <div class="hold"><${motion.span} animate=${{ width: `${(Math.min(held, HOLD) / HOLD) * 100}%` }} transition=${{ duration: 0.3 }} /></div>
+        </div>
+      </div>
+      <ul class="log" aria-live="polite">
+        <${AnimatePresence} initial=${false}>
+          ${log.slice(-4).reverse().map((e) => html`
+            <${motion.li} key=${e.id} layout initial=${{ opacity: 0, x: -12 }} animate=${{ opacity: 1, x: 0 }} exit=${{ opacity: 0 }} transition=${{ duration: 0.3 }}>
+              <time>${e.t}</time><span class=${"k-" + e.k}>${e.text}</span>
+            </${motion.li}>`)}
+        </${AnimatePresence}>
+      </ul>
+    </div>`;
+}
+
+createRoot(document.getElementById("loop-root")).render(html`<${MotionConfig} reducedMotion="user"><${Loop} /></${MotionConfig}>`);
+</script>
+</body>
+</html>
